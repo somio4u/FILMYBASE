@@ -1,0 +1,26 @@
+{
+  "name": "filmmaking-app-backend",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "node server.js",
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "@google/genai": "^0.3.0",
+    "@supabase/supabase-js": "^2.112.3",
+    "cookie-parser": "^1.4.7",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "exceljs": "^4.4.0",
+    "express": "^4.19.2",
+    "fast-xml-parser": "^4.5.0",
+    "mammoth": "^1.8.0",
+    "multer": "^1.4.5-lts.1",
+    "pdf-parse": "^2.1.0",
+    "pdfkit": "^0.15.0",
+    "pg": "^8.12.0",
+    "word-extractor": "^1.0.4"
+  }
+}

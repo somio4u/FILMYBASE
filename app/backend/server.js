@@ -35,6 +35,12 @@ const db = new Pool(
     ? { connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } }
     : { database: "filmmaking_app" }
 );
+// Supabase's pooled connection role has an empty default search_path, so
+// unqualified table names (`users`, `concepts`, ...) fail to resolve unless
+// each new connection sets it explicitly.
+db.on("connect", (client) => {
+  client.query("SET search_path TO public").catch(() => {});
+});
 
 // The free tier's actual cap is a strict 15 requests/minute for the
 // flash-lite model — a burst of parallel calls (a 5-category script

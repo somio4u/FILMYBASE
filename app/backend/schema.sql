@@ -53,6 +53,9 @@ CREATE TABLE bit_sheets (
 CREATE TABLE scene_lists (
   id SERIAL PRIMARY KEY,
   bit_sheet_id INTEGER REFERENCES bit_sheets(id) ON DELETE CASCADE,
+  -- Legacy column from an earlier chain shape; bit_sheet_id is the one in
+  -- current use, kept nullable for backward compatibility with old rows.
+  three_act_structure_id INTEGER REFERENCES three_act_structures(id) ON DELETE SET NULL,
   -- Set instead of bit_sheet_id for a standalone 'production'-type project
   -- (an imported screenplay with no story-agent chain behind it at all).
   concept_id INTEGER REFERENCES concepts(id) ON DELETE CASCADE,

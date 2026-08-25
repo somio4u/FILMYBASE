@@ -1591,6 +1591,38 @@ body {
   color: var(--danger);
 }
 
+.crew-member-card-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.crew-member-card-editing {
+  align-items: stretch;
+  text-align: left;
+  gap: 8px;
+}
+
+.crew-member-edit-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+}
+
+.crew-member-edit-fields input {
+  padding: 6px 10px;
+  background: var(--bg-input);
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  color: var(--text-primary);
+  font-size: 13px;
+}
+
+.crew-member-edit-actions {
+  display: flex;
+  gap: 6px;
+}
+
 .crew-add-form {
   display: flex;
   flex-wrap: wrap;

@@ -4583,6 +4583,65 @@ app.get("/api/crew", requireLogin, async (req, res) => {
   res.json(result.rows.map(serializeCrewMember));
 });
 
+// One combined sheet across every category (cast, locations, art/costume
+// department, general crew) — a department head or the director wants a
+// single phone-book-style list, not five separate category exports.
+app.get("/api/crew/export-excel", requireLogin, async (req, res) => {
+  const lang = req.query.lang === "or" ? "or" : "en";
+
+  if (!(await userOwnsSceneList(req.user, req.query.sceneListId))) {
+    res.status(403).json({ error: "You don't have access to this project." });
+    return;
+  }
+
+  const categoryLabels = lang === "or"
+    ? { artist: "କଳାକାର", location: "ସ୍ଥାନ", art_department: "ଆର୍ଟ ବିଭାଗ", costume_department: "ପୋଷାକ ବିଭାଗ", crew: "ସାଧାରଣ କ୍ରୁ" }
+    : { artist: "Artist", location: "Location", art_department: "Art Department", costume_department: "Costume Department", crew: "General Crew" };
+  const columnLabels = lang === "or"
+    ? { category: "ବିଭାଗ", linkedTo: "ଚରିତ୍ର/ସ୍ଥାନ", name: "ନାମ", role: "ପଦବୀ", contactNumber: "ଯୋଗାଯୋଗ ନମ୍ବର" }
+    : { category: "Category", linkedTo: "Character / Location", name: "Name", role: "Role", contactNumber: "Contact Number" };
+
+  try {
+    const result = await db.query(
+      "SELECT category, character_name, name, role, contact_number FROM crew_members WHERE scene_list_id = $1 ORDER BY category, created_at ASC",
+      [req.query.sceneListId]
+    );
+
+    const workbook = new ExcelJS.Workbook();
+    const sheet = workbook.addWorksheet(lang === "or" ? "କ୍ରୁ ଓ କାଷ୍ଟ" : "Cast & Crew");
+    sheet.columns = [
+      { header: columnLabels.category, key: "category", width: 20 },
+      { header: columnLabels.linkedTo, key: "linkedTo", width: 28 },
+      { header: columnLabels.name, key: "name", width: 24 },
+      { header: columnLabels.role, key: "role", width: 22 },
+      { header: columnLabels.contactNumber, key: "contactNumber", width: 18 },
+    ];
+    sheet.getRow(1).font = { bold: true };
+
+    result.rows.forEach((row) => {
+      sheet.addRow({
+        category: categoryLabels[row.category] || row.category,
+        linkedTo: row.character_name || "",
+        name: row.name,
+        role: row.role || "",
+        contactNumber: row.contact_number || "",
+      });
+    });
+
+    res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+    res.setHeader("Content-Disposition", `attachment; filename="cast-and-crew-${lang}.xlsx"`);
+    await workbook.xlsx.write(res);
+    res.end();
+  } catch (error) {
+    console.error("Cast & Crew Excel export failed:", error.message);
+    if (!res.headersSent) {
+      res.status(500).json({ error: error.message });
+    } else {
+      res.end();
+    }
+  }
+});
+
 app.post("/api/crew", requireRole("admin", "production_manager"), crewPhotoUpload.single("photo"), async (req, res) => {
   const { sceneListId, category, characterName, name, role, contactNumber } = req.body;
 

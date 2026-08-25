@@ -56,6 +56,7 @@ const LABELS = {
     stageCrewLabel: 'Crew & Cast',
     stageScheduleLabel: 'Shoot Schedule',
     crewHeading: 'Crew & Cast',
+    downloadAllCrewExcelLabel: 'Download All Cast & Crew (Excel)',
     castSectionHeading: 'Cast',
     artDepartmentHeading: 'Art Department',
     costumeDepartmentHeading: 'Costume Department',
@@ -67,6 +68,7 @@ const LABELS = {
     crewCharacterLabel: 'Character',
     addCrewMemberButton: 'Add',
     removeCrewMemberButton: 'Remove',
+    modifyCrewMemberButton: 'Modify',
     noCrewMembersYet: 'None added yet.',
     allCharactersCastNotice: 'All characters are cast.',
     castingActorNamePlaceholder: 'Actor playing this role',
@@ -324,6 +326,7 @@ const LABELS = {
     stageCrewLabel: 'କ୍ରୁ ଓ କାଷ୍ଟ',
     stageScheduleLabel: 'ସୁଟିଂ ସିଡ୍ୟୁଲ୍',
     crewHeading: 'କ୍ରୁ ଓ କାଷ୍ଟ',
+    downloadAllCrewExcelLabel: 'ସମସ୍ତ କାଷ୍ଟ ଓ କ୍ରୁ ଡାଉନଲୋଡ୍ କରନ୍ତୁ (Excel)',
     castSectionHeading: 'କାଷ୍ଟ',
     artDepartmentHeading: 'ଆର୍ଟ ବିଭାଗ',
     costumeDepartmentHeading: 'ପୋଷାକ ବିଭାଗ',
@@ -335,6 +338,7 @@ const LABELS = {
     crewCharacterLabel: 'ଚରିତ୍ର',
     addCrewMemberButton: 'ଯୋଡ଼ନ୍ତୁ',
     removeCrewMemberButton: 'ହଟାନ୍ତୁ',
+    modifyCrewMemberButton: 'ପରିବର୍ତ୍ତନ କରନ୍ତୁ',
     noCrewMembersYet: 'ଏପର୍ଯ୍ୟନ୍ତ କେହି ଯୋଡ଼ାଯାଇ ନାହାନ୍ତି।',
     allCharactersCastNotice: 'ସମସ୍ତ ଚରିତ୍ର କାଷ୍ଟ ହୋଇସାରିଛି।',
     castingActorNamePlaceholder: 'ଏହି ଚରିତ୍ର ଭୂମିକାରେ ଅଭିନେତା',
@@ -943,12 +947,50 @@ function SceneListView({ sceneList, episodes, t, language, screenplay }) {
   )
 }
 
-function CrewSection({ category, heading, members, characterOptions, onAdd, onDelete, isAdding, deletingId, t, BACKEND_URL, canEdit }) {
+function CrewMemberEditForm({ member, onSave, onCancel, isSaving, t, showRole }) {
+  const [editName, setEditName] = useState(member.name)
+  const [editRole, setEditRole] = useState(member.role ?? '')
+  const [editContactNumber, setEditContactNumber] = useState(member.contactNumber ?? '')
+  const [editPhotoFile, setEditPhotoFile] = useState(null)
+
+  return (
+    <div className="crew-member-card crew-member-card-editing">
+      {member.photoUrl ? (
+        <img className="crew-member-photo" src={member.photoUrl} alt={member.name} />
+      ) : (
+        <div className="crew-member-photo crew-member-photo-placeholder">{member.name.charAt(0).toUpperCase()}</div>
+      )}
+      <div className="crew-member-edit-fields">
+        <input type="text" placeholder={t.crewNameLabel} value={editName} onChange={(e) => setEditName(e.target.value)} />
+        {showRole && (
+          <input type="text" placeholder={t.crewRoleLabel} value={editRole} onChange={(e) => setEditRole(e.target.value)} />
+        )}
+        <input type="tel" placeholder={t.crewContactLabel} value={editContactNumber} onChange={(e) => setEditContactNumber(e.target.value)} />
+        <input type="file" accept="image/*" onChange={(e) => setEditPhotoFile(e.target.files[0] ?? null)} />
+      </div>
+      <div className="crew-member-edit-actions">
+        <button
+          className="breakdown-action-button"
+          disabled={isSaving || !editName.trim()}
+          onClick={() => onSave({ name: editName, role: showRole ? editRole : undefined, contactNumber: editContactNumber, photoFile: editPhotoFile })}
+        >
+          {isSaving ? t.savingChangesLabel : t.saveChangesButton}
+        </button>
+        <button className="cancel-button" onClick={onCancel} disabled={isSaving}>
+          {t.cancelEditButton}
+        </button>
+      </div>
+    </div>
+  )
+}
+
+function CrewSection({ category, heading, members, characterOptions, onAdd, onUpdate, onDelete, isAdding, deletingId, updatingId, t, BACKEND_URL, canEdit }) {
   const [characterName, setCharacterName] = useState(characterOptions?.[0] ?? '')
   const [name, setName] = useState('')
   const [role, setRole] = useState('')
   const [contactNumber, setContactNumber] = useState('')
   const [photoFile, setPhotoFile] = useState(null)
+  const [editingMemberId, setEditingMemberId] = useState(null)
   const fileInputRef = useRef(null)
 
   // characterOptions shrinks as characters get cast (from here or from the
@@ -981,30 +1023,50 @@ function CrewSection({ category, heading, members, characterOptions, onAdd, onDe
       {members.length === 0 && <p className="sidebar-section-note">{t.noCrewMembersYet}</p>}
 
       <div className="crew-member-grid">
-        {members.map((member) => (
-          <div key={member.id} className="crew-member-card">
-            {member.photoUrl ? (
-              <img className="crew-member-photo" src={member.photoUrl} alt={member.name} />
-            ) : (
-              <div className="crew-member-photo crew-member-photo-placeholder">{member.name.charAt(0).toUpperCase()}</div>
-            )}
-            <div className="crew-member-details">
-              <strong>{member.name}</strong>
-              {member.characterName && <span className="breakdown-item-meta"> — {member.characterName}</span>}
-              {member.role && <p>{member.role}</p>}
-              {member.contactNumber && <p>{member.contactNumber}</p>}
+        {members.map((member) =>
+          editingMemberId === member.id ? (
+            <CrewMemberEditForm
+              key={member.id}
+              member={member}
+              t={t}
+              showRole={!characterOptions}
+              isSaving={updatingId === member.id}
+              onCancel={() => setEditingMemberId(null)}
+              onSave={async (updates) => {
+                await onUpdate(member.id, updates)
+                setEditingMemberId(null)
+              }}
+            />
+          ) : (
+            <div key={member.id} className="crew-member-card">
+              {member.photoUrl ? (
+                <img className="crew-member-photo" src={member.photoUrl} alt={member.name} />
+              ) : (
+                <div className="crew-member-photo crew-member-photo-placeholder">{member.name.charAt(0).toUpperCase()}</div>
+              )}
+              <div className="crew-member-details">
+                <strong>{member.name}</strong>
+                {member.characterName && <span className="breakdown-item-meta"> — {member.characterName}</span>}
+                {member.role && <p>{member.role}</p>}
+                {member.contactNumber && <p>{member.contactNumber}</p>}
+              </div>
+              {canEdit && (
+                <div className="crew-member-card-actions">
+                  <button className="breakdown-action-button" onClick={() => setEditingMemberId(member.id)}>
+                    {t.modifyCrewMemberButton}
+                  </button>
+                  <button
+                    className="breakdown-action-button crew-member-remove"
+                    onClick={() => onDelete(member.id)}
+                    disabled={deletingId === member.id}
+                  >
+                    {t.removeCrewMemberButton}
+                  </button>
+                </div>
+              )}
             </div>
-            {canEdit && (
-              <button
-                className="breakdown-action-button crew-member-remove"
-                onClick={() => onDelete(member.id)}
-                disabled={deletingId === member.id}
-              >
-                {t.removeCrewMemberButton}
-              </button>
-            )}
-          </div>
-        ))}
+          )
+        )}
       </div>
 
       {!canEdit ? null : characterOptions?.length === 0 ? (
@@ -1047,9 +1109,11 @@ function InlineCastAttachment({
   linkKey,
   members,
   onAdd,
+  onUpdate,
   onDelete,
   isAdding,
   deletingId,
+  updatingId,
   t,
   BACKEND_URL,
   canEdit,
@@ -1064,6 +1128,7 @@ function InlineCastAttachment({
   const [photoFile, setPhotoFile] = useState(null)
   const [isPickerOpen, setIsPickerOpen] = useState(false)
   const [searchTerm, setSearchTerm] = useState('')
+  const [editingMemberId, setEditingMemberId] = useState(null)
   const fileInputRef = useRef(null)
 
   async function handleSubmit(e) {
@@ -1098,28 +1163,48 @@ function InlineCastAttachment({
     <div className="inline-cast-attachment">
       {members.length > 0 && (
         <div className="crew-member-grid">
-          {members.map((member) => (
-            <div key={member.id} className="crew-member-card">
-              {member.photoUrl ? (
-                <img className="crew-member-photo" src={member.photoUrl} alt={member.name} />
-              ) : (
-                <div className="crew-member-photo crew-member-photo-placeholder">{member.name.charAt(0).toUpperCase()}</div>
-              )}
-              <div className="crew-member-details">
-                <strong>{member.name}</strong>
-                {member.contactNumber && <p>{member.contactNumber}</p>}
+          {members.map((member) =>
+            editingMemberId === member.id ? (
+              <CrewMemberEditForm
+                key={member.id}
+                member={member}
+                t={t}
+                showRole={false}
+                isSaving={updatingId === member.id}
+                onCancel={() => setEditingMemberId(null)}
+                onSave={async (updates) => {
+                  await onUpdate(member.id, updates)
+                  setEditingMemberId(null)
+                }}
+              />
+            ) : (
+              <div key={member.id} className="crew-member-card">
+                {member.photoUrl ? (
+                  <img className="crew-member-photo" src={member.photoUrl} alt={member.name} />
+                ) : (
+                  <div className="crew-member-photo crew-member-photo-placeholder">{member.name.charAt(0).toUpperCase()}</div>
+                )}
+                <div className="crew-member-details">
+                  <strong>{member.name}</strong>
+                  {member.contactNumber && <p>{member.contactNumber}</p>}
+                </div>
+                {canEdit && (
+                  <div className="crew-member-card-actions">
+                    <button className="breakdown-action-button" onClick={() => setEditingMemberId(member.id)}>
+                      {t.modifyCrewMemberButton}
+                    </button>
+                    <button
+                      className="breakdown-action-button crew-member-remove"
+                      onClick={() => onDelete(member.id)}
+                      disabled={deletingId === member.id}
+                    >
+                      {t.removeCrewMemberButton}
+                    </button>
+                  </div>
+                )}
               </div>
-              {canEdit && (
-                <button
-                  className="breakdown-action-button crew-member-remove"
-                  onClick={() => onDelete(member.id)}
-                  disabled={deletingId === member.id}
-                >
-                  {t.removeCrewMemberButton}
-                </button>
-              )}
-            </div>
-          ))}
+            )
+          )}
         </div>
       )}
       {canEdit && (
@@ -1266,6 +1351,7 @@ function App() {
   const [crewMembers, setCrewMembers] = useState([])
   const [isAddingCrew, setIsAddingCrew] = useState(false)
   const [crewDeletingId, setCrewDeletingId] = useState(null)
+  const [crewUpdatingId, setCrewUpdatingId] = useState(null)
   const [newCastCharacterName, setNewCastCharacterName] = useState('')
   const [isAddingCastCharacter, setIsAddingCastCharacter] = useState(false)
   const [isExportingProject, setIsExportingProject] = useState(false)
@@ -1384,6 +1470,34 @@ function App() {
     }
 
     setIsAddingCrew(false)
+  }
+
+  async function handleUpdateCrewMember(id, { name, role, contactNumber, photoFile }) {
+    setCrewUpdatingId(id)
+    setErrorMessage(null)
+
+    try {
+      const formData = new FormData()
+      formData.append('name', name)
+      if (role != null) formData.append('role', role)
+      if (contactNumber != null) formData.append('contactNumber', contactNumber)
+      if (photoFile) formData.append('photo', photoFile)
+
+      const response = await fetch(`${BACKEND_URL}/api/crew/${id}`, { method: 'PATCH', body: formData })
+      const data = await response.json()
+
+      if (!response.ok) {
+        setErrorMessage(data.error || t.genericError)
+        setCrewUpdatingId(null)
+        return
+      }
+
+      setCrewMembers((prev) => prev.map((member) => (member.id === id ? data : member)))
+    } catch {
+      setErrorMessage(t.genericError)
+    }
+
+    setCrewUpdatingId(null)
   }
 
   async function handleDeleteCrewMember(id) {
@@ -2705,9 +2819,11 @@ function App() {
                   linkKey={item.label}
                   members={crewMembers.filter((m) => m.category === 'artist' && m.characterName === item.label)}
                   onAdd={handleAddCrewMember}
+                  onUpdate={handleUpdateCrewMember}
                   onDelete={handleDeleteCrewMember}
                   isAdding={isAddingCrew}
                   deletingId={crewDeletingId}
+                  updatingId={crewUpdatingId}
                   t={t}
                   BACKEND_URL={BACKEND_URL}
                   canEdit={canEditProduction}
@@ -2724,9 +2840,11 @@ function App() {
                   linkKey={item.location.en}
                   members={crewMembers.filter((m) => m.category === 'location' && m.characterName === item.location.en)}
                   onAdd={handleAddCrewMember}
+                  onUpdate={handleUpdateCrewMember}
                   onDelete={handleDeleteCrewMember}
                   isAdding={isAddingCrew}
                   deletingId={crewDeletingId}
+                  updatingId={crewUpdatingId}
                   t={t}
                   BACKEND_URL={BACKEND_URL}
                   canEdit={canEditProduction}
@@ -4471,6 +4589,12 @@ function App() {
       {activeAgent === 'production' && sceneList && (
         <div className="three-act-structure" id="stage-crew">
           <h2>{t.crewHeading}</h2>
+          <a
+            className="breakdown-pdf-link"
+            href={`${BACKEND_URL}/api/crew/export-excel?sceneListId=${sceneList.id}&lang=${language}`}
+          >
+            {t.downloadAllCrewExcelLabel}
+          </a>
 
           <CrewSection
             category="artist"
@@ -4489,9 +4613,11 @@ function App() {
                 : null
             }
             onAdd={handleAddCrewMember}
+            onUpdate={handleUpdateCrewMember}
             onDelete={handleDeleteCrewMember}
             isAdding={isAddingCrew}
             deletingId={crewDeletingId}
+            updatingId={crewUpdatingId}
             t={t}
             BACKEND_URL={BACKEND_URL}
             canEdit={canEditProduction}
@@ -4502,9 +4628,11 @@ function App() {
             members={crewMembers.filter((m) => m.category === 'art_department')}
             characterOptions={null}
             onAdd={handleAddCrewMember}
+            onUpdate={handleUpdateCrewMember}
             onDelete={handleDeleteCrewMember}
             isAdding={isAddingCrew}
             deletingId={crewDeletingId}
+            updatingId={crewUpdatingId}
             t={t}
             BACKEND_URL={BACKEND_URL}
             canEdit={canEditProduction}
@@ -4515,9 +4643,11 @@ function App() {
             members={crewMembers.filter((m) => m.category === 'costume_department')}
             characterOptions={null}
             onAdd={handleAddCrewMember}
+            onUpdate={handleUpdateCrewMember}
             onDelete={handleDeleteCrewMember}
             isAdding={isAddingCrew}
             deletingId={crewDeletingId}
+            updatingId={crewUpdatingId}
             t={t}
             BACKEND_URL={BACKEND_URL}
             canEdit={canEditProduction}
@@ -4528,9 +4658,11 @@ function App() {
             members={crewMembers.filter((m) => m.category === 'crew')}
             characterOptions={null}
             onAdd={handleAddCrewMember}
+            onUpdate={handleUpdateCrewMember}
             onDelete={handleDeleteCrewMember}
             isAdding={isAddingCrew}
             deletingId={crewDeletingId}
+            updatingId={crewUpdatingId}
             t={t}
             BACKEND_URL={BACKEND_URL}
             canEdit={canEditProduction}

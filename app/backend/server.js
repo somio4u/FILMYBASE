@@ -1,5 +1,6 @@
 import "dotenv/config";
 import express from "express";
+import "express-async-errors";
 import cors from "cors";
 import { GoogleGenAI, Type } from "@google/genai";
 import { Pool } from "pg";
@@ -4760,6 +4761,23 @@ app.get("/api/google/contacts", requireRole("admin", "production_manager"), asyn
     res.status(502).json({ error: error.message });
   }
 });
+
+// Catches every error thrown or rejected inside a route handler (including
+// async ones, via express-async-errors above). Without this, an unhandled
+// rejection anywhere — a bad DB query, a storage upload failure, a Gemini
+// API error — would crash the entire Node process and take the whole app
+// down for every user until it's manually restarted, rather than just
+// failing the one request that hit it.
+app.use((err, req, res, next) => {
+  console.error(`Error on ${req.method} ${req.path}:`, err);
+  if (res.headersSent) return next(err);
+  res.status(500).json({ error: err.message || "Something went wrong on the server." });
+});
+
+// Last-resort safety net for errors outside the request/response cycle
+// (e.g. a fire-and-forget promise). Logs instead of crashing the process.
+process.on("unhandledRejection", (err) => console.error("Unhandled rejection:", err));
+process.on("uncaughtException", (err) => console.error("Uncaught exception:", err));
 
 app.listen(PORT, () => {
   console.log(`Backend server running at http://localhost:${PORT}`);

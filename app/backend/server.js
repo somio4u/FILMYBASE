@@ -3767,6 +3767,59 @@ app.post("/api/script-breakdown/:id/edit", requireRole("admin"), async (req, res
   }
 });
 
+// Lets a production_manager add a character the AI analysis missed,
+// without granting them the full admin-only "Edit" power over
+// AI-analyzed content — same INSERT-only revision pattern as every other
+// breakdown change, just scoped to appending one cast-list entry.
+app.post("/api/script-breakdown/:id/add-character", requireRole("admin", "production_manager"), async (req, res) => {
+  const { label } = req.body;
+
+  if (!label || !label.trim()) {
+    res.status(400).json({ error: "Character name is required." });
+    return;
+  }
+
+  const existing = await db.query("SELECT scene_list_id FROM script_breakdowns WHERE id = $1", [req.params.id]);
+  if (existing.rows.length === 0) {
+    res.status(404).json({ error: "Script breakdown not found" });
+    return;
+  }
+
+  const sceneListId = existing.rows[0].scene_list_id;
+  if (!(await userOwnsSceneList(req.user, sceneListId))) {
+    res.status(403).json({ error: "You don't have access to this project." });
+    return;
+  }
+
+  const latest = await db.query(
+    "SELECT id, content FROM script_breakdowns WHERE scene_list_id = $1 ORDER BY created_at DESC LIMIT 1",
+    [sceneListId]
+  );
+  if (String(latest.rows[0].id) !== String(req.params.id)) {
+    res.status(409).json({ error: "Someone else updated this breakdown since you loaded it. Reload the page and try again." });
+    return;
+  }
+
+  const trimmedLabel = label.trim();
+  const currentArtistList = latest.rows[0].content.artistList ?? [];
+  if (currentArtistList.some((item) => item.label === trimmedLabel)) {
+    res.status(400).json({ error: "A character with that name already exists in the cast list." });
+    return;
+  }
+
+  const updatedContent = {
+    ...latest.rows[0].content,
+    artistList: [...currentArtistList, { label: trimmedLabel, notes: { en: "", or: "" } }],
+  };
+
+  const insertResult = await db.query(
+    "INSERT INTO script_breakdowns (scene_list_id, content, feedback) VALUES ($1, $2, $3) RETURNING id, status, feedback",
+    [sceneListId, JSON.stringify(updatedContent), `Added missing character: ${trimmedLabel}`]
+  );
+
+  res.json({ ...insertResult.rows[0], sceneListId, ...updatedContent });
+});
+
 app.post("/api/script-breakdown/:id/approve", requireRole("admin", "director"), async (req, res) => {
   const target = await db.query("SELECT scene_list_id FROM script_breakdowns WHERE id = $1", [req.params.id]);
   if (target.rows.length === 0) {
@@ -3845,7 +3898,7 @@ app.get("/api/script-breakdown/:id/export", requireLogin, async (req, res) => {
   }
 
   try {
-    const result = await db.query("SELECT content FROM script_breakdowns WHERE id = $1", [req.params.id]);
+    const result = await db.query("SELECT content, scene_list_id FROM script_breakdowns WHERE id = $1", [req.params.id]);
 
     if (result.rows.length === 0) {
       res.status(404).json({ error: "Script breakdown not found" });
@@ -3863,6 +3916,19 @@ app.get("/api/script-breakdown/:id/export", requireLogin, async (req, res) => {
     };
     const bodyFont = lang === "or" ? "odiaRegular" : "Helvetica";
     const headerFont = lang === "or" ? "odiaBold" : "Helvetica-Bold";
+
+    // Real-world casting info lives in crew_members, not the AI-analyzed
+    // breakdown content — join it in here so the exported list reflects
+    // who's actually confirmed, not just who the script analysis found.
+    let castByCharacter = new Map();
+    if (category === "artistList") {
+      const castResult = await db.query(
+        "SELECT character_name, name, contact_number FROM crew_members WHERE scene_list_id = $1 AND category = 'artist'",
+        [result.rows[0].scene_list_id]
+      );
+      castByCharacter = new Map(castResult.rows.map((row) => [row.character_name, row]));
+    }
+    const notCastLabel = lang === "or" ? "ଏପର୍ଯ୍ୟନ୍ତ କାଷ୍ଟ ହୋଇନାହିଁ — ଦୟାକରି ଅପଡେଟ୍ କରନ୍ତୁ" : "Not yet cast — please update";
 
     const doc = new PDFDocument({ size: "A4", margin: 50 });
     doc.registerFont("odiaRegular", FONTS.odiaRegular);
@@ -3889,6 +3955,13 @@ app.get("/api/script-breakdown/:id/export", requireLogin, async (req, res) => {
         doc.font(bodyFont).fontSize(11).text(`  (${item.intExt} — ${item.sceneCount} scenes)`);
       }
       doc.font(bodyFont).fontSize(11).text(noteField[lang], { indent: 10 });
+      if (category === "artistList") {
+        const cast = castByCharacter.get(item.label);
+        const playedByLine = lang === "or"
+          ? `କଳାକାର: ${cast ? cast.name : notCastLabel}${cast?.contact_number ? ` — ${cast.contact_number}` : ""}`
+          : `Played by: ${cast ? cast.name : notCastLabel}${cast?.contact_number ? ` — ${cast.contact_number}` : ""}`;
+        doc.font(bodyFont).fontSize(11).text(playedByLine, { indent: 10 });
+      }
       doc.moveDown(0.8);
     });
 
@@ -3918,7 +3991,7 @@ app.get("/api/script-breakdown/:id/export-excel", requireLogin, async (req, res)
   }
 
   try {
-    const result = await db.query("SELECT content FROM script_breakdowns WHERE id = $1", [req.params.id]);
+    const result = await db.query("SELECT content, scene_list_id FROM script_breakdowns WHERE id = $1", [req.params.id]);
 
     if (result.rows.length === 0) {
       res.status(404).json({ error: "Script breakdown not found" });
@@ -3936,8 +4009,21 @@ app.get("/api/script-breakdown/:id/export-excel", requireLogin, async (req, res)
     const statusLabels = lang === "or" ? ["ବାକି ଅଛି", "ହୋଇଗଲା"] : ["Pending", "Done"];
     const columnLabels =
       lang === "or"
-        ? { name: "ନାମ", location: "ସ୍ଥାନ", intExt: "INT/EXT", sceneCount: "ଦୃଶ୍ୟ ସଂଖ୍ୟା", character: "ଚରିତ୍ର", notes: "ନୋଟ୍", status: "ସ୍ଥିତି", remarks: "ମନ୍ତବ୍ୟ" }
-        : { name: "Name", location: "Location", intExt: "INT/EXT", sceneCount: "Scene Count", character: "Character", notes: "Notes", status: "Status", remarks: "Remarks" };
+        ? { name: "ନାମ", location: "ସ୍ଥାନ", intExt: "INT/EXT", sceneCount: "ଦୃଶ୍ୟ ସଂଖ୍ୟା", character: "ଚରିତ୍ର", notes: "ନୋଟ୍", status: "ସ୍ଥିତି", remarks: "ମନ୍ତବ୍ୟ", playedBy: "କଳାକାର", contactNumber: "ଯୋଗାଯୋଗ ନମ୍ବର" }
+        : { name: "Name", location: "Location", intExt: "INT/EXT", sceneCount: "Scene Count", character: "Character", notes: "Notes", status: "Status", remarks: "Remarks", playedBy: "Played By", contactNumber: "Contact Number" };
+    const notCastLabel = lang === "or" ? "ଏପର୍ଯ୍ୟନ୍ତ କାଷ୍ଟ ହୋଇନାହିଁ — ଦୟାକରି ଅପଡେଟ୍ କରନ୍ତୁ" : "Not yet cast — please update";
+
+    // Real-world casting info lives in crew_members, not the AI-analyzed
+    // breakdown content — join it in here so the exported sheet reflects
+    // who's actually confirmed, not just who the script analysis found.
+    let castByCharacter = new Map();
+    if (category === "artistList") {
+      const castResult = await db.query(
+        "SELECT character_name, name, contact_number FROM crew_members WHERE scene_list_id = $1 AND category = 'artist'",
+        [result.rows[0].scene_list_id]
+      );
+      castByCharacter = new Map(castResult.rows.map((row) => [row.character_name, row]));
+    }
 
     const workbook = new ExcelJS.Workbook();
     const sheet = workbook.addWorksheet(categoryLabels[category][lang].slice(0, 31));
@@ -3958,6 +4044,22 @@ app.get("/api/script-breakdown/:id/export-excel", requireLogin, async (req, res)
         { header: columnLabels.notes, key: "notes", width: 55 },
       ];
       rows = items.map((item) => ({ character: item.character, notes: item.description[lang] }));
+    } else if (category === "artistList") {
+      columns = [
+        { header: columnLabels.name, key: "name", width: 22 },
+        { header: columnLabels.notes, key: "notes", width: 45 },
+        { header: columnLabels.playedBy, key: "playedBy", width: 22 },
+        { header: columnLabels.contactNumber, key: "contactNumber", width: 18 },
+      ];
+      rows = items.map((item) => {
+        const cast = castByCharacter.get(item.label);
+        return {
+          name: item.label,
+          notes: item.notes[lang],
+          playedBy: cast ? cast.name : notCastLabel,
+          contactNumber: cast ? cast.contact_number || "" : notCastLabel,
+        };
+      });
     } else {
       columns = [
         { header: columnLabels.name, key: "name", width: 22 },

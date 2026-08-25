@@ -135,6 +135,9 @@ const LABELS = {
     episodeBreakdown: 'Episode Breakdown',
     episodeLabel: 'Episode',
     genericError: 'Something went wrong. Please wait a moment and try again.',
+    missingCharacterNamePlaceholder: 'Missed a character? Type their name…',
+    addMissingCharacterButton: 'Add Character',
+    addingCharacterLabel: 'Adding…',
     approveButton: 'Approve',
     requestChangesButton: 'Request Changes',
     approvedBadge: '✅ Approved',
@@ -400,6 +403,9 @@ const LABELS = {
     episodeBreakdown: 'ପର୍ବ ବିବରଣୀ',
     episodeLabel: 'ପର୍ବ',
     genericError: 'କିଛି ଭୁଲ ହେଲା। ଦୟାକରି ଅଳ୍ପ ସମୟ ଅପେକ୍ଷା କରି ପୁନଃ ଚେଷ୍ଟା କରନ୍ତୁ।',
+    missingCharacterNamePlaceholder: 'ଏକ ଚରିତ୍ର ଛାଡ଼ିଗଲା କି? ତାହାର ନାମ ଲେଖନ୍ତୁ…',
+    addMissingCharacterButton: 'ଚରିତ୍ର ଯୋଡ଼ନ୍ତୁ',
+    addingCharacterLabel: 'ଯୋଡ଼ୁଛି…',
     approveButton: 'ଅନୁମୋଦନ କରନ୍ତୁ',
     requestChangesButton: 'ପରିବର୍ତ୍ତନ ପାଇଁ ଅନୁରୋଧ',
     approvedBadge: '✅ ଅନୁମୋଦିତ',
@@ -1260,6 +1266,8 @@ function App() {
   const [crewMembers, setCrewMembers] = useState([])
   const [isAddingCrew, setIsAddingCrew] = useState(false)
   const [crewDeletingId, setCrewDeletingId] = useState(null)
+  const [newCastCharacterName, setNewCastCharacterName] = useState('')
+  const [isAddingCastCharacter, setIsAddingCastCharacter] = useState(false)
   const [isExportingProject, setIsExportingProject] = useState(false)
 
   const [googleConnected, setGoogleConnected] = useState(false)
@@ -2597,6 +2605,34 @@ function App() {
     setIsSavingBreakdownEdits(false)
   }
 
+  async function handleAddMissingCharacterClick() {
+    if (!newCastCharacterName.trim()) return
+    setIsAddingCastCharacter(true)
+    setErrorMessage(null)
+
+    try {
+      const response = await fetch(`${BACKEND_URL}/api/script-breakdown/${scriptBreakdown.id}/add-character`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ label: newCastCharacterName.trim() }),
+      })
+      const data = await response.json()
+
+      if (!response.ok) {
+        setErrorMessage(data.error || t.genericError)
+        setIsAddingCastCharacter(false)
+        return
+      }
+
+      setScriptBreakdown(data)
+      setNewCastCharacterName('')
+    } catch {
+      setErrorMessage(t.genericError)
+    }
+
+    setIsAddingCastCharacter(false)
+  }
+
   function renderBreakdownCategory(category, headingKey) {
     const items = scriptBreakdown[category] ?? []
     const isEditing = editingBreakdownCategory === category
@@ -2698,6 +2734,24 @@ function App() {
               )}
             </div>
           ))}
+
+        {!isEditing && category === 'artistList' && canEditProduction && (
+          <div className="add-missing-character-form">
+            <input
+              type="text"
+              placeholder={t.missingCharacterNamePlaceholder}
+              value={newCastCharacterName}
+              onChange={(e) => setNewCastCharacterName(e.target.value)}
+            />
+            <button
+              className="breakdown-action-button"
+              onClick={handleAddMissingCharacterClick}
+              disabled={isAddingCastCharacter || !newCastCharacterName.trim()}
+            >
+              {isAddingCastCharacter ? t.addingCharacterLabel : t.addMissingCharacterButton}
+            </button>
+          </div>
+        )}
 
         {isEditing && (
           <div className="breakdown-edit-list">

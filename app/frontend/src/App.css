@@ -1417,6 +1417,16 @@ body {
   flex-wrap: wrap;
 }
 
+.ad-sheet-panel {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
 .breakdown-action-button {
   flex: 0 0 auto;
   font-size: 12px;

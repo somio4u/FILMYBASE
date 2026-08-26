@@ -348,6 +348,23 @@ const BREAKDOWN_COSTUME_SCHEMA = {
 
 const BREAKDOWN_CATEGORY_KEYS = ["artistList", "locationList", "props", "costumes", "art"];
 
+// The AD (Assistant Director) Scene Breakdown Sheet — one row per scene,
+// the classic single-page-per-scene production document. sceneNumber,
+// description, intExt, dayNight and location come straight from the
+// already-approved scene list (100% reliable, no AI needed); only these
+// four fields genuinely require inference, so the AI call is scoped to
+// just them rather than re-deriving facts the app already has.
+const AD_SHEET_ROW_SCHEMA = {
+  type: Type.OBJECT,
+  properties: {
+    mainCharacters: { type: Type.ARRAY, items: { type: Type.STRING } },
+    extras: BILINGUAL_TEXT_SCHEMA,
+    property: BILINGUAL_TEXT_SCHEMA,
+    costumeRemarks: BILINGUAL_TEXT_SCHEMA,
+  },
+  required: ["mainCharacters", "extras", "property", "costumeRemarks"],
+};
+
 const BREAKDOWN_CATEGORY_ITEM_SCHEMAS = {
   artistList: BREAKDOWN_ITEM_SCHEMA,
   locationList: BREAKDOWN_LOCATION_SCHEMA,
@@ -3684,6 +3701,71 @@ async function generateBreakdownCategoryContent(sourceText, category, existingIt
   return sanitizeBilingualContent(JSON.parse(response.text))[category];
 }
 
+// One entry per real scene, in order — the deterministic half of the AD
+// sheet (SCN/description/INT-EXT/day-night/location all come straight from
+// the already-approved scene list, never from the AI).
+function flattenScenesForAdSheet(sceneList) {
+  if (sceneList.episodeScenes) {
+    const entries = [];
+    sceneList.episodeScenes.forEach((episodeScene, episodeIndex) => {
+      episodeScene.scenes.forEach((scene, sceneIndex) => {
+        entries.push({
+          sceneNumber: `E${episodeIndex + 1}-S${sceneIndex + 1}`,
+          intExt: scene.intExt,
+          timeOfDay: scene.timeOfDay,
+          location: scene.location,
+          oneLiner: scene.oneLiner,
+        });
+      });
+    });
+    return entries;
+  }
+  return sceneList.scenes.map((scene, sceneIndex) => ({
+    sceneNumber: String(sceneIndex + 1),
+    intExt: scene.intExt,
+    timeOfDay: scene.timeOfDay,
+    location: scene.location,
+    oneLiner: scene.oneLiner,
+  }));
+}
+
+// Only the four columns that genuinely need inference — who's in each
+// scene, extras, properties, and costume remarks — using the already
+// generated category breakdown (character/prop/costume names) as the
+// vocabulary to draw from instead of inventing new entities.
+async function generateAdSheetDetails(sceneEntries, breakdownContent, characterNames) {
+  const numberedScenes = sceneEntries
+    .map((s, i) => `${i + 1}. [${s.sceneNumber}] ${s.intExt}. ${s.location.en} — ${s.timeOfDay}: ${s.oneLiner.en}`)
+    .join("\n");
+  const knownCharacters = characterNames.join(", ");
+  const knownProps = (breakdownContent.props ?? []).map((p) => p.label).join(", ");
+  const knownCostumes = (breakdownContent.costumes ?? []).map((c) => `${c.character}: ${c.description.en}`).join("; ");
+
+  const contents = `The full scene list, numbered in order (${sceneEntries.length} scenes total):\n${numberedScenes}\n\nEstablished main characters: ${knownCharacters}\n\nEstablished property list: ${knownProps || "(none yet)"}\n\nEstablished costume notes: ${knownCostumes || "(none yet)"}\n\nFor EACH of the ${sceneEntries.length} scenes above, in the exact same order, determine: which of the established main characters actually appear in that scene (by exact name, from the list given — never invent a name not in that list); a short bilingual note on extras/background people implied by the scene (empty strings if none); a short bilingual note on properties used in that scene, preferring the established property list when relevant (empty strings if none); and a short bilingual costume remark for that scene if the costume notes above say anything relevant (empty strings if nothing applies). Return exactly ${sceneEntries.length} rows in the same order as the scenes — do not skip, merge, or add extra rows.`;
+
+  const response = await generateContentWithRetry({
+    model: "gemini-flash-lite-latest",
+    contents,
+    config: {
+      systemInstruction: SCRIPT_BREAKDOWN_SYSTEM_PROMPT,
+      responseMimeType: "application/json",
+      maxOutputTokens: 12288,
+      responseSchema: {
+        type: Type.OBJECT,
+        properties: { rows: { type: Type.ARRAY, items: AD_SHEET_ROW_SCHEMA } },
+        required: ["rows"],
+      },
+    },
+  });
+
+  const rows = sanitizeBilingualContent(JSON.parse(response.text)).rows ?? [];
+  const blankRow = { mainCharacters: [], extras: { en: "", or: "" }, property: { en: "", or: "" }, costumeRemarks: { en: "", or: "" } };
+  // Defensive padding/truncation — the row COUNT must match the real scene
+  // count no matter what the model returns, since every downstream row is
+  // positionally joined back to its deterministic scene entry.
+  return sceneEntries.map((_, i) => rows[i] ?? blankRow);
+}
+
 app.post("/api/script-breakdown/:id/reanalyze", requireRole("admin"), async (req, res) => {
   const { category } = req.body;
 
@@ -3818,6 +3900,56 @@ app.post("/api/script-breakdown/:id/add-character", requireRole("admin", "produc
   );
 
   res.json({ ...insertResult.rows[0], sceneListId, ...updatedContent });
+});
+
+// The classic AD (Assistant Director) Scene Breakdown Sheet — one row per
+// scene, handed to the whole crew as a single production reference.
+// Generation is allowed for production_manager too (not admin-only like
+// /edit and /reanalyze) since it derives a production document from
+// already-approved data rather than re-touching the AI-analyzed breakdown
+// itself — same permission shape as shoot-schedule generation.
+app.post("/api/script-breakdown/:id/generate-ad-sheet", requireRole("admin", "production_manager"), async (req, res) => {
+  const existing = await db.query("SELECT scene_list_id FROM script_breakdowns WHERE id = $1", [req.params.id]);
+  if (existing.rows.length === 0) {
+    res.status(404).json({ error: "Script breakdown not found" });
+    return;
+  }
+
+  const sceneListId = existing.rows[0].scene_list_id;
+  if (!(await userOwnsSceneList(req.user, sceneListId))) {
+    res.status(403).json({ error: "You don't have access to this project." });
+    return;
+  }
+
+  const latest = await db.query(
+    "SELECT id, content FROM script_breakdowns WHERE scene_list_id = $1 ORDER BY created_at DESC LIMIT 1",
+    [sceneListId]
+  );
+  if (String(latest.rows[0].id) !== String(req.params.id)) {
+    res.status(409).json({ error: "Someone else updated this breakdown since you loaded it. Reload the page and try again." });
+    return;
+  }
+
+  try {
+    const sceneListResult = await db.query("SELECT content FROM scene_lists WHERE id = $1", [sceneListId]);
+    const sceneList = sceneListResult.rows[0].content;
+    const characterNames = await fetchCharacterNamesForSceneList(sceneListId, sceneList);
+    const sceneEntries = flattenScenesForAdSheet(sceneList);
+    const aiDetails = await generateAdSheetDetails(sceneEntries, latest.rows[0].content, characterNames);
+
+    const adSheet = sceneEntries.map((entry, i) => ({ ...entry, ...aiDetails[i] }));
+    const updatedContent = { ...latest.rows[0].content, adSheet };
+
+    const insertResult = await db.query(
+      "INSERT INTO script_breakdowns (scene_list_id, content, feedback) VALUES ($1, $2, $3) RETURNING id, status, feedback",
+      [sceneListId, JSON.stringify(updatedContent), "Generated AD Scene Breakdown Sheet"]
+    );
+
+    res.json({ ...insertResult.rows[0], sceneListId, ...updatedContent });
+  } catch (error) {
+    console.error("AD sheet generation failed:", error.message);
+    res.status(502).json({ error: error.message });
+  }
 });
 
 app.post("/api/script-breakdown/:id/approve", requireRole("admin", "director"), async (req, res) => {
@@ -4087,6 +4219,131 @@ app.get("/api/script-breakdown/:id/export-excel", requireLogin, async (req, res)
     res.end();
   } catch (error) {
     console.error("Excel export failed:", error.message);
+    if (!res.headersSent) {
+      res.status(500).json({ error: error.message });
+    } else {
+      res.end();
+    }
+  }
+});
+
+// One row per scene, landscape grid — the classic paper "AD Scene
+// Breakdown Sheet" every crew department gets a copy of, rendered as a
+// real table rather than the flowing-text style used by the other
+// category exports (this one has too many short columns for that to read
+// well on paper).
+app.get("/api/script-breakdown/:id/export-ad-sheet", requireLogin, async (req, res) => {
+  const lang = req.query.lang === "or" ? "or" : "en";
+
+  try {
+    const result = await db.query("SELECT content, scene_list_id FROM script_breakdowns WHERE id = $1", [req.params.id]);
+    if (result.rows.length === 0) {
+      res.status(404).json({ error: "Script breakdown not found" });
+      return;
+    }
+
+    const adSheet = result.rows[0].content.adSheet;
+    if (!adSheet || adSheet.length === 0) {
+      res.status(400).json({ error: "Generate the AD Scene Breakdown Sheet first." });
+      return;
+    }
+
+    const sceneListId = result.rows[0].scene_list_id;
+    const sceneListResult = await db.query("SELECT content FROM scene_lists WHERE id = $1", [sceneListId]);
+    const title = await fetchProjectTitleForSceneList(sceneListId, sceneListResult.rows[0].content, lang);
+
+    const bodyFont = lang === "or" ? "odiaRegular" : "Helvetica";
+    const headerFont = lang === "or" ? "odiaBold" : "Helvetica-Bold";
+    const labels =
+      lang === "or"
+        ? { title: "ସ୍କ୍ରିପ୍ଟ ବ୍ରେକଡାଉନ୍ ସିଟ୍", scn: "SCN", description: "ଦୃଶ୍ୟ ବର୍ଣ୍ଣନା", type: "TYPE", dn: "D/N", location: "ମୁଖ୍ୟ ସ୍ଥାନ", characters: "ମୁଖ୍ୟ ଚରିତ୍ର", extras: "ଏକ୍ସଟ୍ରା", property: "ପ୍ରପର୍ଟି", costume: "ପୋଷାକ/ମନ୍ତବ୍ୟ" }
+        : { title: "SCRIPT BREAKDOWN SHEET", scn: "SCN", description: "SCENE DESCRIPTION", type: "TYPE", dn: "D/N", location: "PRIMARY LOCATION", characters: "MAIN CHARACTERS", extras: "EXTRAS", property: "PROPERTY", costume: "COSTUME / REMARKS" };
+
+    const doc = new PDFDocument({ size: "A4", layout: "landscape", margin: 24 });
+    doc.registerFont("odiaRegular", FONTS.odiaRegular);
+    doc.registerFont("odiaBold", FONTS.odiaBold);
+
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", `attachment; filename="ad-breakdown-sheet-${lang}.pdf"`);
+    doc.pipe(res);
+
+    const pageLeft = doc.page.margins.left;
+    const pageBottom = doc.page.height - doc.page.margins.bottom;
+    const columns = [
+      { key: "scn", label: labels.scn, width: 30 },
+      { key: "description", label: labels.description, width: 150 },
+      { key: "type", label: labels.type, width: 32 },
+      { key: "dn", label: labels.dn, width: 34 },
+      { key: "location", label: labels.location, width: 95 },
+      { key: "characters", label: labels.characters, width: 115 },
+      { key: "extras", label: labels.extras, width: 80 },
+      { key: "property", label: labels.property, width: 95 },
+      { key: "costume", label: labels.costume, width: 95 },
+    ];
+    const cellPaddingX = 4;
+    const cellPaddingY = 4;
+
+    function drawHeaderRow(y) {
+      doc.font(headerFont).fontSize(9);
+      const rowHeight = Math.max(
+        22,
+        ...columns.map((col) => doc.heightOfString(col.label, { width: col.width - cellPaddingX * 2 }) + cellPaddingY * 2)
+      );
+      let x = pageLeft;
+      columns.forEach((col) => {
+        doc.rect(x, y, col.width, rowHeight).fill("#000");
+        doc.fillColor("#fff").font(headerFont).fontSize(9).text(col.label, x + cellPaddingX, y + cellPaddingY, { width: col.width - cellPaddingX * 2 });
+        x += col.width;
+      });
+      doc.fillColor("#000");
+      return y + rowHeight;
+    }
+
+    function rowValues(row) {
+      return {
+        scn: row.sceneNumber,
+        description: row.oneLiner?.[lang] ?? "",
+        type: row.intExt,
+        dn: row.timeOfDay,
+        location: row.location?.[lang] ?? "",
+        characters: (row.mainCharacters ?? []).join(", "),
+        extras: row.extras?.[lang] ?? "",
+        property: row.property?.[lang] ?? "",
+        costume: row.costumeRemarks?.[lang] ?? "",
+      };
+    }
+
+    doc.font(headerFont).fontSize(16).text(title ? `${title} — ${labels.title}` : labels.title, pageLeft, doc.y);
+    doc.moveDown(0.6);
+    let y = doc.y;
+    y = drawHeaderRow(y);
+
+    adSheet.forEach((row) => {
+      const values = rowValues(row);
+      doc.font(bodyFont).fontSize(9);
+      const rowHeight = Math.max(
+        18,
+        ...columns.map((col) => doc.heightOfString(String(values[col.key] ?? ""), { width: col.width - cellPaddingX * 2 }) + cellPaddingY * 2)
+      );
+
+      if (y + rowHeight > pageBottom) {
+        doc.addPage({ size: "A4", layout: "landscape", margin: 24 });
+        y = doc.page.margins.top;
+        y = drawHeaderRow(y);
+      }
+
+      let x = pageLeft;
+      columns.forEach((col) => {
+        doc.rect(x, y, col.width, rowHeight).stroke("#cccccc");
+        doc.font(bodyFont).fontSize(9).text(String(values[col.key] ?? ""), x + cellPaddingX, y + cellPaddingY, { width: col.width - cellPaddingX * 2 });
+        x += col.width;
+      });
+      y += rowHeight;
+    });
+
+    doc.end();
+  } catch (error) {
+    console.error("AD sheet PDF export failed:", error.message);
     if (!res.headersSent) {
       res.status(500).json({ error: error.message });
     } else {

@@ -187,6 +187,9 @@ const LABELS = {
     scriptBreakdownHeading: 'Script Breakdown',
     generateBreakdownButton: 'Analyze Script',
     generatingBreakdownLabel: 'Analyzing script...',
+    generateAdSheetButton: 'Generate AD Scene Breakdown Sheet',
+    generatingAdSheetLabel: 'Generating AD sheet...',
+    downloadAdSheetLabel: 'Download AD Scene Breakdown Sheet (PDF)',
     artistListHeading: 'Artist List (Cast)',
     locationListHeading: 'Location List',
     propsHeading: 'Property List (Props)',
@@ -457,6 +460,9 @@ const LABELS = {
     scriptBreakdownHeading: 'ସ୍କ୍ରିପ୍ଟ ବ୍ରେକଡାଉନ୍',
     generateBreakdownButton: 'ସ୍କ୍ରିପ୍ଟ ବିଶ୍ଳେଷଣ କରନ୍ତୁ',
     generatingBreakdownLabel: 'ସ୍କ୍ରିପ୍ଟ ବିଶ୍ଳେଷଣ ହେଉଛି...',
+    generateAdSheetButton: 'AD ସିନ୍ ବ୍ରେକଡାଉନ୍ ସିଟ୍ ତିଆରି କରନ୍ତୁ',
+    generatingAdSheetLabel: 'AD ସିଟ୍ ତିଆରି ହେଉଛି...',
+    downloadAdSheetLabel: 'AD ସିନ୍ ବ୍ରେକଡାଉନ୍ ସିଟ୍ ଡାଉନଲୋଡ୍ କରନ୍ତୁ (PDF)',
     artistListHeading: 'କଳାକାର ତାଲିକା',
     locationListHeading: 'ସ୍ଥାନ ତାଲିକା',
     propsHeading: 'ସାମଗ୍ରୀ ତାଲିକା (ପ୍ରପ୍ସ)',
@@ -1339,6 +1345,7 @@ function App() {
 
   const [scriptBreakdown, setScriptBreakdown] = useState(null)
   const [isGeneratingBreakdown, setIsGeneratingBreakdown] = useState(false)
+  const [isGeneratingAdSheet, setIsGeneratingAdSheet] = useState(false)
   const [isApprovingBreakdown, setIsApprovingBreakdown] = useState(false)
   const [showBreakdownFeedbackForm, setShowBreakdownFeedbackForm] = useState(false)
   const [breakdownFeedbackText, setBreakdownFeedbackText] = useState('')
@@ -2526,6 +2533,30 @@ function App() {
     }
 
     setIsGeneratingBreakdown(false)
+  }
+
+  async function handleGenerateAdSheetClick() {
+    setIsGeneratingAdSheet(true)
+    setErrorMessage(null)
+
+    try {
+      const response = await fetch(`${BACKEND_URL}/api/script-breakdown/${scriptBreakdown.id}/generate-ad-sheet`, {
+        method: 'POST',
+      })
+      const data = await response.json()
+
+      if (!response.ok) {
+        setErrorMessage(data.error || t.genericError)
+        setIsGeneratingAdSheet(false)
+        return
+      }
+
+      setScriptBreakdown(data)
+    } catch {
+      setErrorMessage(t.genericError)
+    }
+
+    setIsGeneratingAdSheet(false)
   }
 
   async function handleApproveBreakdownClick() {
@@ -4526,6 +4557,26 @@ function App() {
 
           {scriptBreakdown && (
             <>
+              <div className="ad-sheet-panel">
+                {canEditProduction && (
+                  <button
+                    className="breakdown-action-button"
+                    onClick={handleGenerateAdSheetClick}
+                    disabled={isGeneratingAdSheet}
+                  >
+                    {isGeneratingAdSheet ? t.generatingAdSheetLabel : t.generateAdSheetButton}
+                  </button>
+                )}
+                {scriptBreakdown.adSheet && (
+                  <a
+                    className="breakdown-pdf-link"
+                    href={`${BACKEND_URL}/api/script-breakdown/${scriptBreakdown.id}/export-ad-sheet?lang=${language}`}
+                  >
+                    {t.downloadAdSheetLabel}
+                  </a>
+                )}
+              </div>
+
               {renderBreakdownCategory('artistList', 'artistListHeading')}
               {renderBreakdownCategory('locationList', 'locationListHeading')}
               {renderBreakdownCategory('props', 'propsHeading')}

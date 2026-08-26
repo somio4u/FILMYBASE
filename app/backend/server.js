@@ -3733,15 +3733,27 @@ function flattenScenesForAdSheet(sceneList) {
 // scene, extras, properties, and costume remarks — using the already
 // generated category breakdown (character/prop/costume names) as the
 // vocabulary to draw from instead of inventing new entities.
-async function generateAdSheetDetails(sceneEntries, breakdownContent, characterNames) {
-  const numberedScenes = sceneEntries
-    .map((s, i) => `${i + 1}. [${s.sceneNumber}] ${s.intExt}. ${s.location.en} — ${s.timeOfDay}: ${s.oneLiner.en}`)
+const AD_SHEET_BATCH_SIZE = 15;
+
+// One focused call per small batch of scenes (not one giant call for the
+// whole script) — the same "don't trust a single long pass" lesson already
+// applied to the categorized breakdown's deep-reanalysis, since a model
+// asked to carefully track every incidental character across 70+ scenes in
+// one shot tends to default to just the two leads for anything it isn't
+// paying close attention to.
+async function generateAdSheetDetailsForBatch(batchEntries, batchStartIndex, breakdownContent, sourceText) {
+  const numberedScenes = batchEntries
+    .map((s, i) => `${batchStartIndex + i + 1}. [${s.sceneNumber}] ${s.intExt}. ${s.location.en} — ${s.timeOfDay}: ${s.oneLiner.en}`)
     .join("\n");
-  const knownCharacters = characterNames.join(", ");
+  // The FULL cast (every character the breakdown ever found), not just the
+  // 3-5 major characters from the character sheet — a one-scene bit player
+  // like someone dropping off a baby is a real established character here
+  // even though they'd never make a "major characters" list.
+  const knownCharacters = (breakdownContent.artistList ?? []).map((a) => a.label).join(", ");
   const knownProps = (breakdownContent.props ?? []).map((p) => p.label).join(", ");
   const knownCostumes = (breakdownContent.costumes ?? []).map((c) => `${c.character}: ${c.description.en}`).join("; ");
 
-  const contents = `The full scene list, numbered in order (${sceneEntries.length} scenes total):\n${numberedScenes}\n\nEstablished main characters: ${knownCharacters}\n\nEstablished property list: ${knownProps || "(none yet)"}\n\nEstablished costume notes: ${knownCostumes || "(none yet)"}\n\nFor EACH of the ${sceneEntries.length} scenes above, in the exact same order, determine: which of the established main characters actually appear in that scene (by exact name, from the list given — never invent a name not in that list); a short bilingual note on extras/background people implied by the scene (empty strings if none); a short bilingual note on properties used in that scene, preferring the established property list when relevant (empty strings if none); and a short bilingual costume remark for that scene if the costume notes above say anything relevant (empty strings if nothing applies). Return exactly ${sceneEntries.length} rows in the same order as the scenes — do not skip, merge, or add extra rows.`;
+  const contents = `The full script material (the authoritative source — use this to check exactly who and what is in each of the scenes below, not just their one-liners, which are compressed summaries that can omit incidental details):\n${sourceText}\n\nThese ${batchEntries.length} scenes are the ones to report back on this time, numbered by their true position in the full scene list:\n${numberedScenes}\n\nEstablished full cast list: ${knownCharacters}\n\nEstablished property list: ${knownProps || "(none yet)"}\n\nEstablished costume notes: ${knownCostumes || "(none yet)"}\n\nFor EACH of these ${batchEntries.length} scenes, in the same order given, re-read the corresponding part of the full script material carefully and determine:\n- mainCharacters: EVERY named individual who is physically part of that scene's action — whether or not they speak, and however brief their presence (someone dropping something off, a silent bystander who is nonetheless a named character, a baby being handed over, etc.). Do not default to just the scene's two lead characters — actively check for every name the script mentions in that scene. Prefer exact names from the established full cast list above when they match, but if the script clearly names someone not on that list, include them anyway using the name the script gives them — never silently drop a named person.\n- extras: unnamed/generic background people only (a crowd, "a few guests", "kids playing football") — never someone the script gives an actual name to; leave empty if none.\n- property: objects handled or referenced in that scene, preferring the established property list when relevant; leave empty if none.\n- costumeRemarks: a costume-specific note for that scene if the costume notes above say anything relevant; leave empty if nothing applies.\nReturn exactly ${batchEntries.length} rows in the same order as these scenes — do not skip, merge, or add extra rows.`;
 
   const response = await generateContentWithRetry({
     model: "gemini-flash-lite-latest",
@@ -3749,7 +3761,7 @@ async function generateAdSheetDetails(sceneEntries, breakdownContent, characterN
     config: {
       systemInstruction: SCRIPT_BREAKDOWN_SYSTEM_PROMPT,
       responseMimeType: "application/json",
-      maxOutputTokens: 12288,
+      maxOutputTokens: 8192,
       responseSchema: {
         type: Type.OBJECT,
         properties: { rows: { type: Type.ARRAY, items: AD_SHEET_ROW_SCHEMA } },
@@ -3763,7 +3775,20 @@ async function generateAdSheetDetails(sceneEntries, breakdownContent, characterN
   // Defensive padding/truncation — the row COUNT must match the real scene
   // count no matter what the model returns, since every downstream row is
   // positionally joined back to its deterministic scene entry.
-  return sceneEntries.map((_, i) => rows[i] ?? blankRow);
+  return batchEntries.map((_, i) => rows[i] ?? blankRow);
+}
+
+async function generateAdSheetDetails(sceneEntries, breakdownContent, sourceText) {
+  const batches = [];
+  for (let i = 0; i < sceneEntries.length; i += AD_SHEET_BATCH_SIZE) {
+    batches.push({ start: i, entries: sceneEntries.slice(i, i + AD_SHEET_BATCH_SIZE) });
+  }
+
+  const batchResults = await mapWithConcurrency(batches, 3, (batch) =>
+    generateAdSheetDetailsForBatch(batch.entries, batch.start, breakdownContent, sourceText)
+  );
+
+  return batchResults.flat();
 }
 
 app.post("/api/script-breakdown/:id/reanalyze", requireRole("admin"), async (req, res) => {
@@ -3933,9 +3958,9 @@ app.post("/api/script-breakdown/:id/generate-ad-sheet", requireRole("admin", "pr
   try {
     const sceneListResult = await db.query("SELECT content FROM scene_lists WHERE id = $1", [sceneListId]);
     const sceneList = sceneListResult.rows[0].content;
-    const characterNames = await fetchCharacterNamesForSceneList(sceneListId, sceneList);
+    const sourceText = await buildBreakdownSourceText(sceneList, sceneListId);
     const sceneEntries = flattenScenesForAdSheet(sceneList);
-    const aiDetails = await generateAdSheetDetails(sceneEntries, latest.rows[0].content, characterNames);
+    const aiDetails = await generateAdSheetDetails(sceneEntries, latest.rows[0].content, sourceText);
 
     const adSheet = sceneEntries.map((entry, i) => ({ ...entry, ...aiDetails[i] }));
     const updatedContent = { ...latest.rows[0].content, adSheet };

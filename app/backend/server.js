@@ -1776,10 +1776,17 @@ function splitScreenplayIntoEpisodes(text) {
 
   const episodes = [];
   const firstIndex = matches[0].index;
-  if (text.slice(0, firstIndex).trim().length > 0) {
-    // Content before the first explicit header — episode 1's cold open, for
-    // scripts that don't bother labeling their very first episode.
-    episodes.push({ episodeNumber: 1, title: null, text: text.slice(0, firstIndex).trim() });
+  const leadingText = text.slice(0, firstIndex).trim();
+  // Content before the first explicit header is only ever real scene
+  // material — an unlabeled cold open — if it actually contains a scene
+  // heading. Otherwise it's title-page front matter (title, credits,
+  // "Streaming on X", a "12 of 124" page footer, etc.), which must be
+  // discarded rather than counted as its own "episode 1": treating it as
+  // one shifts every real episode's number up by one, since the episode
+  // ARRAY POSITION (not the header's own number) is what every other
+  // stage uses to label "Episode N".
+  if (leadingText.length > 0 && /^\s*(SCENE\s+\S|INT[.\s]|EXT[.\s])/im.test(leadingText)) {
+    episodes.push({ episodeNumber: 1, title: null, text: leadingText });
   }
 
   matches.forEach((match, i) => {

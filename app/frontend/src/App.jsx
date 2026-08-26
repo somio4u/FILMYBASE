@@ -163,6 +163,10 @@ const LABELS = {
     missingCharacterNamePlaceholder: 'Missed a character? Type their name…',
     addMissingCharacterButton: 'Add Character',
     addingCharacterLabel: 'Adding…',
+    ageLabel: 'Age',
+    genderMaleLabel: 'Male',
+    genderFemaleLabel: 'Female',
+    unspecifiedLabel: 'Unspecified',
     findMissingCharactersButton: 'Re-analyze for Missing Characters',
     findingMissingCharactersLabel: 'Scanning script...',
     findMissingCharactersHint: 'Thoroughly re-scans the full script for any character with screen presence not yet in this list — including non-speaking characters — and adds them. Never removes or changes existing entries. Excludes unnamed extras/crowds.',
@@ -464,6 +468,10 @@ const LABELS = {
     missingCharacterNamePlaceholder: 'ଏକ ଚରିତ୍ର ଛାଡ଼ିଗଲା କି? ତାହାର ନାମ ଲେଖନ୍ତୁ…',
     addMissingCharacterButton: 'ଚରିତ୍ର ଯୋଡ଼ନ୍ତୁ',
     addingCharacterLabel: 'ଯୋଡ଼ୁଛି…',
+    ageLabel: 'ବୟସ',
+    genderMaleLabel: 'ପୁରୁଷ',
+    genderFemaleLabel: 'ମହିଳା',
+    unspecifiedLabel: 'ଅନିର୍ଦ୍ଦିଷ୍ଟ',
     findMissingCharactersButton: 'ମିଳିନଥିବା ଚରିତ୍ର ପାଇଁ ପୁନଃ ବିଶ୍ଳେଷଣ କରନ୍ତୁ',
     findingMissingCharactersLabel: 'ସ୍କ୍ରିପ୍ଟ ସ୍କାନ୍ ହେଉଛି...',
     findMissingCharactersHint: 'ସମ୍ପୂର୍ଣ୍ଣ ସ୍କ୍ରିପ୍ଟକୁ ପୁଙ୍ଖାନୁପୁଙ୍ଖ ଭାବରେ ପୁନଃ ସ୍କାନ୍ କରି ଏହି ତାଲିକାରେ ନଥିବା କୌଣସି ଚରିତ୍ର (ନିରବ ଚରିତ୍ର ସହିତ) ଥିଲେ ଯୋଡ଼ିଥାଏ। ପୂର୍ବରୁ ଥିବା ଏଣ୍ଟ୍ରି କେବେ ହଟାଏ ନାହିଁ କି ପରିବର୍ତ୍ତନ କରେ ନାହିଁ। ଅଜଣା ଏକ୍ସଟ୍ରା/ଜନତାକୁ ବାଦ୍ ଦିଏ।',
@@ -2728,6 +2736,9 @@ function App() {
     if (category === 'costumes') {
       return { character: '', description: { en: '', or: '' } }
     }
+    if (category === 'artistList') {
+      return { label: '', notes: { en: '', or: '' }, age: 'Unspecified', gender: 'Unspecified' }
+    }
     return { label: '', notes: { en: '', or: '' } }
   }
 
@@ -2945,6 +2956,14 @@ function App() {
                   <strong>{item.character}</strong>
                   <p>{item.description[language]}</p>
                 </>
+              ) : category === 'artistList' ? (
+                <>
+                  <strong>{item.label}</strong>{' '}
+                  <span className="breakdown-item-meta">
+                    ({item.gender || t.unspecifiedLabel}, {item.age || t.unspecifiedLabel})
+                  </span>
+                  <p>{item.notes[language]}</p>
+                </>
               ) : (
                 <>
                   <strong>{item.label}</strong>
@@ -3132,6 +3151,59 @@ function App() {
                           handleBreakdownDraftFieldChange(index, (it) => ({
                             ...it,
                             description: { ...it.description, or: e.target.value },
+                          }))
+                        }
+                      />
+                    </div>
+                  </>
+                ) : category === 'artistList' ? (
+                  <>
+                    <input
+                      type="text"
+                      placeholder="Label"
+                      value={item.label}
+                      onChange={(e) =>
+                        handleBreakdownDraftFieldChange(index, (it) => ({ ...it, label: e.target.value }))
+                      }
+                    />
+                    <div className="breakdown-edit-field-pair">
+                      <input
+                        type="text"
+                        placeholder={t.ageLabel}
+                        value={item.age || ''}
+                        onChange={(e) =>
+                          handleBreakdownDraftFieldChange(index, (it) => ({ ...it, age: e.target.value }))
+                        }
+                      />
+                      <select
+                        value={item.gender || 'Unspecified'}
+                        onChange={(e) =>
+                          handleBreakdownDraftFieldChange(index, (it) => ({ ...it, gender: e.target.value }))
+                        }
+                      >
+                        <option value="Male">{t.genderMaleLabel}</option>
+                        <option value="Female">{t.genderFemaleLabel}</option>
+                        <option value="Unspecified">{t.unspecifiedLabel}</option>
+                      </select>
+                    </div>
+                    <div className="breakdown-edit-field-pair">
+                      <textarea
+                        placeholder="Notes (EN)"
+                        value={item.notes.en}
+                        onChange={(e) =>
+                          handleBreakdownDraftFieldChange(index, (it) => ({
+                            ...it,
+                            notes: { ...it.notes, en: e.target.value },
+                          }))
+                        }
+                      />
+                      <textarea
+                        placeholder="ମନ୍ତବ୍ୟ (OR)"
+                        value={item.notes.or}
+                        onChange={(e) =>
+                          handleBreakdownDraftFieldChange(index, (it) => ({
+                            ...it,
+                            notes: { ...it.notes, or: e.target.value },
                           }))
                         }
                       />

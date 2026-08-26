@@ -333,6 +333,19 @@ const BREAKDOWN_ITEM_SCHEMA = {
   required: ["label", "notes"],
 };
 
+// Age/gender exist only on the Artist List — a casting-relevant detail
+// that doesn't apply to props, locations, or art department entries.
+const BREAKDOWN_ARTIST_SCHEMA = {
+  type: Type.OBJECT,
+  properties: {
+    label: { type: Type.STRING },
+    notes: BILINGUAL_TEXT_SCHEMA,
+    age: { type: Type.STRING },
+    gender: { type: Type.STRING, enum: ["Male", "Female", "Unspecified"] },
+  },
+  required: ["label", "notes", "age", "gender"],
+};
+
 const BREAKDOWN_LOCATION_SCHEMA = {
   type: Type.OBJECT,
   properties: {
@@ -373,7 +386,7 @@ const AD_SHEET_ROW_SCHEMA = {
 };
 
 const BREAKDOWN_CATEGORY_ITEM_SCHEMAS = {
-  artistList: BREAKDOWN_ITEM_SCHEMA,
+  artistList: BREAKDOWN_ARTIST_SCHEMA,
   locationList: BREAKDOWN_LOCATION_SCHEMA,
   props: BREAKDOWN_ITEM_SCHEMA,
   costumes: BREAKDOWN_COSTUME_SCHEMA,
@@ -381,7 +394,7 @@ const BREAKDOWN_CATEGORY_ITEM_SCHEMAS = {
 };
 
 const BREAKDOWN_CATEGORY_DESCRIPTIONS = {
-  artistList: "every character who appears, each with a short bilingual note on their overall involvement (how central they are, roughly how many scenes, anything schedule-relevant)",
+  artistList: "every character who appears, each with a short bilingual note on their overall involvement (how central they are, roughly how many scenes, anything schedule-relevant), their approximate age (an age or age range as stated or reasonably inferable from the script and dialogue — e.g. \"60s\", \"Late 20s\", \"Child, around 8\", or \"Unspecified\" if genuinely not inferable), and their gender (Male, Female, or Unspecified) — this is what a casting decision is actually made against, so infer it confidently from context (name, pronouns, family role, honorifics) rather than defaulting to Unspecified whenever possible",
   locationList: "every distinct physical location as its OWN separate entry, each with INT/EXT, how many scenes happen there, and a short bilingual note — NEVER bundle multiple different named places into one combined/vague entry (e.g. never write \"Various Locations\" or \"Village (various)\" as a single item covering several places); even a location that appears only once or briefly (a flashback, a single shot) still gets its own entry",
   props: "every significant PROPERTY (an object a character handles or that's plot-relevant — a letter, a weapon, a phone, a specific vehicle) — not generic background objects",
   costumes: "for each major character, a short bilingual description of their costume and any costume changes across the story",
@@ -411,7 +424,7 @@ You may add a "flashback" element when a brief memory genuinely intrudes on the 
 const SCRIPT_BREAKDOWN_SYSTEM_PROMPT = `You are an experienced Assistant Director / Script Supervisor performing a professional SCRIPT BREAKDOWN — the standard pre-scheduling analysis every production does once a script is locked, reading it closely for everything the production team needs to plan for. You are precise and thorough, not creative — extract what's actually in the script, don't invent story content.
 
 Read the full scene-by-scene material given and produce five separate lists:
-- "artistList": every character who appears, each with a short bilingual note on their overall involvement (how central they are, roughly how many scenes, anything schedule-relevant like "appears only in exterior scenes").
+- "artistList": every character who appears, each with a short bilingual note on their overall involvement (how central they are, roughly how many scenes, anything schedule-relevant like "appears only in exterior scenes"), their approximate age (an age or age range as stated or reasonably inferable from the script and dialogue — e.g. "60s", "Late 20s", "Child, around 8" — use "Unspecified" only when genuinely not inferable), and their gender (Male, Female, or Unspecified) — casting decisions are made against age and gender, so infer both confidently from context (name, pronouns, family role, honorifics) rather than defaulting to Unspecified.
 - "locationList": every distinct physical location as its OWN separate entry, each with INT/EXT, how many scenes happen there, and a short bilingual note (e.g. "needs to be dressed as a rundown temple courtyard"). List EVERY distinct place separately, however briefly it appears (including a flashback or a single shot) — NEVER combine multiple different named locations into one vague catch-all entry like "Various Locations" or "Village (various)".
 - "props": every significant PROPERTY (an object a character handles or that's plot-relevant — a letter, a weapon, a phone, a specific vehicle) — not generic background objects. Each with a short bilingual note on which scene(s)/context it's needed in.
 - "costumes": for each major character, a short bilingual description of their costume and any COSTUME CHANGES across the story (e.g. "starts in worn work clothes, changes to a clean kurta for the temple scene in Act 3").
@@ -3857,7 +3870,7 @@ async function generateScriptBreakdownContent(sourceText, revision) {
       responseSchema: {
         type: Type.OBJECT,
         properties: {
-          artistList: { type: Type.ARRAY, items: BREAKDOWN_ITEM_SCHEMA },
+          artistList: { type: Type.ARRAY, items: BREAKDOWN_ARTIST_SCHEMA },
           locationList: { type: Type.ARRAY, items: BREAKDOWN_LOCATION_SCHEMA },
           props: { type: Type.ARRAY, items: BREAKDOWN_ITEM_SCHEMA },
           costumes: { type: Type.ARRAY, items: BREAKDOWN_COSTUME_SCHEMA },
@@ -3950,7 +3963,7 @@ async function generateBreakdownCategoryContent(sourceText, category, existingIt
 // characters, never touches or reorders what's already there, so it's
 // safe to run at any time without risking already-cast entries.
 async function findMissingCharactersInChunk(chunkText, knownLabels) {
-  const contents = `The script material (one part of a larger script — the character list below spans the WHOLE script, not just this part):\n${chunkText}\n\nAlready-known characters (do NOT report any of these again, even if they appear here): ${knownLabels.join(", ") || "(none yet)"}\n\nThoroughly re-read this material and identify every character with ANY screen presence who is NOT already in the known list above — including characters who never speak, appear only briefly, or are simply named while physically present in a scene (someone silently dropping something off, a background figure the script gives a real name to, etc.). Do not skip anyone just because their part is small. Exclude only generic, unnamed background people or crowds ("a few guests", "kids playing football", "wedding crowd") — never exclude someone the script actually names. For each character found, give a short bilingual note on their overall involvement, matching the style of an existing character-list entry. If none are missing from this material, return an empty array.`;
+  const contents = `The script material (one part of a larger script — the character list below spans the WHOLE script, not just this part):\n${chunkText}\n\nAlready-known characters (do NOT report any of these again, even if they appear here): ${knownLabels.join(", ") || "(none yet)"}\n\nThoroughly re-read this material and identify every character with ANY screen presence who is NOT already in the known list above — including characters who never speak, appear only briefly, or are simply named while physically present in a scene (someone silently dropping something off, a background figure the script gives a real name to, etc.). Do not skip anyone just because their part is small. Exclude only generic, unnamed background people or crowds ("a few guests", "kids playing football", "wedding crowd") — never exclude someone the script actually names. For each character found, give: a short bilingual note on their overall involvement, matching the style of an existing character-list entry; their approximate age (an age or age range as stated or reasonably inferable, e.g. "60s", "Late 20s", "Child, around 8" — "Unspecified" only if genuinely not inferable); and their gender (Male, Female, or Unspecified), inferred confidently from name/pronouns/context rather than defaulted. If none are missing from this material, return an empty array.`;
 
   const response = await generateContentWithRetry({
     model: "gemini-flash-lite-latest",
@@ -3961,7 +3974,7 @@ async function findMissingCharactersInChunk(chunkText, knownLabels) {
       maxOutputTokens: 4096,
       responseSchema: {
         type: Type.OBJECT,
-        properties: { missingCharacters: { type: Type.ARRAY, items: BREAKDOWN_ITEM_SCHEMA } },
+        properties: { missingCharacters: { type: Type.ARRAY, items: BREAKDOWN_ARTIST_SCHEMA } },
         required: ["missingCharacters"],
       },
     },
@@ -4216,7 +4229,7 @@ app.post("/api/script-breakdown/:id/add-character", requireRole("admin", "produc
 
   const updatedContent = {
     ...latest.rows[0].content,
-    artistList: [...currentArtistList, { label: trimmedLabel, notes: { en: "", or: "" } }],
+    artistList: [...currentArtistList, { label: trimmedLabel, notes: { en: "", or: "" }, age: "Unspecified", gender: "Unspecified" }],
   };
 
   const insertResult = await db.query(
@@ -4459,6 +4472,9 @@ app.get("/api/script-breakdown/:id/export", requireLogin, async (req, res) => {
       if (category === "locationList") {
         doc.font(bodyFont).fontSize(11).text(`  (${item.intExt} — ${item.sceneCount} scenes)`);
       }
+      if (category === "artistList" && (item.age || item.gender)) {
+        doc.font(bodyFont).fontSize(11).text(`  (${item.gender || "Unspecified"}, ${item.age || "Unspecified"})`);
+      }
       doc.font(bodyFont).fontSize(11).text(noteField[lang], { indent: 10 });
       if (category === "artistList") {
         const cast = castByCharacter.get(item.label);
@@ -4514,8 +4530,8 @@ app.get("/api/script-breakdown/:id/export-excel", requireLogin, async (req, res)
     const statusLabels = lang === "or" ? ["ବାକି ଅଛି", "ହୋଇଗଲା"] : ["Pending", "Done"];
     const columnLabels =
       lang === "or"
-        ? { name: "ନାମ", location: "ସ୍ଥାନ", intExt: "INT/EXT", sceneCount: "ଦୃଶ୍ୟ ସଂଖ୍ୟା", character: "ଚରିତ୍ର", notes: "ନୋଟ୍", status: "ସ୍ଥିତି", remarks: "ମନ୍ତବ୍ୟ", playedBy: "କଳାକାର", contactNumber: "ଯୋଗାଯୋଗ ନମ୍ବର" }
-        : { name: "Name", location: "Location", intExt: "INT/EXT", sceneCount: "Scene Count", character: "Character", notes: "Notes", status: "Status", remarks: "Remarks", playedBy: "Played By", contactNumber: "Contact Number" };
+        ? { name: "ନାମ", location: "ସ୍ଥାନ", intExt: "INT/EXT", sceneCount: "ଦୃଶ୍ୟ ସଂଖ୍ୟା", character: "ଚରିତ୍ର", notes: "ନୋଟ୍", status: "ସ୍ଥିତି", remarks: "ମନ୍ତବ୍ୟ", playedBy: "କଳାକାର", contactNumber: "ଯୋଗାଯୋଗ ନମ୍ବର", age: "ବୟସ", gender: "ଲିଙ୍ଗ" }
+        : { name: "Name", location: "Location", intExt: "INT/EXT", sceneCount: "Scene Count", character: "Character", notes: "Notes", status: "Status", remarks: "Remarks", playedBy: "Played By", contactNumber: "Contact Number", age: "Age", gender: "Gender" };
     const notCastLabel = lang === "or" ? "ଏପର୍ଯ୍ୟନ୍ତ କାଷ୍ଟ ହୋଇନାହିଁ — ଦୟାକରି ଅପଡେଟ୍ କରନ୍ତୁ" : "Not yet cast — please update";
 
     // Real-world casting info lives in crew_members, not the AI-analyzed
@@ -4552,7 +4568,9 @@ app.get("/api/script-breakdown/:id/export-excel", requireLogin, async (req, res)
     } else if (category === "artistList") {
       columns = [
         { header: columnLabels.name, key: "name", width: 22 },
-        { header: columnLabels.notes, key: "notes", width: 45 },
+        { header: columnLabels.age, key: "age", width: 14 },
+        { header: columnLabels.gender, key: "gender", width: 12 },
+        { header: columnLabels.notes, key: "notes", width: 40 },
         { header: columnLabels.playedBy, key: "playedBy", width: 22 },
         { header: columnLabels.contactNumber, key: "contactNumber", width: 18 },
       ];
@@ -4560,6 +4578,8 @@ app.get("/api/script-breakdown/:id/export-excel", requireLogin, async (req, res)
         const cast = castByCharacter.get(item.label);
         return {
           name: item.label,
+          age: item.age || "Unspecified",
+          gender: item.gender || "Unspecified",
           notes: item.notes[lang],
           playedBy: cast ? cast.name : notCastLabel,
           contactNumber: cast ? cast.contact_number || "" : notCastLabel,

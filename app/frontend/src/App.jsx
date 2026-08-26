@@ -890,7 +890,7 @@ function SceneRows({ scenes, t, language, episodeIndex, screenplay }) {
       <div key={index} className="scene-row">
         {showActHeader && <h4 className="scene-act-header">{actLabel}</h4>}
         <p className="scene-heading">
-          {t.sceneLabel} {index + 1} — {scene.intExt}. {scene.location[language]} — {timeLabel}
+          {t.sceneLabel} {scene.sceneNumber || index + 1} — {scene.intExt}. {scene.location[language]} — {timeLabel}
           {typeof scene.estimatedMinutes === 'number' ? ` (${t.approxMinutesUnit(scene.estimatedMinutes)})` : ''}
         </p>
         {scene.purpose && (
@@ -4880,7 +4880,7 @@ function App() {
                         return (
                           <li key={index}>
                             {typeof ref.episodeIndex === 'number' ? `${t.episodeLabel} ${ref.episodeIndex + 1}, ` : ''}
-                            {t.sceneLabel} {ref.sceneIndex + 1}: {scene.oneLiner[language]}
+                            {t.sceneLabel} {scene.sceneNumber || ref.sceneIndex + 1}: {scene.oneLiner[language]}
                           </li>
                         )
                       })}

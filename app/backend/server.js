@@ -268,6 +268,13 @@ const BIT_SCHEMA = {
 const SCENE_SCHEMA = {
   type: Type.OBJECT,
   properties: {
+    // The scene's own literal number/label from its original source, when
+    // there is one to preserve (an imported screenplay) — e.g. "5A", "36",
+    // or a number that keeps counting up across episodes instead of
+    // restarting at 1. Left unset (never invented) for scenes an AI agent
+    // is writing from scratch, where there is no "real" number to keep;
+    // every reader falls back to the scene's array position in that case.
+    sceneNumber: { type: Type.STRING },
     actNumber: { type: Type.INTEGER },
     intExt: { type: Type.STRING, enum: ["INT", "EXT"] },
     location: BILINGUAL_TEXT_SCHEMA,
@@ -1773,7 +1780,7 @@ async function generateScreenplayMetadataForProduction(fullText) {
 // instead of risking truncation on one giant combined call.
 async function generateEpisodeScenesForProduction(episodeText, episodeNumber, episodeTitle, isSeries, targetMinutes) {
   const episodeLine = isSeries
-    ? `This is EPISODE ${episodeNumber}${episodeTitle ? ` ("${episodeTitle}")` : ""} of a multi-episode series — extract ONLY this episode's own scenes; its scene numbering restarts at 1 within the episode, same as the source. `
+    ? `This is EPISODE ${episodeNumber}${episodeTitle ? ` ("${episodeTitle}")` : ""} of a multi-episode series — extract ONLY this episode's own scenes. `
     : "";
   const targetLine = targetMinutes
     ? ` This ${isSeries ? "episode" : "film"} runs approximately ${targetMinutes} minutes — use that to calibrate each scene's estimatedMinutes so they add up in the right ballpark, without forcing an exact match.`
@@ -1781,7 +1788,7 @@ async function generateEpisodeScenesForProduction(episodeText, episodeNumber, ep
 
   const response = await generateContentWithRetry({
     model: "gemini-flash-lite-latest",
-    contents: `The user pasted an already-written screenplay below — treat it as authoritative, this is a transcription/structuring task, not a creative rewrite. ${episodeLine}Extract a faithful scene-by-scene breakdown of the ENTIRE material given — for each scene give actNumber (estimate 1/2/3 from its position within this material), intExt (INT/EXT), a bilingual location (just the place name), timeOfDay (DAY/NIGHT), a bilingual oneLiner summarizing what happens, an estimatedMinutes number (infer from the scene's length/content), a purpose ("plot_advancing" or "character_revealing"), and a bilingual turn (its value-shift).${targetLine} Odia must be real Odia (Oriya) script, never Romanized. Do not skip any scene, however short.\n\nThe pasted screenplay material:\n${episodeText}`,
+    contents: `The user pasted an already-written screenplay below — treat it as authoritative, this is a transcription/structuring task, not a creative rewrite. ${episodeLine}Extract a faithful scene-by-scene breakdown of the ENTIRE material given — for each scene give sceneNumber (the scene's OWN literal number/label exactly as written in the source — e.g. "5A", "36", or whatever this script actually uses; copy it verbatim, including any letter suffix; NEVER assume it restarts at 1 per episode or renumber it sequentially yourself — if the source keeps counting up across episodes, or starts a scene list mid-sequence, or uses "5A"/"5B" for scenes inserted between 5 and 6, preserve that exactly, since this is what every department on set actually references), actNumber (estimate 1/2/3 from its position within this material), intExt (INT/EXT), a bilingual location (just the place name), timeOfDay (DAY/NIGHT), a bilingual oneLiner summarizing what happens — and it must name EVERY character physically present in the scene, not just whoever is speaking or central to it (someone silently dropping something off, a background figure the script names, etc. — never omit a named person from the one-liner just because their part is brief), an estimatedMinutes number (infer from the scene's length/content), a purpose ("plot_advancing" or "character_revealing"), and a bilingual turn (its value-shift).${targetLine} Odia must be real Odia (Oriya) script, never Romanized. Do not skip any scene, however short.\n\nThe pasted screenplay material:\n${episodeText}`,
     config: {
       systemInstruction: SCENE_SYSTEM_PROMPT,
       responseMimeType: "application/json",
@@ -3704,13 +3711,20 @@ async function generateBreakdownCategoryContent(sourceText, category, existingIt
 // One entry per real scene, in order — the deterministic half of the AD
 // sheet (SCN/description/INT-EXT/day-night/location all come straight from
 // the already-approved scene list, never from the AI).
+// sceneNumber is the scene's own literal number from the source screenplay
+// when the import step captured one (never recomputed from array position
+// — a script that uses "5A"/"5B" or keeps counting across episodes instead
+// of restarting at 1 must show exactly that, since that's what the whole
+// crew actually references on set). Only falls back to the array position
+// for older data or AI-written scenes that never had a "real" number.
 function flattenScenesForAdSheet(sceneList) {
   if (sceneList.episodeScenes) {
     const entries = [];
     sceneList.episodeScenes.forEach((episodeScene, episodeIndex) => {
       episodeScene.scenes.forEach((scene, sceneIndex) => {
         entries.push({
-          sceneNumber: `E${episodeIndex + 1}-S${sceneIndex + 1}`,
+          sceneNumber: scene.sceneNumber || String(sceneIndex + 1),
+          episodeLabel: `Episode ${episodeIndex + 1}`,
           intExt: scene.intExt,
           timeOfDay: scene.timeOfDay,
           location: scene.location,
@@ -3721,7 +3735,8 @@ function flattenScenesForAdSheet(sceneList) {
     return entries;
   }
   return sceneList.scenes.map((scene, sceneIndex) => ({
-    sceneNumber: String(sceneIndex + 1),
+    sceneNumber: scene.sceneNumber || String(sceneIndex + 1),
+    episodeLabel: null,
     intExt: scene.intExt,
     timeOfDay: scene.timeOfDay,
     location: scene.location,
@@ -4295,7 +4310,7 @@ app.get("/api/script-breakdown/:id/export-ad-sheet", requireLogin, async (req, r
     const pageLeft = doc.page.margins.left;
     const pageBottom = doc.page.height - doc.page.margins.bottom;
     const columns = [
-      { key: "scn", label: labels.scn, width: 30 },
+      { key: "scn", label: labels.scn, width: 50 },
       { key: "description", label: labels.description, width: 150 },
       { key: "type", label: labels.type, width: 32 },
       { key: "dn", label: labels.dn, width: 34 },
@@ -4326,7 +4341,7 @@ app.get("/api/script-breakdown/:id/export-ad-sheet", requireLogin, async (req, r
 
     function rowValues(row) {
       return {
-        scn: row.sceneNumber,
+        scn: row.episodeLabel ? `${row.episodeLabel}\n${row.sceneNumber}` : row.sceneNumber,
         description: row.oneLiner?.[lang] ?? "",
         type: row.intExt,
         dn: row.timeOfDay,
@@ -4752,9 +4767,8 @@ app.get("/api/shoot-schedule/:id/export", requireLogin, async (req, res) => {
       (day.sceneRefs ?? []).forEach((ref) => {
         const scene = lookupSceneServerSide(sceneList, ref);
         if (!scene) return;
-        const sceneLabel = isSeries
-          ? `Episode ${ref.episodeIndex + 1}, Scene ${ref.sceneIndex + 1}`
-          : `Scene ${ref.sceneIndex + 1}`;
+        const realSceneNumber = scene.sceneNumber || String(ref.sceneIndex + 1);
+        const sceneLabel = isSeries ? `Episode ${ref.episodeIndex + 1}, Scene ${realSceneNumber}` : `Scene ${realSceneNumber}`;
         doc
           .font(bodyFont)
           .fontSize(10)

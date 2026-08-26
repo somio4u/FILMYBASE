@@ -1803,3 +1803,122 @@ body {
   font-style: italic;
   color: var(--text-muted);
 }
+
+/* --- Mobile responsive layout ---
+   Below 768px, the sidebar (fixed 260px in the desktop flex layout) would
+   otherwise squeeze the main content down to a sliver, causing the
+   one-word-per-line wrapping bug. It becomes an off-canvas drawer instead,
+   toggled by a fixed top bar, so the main content gets the full viewport
+   width. */
+.mobile-topbar {
+  display: none;
+}
+
+.sidebar-overlay {
+  display: none;
+}
+
+.sidebar-close-button {
+  display: none;
+}
+
+@media (max-width: 768px) {
+  .app-shell {
+    position: relative;
+  }
+
+  .mobile-topbar {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 52px;
+    padding: 0 14px;
+    background: var(--bg-sidebar);
+    border-bottom: 1px solid var(--border-subtle);
+    z-index: 40;
+  }
+
+  .mobile-menu-button {
+    background: none;
+    border: none;
+    color: var(--text-primary);
+    font-size: 22px;
+    line-height: 1;
+    cursor: pointer;
+    padding: 4px 8px;
+  }
+
+  .mobile-topbar-title {
+    font-weight: 600;
+    font-size: 15px;
+  }
+
+  .chat-viewport {
+    width: 100%;
+    padding-top: 52px;
+  }
+
+  .sidebar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 82%;
+    max-width: 300px;
+    transform: translateX(-100%);
+    transition: transform 0.2s ease;
+    z-index: 50;
+    box-shadow: 2px 0 16px rgba(0, 0, 0, 0.45);
+  }
+
+  .sidebar.sidebar-open {
+    transform: translateX(0);
+  }
+
+  .sidebar-overlay {
+    display: block;
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.5);
+    z-index: 45;
+  }
+
+  .sidebar-header {
+    position: relative;
+  }
+
+  .sidebar-close-button {
+    display: inline-flex;
+    margin-left: auto;
+    background: none;
+    border: none;
+    color: var(--text-primary);
+    font-size: 18px;
+    cursor: pointer;
+    padding: 4px 8px;
+  }
+
+  .concept-page {
+    margin: 12px auto;
+    padding: 0 14px 100px;
+  }
+
+  .three-act-structure {
+    padding: 16px;
+  }
+
+  .crew-member-grid {
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  }
+
+  .manage-users-list,
+  .contact-picker,
+  .ad-sheet-panel,
+  .breakdown-category-actions,
+  .crew-add-form {
+    overflow-x: auto;
+  }
+}

@@ -16,6 +16,8 @@ window.fetch = (url, options = {}) => nativeFetch(url, { ...options, credentials
 const LABELS = {
   en: {
     heading: 'Filmmaking App',
+    openMenuLabel: 'Open menu',
+    closeMenuLabel: 'Close menu',
     usernameLabel: 'Username',
     passwordLabel: 'Password',
     loginButton: 'Log in',
@@ -289,6 +291,8 @@ const LABELS = {
   },
   or: {
     heading: 'ଚଳଚ୍ଚିତ୍ର ନିର୍ମାଣ ଆପ୍',
+    openMenuLabel: 'ମେନୁ ଖୋଲନ୍ତୁ',
+    closeMenuLabel: 'ମେନୁ ବନ୍ଦ କରନ୍ତୁ',
     usernameLabel: 'ୟୁଜରନେମ୍',
     passwordLabel: 'ପାସୱାର୍ଡ',
     loginButton: 'ଲଗ୍ ଇନ୍',
@@ -1278,6 +1282,7 @@ function InlineCastAttachment({
 function App() {
   const importFileInputRef = useRef(null)
   const screenplayFileInputRef = useRef(null)
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false)
   const [language, setLanguage] = useState('en')
   const [concept, setConcept] = useState('')
   const [conceptId, setConceptId] = useState(null)
@@ -1527,6 +1532,7 @@ function App() {
   // Loads exactly one project's full chain by its concept id — never "whatever's newest
   // anywhere," which was the root cause of the app appearing to randomly jump projects.
   async function loadProject(id) {
+    setIsSidebarOpen(false)
     const response = await fetch(`${BACKEND_URL}/api/concepts/${id}/full`)
     if (!response.ok) return
     const data = await response.json()
@@ -3301,6 +3307,7 @@ function App() {
   }
 
   function handleStageClick(anchorId) {
+    setIsSidebarOpen(false)
     document.getElementById(anchorId)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
   }
 
@@ -3508,10 +3515,22 @@ function App() {
 
   return (
     <div className="app-shell">
-      <aside className="sidebar">
+      <div className="mobile-topbar">
+        <button className="mobile-menu-button" onClick={() => setIsSidebarOpen(true)} aria-label={t.openMenuLabel}>
+          ☰
+        </button>
+        <span className="mobile-topbar-title">{t.heading}</span>
+      </div>
+
+      {isSidebarOpen && <div className="sidebar-overlay" onClick={() => setIsSidebarOpen(false)} />}
+
+      <aside className={`sidebar ${isSidebarOpen ? 'sidebar-open' : ''}`}>
         <div className="sidebar-header">
           <span className="sidebar-logo">{ICONS.clapperboard}</span>
           <span className="sidebar-title">{t.heading}</span>
+          <button className="sidebar-close-button" onClick={() => setIsSidebarOpen(false)} aria-label={t.closeMenuLabel}>
+            ✕
+          </button>
         </div>
 
         <div className="current-user-row">
@@ -3622,7 +3641,7 @@ function App() {
             {currentUser.role === 'admin' && (
               <button
                 className={activeAgent === 'story' ? 'agent-header active' : 'agent-header'}
-                onClick={() => setActiveAgent('story')}
+                onClick={() => { setActiveAgent('story'); setIsSidebarOpen(false) }}
               >
                 <span className={activeAgent === 'story' ? 'agent-expand-icon expanded' : 'agent-expand-icon'}>▸</span>
                 {t.storyAgentLabel}
@@ -3655,7 +3674,7 @@ function App() {
 
             <button
               className={activeAgent === 'production' ? 'agent-header active' : 'agent-header'}
-              onClick={() => setActiveAgent('production')}
+              onClick={() => { setActiveAgent('production'); setIsSidebarOpen(false) }}
             >
               <span className={activeAgent === 'production' ? 'agent-expand-icon expanded' : 'agent-expand-icon'}>▸</span>
               {t.productionAgentLabel}

@@ -854,6 +854,51 @@ app.get("/api/concepts", requireLogin, async (req, res) => {
   );
 });
 
+// The admin-only cross-project dashboard: every project (Story & Screenplay
+// or standalone Production) in one list, each showing who's assigned
+// (director / production_manager logins scoped to it) and which stage
+// it's actually at — "In Development" until BOTH its screenplay/scene
+// list has been approved at least once AND someone is assigned to it,
+// "Ongoing / Pre-Production" once both are true.
+app.get("/api/projects/master-list", requireRole("admin"), async (req, res) => {
+  const projectsResult = await db.query(
+    `SELECT c.id, c.title, c.concept_text, c.project_type, c.pinned, c.created_at,
+            COALESCE(bool_or(sl.status = 'approved'), false) AS screenplay_ready
+     FROM concepts c
+     LEFT JOIN pitch_decks pd ON pd.concept_id = c.id
+     LEFT JOIN three_act_structures tas ON tas.pitch_deck_id = pd.id
+     LEFT JOIN bit_sheets bs ON bs.three_act_structure_id = tas.id
+     LEFT JOIN scene_lists sl ON sl.bit_sheet_id = bs.id OR sl.concept_id = c.id
+     GROUP BY c.id, c.title, c.concept_text, c.project_type, c.pinned, c.created_at
+     ORDER BY c.pinned DESC, c.created_at DESC`
+  );
+
+  const assignmentsResult = await db.query(
+    "SELECT concept_id, name, role FROM users WHERE concept_id IS NOT NULL AND role IN ('director', 'production_manager')"
+  );
+  const assignedUsersByConceptId = new Map();
+  assignmentsResult.rows.forEach((row) => {
+    if (!assignedUsersByConceptId.has(row.concept_id)) assignedUsersByConceptId.set(row.concept_id, []);
+    assignedUsersByConceptId.get(row.concept_id).push({ name: row.name, role: row.role });
+  });
+
+  res.json(
+    projectsResult.rows.map((row) => {
+      const assignedUsers = assignedUsersByConceptId.get(row.id) ?? [];
+      return {
+        id: row.id,
+        title: row.title || row.concept_text?.slice(0, 60) || `#${row.id}`,
+        projectType: row.project_type,
+        pinned: row.pinned,
+        createdAt: row.created_at,
+        screenplayReady: row.screenplay_ready,
+        assignedUsers,
+        stage: row.screenplay_ready && assignedUsers.length > 0 ? "ongoing" : "in_development",
+      };
+    })
+  );
+});
+
 app.post("/api/concepts/:id/title", requireRole("admin", "production_manager"), async (req, res) => {
   const { title } = req.body;
 

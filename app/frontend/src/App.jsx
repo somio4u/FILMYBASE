@@ -38,8 +38,17 @@ const LABELS = {
     renameProjectPrompt: 'Rename this project',
     renameIconTitle: 'Rename project',
     agentsSectionTitle: 'Agents',
+    masterProjectListLabel: 'All Projects',
     storyAgentLabel: 'Story & Screenplay',
     productionAgentLabel: 'Production Management',
+    masterProjectListHeading: 'All Projects',
+    loadingLabel: 'Loading...',
+    ongoingProjectsHeading: 'Ongoing / Pre-Production',
+    inDevelopmentProjectsHeading: 'In Development',
+    noProjectsInStageNote: 'No projects here yet.',
+    noOneAssignedNote: 'No one assigned yet',
+    adRoleLabel: 'AD',
+    directorRoleLabel: 'Director',
     newProductionButton: 'New Production',
     importScreenplayIntro: "Production Management works from a finished screenplay — it doesn't need to have been written in this app.",
     uploadScreenplayFileButton: 'Upload Screenplay File',
@@ -325,8 +334,17 @@ const LABELS = {
     renameProjectPrompt: 'ଏହି ପ୍ରୋଜେକ୍ଟର ନାମ ପରିବର୍ତ୍ତନ କରନ୍ତୁ',
     renameIconTitle: 'ପ୍ରୋଜେକ୍ଟ ନାମ ବଦଳାନ୍ତୁ',
     agentsSectionTitle: 'ଏଜେଣ୍ଟ',
+    masterProjectListLabel: 'ସମସ୍ତ ପ୍ରୋଜେକ୍ଟ',
     storyAgentLabel: 'ଷ୍ଟୋରୀ ଏବଂ ସ୍କ୍ରିନପ୍ଲେ',
     productionAgentLabel: 'ପ୍ରଡକ୍ସନ୍ ମେନେଜମେଣ୍ଟ',
+    masterProjectListHeading: 'ସମସ୍ତ ପ୍ରୋଜେକ୍ଟ',
+    loadingLabel: 'ଲୋଡ୍ ହେଉଛି...',
+    ongoingProjectsHeading: 'ଚାଲୁଥିବା / ପ୍ରି-ପ୍ରଡକ୍ସନ୍',
+    inDevelopmentProjectsHeading: 'ବିକାଶ ଅଧୀନ',
+    noProjectsInStageNote: 'ଏଠାରେ ଏପର୍ଯ୍ୟନ୍ତ କୌଣସି ପ୍ରୋଜେକ୍ଟ ନାହିଁ।',
+    noOneAssignedNote: 'ଏପର୍ଯ୍ୟନ୍ତ କାହାକୁ ନ୍ୟୁକ୍ତ କରାଯାଇ ନାହିଁ',
+    adRoleLabel: 'AD',
+    directorRoleLabel: 'ଡିରେକ୍ଟର',
     newProductionButton: 'ନୂଆ ପ୍ରଡକ୍ସନ୍',
     importScreenplayIntro: 'ପ୍ରଡକ୍ସନ୍ ମେନେଜମେଣ୍ଟ ଏକ ସମ୍ପୂର୍ଣ୍ଣ ସ୍କ୍ରିନପ୍ଲେ ଠାରୁ କାମ କରେ — ଏହା ଏହି ଆପ୍ରେ ଲେଖା ହୋଇଥିବା ଆବଶ୍ୟକ ନାହିଁ।',
     uploadScreenplayFileButton: 'ସ୍କ୍ରିନପ୍ଲେ ଫାଇଲ୍ ଅପଲୋଡ୍ କରନ୍ତୁ',
@@ -1428,6 +1446,8 @@ function App() {
 
   const [activeAgent, setActiveAgent] = useState('story')
   const [projectType, setProjectType] = useState('story')
+  const [masterProjectList, setMasterProjectList] = useState([])
+  const [isLoadingMasterList, setIsLoadingMasterList] = useState(false)
   const [importScreenplayText, setImportScreenplayText] = useState('')
   const [isImportingScreenplay, setIsImportingScreenplay] = useState(false)
   const [isImportingScreenplayFile, setIsImportingScreenplayFile] = useState(false)
@@ -1556,6 +1576,21 @@ function App() {
     const response = await fetch(`${BACKEND_URL}/api/concepts`)
     const data = await response.json()
     setProjectHistory(data)
+  }
+
+  async function loadMasterProjectList() {
+    setIsLoadingMasterList(true)
+    const response = await fetch(`${BACKEND_URL}/api/projects/master-list`)
+    if (response.ok) {
+      setMasterProjectList(await response.json())
+    }
+    setIsLoadingMasterList(false)
+  }
+
+  function handleOpenMasterProjectClick(project) {
+    setIsSidebarOpen(false)
+    setActiveAgent(project.projectType === 'production' ? 'production' : 'story')
+    loadProject(project.id)
   }
 
   // Loads exactly one project's full chain by its concept id — never "whatever's newest
@@ -3737,6 +3772,15 @@ function App() {
           <div className="agent-list">
             {currentUser.role === 'admin' && (
               <button
+                className={activeAgent === 'masterList' ? 'agent-header active' : 'agent-header'}
+                onClick={() => { setActiveAgent('masterList'); setIsSidebarOpen(false); loadMasterProjectList() }}
+              >
+                <span className="agent-expand-icon">▸</span>
+                {t.masterProjectListLabel}
+              </button>
+            )}
+            {currentUser.role === 'admin' && (
+              <button
                 className={activeAgent === 'story' ? 'agent-header active' : 'agent-header'}
                 onClick={() => { setActiveAgent('story'); setIsSidebarOpen(false) }}
               >
@@ -3864,6 +3908,67 @@ function App() {
       <main className="chat-viewport">
     <div className="concept-page" id="stage-idea">
       {errorMessage && <div className="error-banner">{errorMessage}</div>}
+
+      {activeAgent === 'masterList' && (
+        <div className="three-act-structure" id="stage-master-list">
+          <h2>{t.masterProjectListHeading}</h2>
+
+          {isLoadingMasterList && <p className="sidebar-section-note">{t.loadingLabel}</p>}
+
+          {!isLoadingMasterList && (
+            <>
+              <div className="master-list-section">
+                <h4>{t.ongoingProjectsHeading}</h4>
+                {masterProjectList.filter((p) => p.stage === 'ongoing').length === 0 && (
+                  <p className="sidebar-section-note">{t.noProjectsInStageNote}</p>
+                )}
+                <div className="master-list-grid">
+                  {masterProjectList.filter((p) => p.stage === 'ongoing').map((project) => (
+                    <button key={project.id} className="master-list-card" onClick={() => handleOpenMasterProjectClick(project)}>
+                      <strong>{project.title}</strong>
+                      <span className="breakdown-item-meta">
+                        {project.projectType === 'production' ? t.productionAgentLabel : t.storyAgentLabel}
+                      </span>
+                      <div className="master-list-assignments">
+                        {project.assignedUsers.map((u, i) => (
+                          <span key={i} className="master-list-assignment-badge">
+                            {u.role === 'production_manager' ? t.adRoleLabel : t.directorRoleLabel}: {u.name}
+                          </span>
+                        ))}
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="master-list-section">
+                <h4>{t.inDevelopmentProjectsHeading}</h4>
+                {masterProjectList.filter((p) => p.stage === 'in_development').length === 0 && (
+                  <p className="sidebar-section-note">{t.noProjectsInStageNote}</p>
+                )}
+                <div className="master-list-grid">
+                  {masterProjectList.filter((p) => p.stage === 'in_development').map((project) => (
+                    <button key={project.id} className="master-list-card" onClick={() => handleOpenMasterProjectClick(project)}>
+                      <strong>{project.title}</strong>
+                      <span className="breakdown-item-meta">
+                        {project.projectType === 'production' ? t.productionAgentLabel : t.storyAgentLabel}
+                      </span>
+                      <div className="master-list-assignments">
+                        {project.assignedUsers.length === 0 && <span className="breakdown-item-meta">{t.noOneAssignedNote}</span>}
+                        {project.assignedUsers.map((u, i) => (
+                          <span key={i} className="master-list-assignment-badge">
+                            {u.role === 'production_manager' ? t.adRoleLabel : t.directorRoleLabel}: {u.name}
+                          </span>
+                        ))}
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </>
+          )}
+        </div>
+      )}
 
       {activeAgent === 'story' && (
       <>

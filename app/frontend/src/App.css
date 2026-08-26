@@ -1567,6 +1567,53 @@ body {
   color: var(--text-muted);
 }
 
+.master-list-section {
+  margin-bottom: 28px;
+}
+
+.master-list-section h4 {
+  margin-bottom: 10px;
+}
+
+.master-list-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 12px;
+}
+
+.master-list-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 14px;
+  background: var(--bg-surface-raised);
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.master-list-card:hover {
+  border-color: var(--border-strong);
+}
+
+.master-list-assignments {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.master-list-assignment-badge {
+  font-size: 11px;
+  padding: 3px 8px;
+  border-radius: 20px;
+  background: var(--bg-input);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-secondary);
+}
+
 .crew-member-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));

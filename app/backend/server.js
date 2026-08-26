@@ -2084,13 +2084,101 @@ function extractSceneNumbers(sceneListContent) {
 //   exact scene_lists.id via a hard foreign key, so keeping that id
 //   stable is what keeps all of them attached without any migration.
 // - Crew/cast is linked by character or location NAME (not scene
-//   position), so it's untouched by this route entirely — it's never
+//   position), so it's untouched by this function entirely — it's never
 //   queried, updated, or re-derived here.
 // - A character/location the new draft no longer contains is NOT dropped
 //   from the merged breakdown list — it's kept (so its crew_members entry,
 //   with contact number and photo, stays visible and attached) and
 //   reported back as "no longer found" for the production manager to
 //   review and remove by hand if it's really gone.
+//
+// Shared by both the paste-text and file-upload re-upload routes, same
+// split as the original import.
+async function reimportScreenplayForSceneList(sceneListId, pastedText, format) {
+  const existing = await db.query("SELECT concept_id, content FROM scene_lists WHERE id = $1", [sceneListId]);
+  if (existing.rows.length === 0) {
+    return { status: 404, error: "Scene list not found" };
+  }
+  if (!existing.rows[0].content.sourceText) {
+    return { status: 400, error: "This isn't an imported-screenplay project — there's no earlier script to re-upload against." };
+  }
+
+  const previousSceneListContent = existing.rows[0].content;
+  const { sceneListContent: newSceneListContent } = await parseScreenplayIntoSceneListContent(pastedText, format);
+
+  await db.query("UPDATE scene_lists SET content = $1 WHERE id = $2", [JSON.stringify(newSceneListContent), sceneListId]);
+
+  const oldSceneNumbers = new Set(extractSceneNumbers(previousSceneListContent));
+  const newSceneNumbers = new Set(extractSceneNumbers(newSceneListContent));
+  const changes = {
+    addedScenes: [...newSceneNumbers].filter((n) => !oldSceneNumbers.has(n)),
+    removedScenes: [...oldSceneNumbers].filter((n) => !newSceneNumbers.has(n)),
+    addedCharacters: [],
+    removedCharacters: [],
+    addedLocations: [],
+    removedLocations: [],
+  };
+
+  const latestBreakdown = await db.query(
+    "SELECT id, content FROM script_breakdowns WHERE scene_list_id = $1 ORDER BY created_at DESC LIMIT 1",
+    [sceneListId]
+  );
+
+  let breakdownResult = null;
+  if (latestBreakdown.rows.length > 0) {
+    const previousContent = latestBreakdown.rows[0].content;
+    const freshContent = await generateDeepScriptBreakdownContent(newSceneListContent.sourceText);
+
+    const previousArtistLabels = new Set((previousContent.artistList ?? []).map((a) => a.label));
+    const freshArtistLabels = new Set((freshContent.artistList ?? []).map((a) => a.label));
+    const previousLocationLabels = new Set((previousContent.locationList ?? []).map((l) => l.location.en));
+    const freshLocationLabels = new Set((freshContent.locationList ?? []).map((l) => l.location.en));
+
+    changes.addedCharacters = [...freshArtistLabels].filter((l) => !previousArtistLabels.has(l));
+    changes.removedCharacters = [...previousArtistLabels].filter((l) => !freshArtistLabels.has(l));
+    changes.addedLocations = [...freshLocationLabels].filter((l) => !previousLocationLabels.has(l));
+    changes.removedLocations = [...previousLocationLabels].filter((l) => !freshLocationLabels.has(l));
+
+    // Kept, not dropped — see the function's header comment.
+    const keptOldArtists = (previousContent.artistList ?? []).filter((a) => changes.removedCharacters.includes(a.label));
+    const keptOldLocations = (previousContent.locationList ?? []).filter((l) => changes.removedLocations.includes(l.location.en));
+
+    const mergedContent = {
+      ...freshContent,
+      artistList: [...freshContent.artistList, ...keptOldArtists],
+      locationList: [...freshContent.locationList, ...keptOldLocations],
+    };
+
+    const feedbackParts = [];
+    if (changes.addedCharacters.length) feedbackParts.push(`Added characters: ${changes.addedCharacters.join(", ")}`);
+    if (changes.removedCharacters.length) feedbackParts.push(`No longer found (cast kept): ${changes.removedCharacters.join(", ")}`);
+    if (changes.addedLocations.length) feedbackParts.push(`Added locations: ${changes.addedLocations.join(", ")}`);
+    if (changes.removedLocations.length) feedbackParts.push(`Locations no longer found (kept): ${changes.removedLocations.join(", ")}`);
+
+    const insertResult = await db.query(
+      "INSERT INTO script_breakdowns (scene_list_id, content, feedback) VALUES ($1, $2, $3) RETURNING id, status, feedback",
+      [
+        sceneListId,
+        JSON.stringify(mergedContent),
+        feedbackParts.length ? `Re-imported screenplay — ${feedbackParts.join("; ")}` : "Re-imported screenplay",
+      ]
+    );
+    breakdownResult = { ...insertResult.rows[0], sceneListId: Number(sceneListId), ...mergedContent };
+  }
+
+  const shootScheduleCheck = await db.query("SELECT id FROM shoot_schedules WHERE scene_list_id = $1 LIMIT 1", [sceneListId]);
+
+  return {
+    status: 200,
+    body: {
+      sceneList: { id: Number(sceneListId), conceptId: existing.rows[0].concept_id, ...newSceneListContent },
+      breakdown: breakdownResult,
+      changes,
+      shootScheduleMayNeedRegeneration: shootScheduleCheck.rows.length > 0,
+    },
+  };
+}
+
 app.post("/api/scene-lists/:id/reimport-screenplay", requireRole("admin"), async (req, res) => {
   const { pastedText, format } = req.body;
 
@@ -2099,93 +2187,50 @@ app.post("/api/scene-lists/:id/reimport-screenplay", requireRole("admin"), async
     return;
   }
 
-  const existing = await db.query("SELECT concept_id, content FROM scene_lists WHERE id = $1", [req.params.id]);
-  if (existing.rows.length === 0) {
-    res.status(404).json({ error: "Scene list not found" });
-    return;
-  }
-  if (!existing.rows[0].content.sourceText) {
-    res.status(400).json({ error: "This isn't an imported-screenplay project — there's no earlier script to re-upload against." });
-    return;
-  }
-
   try {
-    const previousSceneListContent = existing.rows[0].content;
-    const { sceneListContent: newSceneListContent } = await parseScreenplayIntoSceneListContent(pastedText, format);
-
-    await db.query("UPDATE scene_lists SET content = $1 WHERE id = $2", [JSON.stringify(newSceneListContent), req.params.id]);
-
-    const oldSceneNumbers = new Set(extractSceneNumbers(previousSceneListContent));
-    const newSceneNumbers = new Set(extractSceneNumbers(newSceneListContent));
-    const changes = {
-      addedScenes: [...newSceneNumbers].filter((n) => !oldSceneNumbers.has(n)),
-      removedScenes: [...oldSceneNumbers].filter((n) => !newSceneNumbers.has(n)),
-      addedCharacters: [],
-      removedCharacters: [],
-      addedLocations: [],
-      removedLocations: [],
-    };
-
-    const latestBreakdown = await db.query(
-      "SELECT id, content FROM script_breakdowns WHERE scene_list_id = $1 ORDER BY created_at DESC LIMIT 1",
-      [req.params.id]
-    );
-
-    let breakdownResult = null;
-    if (latestBreakdown.rows.length > 0) {
-      const previousContent = latestBreakdown.rows[0].content;
-      const freshContent = await generateDeepScriptBreakdownContent(newSceneListContent.sourceText);
-
-      const previousArtistLabels = new Set((previousContent.artistList ?? []).map((a) => a.label));
-      const freshArtistLabels = new Set((freshContent.artistList ?? []).map((a) => a.label));
-      const previousLocationLabels = new Set((previousContent.locationList ?? []).map((l) => l.location.en));
-      const freshLocationLabels = new Set((freshContent.locationList ?? []).map((l) => l.location.en));
-
-      changes.addedCharacters = [...freshArtistLabels].filter((l) => !previousArtistLabels.has(l));
-      changes.removedCharacters = [...previousArtistLabels].filter((l) => !freshArtistLabels.has(l));
-      changes.addedLocations = [...freshLocationLabels].filter((l) => !previousLocationLabels.has(l));
-      changes.removedLocations = [...previousLocationLabels].filter((l) => !freshLocationLabels.has(l));
-
-      // Kept, not dropped — see the function's header comment.
-      const keptOldArtists = (previousContent.artistList ?? []).filter((a) => changes.removedCharacters.includes(a.label));
-      const keptOldLocations = (previousContent.locationList ?? []).filter((l) => changes.removedLocations.includes(l.location.en));
-
-      const mergedContent = {
-        ...freshContent,
-        artistList: [...freshContent.artistList, ...keptOldArtists],
-        locationList: [...freshContent.locationList, ...keptOldLocations],
-      };
-
-      const feedbackParts = [];
-      if (changes.addedCharacters.length) feedbackParts.push(`Added characters: ${changes.addedCharacters.join(", ")}`);
-      if (changes.removedCharacters.length) feedbackParts.push(`No longer found (cast kept): ${changes.removedCharacters.join(", ")}`);
-      if (changes.addedLocations.length) feedbackParts.push(`Added locations: ${changes.addedLocations.join(", ")}`);
-      if (changes.removedLocations.length) feedbackParts.push(`Locations no longer found (kept): ${changes.removedLocations.join(", ")}`);
-
-      const insertResult = await db.query(
-        "INSERT INTO script_breakdowns (scene_list_id, content, feedback) VALUES ($1, $2, $3) RETURNING id, status, feedback",
-        [
-          req.params.id,
-          JSON.stringify(mergedContent),
-          feedbackParts.length ? `Re-imported screenplay — ${feedbackParts.join("; ")}` : "Re-imported screenplay",
-        ]
-      );
-      breakdownResult = { ...insertResult.rows[0], sceneListId: Number(req.params.id), ...mergedContent };
+    const result = await reimportScreenplayForSceneList(req.params.id, pastedText, format);
+    if (result.error) {
+      res.status(result.status).json({ error: result.error });
+      return;
     }
-
-    const shootScheduleCheck = await db.query("SELECT id FROM shoot_schedules WHERE scene_list_id = $1 LIMIT 1", [req.params.id]);
-
-    res.json({
-      sceneList: { id: Number(req.params.id), conceptId: existing.rows[0].concept_id, ...newSceneListContent },
-      breakdown: breakdownResult,
-      changes,
-      shootScheduleMayNeedRegeneration: shootScheduleCheck.rows.length > 0,
-    });
+    res.json(result.body);
   } catch (error) {
     console.error("Screenplay re-import failed:", error.message);
     res.status(502).json({ error: error.message });
   }
 });
+
+app.post(
+  "/api/scene-lists/:id/reimport-screenplay/file",
+  requireRole("admin"),
+  screenplayUpload.single("file"),
+  async (req, res) => {
+    if (!req.file) {
+      res.status(400).json({ error: "No file uploaded." });
+      return;
+    }
+
+    try {
+      const text = await extractTextFromUploadedScreenplay(req.file);
+      if (!text || !text.trim()) {
+        res.status(400).json({ error: "Couldn't find any readable text in that file." });
+        return;
+      }
+
+      // multer puts non-file multipart fields into req.body as plain strings.
+      const format = req.body.format ? JSON.parse(req.body.format) : null;
+      const result = await reimportScreenplayForSceneList(req.params.id, text, format);
+      if (result.error) {
+        res.status(result.status).json({ error: result.error });
+        return;
+      }
+      res.json(result.body);
+    } catch (error) {
+      console.error("Screenplay re-import (file) failed:", error.message);
+      res.status(error.message?.startsWith("Unsupported file type") ? 400 : 502).json({ error: error.message });
+    }
+  }
+);
 
 // Builds the bilingual pitch-deck content via Gemini. When `revision` is
 // given, the prompt asks for a rewrite that addresses the producer's

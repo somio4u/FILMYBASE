@@ -1306,6 +1306,7 @@ function InlineCastAttachment({
 function App() {
   const importFileInputRef = useRef(null)
   const screenplayFileInputRef = useRef(null)
+  const reimportScreenplayFileInputRef = useRef(null)
   const [isSidebarOpen, setIsSidebarOpen] = useState(false)
   const [language, setLanguage] = useState('en')
   const [concept, setConcept] = useState('')
@@ -3256,6 +3257,42 @@ function App() {
     setIsReimportingScreenplay(false)
   }
 
+  async function handleReimportScreenplayFileSelected(event) {
+    const file = event.target.files[0]
+    event.target.value = ''
+    if (!file) return
+
+    setIsReimportingScreenplay(true)
+    setErrorMessage(null)
+
+    try {
+      const formData = new FormData()
+      formData.append('file', file)
+      formData.append('format', JSON.stringify(buildFormatObject()))
+
+      const response = await fetch(`${BACKEND_URL}/api/scene-lists/${sceneList.id}/reimport-screenplay/file`, {
+        method: 'POST',
+        body: formData,
+      })
+      const data = await response.json()
+
+      if (!response.ok) {
+        setErrorMessage(data.error || t.genericError)
+        setIsReimportingScreenplay(false)
+        return
+      }
+
+      setSceneList(data.sceneList)
+      if (data.breakdown) setScriptBreakdown(data.breakdown)
+      setReimportResult(data)
+      setShowReimportForm(false)
+    } catch {
+      setErrorMessage(t.genericError)
+    }
+
+    setIsReimportingScreenplay(false)
+  }
+
   async function handleImportScreenplayFileSelected(event) {
     const file = event.target.files[0]
     event.target.value = ''
@@ -4627,6 +4664,23 @@ function App() {
               ) : (
                 <div className="skip-ahead-form">
                   <p className="availability-form-intro">{t.reimportScreenplayIntro}</p>
+                  <button
+                    className="import-export-button screenplay-file-button"
+                    onClick={() => reimportScreenplayFileInputRef.current?.click()}
+                    disabled={isReimportingScreenplay}
+                  >
+                    <span className="import-export-icon">{ICONS.upload}</span>
+                    {isReimportingScreenplay ? t.reimportingScreenplayLabel : t.uploadScreenplayFileButton}
+                  </button>
+                  <input
+                    type="file"
+                    accept=".txt,.fountain,.pdf,.docx,.doc,.fdx,.scrite"
+                    ref={reimportScreenplayFileInputRef}
+                    onChange={handleReimportScreenplayFileSelected}
+                    style={{ display: 'none' }}
+                  />
+                  <p className="screenplay-file-formats-note">{t.screenplayFileFormatsNote}</p>
+                  <p className="availability-form-intro">{t.importScreenplayOrPaste}</p>
                   <textarea
                     className="skip-ahead-textarea"
                     value={reimportScreenplayText}

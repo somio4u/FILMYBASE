@@ -48,6 +48,18 @@ const LABELS = {
     importScreenplayPlaceholder: 'Paste your full screenplay here…',
     importScreenplayButton: 'Import Screenplay',
     importingScreenplayLabel: 'Reading screenplay...',
+    reimportScreenplayButton: 'Re-upload Updated Screenplay',
+    reimportScreenplayIntro: "Paste the writer's newer draft below. Scene numbers, cast, contact numbers, and photos you've already entered are kept — you'll get a summary of anything added or no longer found so you can review it.",
+    reimportingScreenplayLabel: 'Re-analyzing updated screenplay...',
+    confirmReimportScreenplayButton: 'Update Screenplay',
+    reimportChangesHeading: 'Screenplay updated — changes found:',
+    reimportAddedScenesLabel: 'New scenes',
+    reimportRemovedScenesLabel: 'Scenes no longer in the script',
+    reimportAddedCharactersLabel: 'New characters',
+    reimportRemovedCharactersLabel: 'Characters no longer found (their cast info is kept — remove manually if this is intentional)',
+    reimportAddedLocationsLabel: 'New locations',
+    reimportRemovedLocationsLabel: 'Locations no longer found (kept — remove manually if intentional)',
+    reimportShootScheduleWarning: 'You already have a shoot schedule for this project — since scene numbers or order may have changed, regenerate it to make sure shoot days still match the right scenes.',
     stageIdeaLabel: 'Idea',
     stageSynopsisLabel: 'Synopsis',
     stageCharactersLabel: 'Characters',
@@ -323,6 +335,18 @@ const LABELS = {
     importScreenplayPlaceholder: 'ଆପଣଙ୍କ ସମ୍ପୂର୍ଣ୍ଣ ସ୍କ୍ରିନପ୍ଲେ ଏଠାରେ ପେଷ୍ଟ କରନ୍ତୁ…',
     importScreenplayButton: 'ସ୍କ୍ରିନପ୍ଲେ ଇମ୍ପୋର୍ଟ କରନ୍ତୁ',
     importingScreenplayLabel: 'ସ୍କ୍ରିନପ୍ଲେ ପଢ଼ାଯାଉଛି...',
+    reimportScreenplayButton: 'ଅପଡେଟ୍ ହୋଇଥିବା ସ୍କ୍ରିନପ୍ଲେ ପୁନଃ ଅପଲୋଡ୍ କରନ୍ତୁ',
+    reimportScreenplayIntro: 'ଲେଖକଙ୍କ ନୂଆ ଡ୍ରାଫ୍ଟ ତଳେ ପେଷ୍ଟ କରନ୍ତୁ। ଆପଣ ପୂର୍ବରୁ ଭରିଥିବା ସିନ୍ ନମ୍ବର, କାଷ୍ଟ, ଯୋଗାଯୋଗ ନମ୍ବର ଏବଂ ଫଟୋ ସୁରକ୍ଷିତ ରହିବ — କିଛି ଯୋଡାଗଲା କି କିଛି ମିଳିଲା ନାହିଁ ତାହାର ସାରାଂଶ ମିଳିବ।',
+    reimportingScreenplayLabel: 'ଅପଡେଟ୍ ସ୍କ୍ରିନପ୍ଲେ ପୁନଃ ବିଶ୍ଳେଷଣ ହେଉଛି...',
+    confirmReimportScreenplayButton: 'ସ୍କ୍ରିନପ୍ଲେ ଅପଡେଟ୍ କରନ୍ତୁ',
+    reimportChangesHeading: 'ସ୍କ୍ରିନପ୍ଲେ ଅପଡେଟ୍ ହେଲା — ପରିବର୍ତ୍ତନ ମିଳିଲା:',
+    reimportAddedScenesLabel: 'ନୂଆ ସିନ୍',
+    reimportRemovedScenesLabel: 'ସ୍କ୍ରିପ୍ଟରେ ଆଉ ନାହିଁ ଥିବା ସିନ୍',
+    reimportAddedCharactersLabel: 'ନୂଆ ଚରିତ୍ର',
+    reimportRemovedCharactersLabel: 'ମିଳିନଥିବା ଚରିତ୍ର (କାଷ୍ଟ ସୂଚନା ସୁରକ୍ଷିତ ଅଛି — ଯଦି ସଠିକ୍ ତେବେ ହାତରେ ହଟାନ୍ତୁ)',
+    reimportAddedLocationsLabel: 'ନୂଆ ସ୍ଥାନ',
+    reimportRemovedLocationsLabel: 'ମିଳିନଥିବା ସ୍ଥାନ (ସୁରକ୍ଷିତ ଅଛି — ଯଦି ସଠିକ୍ ତେବେ ହାତରେ ହଟାନ୍ତୁ)',
+    reimportShootScheduleWarning: 'ଏହି ପ୍ରୋଜେକ୍ଟ ପାଇଁ ଆପଣଙ୍କର ପୂର୍ବରୁ ଏକ ସୁଟିଂ ସିଡ୍ୟୁଲ୍ ଅଛି — ସିନ୍ ନମ୍ବର କିମ୍ବା କ୍ରମ ପରିବର୍ତ୍ତନ ହୋଇଥାଇପାରେ, ଏହାକୁ ପୁନଃ ତିଆରି କରନ୍ତୁ।',
     stageIdeaLabel: 'ଧାରଣା',
     stageSynopsisLabel: 'ସିନୋପ୍ସିସ୍',
     stageCharactersLabel: 'ଚରିତ୍ର',
@@ -1406,6 +1430,10 @@ function App() {
   const [importScreenplayText, setImportScreenplayText] = useState('')
   const [isImportingScreenplay, setIsImportingScreenplay] = useState(false)
   const [isImportingScreenplayFile, setIsImportingScreenplayFile] = useState(false)
+  const [showReimportForm, setShowReimportForm] = useState(false)
+  const [reimportScreenplayText, setReimportScreenplayText] = useState('')
+  const [isReimportingScreenplay, setIsReimportingScreenplay] = useState(false)
+  const [reimportResult, setReimportResult] = useState(null)
 
   const t = LABELS[language]
   // Mirrors the backend's requireRole checks — hiding a control here is
@@ -3196,6 +3224,38 @@ function App() {
     setIsImportingScreenplay(false)
   }
 
+  async function handleReimportScreenplayClick() {
+    if (!reimportScreenplayText.trim()) return
+
+    setIsReimportingScreenplay(true)
+    setErrorMessage(null)
+
+    try {
+      const response = await fetch(`${BACKEND_URL}/api/scene-lists/${sceneList.id}/reimport-screenplay`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pastedText: reimportScreenplayText, format: buildFormatObject() }),
+      })
+      const data = await response.json()
+
+      if (!response.ok) {
+        setErrorMessage(data.error || t.genericError)
+        setIsReimportingScreenplay(false)
+        return
+      }
+
+      setSceneList(data.sceneList)
+      if (data.breakdown) setScriptBreakdown(data.breakdown)
+      setReimportResult(data)
+      setReimportScreenplayText('')
+      setShowReimportForm(false)
+    } catch {
+      setErrorMessage(t.genericError)
+    }
+
+    setIsReimportingScreenplay(false)
+  }
+
   async function handleImportScreenplayFileSelected(event) {
     const file = event.target.files[0]
     event.target.value = ''
@@ -4555,6 +4615,69 @@ function App() {
                   {isImportingScreenplay ? t.importingScreenplayLabel : t.importScreenplayButton}
                 </button>
               </div>
+            </div>
+          )}
+
+          {sceneList && sceneList.status === 'approved' && sceneList.sourceText != null && canAnalyzeScript && (
+            <div className="reimport-screenplay-panel">
+              {!showReimportForm ? (
+                <button className="import-export-button" onClick={() => setShowReimportForm(true)}>
+                  {t.reimportScreenplayButton}
+                </button>
+              ) : (
+                <div className="skip-ahead-form">
+                  <p className="availability-form-intro">{t.reimportScreenplayIntro}</p>
+                  <textarea
+                    className="skip-ahead-textarea"
+                    value={reimportScreenplayText}
+                    onChange={(e) => setReimportScreenplayText(e.target.value)}
+                    placeholder={t.importScreenplayPlaceholder}
+                  />
+                  <div className="skip-ahead-controls">
+                    <button
+                      className="choose-button"
+                      onClick={handleReimportScreenplayClick}
+                      disabled={isReimportingScreenplay || !reimportScreenplayText.trim()}
+                    >
+                      {isReimportingScreenplay ? t.reimportingScreenplayLabel : t.confirmReimportScreenplayButton}
+                    </button>
+                    <button
+                      className="cancel-button"
+                      onClick={() => { setShowReimportForm(false); setReimportScreenplayText('') }}
+                      disabled={isReimportingScreenplay}
+                    >
+                      {t.cancelEditButton}
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {reimportResult && (
+                <div className="reimport-changes-summary">
+                  <p><strong>{t.reimportChangesHeading}</strong></p>
+                  {reimportResult.changes.addedScenes.length > 0 && (
+                    <p>{t.reimportAddedScenesLabel}: {reimportResult.changes.addedScenes.join(', ')}</p>
+                  )}
+                  {reimportResult.changes.removedScenes.length > 0 && (
+                    <p>{t.reimportRemovedScenesLabel}: {reimportResult.changes.removedScenes.join(', ')}</p>
+                  )}
+                  {reimportResult.changes.addedCharacters.length > 0 && (
+                    <p>{t.reimportAddedCharactersLabel}: {reimportResult.changes.addedCharacters.join(', ')}</p>
+                  )}
+                  {reimportResult.changes.removedCharacters.length > 0 && (
+                    <p className="feedback-note">{t.reimportRemovedCharactersLabel}: {reimportResult.changes.removedCharacters.join(', ')}</p>
+                  )}
+                  {reimportResult.changes.addedLocations.length > 0 && (
+                    <p>{t.reimportAddedLocationsLabel}: {reimportResult.changes.addedLocations.join(', ')}</p>
+                  )}
+                  {reimportResult.changes.removedLocations.length > 0 && (
+                    <p className="feedback-note">{t.reimportRemovedLocationsLabel}: {reimportResult.changes.removedLocations.join(', ')}</p>
+                  )}
+                  {reimportResult.shootScheduleMayNeedRegeneration && (
+                    <p className="feedback-note">{t.reimportShootScheduleWarning}</p>
+                  )}
+                </div>
+              )}
             </div>
           )}
         </div>

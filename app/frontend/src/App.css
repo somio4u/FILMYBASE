@@ -1427,6 +1427,25 @@ body {
   border-bottom: 1px solid var(--border-subtle);
 }
 
+.reimport-screenplay-panel {
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.reimport-changes-summary {
+  margin-top: 14px;
+  padding: 12px 14px;
+  background: var(--bg-surface-raised);
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  font-size: 13px;
+}
+
+.reimport-changes-summary p {
+  margin: 4px 0;
+}
+
 .breakdown-action-button {
   flex: 0 0 auto;
   font-size: 12px;

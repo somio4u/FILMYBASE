@@ -899,7 +899,7 @@ app.get("/api/projects/master-list", requireRole("admin"), async (req, res) => {
   );
 });
 
-app.post("/api/concepts/:id/title", requireRole("admin", "production_manager"), async (req, res) => {
+app.post("/api/concepts/:id/title", requireLogin, async (req, res) => {
   const { title } = req.body;
 
   if (req.user.role !== "admin" && String(req.user.concept_id) !== String(req.params.id)) {
@@ -3944,6 +3944,55 @@ async function generateBreakdownCategoryContent(sourceText, category, existingIt
   return sanitizeBilingualContent(JSON.parse(response.text))[category];
 }
 
+// Additive-only sibling to "Re-analyze" — that button regenerates the
+// WHOLE artistList fresh each time, which risks a subtle first-pass catch
+// silently vanishing on a later pass. This only ever APPENDS newly found
+// characters, never touches or reorders what's already there, so it's
+// safe to run at any time without risking already-cast entries.
+async function findMissingCharactersInChunk(chunkText, knownLabels) {
+  const contents = `The script material (one part of a larger script — the character list below spans the WHOLE script, not just this part):\n${chunkText}\n\nAlready-known characters (do NOT report any of these again, even if they appear here): ${knownLabels.join(", ") || "(none yet)"}\n\nThoroughly re-read this material and identify every character with ANY screen presence who is NOT already in the known list above — including characters who never speak, appear only briefly, or are simply named while physically present in a scene (someone silently dropping something off, a background figure the script gives a real name to, etc.). Do not skip anyone just because their part is small. Exclude only generic, unnamed background people or crowds ("a few guests", "kids playing football", "wedding crowd") — never exclude someone the script actually names. For each character found, give a short bilingual note on their overall involvement, matching the style of an existing character-list entry. If none are missing from this material, return an empty array.`;
+
+  const response = await generateContentWithRetry({
+    model: "gemini-flash-lite-latest",
+    contents,
+    config: {
+      systemInstruction: SCRIPT_BREAKDOWN_SYSTEM_PROMPT,
+      responseMimeType: "application/json",
+      maxOutputTokens: 4096,
+      responseSchema: {
+        type: Type.OBJECT,
+        properties: { missingCharacters: { type: Type.ARRAY, items: BREAKDOWN_ITEM_SCHEMA } },
+        required: ["missingCharacters"],
+      },
+    },
+  });
+
+  return sanitizeBilingualContent(JSON.parse(response.text)).missingCharacters ?? [];
+}
+
+// Splits on "EPISODE N" boundaries when the source has them (reusing the
+// same import-time splitter) so a long multi-episode script gets one
+// focused scan per episode instead of one pass over the whole thing —
+// the same "a single long pass misses things" lesson as the AD sheet and
+// the deep breakdown re-verification.
+async function findMissingCharacters(sourceText, existingArtistList) {
+  const knownLabels = existingArtistList.map((a) => a.label);
+  const chunks = splitScreenplayIntoEpisodes(sourceText);
+  const textChunks = chunks.length > 1 ? chunks.map((c) => c.text) : [sourceText];
+
+  const results = await mapWithConcurrency(textChunks, 3, (chunkText) => findMissingCharactersInChunk(chunkText, knownLabels));
+
+  const seenLabelsLower = new Set(knownLabels.map((l) => l.toLowerCase()));
+  const merged = [];
+  results.flat().forEach((character) => {
+    const key = character.label.toLowerCase();
+    if (seenLabelsLower.has(key)) return;
+    seenLabelsLower.add(key);
+    merged.push(character);
+  });
+  return merged;
+}
+
 // One entry per real scene, in order — the deterministic half of the AD
 // sheet (SCN/description/INT-EXT/day-night/location all come straight from
 // the already-approved scene list, never from the AI).
@@ -4176,6 +4225,54 @@ app.post("/api/script-breakdown/:id/add-character", requireRole("admin", "produc
   );
 
   res.json({ ...insertResult.rows[0], sceneListId, ...updatedContent });
+});
+
+// A thorough AI re-scan for characters the script analysis missed —
+// admin-only, matching Re-analyze/Edit, since (unlike the manual
+// add-character box above) it's genuinely re-reading and reasoning about
+// the whole script rather than just appending a typed name. Additive
+// only: existing entries are never touched, reordered, or regenerated.
+app.post("/api/script-breakdown/:id/find-missing-characters", requireRole("admin"), async (req, res) => {
+  const existing = await db.query("SELECT scene_list_id FROM script_breakdowns WHERE id = $1", [req.params.id]);
+  if (existing.rows.length === 0) {
+    res.status(404).json({ error: "Script breakdown not found" });
+    return;
+  }
+
+  const sceneListId = existing.rows[0].scene_list_id;
+  const latest = await db.query(
+    "SELECT id, content FROM script_breakdowns WHERE scene_list_id = $1 ORDER BY created_at DESC LIMIT 1",
+    [sceneListId]
+  );
+  if (String(latest.rows[0].id) !== String(req.params.id)) {
+    res.status(409).json({ error: "Someone else updated this breakdown since you loaded it. Reload the page and try again." });
+    return;
+  }
+
+  try {
+    const sceneListResult = await db.query("SELECT content FROM scene_lists WHERE id = $1", [sceneListId]);
+    const sourceText = await buildBreakdownSourceText(sceneListResult.rows[0].content, sceneListId);
+    const existingArtistList = latest.rows[0].content.artistList ?? [];
+
+    const missingCharacters = await findMissingCharacters(sourceText, existingArtistList);
+
+    if (missingCharacters.length === 0) {
+      res.json({ id: latest.rows[0].id, sceneListId, ...latest.rows[0].content, addedCharacters: [] });
+      return;
+    }
+
+    const updatedContent = { ...latest.rows[0].content, artistList: [...existingArtistList, ...missingCharacters] };
+
+    const insertResult = await db.query(
+      "INSERT INTO script_breakdowns (scene_list_id, content, feedback) VALUES ($1, $2, $3) RETURNING id, status, feedback",
+      [sceneListId, JSON.stringify(updatedContent), `Found missing characters: ${missingCharacters.map((c) => c.label).join(", ")}`]
+    );
+
+    res.json({ ...insertResult.rows[0], sceneListId, ...updatedContent, addedCharacters: missingCharacters.map((c) => c.label) });
+  } catch (error) {
+    console.error("Find missing characters failed:", error.message);
+    res.status(502).json({ error: error.message });
+  }
 });
 
 // The classic AD (Assistant Director) Scene Breakdown Sheet — one row per

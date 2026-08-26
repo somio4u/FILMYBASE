@@ -163,6 +163,11 @@ const LABELS = {
     missingCharacterNamePlaceholder: 'Missed a character? Type their name…',
     addMissingCharacterButton: 'Add Character',
     addingCharacterLabel: 'Adding…',
+    findMissingCharactersButton: 'Re-analyze for Missing Characters',
+    findingMissingCharactersLabel: 'Scanning script...',
+    findMissingCharactersHint: 'Thoroughly re-scans the full script for any character with screen presence not yet in this list — including non-speaking characters — and adds them. Never removes or changes existing entries. Excludes unnamed extras/crowds.',
+    foundMissingCharactersLabel: 'Found and added',
+    noMissingCharactersFoundLabel: 'No missing characters found — the cast list already covers everyone with screen presence.',
     approveButton: 'Approve',
     requestChangesButton: 'Request Changes',
     approvedBadge: '✅ Approved',
@@ -459,6 +464,11 @@ const LABELS = {
     missingCharacterNamePlaceholder: 'ଏକ ଚରିତ୍ର ଛାଡ଼ିଗଲା କି? ତାହାର ନାମ ଲେଖନ୍ତୁ…',
     addMissingCharacterButton: 'ଚରିତ୍ର ଯୋଡ଼ନ୍ତୁ',
     addingCharacterLabel: 'ଯୋଡ଼ୁଛି…',
+    findMissingCharactersButton: 'ମିଳିନଥିବା ଚରିତ୍ର ପାଇଁ ପୁନଃ ବିଶ୍ଳେଷଣ କରନ୍ତୁ',
+    findingMissingCharactersLabel: 'ସ୍କ୍ରିପ୍ଟ ସ୍କାନ୍ ହେଉଛି...',
+    findMissingCharactersHint: 'ସମ୍ପୂର୍ଣ୍ଣ ସ୍କ୍ରିପ୍ଟକୁ ପୁଙ୍ଖାନୁପୁଙ୍ଖ ଭାବରେ ପୁନଃ ସ୍କାନ୍ କରି ଏହି ତାଲିକାରେ ନଥିବା କୌଣସି ଚରିତ୍ର (ନିରବ ଚରିତ୍ର ସହିତ) ଥିଲେ ଯୋଡ଼ିଥାଏ। ପୂର୍ବରୁ ଥିବା ଏଣ୍ଟ୍ରି କେବେ ହଟାଏ ନାହିଁ କି ପରିବର୍ତ୍ତନ କରେ ନାହିଁ। ଅଜଣା ଏକ୍ସଟ୍ରା/ଜନତାକୁ ବାଦ୍ ଦିଏ।',
+    foundMissingCharactersLabel: 'ମିଳିଲା ଏବଂ ଯୋଡ଼ାଗଲା',
+    noMissingCharactersFoundLabel: 'କୌଣସି ମିଳିନଥିବା ଚରିତ୍ର ମିଳିଲା ନାହିଁ — କାଷ୍ଟ ତାଲିକା ଆଗରୁ ସମସ୍ତଙ୍କୁ ଅନ୍ତର୍ଭୁକ୍ତ କରିଥାଏ।',
     approveButton: 'ଅନୁମୋଦନ କରନ୍ତୁ',
     requestChangesButton: 'ପରିବର୍ତ୍ତନ ପାଇଁ ଅନୁରୋଧ',
     approvedBadge: '✅ ଅନୁମୋଦିତ',
@@ -1409,6 +1419,8 @@ function App() {
   const [crewUpdatingId, setCrewUpdatingId] = useState(null)
   const [newCastCharacterName, setNewCastCharacterName] = useState('')
   const [isAddingCastCharacter, setIsAddingCastCharacter] = useState(false)
+  const [isFindingMissingCharacters, setIsFindingMissingCharacters] = useState(false)
+  const [foundMissingCharacters, setFoundMissingCharacters] = useState(null)
   const [isExportingProject, setIsExportingProject] = useState(false)
 
   const [googleConnected, setGoogleConnected] = useState(false)
@@ -2848,6 +2860,32 @@ function App() {
     setIsAddingCastCharacter(false)
   }
 
+  async function handleFindMissingCharactersClick() {
+    setIsFindingMissingCharacters(true)
+    setErrorMessage(null)
+    setFoundMissingCharacters(null)
+
+    try {
+      const response = await fetch(`${BACKEND_URL}/api/script-breakdown/${scriptBreakdown.id}/find-missing-characters`, {
+        method: 'POST',
+      })
+      const data = await response.json()
+
+      if (!response.ok) {
+        setErrorMessage(data.error || t.genericError)
+        setIsFindingMissingCharacters(false)
+        return
+      }
+
+      setScriptBreakdown(data)
+      setFoundMissingCharacters(data.addedCharacters ?? [])
+    } catch {
+      setErrorMessage(t.genericError)
+    }
+
+    setIsFindingMissingCharacters(false)
+  }
+
   function renderBreakdownCategory(category, headingKey) {
     const items = scriptBreakdown[category] ?? []
     const isEditing = editingBreakdownCategory === category
@@ -2969,7 +3007,25 @@ function App() {
             >
               {isAddingCastCharacter ? t.addingCharacterLabel : t.addMissingCharacterButton}
             </button>
+            {canAnalyzeScript && (
+              <button
+                className="breakdown-action-button"
+                onClick={handleFindMissingCharactersClick}
+                disabled={isFindingMissingCharacters}
+                title={t.findMissingCharactersHint}
+              >
+                {isFindingMissingCharacters ? t.findingMissingCharactersLabel : t.findMissingCharactersButton}
+              </button>
+            )}
           </div>
+        )}
+
+        {!isEditing && category === 'artistList' && foundMissingCharacters !== null && (
+          <p className="sidebar-section-note">
+            {foundMissingCharacters.length > 0
+              ? `${t.foundMissingCharactersLabel}: ${foundMissingCharacters.join(', ')}`
+              : t.noMissingCharactersFoundLabel}
+          </p>
         )}
 
         {isEditing && (
@@ -3876,13 +3932,15 @@ function App() {
                   >
                     {ICONS.pin}
                   </button>
-                  <button
-                    className="sidebar-history-icon-button"
-                    onClick={() => handleDeleteProjectClick(item)}
-                    title={t.deleteIconTitle}
-                  >
-                    {ICONS.trash}
-                  </button>
+                  {currentUser.role === 'admin' && (
+                    <button
+                      className="sidebar-history-icon-button"
+                      onClick={() => handleDeleteProjectClick(item)}
+                      title={t.deleteIconTitle}
+                    >
+                      {ICONS.trash}
+                    </button>
+                  )}
                 </div>
               )
             })
@@ -4769,6 +4827,53 @@ function App() {
               ) : (
                 <div className="skip-ahead-form">
                   <p className="availability-form-intro">{t.reimportScreenplayIntro}</p>
+
+                  <div className="format-picker">
+                    <h4 className="format-picker-title">{t.formatQuestion}</h4>
+                    <div className="format-picker-row">
+                      <label className="format-radio">
+                        <input
+                          type="radio"
+                          name="reimport-format"
+                          value="film"
+                          checked={formatType === 'film'}
+                          onChange={() => setFormatType('film')}
+                        />
+                        {t.filmOption}
+                      </label>
+                      <label className="format-radio">
+                        <input
+                          type="radio"
+                          name="reimport-format"
+                          value="series"
+                          checked={formatType === 'series'}
+                          onChange={() => setFormatType('series')}
+                        />
+                        {t.seriesOption}
+                      </label>
+                    </div>
+
+                    {formatType === 'series' ? (
+                      <div className="episode-fields">
+                        <label>
+                          {t.episodeCountLabel}
+                          <input type="number" min="1" value={episodeCount} onChange={(e) => setEpisodeCount(e.target.value)} />
+                        </label>
+                        <label>
+                          {t.episodeMinutesLabel}
+                          <input type="number" min="1" value={episodeMinutes} onChange={(e) => setEpisodeMinutes(e.target.value)} />
+                        </label>
+                      </div>
+                    ) : (
+                      <div className="episode-fields">
+                        <label>
+                          {t.runtimeMinutesLabel}
+                          <input type="number" min="1" value={runtimeMinutes} onChange={(e) => setRuntimeMinutes(e.target.value)} />
+                        </label>
+                      </div>
+                    )}
+                  </div>
+
                   <button
                     className="import-export-button screenplay-file-button"
                     onClick={() => reimportScreenplayFileInputRef.current?.click()}

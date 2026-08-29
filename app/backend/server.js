@@ -295,10 +295,23 @@ const SCENE_SCHEMA = {
 function sceneRefSchema(isSeries) {
   return {
     type: Type.OBJECT,
-    properties: isSeries
-      ? { episodeIndex: { type: Type.INTEGER }, sceneIndex: { type: Type.INTEGER } }
-      : { sceneIndex: { type: Type.INTEGER } },
-    required: isSeries ? ["episodeIndex", "sceneIndex"] : ["sceneIndex"],
+    properties: {
+      ...(isSeries
+        ? { episodeIndex: { type: Type.INTEGER }, sceneIndex: { type: Type.INTEGER } }
+        : { sceneIndex: { type: Type.INTEGER } }),
+      // Continuity relative to SHOOT order (not story order) — "Fresh",
+      // "Cont. Scene 12", "Night costume", etc. — the same distinction a
+      // real AD's day sheet tracks, since costume department needs to know
+      // whether to change or reuse an outfit between back-to-back setups.
+      costume: { type: Type.STRING },
+      properties: { type: Type.STRING },
+      // Left as an empty string when nothing is uncertain — only filled in
+      // when the model genuinely isn't confident about something (a costume
+      // continuity call it can't verify, an ambiguous prop) so the AD can
+      // resolve it by hand instead of the app silently guessing wrong.
+      adRemark: { type: Type.STRING },
+    },
+    required: [...(isSeries ? ["episodeIndex", "sceneIndex"] : ["sceneIndex"]), "costume", "properties", "adRemark"],
   };
 }
 
@@ -4783,9 +4796,9 @@ function scheduledSceneIdentities(scheduleDays, isSeries) {
   return ids;
 }
 
-function missingScheduleIdentities(scheduleDays, sceneList, isSeries) {
+function missingScheduleIdentities(scheduleDays, sceneList, isSeries, alreadyCovered) {
   const scheduled = scheduledSceneIdentities(scheduleDays, isSeries);
-  return allSceneIdentities(sceneList).filter((id) => !scheduled.has(id));
+  return allSceneIdentities(sceneList).filter((id) => !scheduled.has(id) && !alreadyCovered?.has(id));
 }
 
 async function callShootScheduleGemini(contents, isSeries) {
@@ -4810,11 +4823,31 @@ async function callShootScheduleGemini(contents, isSeries) {
   return sanitizeBilingualContent(JSON.parse(response.text));
 }
 
-async function generateShootScheduleContent(sceneList, characterNames, availability, targetDays, revision) {
+async function generateShootScheduleContent(
+  sceneList,
+  characterNames,
+  availability,
+  targetDays,
+  revision,
+  { specialInstructions, completedDays, sourceText, breakdownContent } = {}
+) {
   const isSeries = Boolean(sceneList.episodeScenes);
   const sceneText = flattenScenesForScheduling(sceneList);
   const characterNamesText = characterNames.join(", ");
   const totalScenes = allSceneIdentities(sceneList).length;
+
+  // Scenes already covered by a completed day (manually recorded from a
+  // real shoot day that already happened) are never re-scheduled — the AI
+  // is only ever asked to plan the REMAINING scenes, continuing the day
+  // numbering after whatever's already been shot.
+  const alreadyCovered = new Set();
+  (completedDays ?? []).forEach((day) => {
+    (day.sceneRefs ?? []).forEach((ref) => {
+      alreadyCovered.add(isSeries ? `e${ref.episodeIndex}-s${ref.sceneIndex}` : `s${ref.sceneIndex}`);
+    });
+  });
+  const remainingSceneCount = totalScenes - alreadyCovered.size;
+  const nextDayNumber = (completedDays ?? []).reduce((max, d) => Math.max(max, d.dayNumber), 0) + 1;
 
   const availabilityText = [
     "Character availability:",
@@ -4833,7 +4866,22 @@ async function generateShootScheduleContent(sceneList, characterNames, availabil
     ? `This is a multi-episode series scene list, laid out episode by episode below (scene numbering restarts at 1 within each episode) — ${totalScenes} scenes total across all episodes. Every sceneRef you output MUST include the correct episodeIndex (0-indexed, matching the episode's position below) AND sceneIndex (0-indexed within that episode).`
     : `This is a single continuous film with NO episodes — ${totalScenes} scenes total. Every sceneRef you output must be JUST a 0-indexed sceneIndex into this one scene list; never invent or include an episode number, this project has none.`;
 
-  let contents = `${formatLine}\n\nMajor characters: ${characterNamesText}\n\nScene list:\n${sceneText}\n\n${availabilityText}${targetDaysText}\n\nIMPORTANT: every one of the ${totalScenes} scenes listed above must appear in exactly one shoot day's sceneRefs — do not skip any scene and do not invent scenes that aren't listed above.\n\nFor each shoot day, also give "charactersNeeded": the major characters (from the list above, by exact name) who appear in at least one of that day's scenes, inferred from the scenes' one-liners and locations — this is what tells each artist which shoot days they're actually called for.`;
+  const alreadyShotText =
+    alreadyCovered.size > 0
+      ? `\n\n${alreadyCovered.size} of the ${totalScenes} scenes have ALREADY BEEN SHOT on a completed day and must NOT appear in your schedule at all — only plan the remaining ${remainingSceneCount} scenes. Number your shoot days starting from Day ${nextDayNumber} (the completed days before it are already numbered 1 through ${nextDayNumber - 1}).`
+      : "";
+
+  const knownCostumes = (breakdownContent?.costumes ?? []).map((c) => `${c.character}: ${c.description.en}`).join("; ");
+  const knownProps = (breakdownContent?.props ?? []).map((p) => p.label).join(", ");
+  const groundingText = sourceText
+    ? `\n\nThe full script text (use this — not just the one-liners above — to work out costume continuity and which properties each scene actually needs):\n${sourceText}\n\nEstablished costume notes: ${knownCostumes || "(none yet)"}\n\nEstablished property list: ${knownProps || "(none yet)"}`
+    : "";
+
+  const specialInstructionsText = specialInstructions?.trim()
+    ? `\n\nThe Production Manager's specific instructions for this schedule — follow these exactly, they override any default assumption: "${specialInstructions.trim()}"`
+    : "";
+
+  let contents = `${formatLine}\n\nMajor characters: ${characterNamesText}\n\nScene list:\n${sceneText}\n\n${availabilityText}${targetDaysText}${alreadyShotText}${groundingText}${specialInstructionsText}\n\nIMPORTANT: every one of the ${remainingSceneCount} remaining scenes must appear in exactly one shoot day's sceneRefs — do not skip any scene and do not invent scenes that aren't listed above, and never include a scene already marked as shot.\n\nScheduling approach — shoot LINEARLY by location, not by episode or story order: group every scene that shares the same physical location together (even across different episodes) and shoot them back-to-back in scene order within that group, exactly like a real production would, rather than following story chronology. Keep INT (indoor) and EXT (outdoor) scenes in separate day groups — outdoor scenes depend on weather/daylight, so schedule them as their own block and say so explicitly in that day's "notes" (e.g. "Weather-dependent — reschedule if rain"). For each shoot day, also give "charactersNeeded": the major characters (from the list above, by exact name) who appear in at least one of that day's scenes, inferred from the scenes' one-liners and locations — this is what tells each artist which shoot days they're actually called for. For EACH scene in sceneRefs, also give: "costume" (continuity relative to shoot order — "Fresh" for a new/changed outfit, "Cont. Scene X" when it's the same outfit as an already-scheduled scene X with no change, or a short costume description if genuinely a first appearance); "properties" (objects/set-dressing that scene needs, preferring the established property list above); and "adRemark" (leave as an empty string "" when nothing is uncertain — only write something here when you are genuinely not confident about a costume-continuity call or a property and need the Assistant Director to confirm it by hand).`;
 
   if (revision) {
     contents += `\n\nThis is a REVISION of a previous shoot schedule. The Production Manager reviewed it and requested changes.\nFeedback: "${revision.feedback}"\nRevise the schedule to address the feedback directly.`;
@@ -4844,16 +4892,23 @@ async function generateShootScheduleContent(sceneList, characterNames, availabil
   // If the model dropped any real scenes, give it one corrective retry
   // listing exactly which ones were missed — capped at a single retry, same
   // pattern as the scene-list pacing retry above.
-  const missing = missingScheduleIdentities(parsed.scheduleDays, sceneList, isSeries);
+  const missing = missingScheduleIdentities(parsed.scheduleDays, sceneList, isSeries, alreadyCovered);
   if (missing.length > 0) {
     const missingText = missing
       .map((id) => (isSeries ? id.replace(/^e(\d+)-s(\d+)$/, "episode $1, scene $2") : id.replace(/^s(\d+)$/, "scene $1")))
       .join("; ");
-    const correctionNote = `\n\nIMPORTANT CORRECTION NEEDED: your schedule left out these scenes entirely (0-indexed): ${missingText}. Revise the schedule so every one of the ${totalScenes} scenes is assigned to a shoot day, adding days if needed.`;
+    const correctionNote = `\n\nIMPORTANT CORRECTION NEEDED: your schedule left out these scenes entirely (0-indexed): ${missingText}. Revise the schedule so every one of the remaining scenes is assigned to a shoot day, adding days if needed.`;
     parsed = await callShootScheduleGemini(contents + correctionNote, isSeries);
   }
 
-  const scheduleDays = assignScheduleDates(parsed.scheduleDays, availability.startDate);
+  // Renumber the AI's days to continue right after the last completed one,
+  // and only date-assign the NEW days (starting from availability.startDate,
+  // which the caller supplies for this NEW block specifically) — a
+  // completed day's real date (from when it actually happened) is never
+  // recomputed or overwritten.
+  const renumberedNewDays = parsed.scheduleDays.map((day, i) => ({ ...day, dayNumber: nextDayNumber + i, completed: false }));
+  const datedNewDays = assignScheduleDates(renumberedNewDays, availability.startDate);
+  const scheduleDays = [...(completedDays ?? []), ...datedNewDays];
 
   return {
     ...parsed,
@@ -4861,6 +4916,7 @@ async function generateShootScheduleContent(sceneList, characterNames, availabil
     artistSchedule: buildArtistWiseSchedule(scheduleDays),
     availability,
     targetDays,
+    specialInstructions: specialInstructions ?? null,
   };
 }
 
@@ -4937,7 +4993,7 @@ async function fetchProjectTitleForSceneList(sceneListId, sceneList, lang) {
 }
 
 app.post("/api/shoot-schedule", requireRole("admin", "production_manager"), async (req, res) => {
-  const { sceneListId, availability, targetDays } = req.body;
+  const { sceneListId, availability, targetDays, specialInstructions } = req.body;
 
   if (!(await userOwnsSceneList(req.user, sceneListId))) {
     res.status(403).json({ error: "You don't have access to this project." });
@@ -4958,7 +5014,7 @@ app.post("/api/shoot-schedule", requireRole("admin", "production_manager"), asyn
     }
 
     const breakdownResult = await db.query(
-      "SELECT status FROM script_breakdowns WHERE scene_list_id = $1 ORDER BY created_at DESC LIMIT 1",
+      "SELECT status, content FROM script_breakdowns WHERE scene_list_id = $1 ORDER BY created_at DESC LIMIT 1",
       [sceneListId]
     );
     if (breakdownResult.rows.length === 0 || breakdownResult.rows[0].status !== "approved") {
@@ -4966,8 +5022,27 @@ app.post("/api/shoot-schedule", requireRole("admin", "production_manager"), asyn
       return;
     }
 
-    const characterNames = await fetchCharacterNamesForSceneList(sceneListId, sceneListResult.rows[0].content);
-    const content = await generateShootScheduleContent(sceneListResult.rows[0].content, characterNames, availability, targetDays);
+    // Any day already marked completed (a real shoot day that's already
+    // happened — recorded via /record-day, whether transcribed from a
+    // paper sheet or confirmed after the fact) carries forward untouched;
+    // only its ACTUALLY-shot scenes count as covered, so anything the AD
+    // reported as not-completed on a previous day naturally flows into
+    // this new plan instead of vanishing.
+    const latestSchedule = await db.query(
+      "SELECT content FROM shoot_schedules WHERE scene_list_id = $1 ORDER BY created_at DESC LIMIT 1",
+      [sceneListId]
+    );
+    const completedDays = (latestSchedule.rows[0]?.content?.scheduleDays ?? []).filter((d) => d.completed);
+
+    const sceneList = sceneListResult.rows[0].content;
+    const characterNames = await fetchCharacterNamesForSceneList(sceneListId, sceneList);
+    const sourceText = await buildBreakdownSourceText(sceneList, sceneListId);
+    const content = await generateShootScheduleContent(sceneList, characterNames, availability, targetDays, null, {
+      specialInstructions,
+      completedDays,
+      sourceText,
+      breakdownContent: breakdownResult.rows[0].content,
+    });
 
     const insertResult = await db.query(
       "INSERT INTO shoot_schedules (scene_list_id, content) VALUES ($1, $2) RETURNING id, status, feedback",
@@ -4978,6 +5053,58 @@ app.post("/api/shoot-schedule", requireRole("admin", "production_manager"), asyn
   } catch (error) {
     console.error("Gemini API call failed:", error.message);
     res.status(502).json({ error: error.message });
+  }
+});
+
+// Records what ACTUALLY happened on a real shoot day — either transcribing
+// a paper AD sheet for a day that's already been shot (before this feature
+// existed), or confirming which of a previously PLANNED day's scenes were
+// genuinely completed once shooting wrapped. Only the scenes listed here
+// count as "shot"; anything from that day left out (because the AD
+// reported it wasn't finished) simply remains unscheduled and will be
+// picked up automatically the next time the schedule is (re)generated.
+app.post("/api/shoot-schedule/:sceneListId/record-day", requireRole("admin", "production_manager"), async (req, res) => {
+  const { sceneListId } = req.params;
+  const { day } = req.body;
+
+  if (!(await userOwnsSceneList(req.user, sceneListId))) {
+    res.status(403).json({ error: "You don't have access to this project." });
+    return;
+  }
+  if (!day || typeof day.dayNumber !== "number" || !Array.isArray(day.sceneRefs)) {
+    res.status(400).json({ error: "A day with a dayNumber and sceneRefs is required." });
+    return;
+  }
+
+  try {
+    const latestSchedule = await db.query(
+      "SELECT id, content FROM shoot_schedules WHERE scene_list_id = $1 ORDER BY created_at DESC LIMIT 1",
+      [sceneListId]
+    );
+
+    const previousContent = latestSchedule.rows[0]?.content ?? { scheduleDays: [], conflicts: [] };
+    const recordedDay = { ...day, completed: true };
+    // Replacing by dayNumber lets the same day be re-recorded (e.g. the AD
+    // first reports 4 of 6 scenes done, then later confirms the rest) —
+    // never appended as a duplicate.
+    const otherDays = (previousContent.scheduleDays ?? []).filter((d) => d.dayNumber !== recordedDay.dayNumber);
+    const scheduleDays = [...otherDays, recordedDay].sort((a, b) => a.dayNumber - b.dayNumber);
+
+    const updatedContent = {
+      ...previousContent,
+      scheduleDays,
+      artistSchedule: buildArtistWiseSchedule(scheduleDays),
+    };
+
+    const insertResult = await db.query(
+      "INSERT INTO shoot_schedules (scene_list_id, content, feedback) VALUES ($1, $2, $3) RETURNING id, status, feedback",
+      [sceneListId, JSON.stringify(updatedContent), `Recorded Day ${recordedDay.dayNumber} as shot`]
+    );
+
+    res.json({ ...insertResult.rows[0], sceneListId, ...updatedContent });
+  } catch (error) {
+    console.error("Recording shoot day failed:", error.message);
+    res.status(500).json({ error: error.message });
   }
 });
 
@@ -5095,10 +5222,42 @@ app.get("/api/shoot-schedule/:id/export", requireLogin, async (req, res) => {
     const headerFont = lang === "or" ? "odiaBold" : "Helvetica-Bold";
     const labels =
       lang === "or"
-        ? { schedule: "ସୁଟିଂ ସୂଚୀ", day: "ଦିନ", location: "ସ୍ଥାନ", cast: "କଳାକାର", notes: "ଟିପ୍ପଣୀ", artistSummary: "କଳାକାର-ଅନୁଯାୟୀ ସାରାଂଶ", totalDays: "ମୋଟ ଦିନ", days: "ଦିନଗୁଡ଼ିକ" }
-        : { schedule: "Shoot Schedule", day: "Day", location: "Location", cast: "Cast Called", notes: "Notes", artistSummary: "Artist-Wise Summary", totalDays: "Total Days", days: "Days" };
+        ? { schedule: "ସୁଟିଂ ସୂଚୀ", day: "ଦିନ", location: "ସ୍ଥାନ", cast: "କଳାକାର", notes: "ଟିପ୍ପଣୀ", artistSummary: "କଳାକାର-ଅନୁଯାୟୀ ସାରାଂଶ", totalDays: "ମୋଟ ଦିନ", days: "ଦିନଗୁଡ଼ିକ", completed: "ସମାପ୍ତ", costume: "ପୋଷାକ", properties: "ପ୍ରପର୍ଟି", adRemark: "AD ମନ୍ତବ୍ୟ" }
+        : { schedule: "Shoot Schedule", day: "Day", location: "Location", cast: "Cast Called", notes: "Notes", artistSummary: "Artist-Wise Summary", totalDays: "Total Days", days: "Days", completed: "COMPLETED", costume: "Costume", properties: "Properties", adRemark: "AD Remark" };
 
-    const doc = new PDFDocument({ size: "A4", margin: 50 });
+    // Per-scene cast (who's actually IN that scene, not the whole day's
+    // call list) comes from the AD Scene Breakdown Sheet, if one's been
+    // generated — same positional flattening it was built from, so a
+    // sceneRef's position in that array lines up with its adSheet row.
+    const breakdownResult = await db.query(
+      "SELECT content FROM script_breakdowns WHERE scene_list_id = $1 ORDER BY created_at DESC LIMIT 1",
+      [sceneListId]
+    );
+    const adSheetRows = breakdownResult.rows[0]?.content?.adSheet ?? null;
+    const castByIdentity = new Map();
+    // The AD sheet only carries the literal sceneNumber label per row, not
+    // an episode/scene INDEX — rebuild the same positional order it was
+    // generated in (flattenScenesForAdSheet's own order) to get a reliable
+    // e{ep}-s{idx} key per row.
+    if (adSheetRows) {
+      let flatIndex = 0;
+      if (isSeries) {
+        (sceneList.episodeScenes ?? []).forEach((episodeScene, episodeIndex) => {
+          episodeScene.scenes.forEach((_, sceneIndex) => {
+            castByIdentity.set(`e${episodeIndex}-s${sceneIndex}`, adSheetRows[flatIndex]);
+            flatIndex += 1;
+          });
+        });
+      } else {
+        (sceneList.scenes ?? []).forEach((_, sceneIndex) => {
+          castByIdentity.set(`s${sceneIndex}`, adSheetRows[flatIndex]);
+          flatIndex += 1;
+        });
+      }
+    }
+    const notAvailableLabel = lang === "or" ? "—" : "—";
+
+    const doc = new PDFDocument({ size: "A4", layout: "landscape", margin: 24 });
     doc.registerFont("odiaRegular", FONTS.odiaRegular);
     doc.registerFont("odiaBold", FONTS.odiaBold);
 
@@ -5106,40 +5265,112 @@ app.get("/api/shoot-schedule/:id/export", requireLogin, async (req, res) => {
     res.setHeader("Content-Disposition", `attachment; filename="shoot-schedule-${lang}.pdf"`);
     doc.pipe(res);
 
-    doc.font(headerFont).fontSize(20).text(title || labels.schedule);
-    if (title) doc.font(bodyFont).fontSize(13).fillColor("#555").text(labels.schedule).fillColor("#000");
-    doc.moveDown(1);
+    const pageLeft = doc.page.margins.left;
+    const pageBottom = doc.page.height - doc.page.margins.bottom;
+    const columns = [
+      { key: "scn", label: "SC NO", width: 55 },
+      { key: "location", label: labels.location, width: 140 },
+      { key: "artist", label: labels.cast, width: 160 },
+      { key: "costume", label: labels.costume, width: 170 },
+      { key: "properties", label: labels.properties, width: 235 },
+    ];
+    const cellPaddingX = 4;
+    const cellPaddingY = 4;
 
-    schedule.scheduleDays.forEach((day) => {
+    function drawHeaderRow(y) {
+      doc.font(headerFont).fontSize(9);
+      const rowHeight = Math.max(
+        22,
+        ...columns.map((col) => doc.heightOfString(col.label, { width: col.width - cellPaddingX * 2 }) + cellPaddingY * 2)
+      );
+      let x = pageLeft;
+      columns.forEach((col) => {
+        doc.rect(x, y, col.width, rowHeight).fill("#000");
+        doc.fillColor("#fff").font(headerFont).fontSize(9).text(col.label, x + cellPaddingX, y + cellPaddingY, { width: col.width - cellPaddingX * 2 });
+        x += col.width;
+      });
+      doc.fillColor("#000");
+      return y + rowHeight;
+    }
+
+    schedule.scheduleDays.forEach((day, dayIndex) => {
+      if (dayIndex > 0) doc.addPage({ size: "A4", layout: "landscape", margin: 24 });
+
       doc
         .font(headerFont)
-        .fontSize(14)
-        .text(`${labels.day} ${day.dayNumber}${day.date ? `  —  ${day.date}` : ""}`);
-      doc.font(bodyFont).fontSize(11).text(`${labels.location}: ${day.location?.[lang] ?? ""}`);
+        .fontSize(16)
+        .text(
+          `${day.date ? `${day.date}  —  ` : ""}${labels.day} ${day.dayNumber}${day.completed ? `  ✓ ${labels.completed}` : ""}`,
+          pageLeft,
+          doc.page.margins.top
+        );
+      doc.font(bodyFont).fontSize(11).text(`${labels.location}: ${day.location?.[lang] ?? ""}`, pageLeft);
+      doc.moveDown(0.5);
+
+      let y = doc.y;
+      y = drawHeaderRow(y);
 
       (day.sceneRefs ?? []).forEach((ref) => {
         const scene = lookupSceneServerSide(sceneList, ref);
         if (!scene) return;
-        const realSceneNumber = scene.sceneNumber || String(ref.sceneIndex + 1);
-        const sceneLabel = isSeries ? `Episode ${ref.episodeIndex + 1}, Scene ${realSceneNumber}` : `Scene ${realSceneNumber}`;
-        doc
-          .font(bodyFont)
-          .fontSize(10)
-          .text(`  • ${sceneLabel} (${scene.intExt}. ${scene.location?.[lang] ?? ""} — ${scene.timeOfDay}): ${scene.oneLiner?.[lang] ?? ""}`, {
-            indent: 10,
-          });
+        const identity = isSeries ? `e${ref.episodeIndex}-s${ref.sceneIndex}` : `s${ref.sceneIndex}`;
+        const adSheetRow = castByIdentity.get(identity);
+        // The stored sceneNumber is sometimes a bare code ("1A", "7") and
+        // sometimes the verbatim script text including the word itself
+        // ("SCENE 1") — strip that prefix so the cell never reads "SCENE
+        // SCENE 1", regardless of which form this particular scene has.
+        const realSceneNumber = (scene.sceneNumber || String(ref.sceneIndex + 1)).replace(/^\s*(SCENE|SC)\.?\s*/i, "");
+        const scn = isSeries ? `Ep${ref.episodeIndex + 1}\n${realSceneNumber}` : realSceneNumber;
+        const artist = adSheetRow ? (adSheetRow.mainCharacters ?? []).join(", ") || notAvailableLabel : (day.charactersNeeded ?? []).join(", ") || notAvailableLabel;
+        const properties = [ref.properties, adSheetRow?.extras?.[lang]].filter(Boolean).join("; ");
+
+        const values = {
+          scn,
+          location: `${scene.intExt}. ${scene.location?.[lang] ?? ""}`,
+          artist,
+          costume: ref.costume || notAvailableLabel,
+          properties: properties || notAvailableLabel,
+        };
+
+        doc.font(bodyFont).fontSize(9);
+        const rowHeight = Math.max(
+          18,
+          ...columns.map((col) => doc.heightOfString(String(values[col.key] ?? ""), { width: col.width - cellPaddingX * 2 }) + cellPaddingY * 2)
+        );
+
+        if (y + rowHeight > pageBottom) {
+          doc.addPage({ size: "A4", layout: "landscape", margin: 24 });
+          y = doc.page.margins.top;
+          y = drawHeaderRow(y);
+        }
+
+        let x = pageLeft;
+        columns.forEach((col) => {
+          doc.rect(x, y, col.width, rowHeight).stroke("#cccccc");
+          doc.font(bodyFont).fontSize(9).text(String(values[col.key] ?? ""), x + cellPaddingX, y + cellPaddingY, { width: col.width - cellPaddingX * 2 });
+          x += col.width;
+        });
+        if (ref.adRemark) {
+          const remarkHeight = doc.heightOfString(`AD Remark: ${ref.adRemark}`, { width: columns.reduce((s, c) => s + c.width, 0) - cellPaddingX * 2 }) + cellPaddingY * 2;
+          doc
+            .font(bodyFont)
+            .fontSize(8)
+            .fillColor("#b45309")
+            .text(`AD Remark: ${ref.adRemark}`, pageLeft + cellPaddingX, y + rowHeight, { width: columns.reduce((s, c) => s + c.width, 0) - cellPaddingX * 2 })
+            .fillColor("#000");
+          y += rowHeight + remarkHeight;
+        } else {
+          y += rowHeight;
+        }
       });
 
-      if (day.charactersNeeded?.length) {
-        doc.font(headerFont).fontSize(10).text(`${labels.cast}: `, { continued: true }).font(bodyFont).text(day.charactersNeeded.join(", "));
-      }
       if (day.notes?.[lang]) {
-        doc.font(headerFont).fontSize(10).text(`${labels.notes}: `, { continued: true }).font(bodyFont).text(day.notes[lang]);
+        doc.moveDown(0.5);
+        doc.font(headerFont).fontSize(10).text(`${labels.notes}: `, pageLeft, y + 6, { continued: true }).font(bodyFont).text(day.notes[lang]);
       }
-      doc.moveDown(0.8);
     });
 
-    doc.addPage();
+    doc.addPage({ size: "A4", margin: 50 });
     doc.font(headerFont).fontSize(18).text(labels.artistSummary);
     doc.moveDown(1);
 

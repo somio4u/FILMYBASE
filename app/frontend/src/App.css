@@ -1870,6 +1870,30 @@ body {
   color: var(--text-muted);
 }
 
+.schedule-setup-field-wide {
+  width: 100%;
+}
+
+.schedule-day-completed {
+  border-color: var(--success);
+}
+
+.schedule-day-completed-badge {
+  color: var(--success);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.schedule-scene-meta {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.schedule-scene-ad-remark {
+  margin: 2px 0 4px 18px;
+  font-size: 12px;
+}
+
 /* --- Mobile responsive layout ---
    Below 768px, the sidebar (fixed 260px in the desktop flex layout) would
    otherwise squeeze the main content down to a sliver, causing the

@@ -246,6 +246,8 @@ const LABELS = {
     tentativeScheduleDateLabel: 'Tentative shoot start date',
     scheduleTargetDaysLabel: 'How many days should the schedule span?',
     scheduleSetupIntro: 'Before generating the shoot schedule, confirm a tentative start date and how many days you want the schedule to cover.',
+    scheduleSpecialInstructionsLabel: 'Any specific way this schedule should happen? (optional)',
+    scheduleSpecialInstructionsPlaceholder: 'e.g. "Shoot linearly by location. 5 days, 6am-11am each day, but the last day should be a full night shoot at the restaurant/pub."',
     waitingOnProductionManagerNotice: 'Waiting for the Production Manager to generate the shoot schedule.',
     waitingOnProductionManagerImportNotice: 'Waiting for the script to be imported and analyzed.',
     availabilityFormIntro: "Before building a shoot schedule, give a rough sense of when your major characters (artists) and locations are available. Mark anything you don't know yet as \"unknown\" — the schedule will just estimate.",
@@ -259,6 +261,13 @@ const LABELS = {
     shootDayLabel: 'Day',
     conflictsHeading: 'Flagged Conflicts',
     castCalledLabel: 'Cast Called',
+    shootDayCompletedLabel: 'Completed',
+    costumeLabel: 'Costume',
+    propertiesLabel: 'Properties',
+    adRemarkLabel: 'AD Remark',
+    markDayShotButton: 'Mark Day as Shot',
+    confirmShotScenesButton: 'Confirm Shot Scenes',
+    recordingShotDayLabel: 'Recording...',
     artistScheduleHeading: 'Artist-Wise Summary',
     totalDaysLabel: 'Total Days',
     approveScheduleButton: 'Approve',
@@ -551,6 +560,8 @@ const LABELS = {
     tentativeScheduleDateLabel: 'ଆନୁମାନିକ ସୁଟିଂ ଆରମ୍ଭ ତାରିଖ',
     scheduleTargetDaysLabel: 'ସିଡ୍ୟୁଲ୍ କେତେ ଦିନ ପାଇଁ ହେବା ଉଚିତ?',
     scheduleSetupIntro: 'ସୁଟିଂ ସିଡ୍ୟୁଲ୍ ତିଆରି କରିବା ପୂର୍ବରୁ, ଏକ ଆନୁମାନିକ ଆରମ୍ଭ ତାରିଖ ଏବଂ ସିଡ୍ୟୁଲ୍ କେତେ ଦିନ ପାଇଁ ହେବା ଉଚିତ ତାହା ନିଶ୍ଚିତ କରନ୍ତୁ।',
+    scheduleSpecialInstructionsLabel: 'ଏହି ସିଡ୍ୟୁଲ୍ କୌଣସି ନିର୍ଦ୍ଦିଷ୍ଟ ଢଙ୍ଗରେ ହେବା ଉଚିତ କି? (ଇଚ୍ଛାଧୀନ)',
+    scheduleSpecialInstructionsPlaceholder: 'ଉଦାହରଣ: "ସ୍ଥାନ ଅନୁଯାୟୀ ଲିନିଅର୍ ଭାବରେ ସୁଟ୍ କରନ୍ତୁ। ୫ ଦିନ, ପ୍ରତିଦିନ ସକାଳ ୬ ଟାରୁ ୧୧ ଟା, କିନ୍ତୁ ଶେଷ ଦିନ ରେଷ୍ଟୁରାଣ୍ଟ/ପବ୍‌ରେ ପୂର୍ଣ୍ଣ ରାତି ସୁଟ୍ ହେବ।"',
     waitingOnProductionManagerNotice: 'ପ୍ରଡକ୍ସନ୍ ମ୍ୟାନେଜର୍ ସୁଟିଂ ସିଡ୍ୟୁଲ୍ ତିଆରି କରିବା ପାଇଁ ଅପେକ୍ଷାରେ।',
     waitingOnProductionManagerImportNotice: 'ସ୍କ୍ରିପ୍ଟ ଇମ୍ପୋର୍ଟ ଏବଂ ବିଶ୍ଳେଷଣ ପାଇଁ ଅପେକ୍ଷାରେ।',
     availabilityFormIntro: 'ସୁଟିଂ ସିଡ୍ୟୁଲ୍ ତିଆରି କରିବା ପୂର୍ବରୁ, ଆପଣଙ୍କ ମୁଖ୍ୟ ଚରିତ୍ର (କଳାକାର) ଏବଂ ସ୍ଥାନଗୁଡ଼ିକ କେବେ ଉପଲବ୍ଧ ତାହା ମୋଟାମୋଟି ଭାବେ ଜଣାନ୍ତୁ। ଯାହା ଜାଣି ନାହାନ୍ତି ତାହାକୁ "ଅଜଣା" ଚିହ୍ନିତ କରନ୍ତୁ — ସିଡ୍ୟୁଲ୍ ନିଜେ ଆକଳନ କରିବ।',
@@ -564,6 +575,13 @@ const LABELS = {
     shootDayLabel: 'ଦିନ',
     conflictsHeading: 'ଚିହ୍ନିତ ସମସ୍ୟା',
     castCalledLabel: 'କଳାକାର ଡକରା',
+    shootDayCompletedLabel: 'ସମାପ୍ତ',
+    costumeLabel: 'ପୋଷାକ',
+    propertiesLabel: 'ପ୍ରପର୍ଟି',
+    adRemarkLabel: 'AD ମନ୍ତବ୍ୟ',
+    markDayShotButton: 'ଦିନଟି ସୁଟ୍ ହେଲା ବୋଲି ଚିହ୍ନଟ କରନ୍ତୁ',
+    confirmShotScenesButton: 'ସୁଟ୍ ହୋଇଥିବା ସିନ୍ ନିଶ୍ଚିତ କରନ୍ତୁ',
+    recordingShotDayLabel: 'ରେକର୍ଡ ହେଉଛି...',
     artistScheduleHeading: 'କଳାକାର-ଅନୁଯାୟୀ ସାରାଂଶ',
     totalDaysLabel: 'ମୋଟ ଦିନ',
     approveScheduleButton: 'ଅନୁମୋଦନ କରନ୍ତୁ',
@@ -829,6 +847,34 @@ function lookupScene(sceneList, ref) {
   return sceneList.scenes[ref.sceneIndex] ?? null
 }
 
+// Who's actually IN this one scene — pulled from the AD Scene Breakdown
+// Sheet (if one's been generated), matched by the same positional order it
+// was built in, rather than a whole shoot day's cast list. Falls back to
+// null when no AD sheet exists yet, so the caller can fall back to the
+// day's charactersNeeded instead.
+function lookupSceneCast(sceneList, adSheet, ref) {
+  if (!sceneList || !adSheet) return null
+  let flatIndex = 0
+  if (sceneList.episodeScenes) {
+    for (let e = 0; e < sceneList.episodeScenes.length; e++) {
+      const scenes = sceneList.episodeScenes[e].scenes
+      for (let s = 0; s < scenes.length; s++) {
+        if (e === ref.episodeIndex && s === ref.sceneIndex) return adSheet[flatIndex]?.mainCharacters ?? null
+        flatIndex += 1
+      }
+    }
+    return null
+  }
+  return adSheet[ref.sceneIndex]?.mainCharacters ?? null
+}
+
+// A raw scene number is sometimes just a code ("1A", "7") and sometimes
+// the verbatim script text including the word itself ("SCENE 1") — strip
+// that prefix so a label is never built as "Scene SCENE 1".
+function cleanSceneNumber(raw) {
+  return String(raw).replace(/^\s*(SCENE|SC)\.?\s*/i, '')
+}
+
 // A reasonable default tentative shoot start date — roughly 3 weeks out,
 // enough prep time after a script breakdown before cameras roll. Just a
 // starting suggestion; the Production Manager can change it before generating.
@@ -950,7 +996,7 @@ function SceneRows({ scenes, t, language, episodeIndex, screenplay }) {
       <div key={index} className="scene-row">
         {showActHeader && <h4 className="scene-act-header">{actLabel}</h4>}
         <p className="scene-heading">
-          {t.sceneLabel} {scene.sceneNumber || index + 1} — {scene.intExt}. {scene.location[language]} — {timeLabel}
+          {t.sceneLabel} {scene.sceneNumber ? cleanSceneNumber(scene.sceneNumber) : index + 1} — {scene.intExt}. {scene.location[language]} — {timeLabel}
           {typeof scene.estimatedMinutes === 'number' ? ` (${t.approxMinutesUnit(scene.estimatedMinutes)})` : ''}
         </p>
         {scene.purpose && (
@@ -1463,6 +1509,10 @@ function App() {
   const [locationAvailability, setLocationAvailability] = useState({})
   const [scheduleStartDate, setScheduleStartDate] = useState(defaultTentativeStartDate())
   const [scheduleTargetDays, setScheduleTargetDays] = useState(10)
+  const [scheduleSpecialInstructions, setScheduleSpecialInstructions] = useState('')
+  const [markingShotDayNumber, setMarkingShotDayNumber] = useState(null)
+  const [shotSceneSelections, setShotSceneSelections] = useState({})
+  const [isRecordingShotDay, setIsRecordingShotDay] = useState(false)
 
   const [activeAgent, setActiveAgent] = useState('story')
   const [projectType, setProjectType] = useState('story')
@@ -3287,7 +3337,12 @@ function App() {
       const response = await fetch(`${BACKEND_URL}/api/shoot-schedule`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sceneListId: sceneList.id, availability, targetDays: Number(scheduleTargetDays) || null }),
+        body: JSON.stringify({
+          sceneListId: sceneList.id,
+          availability,
+          targetDays: Number(scheduleTargetDays) || null,
+          specialInstructions: scheduleSpecialInstructions,
+        }),
       })
       const data = await response.json()
 
@@ -3303,6 +3358,36 @@ function App() {
     }
 
     setIsGeneratingSchedule(false)
+  }
+
+  async function handleConfirmDayShotClick(day) {
+    setIsRecordingShotDay(true)
+    setErrorMessage(null)
+
+    const shotSceneRefs = day.sceneRefs.filter((_, index) => shotSceneSelections[index] !== false)
+
+    try {
+      const response = await fetch(`${BACKEND_URL}/api/shoot-schedule/${sceneList.id}/record-day`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ day: { ...day, sceneRefs: shotSceneRefs } }),
+      })
+      const data = await response.json()
+
+      if (!response.ok) {
+        setErrorMessage(data.error || t.genericError)
+        setIsRecordingShotDay(false)
+        return
+      }
+
+      setShootSchedule(data)
+      setMarkingShotDayNumber(null)
+      setShotSceneSelections({})
+    } catch {
+      setErrorMessage(t.genericError)
+    }
+
+    setIsRecordingShotDay(false)
   }
 
   async function handleApproveScheduleClick() {
@@ -5229,6 +5314,16 @@ function App() {
                 </label>
               </div>
 
+              <label className="schedule-setup-field schedule-setup-field-wide">
+                {t.scheduleSpecialInstructionsLabel}
+                <textarea
+                  className="skip-ahead-textarea"
+                  value={scheduleSpecialInstructions}
+                  onChange={(e) => setScheduleSpecialInstructions(e.target.value)}
+                  placeholder={t.scheduleSpecialInstructionsPlaceholder}
+                />
+              </label>
+
               <p className="availability-form-intro">{t.availabilityFormIntro}</p>
 
               <h4>{t.characterAvailabilityHeading}</h4>
@@ -5330,16 +5425,42 @@ function App() {
 
               <div className="schedule-days">
                 {shootSchedule.scheduleDays.map((day) => (
-                  <div key={day.dayNumber} className="schedule-day-card">
-                    <strong>{t.shootDayLabel} {day.dayNumber} — {day.location[language]}</strong>
+                  <div key={day.dayNumber} className={day.completed ? 'schedule-day-card schedule-day-completed' : 'schedule-day-card'}>
+                    <strong>
+                      {t.shootDayLabel} {day.dayNumber} — {day.location[language]}
+                      {day.completed && <span className="schedule-day-completed-badge"> ✓ {t.shootDayCompletedLabel}</span>}
+                    </strong>
                     <ul className="schedule-day-scenes">
                       {day.sceneRefs.map((ref, index) => {
                         const scene = lookupScene(sceneList, ref)
                         if (!scene) return null
+                        const isMarking = markingShotDayNumber === day.dayNumber
                         return (
                           <li key={index}>
+                            {isMarking && (
+                              <input
+                                type="checkbox"
+                                checked={shotSceneSelections[index] !== false}
+                                onChange={(e) =>
+                                  setShotSceneSelections((prev) => ({ ...prev, [index]: e.target.checked }))
+                                }
+                              />
+                            )}
                             {typeof ref.episodeIndex === 'number' ? `${t.episodeLabel} ${ref.episodeIndex + 1}, ` : ''}
-                            {t.sceneLabel} {scene.sceneNumber || ref.sceneIndex + 1}: {scene.oneLiner[language]}
+                            {t.sceneLabel} {scene.sceneNumber ? cleanSceneNumber(scene.sceneNumber) : ref.sceneIndex + 1}: {scene.oneLiner[language]}
+                            {(() => {
+                              const sceneCast = lookupSceneCast(sceneList, scriptBreakdown?.adSheet, ref)
+                              return sceneCast?.length > 0 ? (
+                                <span className="schedule-scene-meta"> — {t.castCalledLabel}: {sceneCast.join(', ')}</span>
+                              ) : null
+                            })()}
+                            {(ref.costume || ref.properties) && (
+                              <span className="schedule-scene-meta">
+                                {ref.costume && ` — ${t.costumeLabel}: ${ref.costume}`}
+                                {ref.properties && ` — ${t.propertiesLabel}: ${ref.properties}`}
+                              </span>
+                            )}
+                            {ref.adRemark && <p className="feedback-note schedule-scene-ad-remark">{t.adRemarkLabel}: {ref.adRemark}</p>}
                           </li>
                         )
                       })}
@@ -5350,6 +5471,29 @@ function App() {
                       </p>
                     )}
                     <p className="schedule-day-notes">{day.notes[language]}</p>
+                    {canEditProduction && !day.completed && (
+                      markingShotDayNumber === day.dayNumber ? (
+                        <div className="skip-ahead-controls">
+                          <button
+                            className="choose-button"
+                            onClick={() => handleConfirmDayShotClick(day)}
+                            disabled={isRecordingShotDay}
+                          >
+                            {isRecordingShotDay ? t.recordingShotDayLabel : t.confirmShotScenesButton}
+                          </button>
+                          <button className="cancel-button" onClick={() => setMarkingShotDayNumber(null)}>
+                            {t.cancelEditButton}
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          className="breakdown-action-button"
+                          onClick={() => { setMarkingShotDayNumber(day.dayNumber); setShotSceneSelections({}) }}
+                        >
+                          {t.markDayShotButton}
+                        </button>
+                      )
+                    )}
                   </div>
                 ))}
               </div>

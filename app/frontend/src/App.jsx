@@ -267,7 +267,17 @@ const LABELS = {
     adRemarkLabel: 'AD Remark',
     markDayShotButton: 'Mark Day as Shot',
     confirmShotScenesButton: 'Confirm Shot Scenes',
+    completionNotePlaceholder: 'Uncheck any scene not actually completed, and add a note if useful (e.g. "rained in the afternoon, milkman scene needs a reshoot"). Unchecked scenes move to the next schedule automatically.',
     recordingShotDayLabel: 'Recording...',
+    dayCompletionReportIntro: "Tell us what actually happened today, in your own words — refer to scenes by their real script scene numbers, just like on your paper sheet.",
+    dayCompletionReportPlaceholder: 'e.g. "Completed Episode 1 scenes 1-6 and Episode 3 1A-1B. Could not get to the maid interviews (2A) or Episode 2 7-9 — pushed to another day."',
+    interpretReportButton: 'Interpret Report',
+    parsingDayCompletionLabel: 'Reading report...',
+    interpretedAsHeading: "Here's what I understood — review before confirming:",
+    completedLabel: 'Completed',
+    movesToNextDayLabel: 'Not completed, moves to next day',
+    noneLabel: 'none',
+    reviewCheckboxesNote: 'The scene checkboxes above have been set to match this — adjust any of them by hand if something looks wrong before confirming.',
     artistScheduleHeading: 'Artist-Wise Summary',
     totalDaysLabel: 'Total Days',
     approveScheduleButton: 'Approve',
@@ -581,7 +591,17 @@ const LABELS = {
     adRemarkLabel: 'AD ମନ୍ତବ୍ୟ',
     markDayShotButton: 'ଦିନଟି ସୁଟ୍ ହେଲା ବୋଲି ଚିହ୍ନଟ କରନ୍ତୁ',
     confirmShotScenesButton: 'ସୁଟ୍ ହୋଇଥିବା ସିନ୍ ନିଶ୍ଚିତ କରନ୍ତୁ',
+    completionNotePlaceholder: 'ପ୍ରକୃତରେ ସମାପ୍ତ ହୋଇନଥିବା ଯେକୌଣସି ସିନ୍‌ର ଚେକ୍‌ବକ୍ସ ହଟାନ୍ତୁ, ଏବଂ ଉପଯୋଗୀ ହେଲେ ଏକ ମନ୍ତବ୍ୟ ଯୋଡ଼ନ୍ତୁ। ଅନ୍‌ଚେକ୍ ହୋଇଥିବା ସିନ୍ ପରବର୍ତ୍ତୀ ସିଡ୍ୟୁଲ୍‌କୁ ସ୍ୱଚାଳିତ ଭାବରେ ଯାଇଥାଏ।',
     recordingShotDayLabel: 'ରେକର୍ଡ ହେଉଛି...',
+    dayCompletionReportIntro: 'ଆଜି ପ୍ରକୃତରେ କଣ ହେଲା ତାହା ନିଜ ଭାଷାରେ କୁହନ୍ତୁ — ସ୍କ୍ରିପ୍ଟର ପ୍ରକୃତ ସିନ୍ ନମ୍ବର ଅନୁଯାୟୀ ଉଲ୍ଲେଖ କରନ୍ତୁ, ଠିକ୍ ଆପଣଙ୍କ କାଗଜ ସିଟ୍ ପରି।',
+    dayCompletionReportPlaceholder: 'ଉଦାହରଣ: "ଏପିସୋଡ୍ ୧ ର ସିନ୍ ୧-୬ ଏବଂ ଏପିସୋଡ୍ ୩ ର 1A-1B ସମାପ୍ତ ହେଲା। କାମବାଳୀ ସାକ୍ଷାତକାର (2A) କିମ୍ବା ଏପିସୋଡ୍ ୨ ର ୭-୯ ହୋଇପାରିଲା ନାହିଁ — ଅନ୍ୟ ଏକ ଦିନକୁ ଠେଲି ଦିଆଗଲା।"',
+    interpretReportButton: 'ରିପୋର୍ଟ ବୁଝନ୍ତୁ',
+    parsingDayCompletionLabel: 'ରିପୋର୍ଟ ପଢ଼ାଯାଉଛି...',
+    interpretedAsHeading: 'ମୁଁ ଏହା ବୁଝିଲି — ନିଶ୍ଚିତ କରିବା ପୂର୍ବରୁ ସମୀକ୍ଷା କରନ୍ତୁ:',
+    completedLabel: 'ସମାପ୍ତ',
+    movesToNextDayLabel: 'ସମାପ୍ତ ହୋଇନାହିଁ, ପରବର୍ତ୍ତୀ ଦିନକୁ ଯାଉଛି',
+    noneLabel: 'କିଛି ନାହିଁ',
+    reviewCheckboxesNote: 'ଉପରର ସିନ୍ ଚେକ୍‌ବକ୍ସଗୁଡ଼ିକ ଏହା ସହିତ ମେଳ ଖାଉଥିବା ଭାବରେ ସେଟ୍ ହୋଇଛି — ନିଶ୍ଚିତ କରିବା ପୂର୍ବରୁ କିଛି ଭୁଲ ଲାଗିଲେ ହାତରେ ପରିବର୍ତ୍ତନ କରନ୍ତୁ।',
     artistScheduleHeading: 'କଳାକାର-ଅନୁଯାୟୀ ସାରାଂଶ',
     totalDaysLabel: 'ମୋଟ ଦିନ',
     approveScheduleButton: 'ଅନୁମୋଦନ କରନ୍ତୁ',
@@ -1512,7 +1532,11 @@ function App() {
   const [scheduleSpecialInstructions, setScheduleSpecialInstructions] = useState('')
   const [markingShotDayNumber, setMarkingShotDayNumber] = useState(null)
   const [shotSceneSelections, setShotSceneSelections] = useState({})
+  const [shotCompletionNote, setShotCompletionNote] = useState('')
   const [isRecordingShotDay, setIsRecordingShotDay] = useState(false)
+  const [dayCompletionReportText, setDayCompletionReportText] = useState('')
+  const [isParsingDayCompletion, setIsParsingDayCompletion] = useState(false)
+  const [dayCompletionParseResult, setDayCompletionParseResult] = useState(null)
 
   const [activeAgent, setActiveAgent] = useState('story')
   const [projectType, setProjectType] = useState('story')
@@ -3360,17 +3384,52 @@ function App() {
     setIsGeneratingSchedule(false)
   }
 
+  async function handleParseDayCompletionClick(day) {
+    if (!dayCompletionReportText.trim()) return
+    setIsParsingDayCompletion(true)
+    setErrorMessage(null)
+
+    try {
+      const response = await fetch(`${BACKEND_URL}/api/shoot-schedule/${sceneList.id}/parse-day-completion`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ dayNumber: day.dayNumber, reportText: dayCompletionReportText }),
+      })
+      const data = await response.json()
+
+      if (!response.ok) {
+        setErrorMessage(data.error || t.genericError)
+        setIsParsingDayCompletion(false)
+        return
+      }
+
+      const selections = {}
+      day.sceneRefs.forEach((_, index) => {
+        selections[index] = data.completedIndexes.includes(index)
+      })
+      setShotSceneSelections(selections)
+      setDayCompletionParseResult(data)
+    } catch {
+      setErrorMessage(t.genericError)
+    }
+
+    setIsParsingDayCompletion(false)
+  }
+
   async function handleConfirmDayShotClick(day) {
     setIsRecordingShotDay(true)
     setErrorMessage(null)
 
     const shotSceneRefs = day.sceneRefs.filter((_, index) => shotSceneSelections[index] !== false)
+    const notesWithCompletion = shotCompletionNote.trim()
+      ? { en: [day.notes?.en, shotCompletionNote.trim()].filter(Boolean).join(' — '), or: day.notes?.or ?? '' }
+      : day.notes
 
     try {
       const response = await fetch(`${BACKEND_URL}/api/shoot-schedule/${sceneList.id}/record-day`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ day: { ...day, sceneRefs: shotSceneRefs } }),
+        body: JSON.stringify({ day: { ...day, sceneRefs: shotSceneRefs, notes: notesWithCompletion } }),
       })
       const data = await response.json()
 
@@ -3383,6 +3442,9 @@ function App() {
       setShootSchedule(data)
       setMarkingShotDayNumber(null)
       setShotSceneSelections({})
+      setShotCompletionNote('')
+      setDayCompletionReportText('')
+      setDayCompletionParseResult(null)
     } catch {
       setErrorMessage(t.genericError)
     }
@@ -5473,17 +5535,59 @@ function App() {
                     <p className="schedule-day-notes">{day.notes[language]}</p>
                     {canEditProduction && !day.completed && (
                       markingShotDayNumber === day.dayNumber ? (
-                        <div className="skip-ahead-controls">
-                          <button
-                            className="choose-button"
-                            onClick={() => handleConfirmDayShotClick(day)}
-                            disabled={isRecordingShotDay}
-                          >
-                            {isRecordingShotDay ? t.recordingShotDayLabel : t.confirmShotScenesButton}
-                          </button>
-                          <button className="cancel-button" onClick={() => setMarkingShotDayNumber(null)}>
-                            {t.cancelEditButton}
-                          </button>
+                        <div className="skip-ahead-controls schedule-mark-shot-controls">
+                          <p className="availability-form-intro">{t.dayCompletionReportIntro}</p>
+                          <textarea
+                            className="skip-ahead-textarea"
+                            value={dayCompletionReportText}
+                            onChange={(e) => setDayCompletionReportText(e.target.value)}
+                            placeholder={t.dayCompletionReportPlaceholder}
+                          />
+                          <div className="skip-ahead-controls">
+                            <button
+                              className="import-export-button"
+                              onClick={() => handleParseDayCompletionClick(day)}
+                              disabled={isParsingDayCompletion || !dayCompletionReportText.trim()}
+                            >
+                              {isParsingDayCompletion ? t.parsingDayCompletionLabel : t.interpretReportButton}
+                            </button>
+                          </div>
+
+                          {dayCompletionParseResult && (
+                            <div className="reimport-changes-summary">
+                              <p><strong>{t.interpretedAsHeading}</strong></p>
+                              <p>✅ {t.completedLabel} ({dayCompletionParseResult.completed.length}): {dayCompletionParseResult.completed.map((c) => c.label.split(':')[0]).join(', ')}</p>
+                              <p>🔲 {t.movesToNextDayLabel} ({dayCompletionParseResult.notCompleted.length}): {dayCompletionParseResult.notCompleted.map((c) => c.label.split(':')[0]).join(', ') || t.noneLabel}</p>
+                              <p className="sidebar-section-note">{t.reviewCheckboxesNote}</p>
+                            </div>
+                          )}
+
+                          <textarea
+                            className="skip-ahead-textarea"
+                            value={shotCompletionNote}
+                            onChange={(e) => setShotCompletionNote(e.target.value)}
+                            placeholder={t.completionNotePlaceholder}
+                          />
+                          <div className="skip-ahead-controls">
+                            <button
+                              className="choose-button"
+                              onClick={() => handleConfirmDayShotClick(day)}
+                              disabled={isRecordingShotDay}
+                            >
+                              {isRecordingShotDay ? t.recordingShotDayLabel : t.confirmShotScenesButton}
+                            </button>
+                            <button
+                              className="cancel-button"
+                              onClick={() => {
+                                setMarkingShotDayNumber(null)
+                                setShotCompletionNote('')
+                                setDayCompletionReportText('')
+                                setDayCompletionParseResult(null)
+                              }}
+                            >
+                              {t.cancelEditButton}
+                            </button>
+                          </div>
                         </div>
                       ) : (
                         <button

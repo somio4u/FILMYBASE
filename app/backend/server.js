@@ -5063,6 +5063,97 @@ app.post("/api/shoot-schedule", requireRole("admin", "production_manager"), asyn
 // count as "shot"; anything from that day left out (because the AD
 // reported it wasn't finished) simply remains unscheduled and will be
 // picked up automatically the next time the schedule is (re)generated.
+// Lets the AD report what actually happened today in his own words,
+// referencing scenes by their real script scene numbers (the same ones
+// on his paper sheet) — rather than making him understand or click
+// through the app's own internal scene ordering. The candidate list is
+// bounded to just today's PLANNED scenes (typically a handful to a few
+// dozen), which is what makes this reliable: the model only has to match
+// a short report against a short, concrete list, not search the whole
+// script. Never commits anything by itself — the frontend shows the
+// interpretation back to the AD/PM to confirm or correct before saving.
+async function parseCompletedScenesFromReport(sceneList, plannedSceneRefs, reportText) {
+  const isSeries = Boolean(sceneList.episodeScenes);
+  const listText = plannedSceneRefs
+    .map((ref, i) => {
+      const scene = lookupSceneServerSide(sceneList, ref);
+      const num = (scene?.sceneNumber || String(ref.sceneIndex + 1)).replace(/^\s*(SCENE|SC)\.?\s*/i, "");
+      const epLabel = isSeries ? `Episode ${ref.episodeIndex + 1}, ` : "";
+      return `${i}. ${epLabel}Scene ${num}: ${scene?.oneLiner?.en ?? ""}`;
+    })
+    .join("\n");
+
+  const contents = `Today's planned shoot list, numbered:\n${listText}\n\nThe Assistant Director's report on what actually happened today:\n"${reportText}"\n\nFor EACH numbered item above, determine whether the AD's report says it was completed today or not. Match by the scene number and episode mentioned in the report — the AD refers to scenes by their real script scene numbers, exactly as listed above — do not guess from position alone. If the report doesn't mention an item at all, assume it was NOT completed (safer default — an unmentioned scene should roll forward rather than be silently marked done). Return "completedIndexes" (0-indexed positions from the list above that the report confirms were completed) and "notCompletedIndexes" (everything else). Every index from 0 to ${plannedSceneRefs.length - 1} must appear in exactly one of the two arrays.`;
+
+  const response = await generateContentWithRetry({
+    model: "gemini-flash-lite-latest",
+    contents,
+    config: {
+      systemInstruction: PRODUCTION_SYSTEM_PROMPT,
+      responseMimeType: "application/json",
+      maxOutputTokens: 2048,
+      responseSchema: {
+        type: Type.OBJECT,
+        properties: {
+          completedIndexes: { type: Type.ARRAY, items: { type: Type.INTEGER } },
+          notCompletedIndexes: { type: Type.ARRAY, items: { type: Type.INTEGER } },
+        },
+        required: ["completedIndexes", "notCompletedIndexes"],
+      },
+    },
+  });
+
+  return JSON.parse(response.text);
+}
+
+app.post("/api/shoot-schedule/:sceneListId/parse-day-completion", requireRole("admin", "production_manager"), async (req, res) => {
+  const { sceneListId } = req.params;
+  const { dayNumber, reportText } = req.body;
+
+  if (!(await userOwnsSceneList(req.user, sceneListId))) {
+    res.status(403).json({ error: "You don't have access to this project." });
+    return;
+  }
+  if (typeof dayNumber !== "number" || !reportText?.trim()) {
+    res.status(400).json({ error: "A dayNumber and a completion report are required." });
+    return;
+  }
+
+  try {
+    const latestSchedule = await db.query(
+      "SELECT content FROM shoot_schedules WHERE scene_list_id = $1 ORDER BY created_at DESC LIMIT 1",
+      [sceneListId]
+    );
+    const day = (latestSchedule.rows[0]?.content?.scheduleDays ?? []).find((d) => d.dayNumber === dayNumber);
+    if (!day) {
+      res.status(404).json({ error: "That shoot day wasn't found in the current schedule." });
+      return;
+    }
+
+    const sceneListResult = await db.query("SELECT content FROM scene_lists WHERE id = $1", [sceneListId]);
+    const sceneList = sceneListResult.rows[0].content;
+
+    const { completedIndexes, notCompletedIndexes } = await parseCompletedScenesFromReport(sceneList, day.sceneRefs, reportText);
+
+    const describeRef = (ref) => {
+      const scene = lookupSceneServerSide(sceneList, ref);
+      const num = (scene?.sceneNumber || String(ref.sceneIndex + 1)).replace(/^\s*(SCENE|SC)\.?\s*/i, "");
+      const epLabel = typeof ref.episodeIndex === "number" ? `Episode ${ref.episodeIndex + 1}, ` : "";
+      return `${epLabel}Scene ${num}${scene?.oneLiner?.en ? `: ${scene.oneLiner.en}` : ""}`;
+    };
+
+    res.json({
+      dayNumber,
+      completedIndexes,
+      completed: completedIndexes.map((i) => ({ index: i, label: describeRef(day.sceneRefs[i]) })),
+      notCompleted: notCompletedIndexes.map((i) => ({ index: i, label: describeRef(day.sceneRefs[i]) })),
+    });
+  } catch (error) {
+    console.error("Parsing day completion failed:", error.message);
+    res.status(502).json({ error: error.message });
+  }
+});
+
 app.post("/api/shoot-schedule/:sceneListId/record-day", requireRole("admin", "production_manager"), async (req, res) => {
   const { sceneListId } = req.params;
   const { day } = req.body;

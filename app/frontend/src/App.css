@@ -1867,13 +1867,61 @@ body {
 }
 
 .schedule-day-completed {
-  border-color: var(--success);
+  border-color: var(--danger);
+  background: var(--danger-bg);
 }
 
 .schedule-day-completed-badge {
-  color: var(--success);
+  color: var(--danger);
   font-size: 12px;
   font-weight: 600;
+}
+
+.artist-schedule-row {
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin: 4px 0;
+  padding: 6px 10px;
+  border-radius: 6px;
+  border-left: 3px solid transparent;
+}
+
+.artist-schedule-row.wrapped {
+  border-left-color: var(--danger);
+  background: var(--danger-bg);
+}
+
+.artist-schedule-row.pending {
+  border-left-color: var(--warning);
+  background: var(--warning-bg);
+}
+
+.artist-schedule-row.in-progress {
+  border-left-color: var(--accent);
+  background: rgba(138, 180, 248, 0.12);
+}
+
+.artist-schedule-status-chip {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 1px 8px;
+  border-radius: 10px;
+}
+
+.artist-schedule-status-chip.wrapped {
+  background: var(--danger-bg);
+  color: var(--danger);
+}
+
+.artist-schedule-status-chip.pending {
+  background: var(--warning-bg);
+  color: var(--warning);
+}
+
+.artist-schedule-status-chip.in-progress {
+  background: rgba(138, 180, 248, 0.16);
+  color: var(--accent-strong);
 }
 
 .schedule-scene-meta {

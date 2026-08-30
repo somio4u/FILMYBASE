@@ -307,6 +307,9 @@ const LABELS = {
     noneLabel: 'none',
     reviewCheckboxesNote: 'The scene checkboxes above have been set to match this — adjust any of them by hand if something looks wrong before confirming.',
     artistScheduleHeading: 'Artist-Wise Summary',
+    artistStatusWrappedLabel: 'Wrapped',
+    artistStatusPendingLabel: 'Pending',
+    artistStatusInProgressLabel: 'In Progress',
     totalDaysLabel: 'Total Days',
     approveScheduleButton: 'Approve',
     scheduleApprovedBadge: '✅ Shoot Schedule Approved',
@@ -659,6 +662,9 @@ const LABELS = {
     noneLabel: 'କିଛି ନାହିଁ',
     reviewCheckboxesNote: 'ଉପରର ସିନ୍ ଚେକ୍‌ବକ୍ସଗୁଡ଼ିକ ଏହା ସହିତ ମେଳ ଖାଉଥିବା ଭାବରେ ସେଟ୍ ହୋଇଛି — ନିଶ୍ଚିତ କରିବା ପୂର୍ବରୁ କିଛି ଭୁଲ ଲାଗିଲେ ହାତରେ ପରିବର୍ତ୍ତନ କରନ୍ତୁ।',
     artistScheduleHeading: 'କଳାକାର-ଅନୁଯାୟୀ ସାରାଂଶ',
+    artistStatusWrappedLabel: 'ସମାପ୍ତ',
+    artistStatusPendingLabel: 'ବାକି',
+    artistStatusInProgressLabel: 'ଚାଲୁଛି',
     totalDaysLabel: 'ମୋଟ ଦିନ',
     approveScheduleButton: 'ଅନୁମୋଦନ କରନ୍ତୁ',
     scheduleApprovedBadge: '✅ ସୁଟିଂ ସିଡ୍ୟୁଲ୍ ଅନୁମୋଦିତ',
@@ -6101,11 +6107,28 @@ function App() {
                     </h4>
                   </button>
                   {isArtistScheduleExpanded &&
-                    shootSchedule.artistSchedule.map((entry) => (
-                      <p key={entry.character} className="artist-schedule-row">
-                        <strong>{entry.character}</strong> — {t.totalDaysLabel}: {entry.totalDays} ({entry.days.map((d) => `${t.shootDayLabel} ${d.dayNumber}${d.date ? ` (${d.date})` : ''}`).join(', ')})
-                      </p>
-                    ))}
+                    (() => {
+                      const completedByDayNumber = Object.fromEntries(
+                        shootSchedule.scheduleDays.map((d) => [d.dayNumber, Boolean(d.completed)])
+                      )
+                      return shootSchedule.artistSchedule.map((entry) => {
+                        const completedFlags = entry.days.map((d) => completedByDayNumber[d.dayNumber])
+                        const allDone = completedFlags.every(Boolean)
+                        const noneDone = completedFlags.every((c) => !c)
+                        const statusClass = allDone ? 'wrapped' : noneDone ? 'pending' : 'in-progress'
+                        const statusLabel = allDone ? t.artistStatusWrappedLabel : noneDone ? t.artistStatusPendingLabel : t.artistStatusInProgressLabel
+                        return (
+                          <p key={entry.character} className={`artist-schedule-row ${statusClass}`}>
+                            <span className={`artist-schedule-status-chip ${statusClass}`}>{statusLabel}</span>{' '}
+                            <strong>{entry.character}</strong> — {t.totalDaysLabel}: {entry.totalDays} (
+                            {entry.days
+                              .map((d) => `${t.shootDayLabel} ${d.dayNumber}${d.date ? ` (${d.date})` : ''}${completedByDayNumber[d.dayNumber] ? ' ✓' : ''}`)
+                              .join(', ')}
+                            )
+                          </p>
+                        )
+                      })
+                    })()}
                 </div>
               )}
 

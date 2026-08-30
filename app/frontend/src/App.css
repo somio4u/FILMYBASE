@@ -1567,6 +1567,53 @@ body {
   color: var(--text-muted);
 }
 
+.breakdown-expand-all-button {
+  margin-bottom: 8px;
+}
+
+.breakdown-item-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  background: none;
+  border: none;
+  padding: 0;
+  margin: 0;
+  text-align: left;
+  font-size: 13px;
+  color: inherit;
+  cursor: pointer;
+}
+
+.breakdown-item-chevron {
+  flex: 0 0 auto;
+  display: inline-block;
+  color: var(--text-muted);
+  transition: transform 0.15s ease;
+}
+
+.breakdown-item-chevron.expanded {
+  transform: rotate(90deg);
+}
+
+.breakdown-item-chip {
+  font-size: 11px;
+  padding: 1px 7px;
+  border-radius: 10px;
+  margin-left: 6px;
+}
+
+.breakdown-item-chip.finalized {
+  background: var(--success-bg);
+  color: var(--success);
+}
+
+.breakdown-item-chip.pending {
+  background: var(--warning-bg);
+  color: var(--warning);
+}
+
 .master-list-section {
   margin-bottom: 28px;
 }

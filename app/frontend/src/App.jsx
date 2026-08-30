@@ -258,6 +258,8 @@ const LABELS = {
     reanalyzeButton: 'Re-analyze',
     reanalyzingLabel: 'Re-analyzing...',
     editButton: 'Edit',
+    expandAllButton: 'Expand All',
+    collapseAllButton: 'Collapse All',
     addItemButton: '+ Add Item',
     removeItemButton: 'Remove',
     saveChangesButton: 'Save Changes',
@@ -603,6 +605,8 @@ const LABELS = {
     reanalyzeButton: 'ପୁନଃ ବିଶ୍ଳେଷଣ',
     reanalyzingLabel: 'ପୁନଃ ବିଶ୍ଳେଷଣ ହେଉଛି...',
     editButton: 'ସମ୍ପାଦନା',
+    expandAllButton: 'ସବୁ ଖୋଲନ୍ତୁ',
+    collapseAllButton: 'ସବୁ ବନ୍ଦ କରନ୍ତୁ',
     addItemButton: '+ ଆଇଟମ୍ ଯୋଡ଼ନ୍ତୁ',
     removeItemButton: 'ହଟାନ୍ତୁ',
     saveChangesButton: 'ପରିବର୍ତ୍ତନ ସେଭ୍ କରନ୍ତୁ',
@@ -1741,6 +1745,11 @@ function App() {
   const [editingBreakdownCategory, setEditingBreakdownCategory] = useState(null)
   const [breakdownCategoryDraft, setBreakdownCategoryDraft] = useState([])
   const [isSavingBreakdownEdits, setIsSavingBreakdownEdits] = useState(false)
+  const [expandedBreakdownItems, setExpandedBreakdownItems] = useState({})
+
+  function toggleBreakdownItem(key) {
+    setExpandedBreakdownItems((prev) => ({ ...prev, [key]: !prev[key] }))
+  }
 
   const [crewMembers, setCrewMembers] = useState([])
   const [isAddingCrew, setIsAddingCrew] = useState(false)
@@ -3269,79 +3278,115 @@ function App() {
           </div>
         </div>
 
-        {!isEditing &&
-          items.map((item, index) => (
-            <div key={index} className="breakdown-item">
-              {category === 'locationList' ? (
-                <>
-                  <strong>{item.location[language]}</strong>{' '}
-                  <span className="breakdown-item-meta">
-                    ({item.intExt} — {item.sceneCount} {t.scenesLabel})
-                  </span>
-                  <p>{item.notes[language]}</p>
-                </>
-              ) : category === 'costumes' ? (
-                <>
-                  <strong>{item.character}</strong>
-                  <p>{item.description[language]}</p>
-                </>
-              ) : category === 'artistList' ? (
-                <>
-                  <strong>{item.label}</strong>{' '}
-                  <span className="breakdown-item-meta">
-                    ({item.gender || t.unspecifiedLabel}, {item.age || t.unspecifiedLabel})
-                  </span>
-                  <p>{item.notes[language]}</p>
-                </>
-              ) : (
-                <>
-                  <strong>{item.label}</strong>
-                  <p>{item.notes[language]}</p>
-                </>
-              )}
+        {!isEditing && items.length > 1 && (
+          <button
+            className="breakdown-action-button breakdown-expand-all-button"
+            onClick={() => {
+              const allKeys = items.map((_, index) => `${category}:${index}`)
+              const allExpanded = allKeys.every((key) => expandedBreakdownItems[key])
+              setExpandedBreakdownItems((prev) => {
+                const next = { ...prev }
+                allKeys.forEach((key) => {
+                  next[key] = !allExpanded
+                })
+                return next
+              })
+            }}
+          >
+            {items.every((_, index) => expandedBreakdownItems[`${category}:${index}`]) ? t.collapseAllButton : t.expandAllButton}
+          </button>
+        )}
 
-              {category === 'artistList' && (
-                <InlineCastAttachment
-                  category="artist"
-                  linkKey={item.label}
-                  members={crewMembers.filter((m) => m.category === 'artist' && m.characterName === item.label)}
-                  onAdd={handleAddCrewMember}
-                  onUpdate={handleUpdateCrewMember}
-                  onDelete={handleDeleteCrewMember}
-                  isAdding={isAddingCrew}
-                  deletingId={crewDeletingId}
-                  updatingId={crewUpdatingId}
-                  t={t}
-                  BACKEND_URL={BACKEND_URL}
-                  canEdit={canEditProduction}
-                  googleConnected={googleConnected}
-                  googleContacts={googleContacts}
-                  isLoadingGoogleContacts={isLoadingGoogleContacts}
-                  onLoadGoogleContacts={loadGoogleContacts}
-                  onAddFromContact={handleAddCrewMemberFromContact}
-                  sceneListId={sceneList.id}
-                  language={language}
-                  projectTitle={projectTitle}
-                />
-              )}
-              {category === 'locationList' && (
-                <InlineCastAttachment
-                  category="location"
-                  linkKey={item.location.en}
-                  members={crewMembers.filter((m) => m.category === 'location' && m.characterName === item.location.en)}
-                  onAdd={handleAddCrewMember}
-                  onUpdate={handleUpdateCrewMember}
-                  onDelete={handleDeleteCrewMember}
-                  isAdding={isAddingCrew}
-                  deletingId={crewDeletingId}
-                  updatingId={crewUpdatingId}
-                  t={t}
-                  BACKEND_URL={BACKEND_URL}
-                  canEdit={canEditProduction}
-                />
-              )}
-            </div>
-          ))}
+        {!isEditing &&
+          items.map((item, index) => {
+            const itemKey = `${category}:${index}`
+            const isExpanded = Boolean(expandedBreakdownItems[itemKey])
+            const isCastFinalized =
+              category === 'artistList' && crewMembers.some((m) => m.category === 'artist' && m.characterName === item.label)
+            const isLocationFinalized =
+              category === 'locationList' &&
+              crewMembers.some((m) => m.category === 'location' && m.characterName === item.location.en)
+
+            return (
+              <div key={index} className="breakdown-item">
+                <button className="breakdown-item-toggle" onClick={() => toggleBreakdownItem(itemKey)}>
+                  <span className={isExpanded ? 'breakdown-item-chevron expanded' : 'breakdown-item-chevron'}>▸</span>
+                  {category === 'locationList' ? (
+                    <>
+                      <strong>{item.location[language]}</strong>{' '}
+                      <span className="breakdown-item-meta">
+                        ({item.intExt} — {item.sceneCount} {t.scenesLabel})
+                      </span>
+                      <span className={isLocationFinalized ? 'breakdown-item-chip finalized' : 'breakdown-item-chip pending'}>
+                        {isLocationFinalized ? '✓' : '…'}
+                      </span>
+                    </>
+                  ) : category === 'costumes' ? (
+                    <strong>{item.character}</strong>
+                  ) : category === 'artistList' ? (
+                    <>
+                      <strong>{item.label}</strong>{' '}
+                      <span className="breakdown-item-meta">
+                        ({item.gender || t.unspecifiedLabel}, {item.age || t.unspecifiedLabel})
+                      </span>
+                      <span className={isCastFinalized ? 'breakdown-item-chip finalized' : 'breakdown-item-chip pending'}>
+                        {isCastFinalized ? '✓' : '…'}
+                      </span>
+                    </>
+                  ) : (
+                    <strong>{item.label}</strong>
+                  )}
+                </button>
+
+                {isExpanded && (
+                  <>
+                    <p>{category === 'costumes' ? item.description[language] : item.notes[language]}</p>
+
+                    {category === 'artistList' && (
+                      <InlineCastAttachment
+                        category="artist"
+                        linkKey={item.label}
+                        members={crewMembers.filter((m) => m.category === 'artist' && m.characterName === item.label)}
+                        onAdd={handleAddCrewMember}
+                        onUpdate={handleUpdateCrewMember}
+                        onDelete={handleDeleteCrewMember}
+                        isAdding={isAddingCrew}
+                        deletingId={crewDeletingId}
+                        updatingId={crewUpdatingId}
+                        t={t}
+                        BACKEND_URL={BACKEND_URL}
+                        canEdit={canEditProduction}
+                        googleConnected={googleConnected}
+                        googleContacts={googleContacts}
+                        isLoadingGoogleContacts={isLoadingGoogleContacts}
+                        onLoadGoogleContacts={loadGoogleContacts}
+                        onAddFromContact={handleAddCrewMemberFromContact}
+                        sceneListId={sceneList.id}
+                        language={language}
+                        projectTitle={projectTitle}
+                      />
+                    )}
+                    {category === 'locationList' && (
+                      <InlineCastAttachment
+                        category="location"
+                        linkKey={item.location.en}
+                        members={crewMembers.filter((m) => m.category === 'location' && m.characterName === item.location.en)}
+                        onAdd={handleAddCrewMember}
+                        onUpdate={handleUpdateCrewMember}
+                        onDelete={handleDeleteCrewMember}
+                        isAdding={isAddingCrew}
+                        deletingId={crewDeletingId}
+                        updatingId={crewUpdatingId}
+                        t={t}
+                        BACKEND_URL={BACKEND_URL}
+                        canEdit={canEditProduction}
+                      />
+                    )}
+                  </>
+                )}
+              </div>
+            )
+          })}
 
         {!isEditing && category === 'artistList' && canEditProduction && (
           <div className="add-missing-character-form">

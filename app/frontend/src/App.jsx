@@ -1186,6 +1186,7 @@ function CrewSection({ category, heading, members, characterOptions, onAdd, onUp
   const [contactNumber, setContactNumber] = useState('')
   const [photoFile, setPhotoFile] = useState(null)
   const [editingMemberId, setEditingMemberId] = useState(null)
+  const [isExpanded, setIsExpanded] = useState(false)
   const fileInputRef = useRef(null)
 
   // characterOptions shrinks as characters get cast (from here or from the
@@ -1212,84 +1213,93 @@ function CrewSection({ category, heading, members, characterOptions, onAdd, onUp
   return (
     <div className="breakdown-category">
       <div className="breakdown-category-header">
-        <h4>{heading}</h4>
+        <button className="breakdown-item-toggle" onClick={() => setIsExpanded(!isExpanded)}>
+          <span className={isExpanded ? 'breakdown-item-chevron expanded' : 'breakdown-item-chevron'}>▸</span>
+          <h4>
+            {heading} <span className="breakdown-item-meta">({members.length})</span>
+          </h4>
+        </button>
       </div>
 
-      {members.length === 0 && <p className="sidebar-section-note">{t.noCrewMembersYet}</p>}
+      {!isExpanded ? null : (
+        <>
+          {members.length === 0 && <p className="sidebar-section-note">{t.noCrewMembersYet}</p>}
 
-      <div className="crew-member-grid">
-        {members.map((member) =>
-          editingMemberId === member.id ? (
-            <CrewMemberEditForm
-              key={member.id}
-              member={member}
-              t={t}
-              showRole={!characterOptions}
-              isSaving={updatingId === member.id}
-              onCancel={() => setEditingMemberId(null)}
-              onSave={async (updates) => {
-                await onUpdate(member.id, updates)
-                setEditingMemberId(null)
-              }}
-            />
-          ) : (
-            <div key={member.id} className="crew-member-card">
-              {member.photoUrl ? (
-                <img className="crew-member-photo" src={member.photoUrl} alt={member.name} />
+          <div className="crew-member-grid">
+            {members.map((member) =>
+              editingMemberId === member.id ? (
+                <CrewMemberEditForm
+                  key={member.id}
+                  member={member}
+                  t={t}
+                  showRole={!characterOptions}
+                  isSaving={updatingId === member.id}
+                  onCancel={() => setEditingMemberId(null)}
+                  onSave={async (updates) => {
+                    await onUpdate(member.id, updates)
+                    setEditingMemberId(null)
+                  }}
+                />
               ) : (
-                <div className="crew-member-photo crew-member-photo-placeholder">{member.name.charAt(0).toUpperCase()}</div>
-              )}
-              <div className="crew-member-details">
-                <strong>{member.name}</strong>
-                {member.characterName && <span className="breakdown-item-meta"> — {member.characterName}</span>}
-                {member.role && <p>{member.role}</p>}
-                {member.contactNumber && <p>{member.contactNumber}</p>}
-              </div>
-              {canEdit && (
-                <div className="crew-member-card-actions">
-                  <button className="breakdown-action-button" onClick={() => setEditingMemberId(member.id)}>
-                    {t.modifyCrewMemberButton}
-                  </button>
-                  <button
-                    className="breakdown-action-button crew-member-remove"
-                    onClick={() => onDelete(member.id)}
-                    disabled={deletingId === member.id}
-                  >
-                    {t.removeCrewMemberButton}
-                  </button>
+                <div key={member.id} className="crew-member-card">
+                  {member.photoUrl ? (
+                    <img className="crew-member-photo" src={member.photoUrl} alt={member.name} />
+                  ) : (
+                    <div className="crew-member-photo crew-member-photo-placeholder">{member.name.charAt(0).toUpperCase()}</div>
+                  )}
+                  <div className="crew-member-details">
+                    <strong>{member.name}</strong>
+                    {member.characterName && <span className="breakdown-item-meta"> — {member.characterName}</span>}
+                    {member.role && <p>{member.role}</p>}
+                    {member.contactNumber && <p>{member.contactNumber}</p>}
+                  </div>
+                  {canEdit && (
+                    <div className="crew-member-card-actions">
+                      <button className="breakdown-action-button" onClick={() => setEditingMemberId(member.id)}>
+                        {t.modifyCrewMemberButton}
+                      </button>
+                      <button
+                        className="breakdown-action-button crew-member-remove"
+                        onClick={() => onDelete(member.id)}
+                        disabled={deletingId === member.id}
+                      >
+                        {t.removeCrewMemberButton}
+                      </button>
+                    </div>
+                  )}
                 </div>
-              )}
-            </div>
-          )
-        )}
-      </div>
+              )
+            )}
+          </div>
 
-      {!canEdit ? null : characterOptions?.length === 0 ? (
-        <p className="runtime-summary">{t.allCharactersCastNotice}</p>
-      ) : (
-        <form className="crew-add-form" onSubmit={handleSubmit}>
-          {characterOptions && (
-            <select value={characterName} onChange={(e) => setCharacterName(e.target.value)}>
-              {characterOptions.map((option) => (
-                <option key={option} value={option}>{option}</option>
-              ))}
-            </select>
+          {!canEdit ? null : characterOptions?.length === 0 ? (
+            <p className="runtime-summary">{t.allCharactersCastNotice}</p>
+          ) : (
+            <form className="crew-add-form" onSubmit={handleSubmit}>
+              {characterOptions && (
+                <select value={characterName} onChange={(e) => setCharacterName(e.target.value)}>
+                  {characterOptions.map((option) => (
+                    <option key={option} value={option}>{option}</option>
+                  ))}
+                </select>
+              )}
+              <input type="text" placeholder={t.crewNameLabel} value={name} onChange={(e) => setName(e.target.value)} />
+              {!characterOptions && (
+                <input type="text" placeholder={t.crewRoleLabel} value={role} onChange={(e) => setRole(e.target.value)} />
+              )}
+              <input type="tel" placeholder={t.crewContactLabel} value={contactNumber} onChange={(e) => setContactNumber(e.target.value)} />
+              <input
+                type="file"
+                accept="image/*"
+                ref={fileInputRef}
+                onChange={(e) => setPhotoFile(e.target.files[0] ?? null)}
+              />
+              <button className="breakdown-action-button" type="submit" disabled={isAdding || !name.trim()}>
+                {t.addCrewMemberButton}
+              </button>
+            </form>
           )}
-          <input type="text" placeholder={t.crewNameLabel} value={name} onChange={(e) => setName(e.target.value)} />
-          {!characterOptions && (
-            <input type="text" placeholder={t.crewRoleLabel} value={role} onChange={(e) => setRole(e.target.value)} />
-          )}
-          <input type="tel" placeholder={t.crewContactLabel} value={contactNumber} onChange={(e) => setContactNumber(e.target.value)} />
-          <input
-            type="file"
-            accept="image/*"
-            ref={fileInputRef}
-            onChange={(e) => setPhotoFile(e.target.files[0] ?? null)}
-          />
-          <button className="breakdown-action-button" type="submit" disabled={isAdding || !name.trim()}>
-            {t.addCrewMemberButton}
-          </button>
-        </form>
+        </>
       )}
     </div>
   )
@@ -1749,6 +1759,12 @@ function App() {
 
   function toggleBreakdownItem(key) {
     setExpandedBreakdownItems((prev) => ({ ...prev, [key]: !prev[key] }))
+  }
+
+  const [expandedScheduleDays, setExpandedScheduleDays] = useState({})
+
+  function toggleScheduleDay(dayNumber) {
+    setExpandedScheduleDays((prev) => ({ ...prev, [dayNumber]: !prev[dayNumber] }))
   }
 
   const [crewMembers, setCrewMembers] = useState([])
@@ -5792,121 +5808,154 @@ function App() {
                 </div>
               )}
 
+              {shootSchedule.scheduleDays.length > 1 && (
+                <button
+                  className="breakdown-action-button breakdown-expand-all-button"
+                  onClick={() => {
+                    const allExpanded = shootSchedule.scheduleDays.every((day) => expandedScheduleDays[day.dayNumber])
+                    setExpandedScheduleDays((prev) => {
+                      const next = { ...prev }
+                      shootSchedule.scheduleDays.forEach((day) => {
+                        next[day.dayNumber] = !allExpanded
+                      })
+                      return next
+                    })
+                  }}
+                >
+                  {shootSchedule.scheduleDays.every((day) => expandedScheduleDays[day.dayNumber]) ? t.collapseAllButton : t.expandAllButton}
+                </button>
+              )}
+
               <div className="schedule-days">
-                {shootSchedule.scheduleDays.map((day) => (
+                {shootSchedule.scheduleDays.map((day) => {
+                  const isDayExpanded = Boolean(expandedScheduleDays[day.dayNumber])
+                  return (
                   <div key={day.dayNumber} className={day.completed ? 'schedule-day-card schedule-day-completed' : 'schedule-day-card'}>
-                    <strong>
-                      {t.shootDayLabel} {day.dayNumber} — {day.location[language]}
-                      {day.completed && <span className="schedule-day-completed-badge"> ✓ {t.shootDayCompletedLabel}</span>}
-                    </strong>
-                    <ul className="schedule-day-scenes">
-                      {day.sceneRefs.map((ref, index) => {
-                        const scene = lookupScene(sceneList, ref)
-                        if (!scene) return null
-                        const isMarking = markingShotDayNumber === day.dayNumber
-                        return (
-                          <li key={index}>
-                            {isMarking && (
-                              <input
-                                type="checkbox"
-                                checked={shotSceneSelections[index] !== false}
-                                onChange={(e) =>
-                                  setShotSceneSelections((prev) => ({ ...prev, [index]: e.target.checked }))
-                                }
+                    <button className="breakdown-item-toggle" onClick={() => toggleScheduleDay(day.dayNumber)}>
+                      <span className={isDayExpanded ? 'breakdown-item-chevron expanded' : 'breakdown-item-chevron'}>▸</span>
+                      <strong>
+                        {t.shootDayLabel} {day.dayNumber} — {day.location[language]}
+                        {' '}
+                        <span className="breakdown-item-meta">
+                          ({day.sceneRefs.length} {t.scenesLabel})
+                        </span>
+                        {day.completed && <span className="schedule-day-completed-badge"> ✓ {t.shootDayCompletedLabel}</span>}
+                      </strong>
+                    </button>
+
+                    {isDayExpanded && (
+                      <>
+                        <ul className="schedule-day-scenes">
+                          {day.sceneRefs.map((ref, index) => {
+                            const scene = lookupScene(sceneList, ref)
+                            if (!scene) return null
+                            const isMarking = markingShotDayNumber === day.dayNumber
+                            return (
+                              <li key={index}>
+                                {isMarking && (
+                                  <input
+                                    type="checkbox"
+                                    checked={shotSceneSelections[index] !== false}
+                                    onChange={(e) =>
+                                      setShotSceneSelections((prev) => ({ ...prev, [index]: e.target.checked }))
+                                    }
+                                  />
+                                )}
+                                {typeof ref.episodeIndex === 'number' ? `${t.episodeLabel} ${ref.episodeIndex + 1}, ` : ''}
+                                {t.sceneLabel} {scene.sceneNumber ? cleanSceneNumber(scene.sceneNumber) : ref.sceneIndex + 1}: {scene.oneLiner[language]}
+                                {(() => {
+                                  const sceneCast = lookupSceneCast(sceneList, scriptBreakdown?.adSheet, ref)
+                                  return sceneCast?.length > 0 ? (
+                                    <span className="schedule-scene-meta"> — {t.castCalledLabel}: {sceneCast.join(', ')}</span>
+                                  ) : null
+                                })()}
+                                {(ref.costume || ref.properties) && (
+                                  <span className="schedule-scene-meta">
+                                    {ref.costume && ` — ${t.costumeLabel}: ${ref.costume}`}
+                                    {ref.properties && ` — ${t.propertiesLabel}: ${ref.properties}`}
+                                  </span>
+                                )}
+                                {ref.adRemark && <p className="feedback-note schedule-scene-ad-remark">{t.adRemarkLabel}: {ref.adRemark}</p>}
+                              </li>
+                            )
+                          })}
+                        </ul>
+                        {day.charactersNeeded?.length > 0 && (
+                          <p className="schedule-day-cast">
+                            <strong>{t.castCalledLabel}:</strong> {day.charactersNeeded.join(', ')}
+                          </p>
+                        )}
+                        <p className="schedule-day-notes">{day.notes[language]}</p>
+                        {canEditProduction && !day.completed && (
+                          markingShotDayNumber === day.dayNumber ? (
+                            <div className="skip-ahead-controls schedule-mark-shot-controls">
+                              <p className="availability-form-intro">{t.dayCompletionReportIntro}</p>
+                              <textarea
+                                className="skip-ahead-textarea"
+                                value={dayCompletionReportText}
+                                onChange={(e) => setDayCompletionReportText(e.target.value)}
+                                placeholder={t.dayCompletionReportPlaceholder}
                               />
-                            )}
-                            {typeof ref.episodeIndex === 'number' ? `${t.episodeLabel} ${ref.episodeIndex + 1}, ` : ''}
-                            {t.sceneLabel} {scene.sceneNumber ? cleanSceneNumber(scene.sceneNumber) : ref.sceneIndex + 1}: {scene.oneLiner[language]}
-                            {(() => {
-                              const sceneCast = lookupSceneCast(sceneList, scriptBreakdown?.adSheet, ref)
-                              return sceneCast?.length > 0 ? (
-                                <span className="schedule-scene-meta"> — {t.castCalledLabel}: {sceneCast.join(', ')}</span>
-                              ) : null
-                            })()}
-                            {(ref.costume || ref.properties) && (
-                              <span className="schedule-scene-meta">
-                                {ref.costume && ` — ${t.costumeLabel}: ${ref.costume}`}
-                                {ref.properties && ` — ${t.propertiesLabel}: ${ref.properties}`}
-                              </span>
-                            )}
-                            {ref.adRemark && <p className="feedback-note schedule-scene-ad-remark">{t.adRemarkLabel}: {ref.adRemark}</p>}
-                          </li>
-                        )
-                      })}
-                    </ul>
-                    {day.charactersNeeded?.length > 0 && (
-                      <p className="schedule-day-cast">
-                        <strong>{t.castCalledLabel}:</strong> {day.charactersNeeded.join(', ')}
-                      </p>
-                    )}
-                    <p className="schedule-day-notes">{day.notes[language]}</p>
-                    {canEditProduction && !day.completed && (
-                      markingShotDayNumber === day.dayNumber ? (
-                        <div className="skip-ahead-controls schedule-mark-shot-controls">
-                          <p className="availability-form-intro">{t.dayCompletionReportIntro}</p>
-                          <textarea
-                            className="skip-ahead-textarea"
-                            value={dayCompletionReportText}
-                            onChange={(e) => setDayCompletionReportText(e.target.value)}
-                            placeholder={t.dayCompletionReportPlaceholder}
-                          />
-                          <div className="skip-ahead-controls">
-                            <button
-                              className="import-export-button"
-                              onClick={() => handleParseDayCompletionClick(day)}
-                              disabled={isParsingDayCompletion || !dayCompletionReportText.trim()}
-                            >
-                              {isParsingDayCompletion ? t.parsingDayCompletionLabel : t.interpretReportButton}
-                            </button>
-                          </div>
+                              <div className="skip-ahead-controls">
+                                <button
+                                  className="import-export-button"
+                                  onClick={() => handleParseDayCompletionClick(day)}
+                                  disabled={isParsingDayCompletion || !dayCompletionReportText.trim()}
+                                >
+                                  {isParsingDayCompletion ? t.parsingDayCompletionLabel : t.interpretReportButton}
+                                </button>
+                              </div>
 
-                          {dayCompletionParseResult && (
-                            <div className="reimport-changes-summary">
-                              <p><strong>{t.interpretedAsHeading}</strong></p>
-                              <p>✅ {t.completedLabel} ({dayCompletionParseResult.completed.length}): {dayCompletionParseResult.completed.map((c) => c.label.split(':')[0]).join(', ')}</p>
-                              <p>🔲 {t.movesToNextDayLabel} ({dayCompletionParseResult.notCompleted.length}): {dayCompletionParseResult.notCompleted.map((c) => c.label.split(':')[0]).join(', ') || t.noneLabel}</p>
-                              <p className="sidebar-section-note">{t.reviewCheckboxesNote}</p>
+                              {dayCompletionParseResult && (
+                                <div className="reimport-changes-summary">
+                                  <p><strong>{t.interpretedAsHeading}</strong></p>
+                                  <p>✅ {t.completedLabel} ({dayCompletionParseResult.completed.length}): {dayCompletionParseResult.completed.map((c) => c.label.split(':')[0]).join(', ')}</p>
+                                  <p>🔲 {t.movesToNextDayLabel} ({dayCompletionParseResult.notCompleted.length}): {dayCompletionParseResult.notCompleted.map((c) => c.label.split(':')[0]).join(', ') || t.noneLabel}</p>
+                                  <p className="sidebar-section-note">{t.reviewCheckboxesNote}</p>
+                                </div>
+                              )}
+
+                              <textarea
+                                className="skip-ahead-textarea"
+                                value={shotCompletionNote}
+                                onChange={(e) => setShotCompletionNote(e.target.value)}
+                                placeholder={t.completionNotePlaceholder}
+                              />
+                              <div className="skip-ahead-controls">
+                                <button
+                                  className="choose-button"
+                                  onClick={() => handleConfirmDayShotClick(day)}
+                                  disabled={isRecordingShotDay}
+                                >
+                                  {isRecordingShotDay ? t.recordingShotDayLabel : t.confirmShotScenesButton}
+                                </button>
+                                <button
+                                  className="cancel-button"
+                                  onClick={() => {
+                                    setMarkingShotDayNumber(null)
+                                    setShotCompletionNote('')
+                                    setDayCompletionReportText('')
+                                    setDayCompletionParseResult(null)
+                                  }}
+                                >
+                                  {t.cancelEditButton}
+                                </button>
+                              </div>
                             </div>
-                          )}
-
-                          <textarea
-                            className="skip-ahead-textarea"
-                            value={shotCompletionNote}
-                            onChange={(e) => setShotCompletionNote(e.target.value)}
-                            placeholder={t.completionNotePlaceholder}
-                          />
-                          <div className="skip-ahead-controls">
+                          ) : (
                             <button
-                              className="choose-button"
-                              onClick={() => handleConfirmDayShotClick(day)}
-                              disabled={isRecordingShotDay}
+                              className="breakdown-action-button"
+                              onClick={() => { setMarkingShotDayNumber(day.dayNumber); setShotSceneSelections({}) }}
                             >
-                              {isRecordingShotDay ? t.recordingShotDayLabel : t.confirmShotScenesButton}
+                              {t.markDayShotButton}
                             </button>
-                            <button
-                              className="cancel-button"
-                              onClick={() => {
-                                setMarkingShotDayNumber(null)
-                                setShotCompletionNote('')
-                                setDayCompletionReportText('')
-                                setDayCompletionParseResult(null)
-                              }}
-                            >
-                              {t.cancelEditButton}
-                            </button>
-                          </div>
-                        </div>
-                      ) : (
-                        <button
-                          className="breakdown-action-button"
-                          onClick={() => { setMarkingShotDayNumber(day.dayNumber); setShotSceneSelections({}) }}
-                        >
-                          {t.markDayShotButton}
-                        </button>
-                      )
+                          )
+                        )}
+                      </>
                     )}
                   </div>
-                ))}
+                  )
+                })}
               </div>
 
               {shootSchedule.artistSchedule?.length > 0 && (

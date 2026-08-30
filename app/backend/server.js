@@ -5626,8 +5626,14 @@ app.get("/api/shoot-schedule/:id/export", requireLogin, async (req, res) => {
     const headerFont = lang === "or" ? "odiaBold" : "Helvetica-Bold";
     const labels =
       lang === "or"
-        ? { schedule: "ସୁଟିଂ ସୂଚୀ", day: "ଦିନ", location: "ସ୍ଥାନ", cast: "କଳାକାର", notes: "ଟିପ୍ପଣୀ", artistSummary: "କଳାକାର-ଅନୁଯାୟୀ ସାରାଂଶ", totalDays: "ମୋଟ ଦିନ", days: "ଦିନଗୁଡ଼ିକ", completed: "ସମାପ୍ତ", costume: "ପୋଷାକ", properties: "ପ୍ରପର୍ଟି", adRemark: "AD ମନ୍ତବ୍ୟ" }
-        : { schedule: "Shoot Schedule", day: "Day", location: "Location", cast: "Cast Called", notes: "Notes", artistSummary: "Artist-Wise Summary", totalDays: "Total Days", days: "Days", completed: "COMPLETED", costume: "Costume", properties: "Properties", adRemark: "AD Remark" };
+        ? {
+            schedule: "ସୁଟିଂ ସୂଚୀ", day: "ଦିନ", location: "ସ୍ଥାନ", cast: "କଳାକାର", notes: "ଟିପ୍ପଣୀ", artistSummary: "କଳାକାର-ଅନୁଯାୟୀ ସାରାଂଶ", totalDays: "ମୋଟ ଦିନ", days: "ଦିନଗୁଡ଼ିକ", completed: "ସମାପ୍ତ", costume: "ପୋଷାକ", properties: "ପ୍ରପର୍ଟି", adRemark: "AD ମନ୍ତବ୍ୟ",
+            wrapped: "ସମାପ୍ତ", pending: "ବାକି", inProgress: "ଚାଲୁଛି",
+          }
+        : {
+            schedule: "Shoot Schedule", day: "Day", location: "Location", cast: "Cast Called", notes: "Notes", artistSummary: "Artist-Wise Summary", totalDays: "Total Days", days: "Days", completed: "COMPLETED", costume: "Costume", properties: "Properties", adRemark: "AD Remark",
+            wrapped: "WRAPPED", pending: "PENDING", inProgress: "IN PROGRESS",
+          };
 
     // Per-scene cast (who's actually IN that scene, not the whole day's
     // call list) comes from the AD Scene Breakdown Sheet, if one's been
@@ -5700,14 +5706,18 @@ app.get("/api/shoot-schedule/:id/export", requireLogin, async (req, res) => {
     schedule.scheduleDays.forEach((day, dayIndex) => {
       if (dayIndex > 0) doc.addPage({ size: "A4", layout: "landscape", margin: 24 });
 
-      doc
-        .font(headerFont)
-        .fontSize(16)
-        .text(
-          `${day.date ? `${day.date}  —  ` : ""}${labels.day} ${day.dayNumber}${day.completed ? `  ✓ ${labels.completed}` : ""}`,
-          pageLeft,
-          doc.page.margins.top
-        );
+      // A completed day gets a red band behind its header so it reads as
+      // "already shot" at a glance when flipping through a printed copy,
+      // matching the same red the app's own UI uses for a wrapped day.
+      const dayTitle = `${day.date ? `${day.date}  —  ` : ""}${labels.day} ${day.dayNumber}${day.completed ? `  — ${labels.completed}` : ""}`;
+      if (day.completed) {
+        const bandHeight = 30;
+        doc.rect(pageLeft, doc.page.margins.top - 4, doc.page.width - pageLeft - doc.page.margins.right, bandHeight).fill("#fdecea");
+        doc.fillColor("#b3261e").font(headerFont).fontSize(16).text(dayTitle, pageLeft + 6, doc.page.margins.top);
+        doc.fillColor("#000");
+      } else {
+        doc.font(headerFont).fontSize(16).text(dayTitle, pageLeft, doc.page.margins.top);
+      }
       doc.font(bodyFont).fontSize(11).text(`${labels.location}: ${day.location?.[lang] ?? ""}`, pageLeft);
       doc.moveDown(0.5);
 
@@ -5778,14 +5788,39 @@ app.get("/api/shoot-schedule/:id/export", requireLogin, async (req, res) => {
     doc.font(headerFont).fontSize(18).text(labels.artistSummary);
     doc.moveDown(1);
 
+    // Same wrapped/pending/in-progress classification as the app's own
+    // Artist-Wise Summary view — cross-references each artist's call days
+    // against which schedule days are actually marked completed, so the
+    // printed sheet shows who's done and no longer needed on set.
+    const completedByDayNumber = Object.fromEntries(schedule.scheduleDays.map((d) => [d.dayNumber, Boolean(d.completed)]));
+    const statusColors = {
+      wrapped: { bg: "#fdecea", text: "#b3261e", label: labels.wrapped },
+      pending: { bg: "#fdf3e0", text: "#8a5a00", label: labels.pending },
+      "in-progress": { bg: "#e8f0fe", text: "#1a56b0", label: labels.inProgress },
+    };
+
     (schedule.artistSchedule ?? []).forEach((entry) => {
-      doc.font(headerFont).fontSize(13).text(entry.character);
+      const completedFlags = entry.days.map((d) => completedByDayNumber[d.dayNumber]);
+      const allDone = completedFlags.every(Boolean);
+      const noneDone = completedFlags.every((c) => !c);
+      const status = statusColors[allDone ? "wrapped" : noneDone ? "pending" : "in-progress"];
+
+      const chipText = status.label;
+      doc.font(headerFont).fontSize(9);
+      const chipWidth = doc.widthOfString(chipText) + 14;
+      const chipY = doc.y;
+      doc.rect(pageLeft, chipY, chipWidth, 16).fill(status.bg);
+      doc.fillColor(status.text).text(chipText, pageLeft + 7, chipY + 4);
+      doc.fillColor("#000");
+      doc.font(headerFont).fontSize(13).text(entry.character, pageLeft + chipWidth + 8, chipY - 2);
+      doc.moveDown(0.3);
       doc
         .font(bodyFont)
         .fontSize(11)
-        .text(`${labels.totalDays}: ${entry.totalDays}  —  ${labels.days}: ${entry.days.map((d) => `Day ${d.dayNumber}${d.date ? ` (${d.date})` : ""}`).join(", ")}`, {
-          indent: 10,
-        });
+        .text(
+          `${labels.totalDays}: ${entry.totalDays}  —  ${labels.days}: ${entry.days.map((d) => `Day ${d.dayNumber}${d.date ? ` (${d.date})` : ""}${completedByDayNumber[d.dayNumber] ? " (done)" : ""}`).join(", ")}`,
+          { indent: 10 }
+        );
       doc.moveDown(0.6);
     });
 

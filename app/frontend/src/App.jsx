@@ -113,6 +113,10 @@ const LABELS = {
     pickFromContactsButton: 'Pick from Google Contacts',
     downloadAuditionSidesButton: 'Download Character Script (PDF)',
     auditionSidesHint: "Every scene this character appears in, with their real dialogue transcribed from the script — or a description of their actions in scenes where they don't speak — so you can send the actor a complete packet for a self-tape audition.",
+    sendWhatsAppButton: 'Send via WhatsApp',
+    sendingWhatsAppLabel: 'Preparing…',
+    invalidPhoneNumberNotice: "This contact number doesn't look valid for WhatsApp.",
+    whatsAppShareLinkErrorNotice: 'Could not create the WhatsApp link. Please try again.',
     searchContactsPlaceholder: 'Search contacts…',
     loadingContactsLabel: 'Loading contacts…',
     noContactsFound: 'No matching contacts.',
@@ -454,6 +458,10 @@ const LABELS = {
     pickFromContactsButton: 'Google Contacts ରୁ ବାଛନ୍ତୁ',
     downloadAuditionSidesButton: 'କାରାକ୍ଟର ସ୍କ୍ରିପ୍ଟ ଡାଉନଲୋଡ୍ କରନ୍ତୁ (PDF)',
     auditionSidesHint: 'ଏହି ଚରିତ୍ର ଥିବା ପ୍ରତ୍ୟେକ ଦୃଶ୍ୟ, ସ୍କ୍ରିପ୍ଟରୁ ତାଙ୍କ ପ୍ରକୃତ ସଂଳାପ ସହିତ — କିମ୍ବା ସେ କଥା ନ କହିଥିବା ଦୃଶ୍ୟରେ ତାଙ୍କ କାର୍ଯ୍ୟର ବର୍ଣ୍ଣନା — ଯାହା ଦ୍ୱାରା ଆପଣ ଅଭିନେତାଙ୍କୁ ଏକ ସେଲ୍ଫ-ଟେପ୍ ଅଡିସନ୍ ପାଇଁ ସମ୍ପୂର୍ଣ୍ଣ ପ୍ୟାକେଟ୍ ପଠାଇ ପାରିବେ।',
+    sendWhatsAppButton: 'WhatsApp ରେ ପଠାନ୍ତୁ',
+    sendingWhatsAppLabel: 'ପ୍ରସ୍ତୁତ ହେଉଛି…',
+    invalidPhoneNumberNotice: 'ଏହି ଯୋଗାଯୋଗ ନମ୍ବର WhatsApp ପାଇଁ ବୈଧ ମନେହେଉନାହିଁ।',
+    whatsAppShareLinkErrorNotice: 'WhatsApp ଲିଙ୍କ ତିଆରି ହୋଇପାରିଲା ନାହିଁ। ପୁଣି ଚେଷ୍ଟା କରନ୍ତୁ।',
     searchContactsPlaceholder: 'ଯୋଗାଯୋଗ ଖୋଜନ୍ତୁ…',
     loadingContactsLabel: 'ଯୋଗାଯୋଗ ଲୋଡ୍ ହେଉଛି…',
     noContactsFound: 'କୌଣସି ମେଳ ଖାଉଥିବା ଯୋଗାଯୋଗ ନାହିଁ।',
@@ -927,6 +935,19 @@ function lookupSceneCast(sceneList, adSheet, ref) {
 // that prefix so a label is never built as "Scene SCENE 1".
 function cleanSceneNumber(raw) {
   return String(raw).replace(/^\s*(SCENE|SC)\.?\s*/i, '')
+}
+
+// wa.me needs the number in full international form with no "+", spaces, or
+// leading zero. Every contact number seen in this app so far is a plain
+// 10-digit Indian mobile number with no country code typed in, so that's the
+// only case worth guessing at — anything already carrying a country code is
+// left as-is rather than mangled.
+function normalizePhoneForWhatsApp(raw) {
+  const digits = String(raw ?? '').replace(/\D/g, '')
+  if (digits.length === 10) return `91${digits}`
+  if (digits.length === 11 && digits.startsWith('0')) return `91${digits.slice(1)}`
+  if (digits.length >= 11) return digits
+  return null
 }
 
 // A reasonable default tentative shoot start date — roughly 3 weeks out,
@@ -1443,6 +1464,7 @@ function InlineCastAttachment({
   onAddFromContact,
   sceneListId,
   language,
+  projectTitle,
 }) {
   const [name, setName] = useState('')
   const [contactNumber, setContactNumber] = useState('')
@@ -1450,7 +1472,36 @@ function InlineCastAttachment({
   const [isPickerOpen, setIsPickerOpen] = useState(false)
   const [searchTerm, setSearchTerm] = useState('')
   const [editingMemberId, setEditingMemberId] = useState(null)
+  const [whatsappSendingId, setWhatsappSendingId] = useState(null)
   const fileInputRef = useRef(null)
+
+  async function handleSendWhatsApp(member) {
+    const phone = normalizePhoneForWhatsApp(member.contactNumber)
+    if (!phone) {
+      alert(t.invalidPhoneNumberNotice)
+      return
+    }
+    setWhatsappSendingId(member.id)
+    try {
+      const res = await fetch(
+        `${BACKEND_URL}/api/scene-lists/${sceneListId}/character-script/share-link?character=${encodeURIComponent(linkKey)}&lang=${language}`
+      )
+      const data = await res.json()
+      if (data.error || !data.url) {
+        alert(t.whatsAppShareLinkErrorNotice)
+        return
+      }
+      const message =
+        language === 'or'
+          ? `ନମସ୍କାର ${member.name}! "${linkKey}"${projectTitle ? ` (${projectTitle})` : ''} ଚରିତ୍ର ପାଇଁ ଆପଣଙ୍କର ଦୃଶ୍ୟଗୁଡ଼ିକ ଏଠାରେ ଅଛି। ଦୟାକରି ଏହାକୁ ଦେଖନ୍ତୁ ଏବଂ ପ୍ରସ୍ତୁତ ହେଲେ ଏକ ସେଲ୍ଫ-ଟେପ୍ ଅଡିସନ୍ ପଠାନ୍ତୁ:\n${data.url}`
+          : `Hi ${member.name}! Here are your scenes as "${linkKey}"${projectTitle ? ` for "${projectTitle}"` : ''}. Please go through them and send a self-tape when you're ready:\n${data.url}`
+      window.open(`https://wa.me/${phone}?text=${encodeURIComponent(message)}`, '_blank')
+    } catch {
+      alert(t.whatsAppShareLinkErrorNotice)
+    } finally {
+      setWhatsappSendingId(null)
+    }
+  }
 
   async function handleSubmit(e) {
     e.preventDefault()
@@ -1509,6 +1560,15 @@ function InlineCastAttachment({
                   <strong>{member.name}</strong>
                   {member.contactNumber && <p>{member.contactNumber}</p>}
                 </div>
+                {category === 'artist' && member.contactNumber && (
+                  <button
+                    className="breakdown-action-button whatsapp-send-button"
+                    onClick={() => handleSendWhatsApp(member)}
+                    disabled={whatsappSendingId === member.id}
+                  >
+                    {whatsappSendingId === member.id ? t.sendingWhatsAppLabel : t.sendWhatsAppButton}
+                  </button>
+                )}
                 {canEdit && (
                   <div className="crew-member-card-actions">
                     <button className="breakdown-action-button" onClick={() => setEditingMemberId(member.id)}>
@@ -3261,6 +3321,7 @@ function App() {
                   onAddFromContact={handleAddCrewMemberFromContact}
                   sceneListId={sceneList.id}
                   language={language}
+                  projectTitle={projectTitle}
                 />
               )}
               {category === 'locationList' && (

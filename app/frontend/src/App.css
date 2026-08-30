@@ -2155,6 +2155,16 @@ body {
   color: var(--warning);
 }
 
+.whatsapp-send-button {
+  background: #25d366;
+  color: #0b1a10;
+  border-color: #25d366;
+}
+
+.whatsapp-send-button:hover:not(:disabled) {
+  opacity: 0.85;
+}
+
 @media (max-width: 640px) {
   .director-overview-scene-row {
     flex-wrap: wrap;

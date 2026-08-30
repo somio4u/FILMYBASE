@@ -4870,6 +4870,56 @@ app.get("/api/scene-lists/:sceneListId/character-script", requireLogin, async (r
   }
 });
 
+// Shared by both the logged-in export route and the public (token-gated)
+// route an artist opens from a WhatsApp link — the PDF itself is identical
+// either way, only how the caller is allowed to reach it differs.
+function renderCharacterScriptPdf(res, characterLabel, lang, scenes) {
+  const bodyFont = lang === "or" ? "odiaRegular" : "Helvetica";
+  const headerFont = lang === "or" ? "odiaBold" : "Helvetica-Bold";
+  const labels =
+    lang === "or" ? { title: "CHARACTER SCRIPT", action: "କାର୍ଯ୍ୟ" } : { title: "CHARACTER SCRIPT", action: "Action" };
+
+  const doc = new PDFDocument({ size: "A4", margin: 50 });
+  doc.registerFont("odiaRegular", FONTS.odiaRegular);
+  doc.registerFont("odiaBold", FONTS.odiaBold);
+
+  res.setHeader("Content-Type", "application/pdf");
+  res.setHeader("Content-Disposition", `attachment; filename="character-script-${characterLabel.trim().replace(/\s+/g, "-")}.pdf"`);
+  doc.pipe(res);
+
+  doc.font(headerFont).fontSize(20).text(`${labels.title} — ${characterLabel.trim()}`);
+  doc.moveDown(1);
+
+  if (scenes.length === 0) {
+    doc.font(bodyFont).fontSize(12).text("No scenes were found for this character.");
+  }
+
+  scenes.forEach((scene, index) => {
+    if (index > 0) doc.moveDown(1);
+    const sceneLabel = scene.episodeLabel ? `${scene.episodeLabel}, ${scene.sceneNumberLabel}` : scene.sceneNumberLabel;
+    doc.font(bodyFont).fontSize(12).fillColor("#555").text(`${sceneLabel} — ${scene.sceneHeading}`).fillColor("#000");
+    doc.moveDown(0.4);
+
+    if (scene.hasDialogue) {
+      scene.lines.forEach((line) => {
+        if (line.isTargetCharacter) {
+          doc.font(headerFont).fontSize(12).fillColor("#000").text(line.character.toUpperCase());
+          doc.font(headerFont).fontSize(12).fillColor("#000").text(line.text, { indent: 20 });
+        } else {
+          doc.font(bodyFont).fontSize(11).fillColor("#777").text(line.character.toUpperCase());
+          doc.font(bodyFont).fontSize(11).fillColor("#777").text(line.text, { indent: 20 });
+        }
+        doc.fillColor("#000");
+        doc.moveDown(0.6);
+      });
+    } else {
+      doc.font(bodyFont).fontSize(11).fillColor("#555").text(`${labels.action}: ${scene.actionDescription}`).fillColor("#000");
+    }
+  });
+
+  doc.end();
+}
+
 app.get("/api/scene-lists/:sceneListId/character-script/export", requireLogin, async (req, res) => {
   const { sceneListId } = req.params;
   const characterLabel = req.query.character;
@@ -4893,57 +4943,86 @@ app.get("/api/scene-lists/:sceneListId/character-script/export", requireLogin, a
 
     const sourceText = await buildBreakdownSourceText(sceneListResult.rows[0].content, sceneListId);
     const scenes = await generateCharacterScript(sourceText, characterLabel.trim());
-
-    const bodyFont = lang === "or" ? "odiaRegular" : "Helvetica";
-    const headerFont = lang === "or" ? "odiaBold" : "Helvetica-Bold";
-    const labels =
-      lang === "or"
-        ? { title: "CHARACTER SCRIPT", action: "କାର୍ଯ୍ୟ" }
-        : { title: "CHARACTER SCRIPT", action: "Action" };
-
-    const doc = new PDFDocument({ size: "A4", margin: 50 });
-    doc.registerFont("odiaRegular", FONTS.odiaRegular);
-    doc.registerFont("odiaBold", FONTS.odiaBold);
-
-    res.setHeader("Content-Type", "application/pdf");
-    res.setHeader("Content-Disposition", `attachment; filename="character-script-${characterLabel.trim().replace(/\s+/g, "-")}.pdf"`);
-    doc.pipe(res);
-
-    doc.font(headerFont).fontSize(20).text(`${labels.title} — ${characterLabel.trim()}`);
-    doc.moveDown(1);
-
-    if (scenes.length === 0) {
-      doc.font(bodyFont).fontSize(12).text("No scenes were found for this character.");
-    }
-
-    scenes.forEach((scene, index) => {
-      if (index > 0) doc.moveDown(1);
-      const sceneLabel = scene.episodeLabel ? `${scene.episodeLabel}, ${scene.sceneNumberLabel}` : scene.sceneNumberLabel;
-      doc.font(bodyFont).fontSize(12).fillColor("#555").text(`${sceneLabel} — ${scene.sceneHeading}`).fillColor("#000");
-      doc.moveDown(0.4);
-
-      if (scene.hasDialogue) {
-        scene.lines.forEach((line) => {
-          if (line.isTargetCharacter) {
-            doc.font(headerFont).fontSize(12).fillColor("#000").text(line.character.toUpperCase());
-            doc.font(headerFont).fontSize(12).fillColor("#000").text(line.text, { indent: 20 });
-          } else {
-            doc.font(bodyFont).fontSize(11).fillColor("#777").text(line.character.toUpperCase());
-            doc.font(bodyFont).fontSize(11).fillColor("#777").text(line.text, { indent: 20 });
-          }
-          doc.fillColor("#000");
-          doc.moveDown(0.6);
-        });
-      } else {
-        doc.font(bodyFont).fontSize(11).fillColor("#555").text(`${labels.action}: ${scene.actionDescription}`).fillColor("#000");
-      }
-    });
-
-    doc.end();
+    renderCharacterScriptPdf(res, characterLabel.trim(), lang, scenes);
   } catch (error) {
     console.error("Character script PDF export failed:", error.message);
     if (!res.headersSent) {
       res.status(500).json({ error: error.message });
+    } else {
+      res.end();
+    }
+  }
+});
+
+// Signs a (sceneListId, character) pair so an artist can open their own
+// character-script PDF from a WhatsApp link without an app login — the
+// token proves the link was minted by someone who actually had access to
+// this project, without needing a database row or an expiry to manage.
+// Never signs anything beyond "this one character's own scenes are OK to
+// hand out", the same scope the AD/director already shares by hand today.
+const PUBLIC_LINK_SECRET = process.env.PUBLIC_LINK_SECRET || "dev-only-insecure-secret-change-in-production";
+
+function signPublicCharacterScriptLink(sceneListId, characterLabel) {
+  return crypto
+    .createHmac("sha256", PUBLIC_LINK_SECRET)
+    .update(`${sceneListId}:${characterLabel.trim().toLowerCase()}`)
+    .digest("hex");
+}
+
+function verifyPublicCharacterScriptLink(sceneListId, characterLabel, token) {
+  if (!token) return false;
+  const expected = signPublicCharacterScriptLink(sceneListId, characterLabel);
+  const expectedBuf = Buffer.from(expected, "hex");
+  const givenBuf = Buffer.from(String(token), "hex");
+  return expectedBuf.length === givenBuf.length && crypto.timingSafeEqual(expectedBuf, givenBuf);
+}
+
+app.get("/api/scene-lists/:sceneListId/character-script/share-link", requireLogin, async (req, res) => {
+  const { sceneListId } = req.params;
+  const characterLabel = req.query.character;
+  const lang = req.query.lang === "or" ? "or" : "en";
+
+  if (!characterLabel?.trim()) {
+    res.status(400).json({ error: "A character name is required." });
+    return;
+  }
+  if (!(await userOwnsSceneList(req.user, sceneListId))) {
+    res.status(403).json({ error: "You don't have access to this project." });
+    return;
+  }
+
+  const token = signPublicCharacterScriptLink(sceneListId, characterLabel.trim());
+  const url = `${BACKEND_URL}/api/public/character-script?sceneListId=${encodeURIComponent(sceneListId)}&character=${encodeURIComponent(characterLabel.trim())}&token=${token}&lang=${lang}`;
+  res.json({ url });
+});
+
+// No login required — this is the link an artist with no app account opens
+// straight from WhatsApp. Reached only via a token minted by the route
+// above, so it can't be used to fetch an arbitrary character's script
+// without first having had legitimate access to mint that link.
+app.get("/api/public/character-script", async (req, res) => {
+  const { sceneListId, character, token } = req.query;
+  const lang = req.query.lang === "or" ? "or" : "en";
+
+  if (!sceneListId || !character?.trim() || !verifyPublicCharacterScriptLink(sceneListId, character, token)) {
+    res.status(403).send("This link is invalid or has expired. Please ask for a new one.");
+    return;
+  }
+
+  try {
+    const sceneListResult = await db.query("SELECT content FROM scene_lists WHERE id = $1", [sceneListId]);
+    if (sceneListResult.rows.length === 0) {
+      res.status(404).send("This project could not be found.");
+      return;
+    }
+
+    const sourceText = await buildBreakdownSourceText(sceneListResult.rows[0].content, sceneListId);
+    const scenes = await generateCharacterScript(sourceText, character.trim());
+    renderCharacterScriptPdf(res, character.trim(), lang, scenes);
+  } catch (error) {
+    console.error("Public character script PDF failed:", error.message);
+    if (!res.headersSent) {
+      res.status(500).send("Something went wrong generating this script.");
     } else {
       res.end();
     }

@@ -398,18 +398,21 @@ const AD_SHEET_ROW_SCHEMA = {
   required: ["mainCharacters", "extras", "property", "costumeRemarks"],
 };
 
-// Audition sides for one character — a single real scene's dialogue,
-// transcribed VERBATIM from the actual script (never translated or
-// paraphrased, since the actor needs to say exactly what's written, in
-// whatever language/script mix the original already uses). Other
-// characters' lines are included too since the actor needs their cues,
-// with isTargetCharacter marking which ones are actually this actor's.
-const AUDITION_SIDES_SCHEMA = {
+// A character's full master script packet — EVERY scene they appear in
+// (not just one audition scene), transcribed VERBATIM from the actual
+// script (never translated or paraphrased, since the actor needs to say
+// exactly what's written, in whatever language/script mix the original
+// already uses). Other characters' lines are included too since the actor
+// needs their cues, with isTargetCharacter marking which ones are actually
+// this actor's. When the character has no dialogue in a given scene at all,
+// hasDialogue is false and actionDescription instead grounds what they
+// physically do there, so a non-speaking scene still shows up.
+const CHARACTER_SCRIPT_SCENE_SCHEMA = {
   type: Type.OBJECT,
   properties: {
     sceneHeading: { type: Type.STRING },
     sceneNumberLabel: { type: Type.STRING },
-    contextNote: { type: Type.STRING },
+    hasDialogue: { type: Type.BOOLEAN },
     lines: {
       type: Type.ARRAY,
       items: {
@@ -422,8 +425,15 @@ const AUDITION_SIDES_SCHEMA = {
         required: ["character", "text", "isTargetCharacter"],
       },
     },
+    actionDescription: { type: Type.STRING },
   },
-  required: ["sceneHeading", "sceneNumberLabel", "contextNote", "lines"],
+  required: ["sceneHeading", "sceneNumberLabel", "hasDialogue", "lines", "actionDescription"],
+};
+
+const CHARACTER_SCRIPT_CHUNK_SCHEMA = {
+  type: Type.OBJECT,
+  properties: { scenes: { type: Type.ARRAY, items: CHARACTER_SCRIPT_SCENE_SCHEMA } },
+  required: ["scenes"],
 };
 
 const BREAKDOWN_CATEGORY_ITEM_SCHEMAS = {
@@ -4786,13 +4796,15 @@ app.get("/api/script-breakdown/:id/export-ad-sheet", requireLogin, async (req, r
   }
 });
 
-// Finds this character's best real scene for a self-tape audition and
-// transcribes their dialogue for it VERBATIM from the actual script — never
-// translated or paraphrased, since the actor has to say exactly what's
-// written. Other characters' lines are kept too, for cueing, but only
-// marked isTargetCharacter for the one being cast.
-async function generateAuditionSides(sourceText, characterLabel) {
-  const contents = `The full script material:\n${sourceText}\n\nYou are preparing AUDITION SIDES for an actor auditioning to play the character "${characterLabel}". Find ONE scene where this character has substantial, meaningful dialogue (not just a single throwaway line) — ideally their most characterful or dramatically interesting scene in the whole script. Extract the COMPLETE dialogue exchange for that scene, copying every line VERBATIM exactly as written in the script — do not paraphrase, summarize, translate, or invent a single word, and preserve whatever mix of language/script the original already uses. Include every other character's lines too (the actor needs their cues to know when to speak), marking "isTargetCharacter": true only on "${characterLabel}"'s own lines. Give the scene's heading (e.g. "INT. LIVING ROOM - DAY"), its real number/label from the script if there is one (e.g. "Episode 1, Scene 1"), and a short one-sentence contextNote in plain English (a stage-direction-style note for the actor about what's happening right before this excerpt starts — this note itself is NOT dialogue and should not be translated or dramatized).`;
+// One focused call per episode/chunk (never the whole script in one pass) —
+// the same "a single long pass misses things and conflates similar minor
+// characters" lesson as the AD sheet and missing-character scan. Matching
+// the target character name EXACTLY is called out explicitly because a
+// single loose pass over a script with several same-age/same-role minor
+// characters (e.g. multiple unnamed or similarly-described kids) has been
+// observed to misattribute another character's dialogue to the wrong one.
+async function generateCharacterScriptForChunk(chunkText, characterLabel) {
+  const contents = `The script material (one part of the full script):\n${chunkText}\n\nYou are building a MASTER SCRIPT PACKET for the actor playing "${characterLabel}" — find EVERY scene in this material where "${characterLabel}" has any screen presence at all (speaking, or silently doing something), in the order the scenes occur here. Do not skip any scene they appear in, however brief, and do not include scenes where they are absent entirely.\n\nMatch the name EXACTLY: "${characterLabel}" only. Scripts often have several similar minor characters (e.g. more than one unnamed or similarly-described child, or two characters with close roles) — never attribute another character's dialogue or presence to "${characterLabel}" just because they seem similar. If you are genuinely unsure whether a specific line or scene belongs to this exact character, leave it out rather than guessing.\n\nFor each scene "${characterLabel}" is actually in: give its real scene heading (e.g. "INT. LIVING ROOM - DAY") and its real number/label exactly as written in the script (e.g. "Scene 4", "12A") — copy it verbatim, never invent or renumber it. If "${characterLabel}" has ANY dialogue in that scene, set hasDialogue true, leave actionDescription empty, and extract the COMPLETE dialogue exchange for that scene VERBATIM exactly as written — every line, from every character who speaks in it (the actor needs their cues too) — copied word for word, never paraphrased, summarized, translated, or invented, marking "isTargetCharacter": true only on "${characterLabel}"'s own lines. If "${characterLabel}" has NO dialogue in that scene but is present or doing something, set hasDialogue false, leave lines empty, and instead write a factual one-to-two-sentence actionDescription (in English) of what they actually do in that scene, grounded strictly in the script's own action lines — never invented.`;
 
   const response = await generateContentWithRetry({
     model: "gemini-flash-lite-latest",
@@ -4801,14 +4813,35 @@ async function generateAuditionSides(sourceText, characterLabel) {
       systemInstruction: SCRIPT_BREAKDOWN_SYSTEM_PROMPT,
       responseMimeType: "application/json",
       maxOutputTokens: 8192,
-      responseSchema: AUDITION_SIDES_SCHEMA,
+      responseSchema: CHARACTER_SCRIPT_CHUNK_SCHEMA,
     },
   });
 
-  return JSON.parse(response.text);
+  return JSON.parse(response.text).scenes ?? [];
 }
 
-app.get("/api/scene-lists/:sceneListId/audition-sides", requireLogin, async (req, res) => {
+// Splits on "EPISODE N" boundaries when the source has them (same splitter
+// used at import time and by the AD sheet / missing-character scan) so a
+// long multi-episode script gets one focused scan per episode instead of
+// one pass over everything — and the episode label attached to each scene
+// comes from OUR OWN loop position, never the model, since episode numbering
+// is deterministic and must never be left to the AI to guess or renumber.
+async function generateCharacterScript(sourceText, characterLabel) {
+  const chunks = splitScreenplayIntoEpisodes(sourceText);
+  const isSeries = chunks.length > 1;
+
+  const perChunkScenes = await mapWithConcurrency(chunks, 3, async (chunk) => {
+    const scenes = await generateCharacterScriptForChunk(chunk.text, characterLabel);
+    return scenes.map((scene) => ({
+      ...scene,
+      episodeLabel: isSeries ? `Episode ${chunk.episodeNumber}` : null,
+    }));
+  });
+
+  return perChunkScenes.flat();
+}
+
+app.get("/api/scene-lists/:sceneListId/character-script", requireLogin, async (req, res) => {
   const { sceneListId } = req.params;
   const characterLabel = req.query.character;
 
@@ -4829,15 +4862,15 @@ app.get("/api/scene-lists/:sceneListId/audition-sides", requireLogin, async (req
     }
 
     const sourceText = await buildBreakdownSourceText(sceneListResult.rows[0].content, sceneListId);
-    const sides = await generateAuditionSides(sourceText, characterLabel.trim());
-    res.json(sides);
+    const scenes = await generateCharacterScript(sourceText, characterLabel.trim());
+    res.json({ scenes });
   } catch (error) {
-    console.error("Audition sides generation failed:", error.message);
+    console.error("Character script generation failed:", error.message);
     res.status(502).json({ error: error.message });
   }
 });
 
-app.get("/api/scene-lists/:sceneListId/audition-sides/export", requireLogin, async (req, res) => {
+app.get("/api/scene-lists/:sceneListId/character-script/export", requireLogin, async (req, res) => {
   const { sceneListId } = req.params;
   const characterLabel = req.query.character;
   const lang = req.query.lang === "or" ? "or" : "en";
@@ -4859,45 +4892,56 @@ app.get("/api/scene-lists/:sceneListId/audition-sides/export", requireLogin, asy
     }
 
     const sourceText = await buildBreakdownSourceText(sceneListResult.rows[0].content, sceneListId);
-    const sides = await generateAuditionSides(sourceText, characterLabel.trim());
+    const scenes = await generateCharacterScript(sourceText, characterLabel.trim());
 
     const bodyFont = lang === "or" ? "odiaRegular" : "Helvetica";
     const headerFont = lang === "or" ? "odiaBold" : "Helvetica-Bold";
     const labels =
       lang === "or"
-        ? { title: "AUDITION SIDES", scene: "ଦୃଶ୍ୟ", note: "ଟିପ୍ପଣୀ" }
-        : { title: "AUDITION SIDES", scene: "Scene", note: "Note" };
+        ? { title: "CHARACTER SCRIPT", action: "କାର୍ଯ୍ୟ" }
+        : { title: "CHARACTER SCRIPT", action: "Action" };
 
     const doc = new PDFDocument({ size: "A4", margin: 50 });
     doc.registerFont("odiaRegular", FONTS.odiaRegular);
     doc.registerFont("odiaBold", FONTS.odiaBold);
 
     res.setHeader("Content-Type", "application/pdf");
-    res.setHeader("Content-Disposition", `attachment; filename="audition-sides-${characterLabel.trim().replace(/\s+/g, "-")}.pdf"`);
+    res.setHeader("Content-Disposition", `attachment; filename="character-script-${characterLabel.trim().replace(/\s+/g, "-")}.pdf"`);
     doc.pipe(res);
 
     doc.font(headerFont).fontSize(20).text(`${labels.title} — ${characterLabel.trim()}`);
-    doc.moveDown(0.3);
-    doc.font(bodyFont).fontSize(12).fillColor("#555").text(`${sides.sceneNumberLabel} — ${sides.sceneHeading}`).fillColor("#000");
-    doc.moveDown(0.5);
-    doc.font(bodyFont).fontSize(11).fillColor("#555").text(`${labels.note}: ${sides.contextNote}`).fillColor("#000");
     doc.moveDown(1);
 
-    sides.lines.forEach((line) => {
-      if (line.isTargetCharacter) {
-        doc.font(headerFont).fontSize(12).fillColor("#000").text(line.character.toUpperCase());
-        doc.font(headerFont).fontSize(12).fillColor("#000").text(line.text, { indent: 20 });
+    if (scenes.length === 0) {
+      doc.font(bodyFont).fontSize(12).text("No scenes were found for this character.");
+    }
+
+    scenes.forEach((scene, index) => {
+      if (index > 0) doc.moveDown(1);
+      const sceneLabel = scene.episodeLabel ? `${scene.episodeLabel}, ${scene.sceneNumberLabel}` : scene.sceneNumberLabel;
+      doc.font(bodyFont).fontSize(12).fillColor("#555").text(`${sceneLabel} — ${scene.sceneHeading}`).fillColor("#000");
+      doc.moveDown(0.4);
+
+      if (scene.hasDialogue) {
+        scene.lines.forEach((line) => {
+          if (line.isTargetCharacter) {
+            doc.font(headerFont).fontSize(12).fillColor("#000").text(line.character.toUpperCase());
+            doc.font(headerFont).fontSize(12).fillColor("#000").text(line.text, { indent: 20 });
+          } else {
+            doc.font(bodyFont).fontSize(11).fillColor("#777").text(line.character.toUpperCase());
+            doc.font(bodyFont).fontSize(11).fillColor("#777").text(line.text, { indent: 20 });
+          }
+          doc.fillColor("#000");
+          doc.moveDown(0.6);
+        });
       } else {
-        doc.font(bodyFont).fontSize(11).fillColor("#777").text(line.character.toUpperCase());
-        doc.font(bodyFont).fontSize(11).fillColor("#777").text(line.text, { indent: 20 });
+        doc.font(bodyFont).fontSize(11).fillColor("#555").text(`${labels.action}: ${scene.actionDescription}`).fillColor("#000");
       }
-      doc.fillColor("#000");
-      doc.moveDown(0.6);
     });
 
     doc.end();
   } catch (error) {
-    console.error("Audition sides PDF export failed:", error.message);
+    console.error("Character script PDF export failed:", error.message);
     if (!res.headersSent) {
       res.status(500).json({ error: error.message });
     } else {

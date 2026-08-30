@@ -111,8 +111,8 @@ const LABELS = {
     googleContactsConnectedNotice: 'Google Contacts connected.',
     googleContactsErrorNotice: 'Could not connect Google Contacts. Please try again.',
     pickFromContactsButton: 'Pick from Google Contacts',
-    downloadAuditionSidesButton: 'Download Audition Sides (PDF)',
-    auditionSidesHint: "Finds this character's best scene and transcribes their real dialogue from the script, so you can send it to the actor for a self-tape audition.",
+    downloadAuditionSidesButton: 'Download Character Script (PDF)',
+    auditionSidesHint: "Every scene this character appears in, with their real dialogue transcribed from the script — or a description of their actions in scenes where they don't speak — so you can send the actor a complete packet for a self-tape audition.",
     searchContactsPlaceholder: 'Search contacts…',
     loadingContactsLabel: 'Loading contacts…',
     noContactsFound: 'No matching contacts.',
@@ -437,8 +437,8 @@ const LABELS = {
     googleContactsConnectedNotice: 'Google Contacts ସଂଯୁକ୍ତ ହୋଇଗଲା।',
     googleContactsErrorNotice: 'Google Contacts ସଂଯୋଗ ହୋଇପାରିଲା ନାହିଁ। ପୁଣି ଚେଷ୍ଟା କରନ୍ତୁ।',
     pickFromContactsButton: 'Google Contacts ରୁ ବାଛନ୍ତୁ',
-    downloadAuditionSidesButton: 'ଅଡିସନ୍ ସାଇଡ୍ସ ଡାଉନଲୋଡ୍ କରନ୍ତୁ (PDF)',
-    auditionSidesHint: 'ଏହି ଚରିତ୍ରର ସର୍ବୋତ୍ତମ ଦୃଶ୍ୟ ଖୋଜି ସ୍କ୍ରିପ୍ଟରୁ ତାଙ୍କ ପ୍ରକୃତ ସଂଳାପ ଲେଖିଥାଏ, ଯାହା ଦ୍ୱାରା ଆପଣ ଅଭିନେତାଙ୍କୁ ଏକ ସେଲ୍ଫ-ଟେପ୍ ଅଡିସନ୍ ପାଇଁ ପଠାଇ ପାରିବେ।',
+    downloadAuditionSidesButton: 'କାରାକ୍ଟର ସ୍କ୍ରିପ୍ଟ ଡାଉନଲୋଡ୍ କରନ୍ତୁ (PDF)',
+    auditionSidesHint: 'ଏହି ଚରିତ୍ର ଥିବା ପ୍ରତ୍ୟେକ ଦୃଶ୍ୟ, ସ୍କ୍ରିପ୍ଟରୁ ତାଙ୍କ ପ୍ରକୃତ ସଂଳାପ ସହିତ — କିମ୍ବା ସେ କଥା ନ କହିଥିବା ଦୃଶ୍ୟରେ ତାଙ୍କ କାର୍ଯ୍ୟର ବର୍ଣ୍ଣନା — ଯାହା ଦ୍ୱାରା ଆପଣ ଅଭିନେତାଙ୍କୁ ଏକ ସେଲ୍ଫ-ଟେପ୍ ଅଡିସନ୍ ପାଇଁ ସମ୍ପୂର୍ଣ୍ଣ ପ୍ୟାକେଟ୍ ପଠାଇ ପାରିବେ।',
     searchContactsPlaceholder: 'ଯୋଗାଯୋଗ ଖୋଜନ୍ତୁ…',
     loadingContactsLabel: 'ଯୋଗାଯୋଗ ଲୋଡ୍ ହେଉଛି…',
     noContactsFound: 'କୌଣସି ମେଳ ଖାଉଥିବା ଯୋଗାଯୋଗ ନାହିଁ।',
@@ -1375,7 +1375,7 @@ function InlineCastAttachment({
       {category === 'artist' && (
         <a
           className="breakdown-pdf-link audition-sides-link"
-          href={`${BACKEND_URL}/api/scene-lists/${sceneListId}/audition-sides/export?character=${encodeURIComponent(linkKey)}&lang=${language}`}
+          href={`${BACKEND_URL}/api/scene-lists/${sceneListId}/character-script/export?character=${encodeURIComponent(linkKey)}&lang=${language}`}
           title={t.auditionSidesHint}
         >
           {t.downloadAuditionSidesButton}

@@ -5172,12 +5172,54 @@ async function generateShootScheduleContent(
     parsed = await callShootScheduleGemini(contents + correctionNote, isSeries);
   }
 
+  // The model isn't perfectly reliable about several things it's explicitly
+  // told: not to re-include an already-shot scene, not to schedule the same
+  // scene twice, and not to invent a scene that isn't in the real list
+  // (seen referencing an out-of-range sceneIndex for an episode). Enforce
+  // all three in code rather than trust the prompt alone: drop anything not
+  // in the real scene list, anything already covered by a completed day,
+  // and a scene's second-or-later occurrence across the new days.
+  const validIdentities = new Set(allSceneIdentities(sceneList));
+  const seenNew = new Set(alreadyCovered);
+  const dedupedDays = parsed.scheduleDays.map((day) => ({
+    ...day,
+    sceneRefs: day.sceneRefs.filter((ref) => {
+      const id = isSeries ? `e${ref.episodeIndex}-s${ref.sceneIndex}` : `s${ref.sceneIndex}`;
+      if (!validIdentities.has(id) || seenNew.has(id)) return false;
+      seenNew.add(id);
+      return true;
+    }),
+  }));
+
+  // Dedup can only ever remove a scene's later duplicate, never its only
+  // occurrence — so anything still missing here was dropped by the model
+  // outright, surviving even the corrective retry above. Rather than lose
+  // it silently, force it onto the last day with a flag so the AD notices
+  // and relocates it by hand instead of it just never getting shot.
+  const stillMissing = allSceneIdentities(sceneList).filter((id) => !seenNew.has(id));
+  if (stillMissing.length > 0 && dedupedDays.length > 0) {
+    const lastDay = dedupedDays[dedupedDays.length - 1];
+    stillMissing.forEach((id) => {
+      const seriesMatch = id.match(/^e(\d+)-s(\d+)$/);
+      const filmMatch = id.match(/^s(\d+)$/);
+      const ref = seriesMatch
+        ? { episodeIndex: Number(seriesMatch[1]), sceneIndex: Number(seriesMatch[2]) }
+        : { sceneIndex: Number(filmMatch[1]) };
+      lastDay.sceneRefs.push({
+        ...ref,
+        costume: "",
+        properties: "",
+        adRemark: "Auto-added — the generated schedule left this scene unplaced; please move it to the right day by hand.",
+      });
+    });
+  }
+
   // Renumber the AI's days to continue right after the last completed one,
   // and only date-assign the NEW days (starting from availability.startDate,
   // which the caller supplies for this NEW block specifically) — a
   // completed day's real date (from when it actually happened) is never
   // recomputed or overwritten.
-  const renumberedNewDays = parsed.scheduleDays.map((day, i) => ({ ...day, dayNumber: nextDayNumber + i, completed: false }));
+  const renumberedNewDays = dedupedDays.map((day, i) => ({ ...day, dayNumber: nextDayNumber + i, completed: false }));
   const datedNewDays = assignScheduleDates(renumberedNewDays, availability.startDate);
   const scheduleDays = [...(completedDays ?? []), ...datedNewDays];
 

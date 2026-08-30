@@ -169,6 +169,21 @@ const LABELS = {
     genderMaleLabel: 'Male',
     genderFemaleLabel: 'Female',
     unspecifiedLabel: 'Unspecified',
+    directorOverviewHeading: 'Production Status Overview',
+    directorOverviewCastLabel: 'Cast',
+    directorOverviewLocationsLabel: 'Locations',
+    directorOverviewCrewLabel: 'Crew',
+    directorOverviewScenesLabel: 'Shoot Progress',
+    directorOverviewAllCastFinalized: 'All characters are cast — nothing pending.',
+    directorOverviewPendingCastNote: 'Still need to be cast:',
+    directorOverviewAllLocationsFinalized: 'All locations are confirmed — nothing pending.',
+    directorOverviewPendingLocationsNote: 'Still need to be confirmed:',
+    directorOverviewNoCrewNote: 'No crew members added yet.',
+    shotLabel: 'Shot',
+    pendingLabel: 'Pending',
+    showDetailsButton: 'Show scene-by-scene detail',
+    hideDetailsButton: 'Hide scene-by-scene detail',
+    loadingOverviewLabel: 'Loading production status…',
     findMissingCharactersButton: 'Re-analyze for Missing Characters',
     findingMissingCharactersLabel: 'Scanning script...',
     findMissingCharactersHint: 'Thoroughly re-scans the full script for any character with screen presence not yet in this list — including non-speaking characters — and adds them. Never removes or changes existing entries. Excludes unnamed extras/crowds.',
@@ -495,6 +510,21 @@ const LABELS = {
     genderMaleLabel: 'ପୁରୁଷ',
     genderFemaleLabel: 'ମହିଳା',
     unspecifiedLabel: 'ଅନିର୍ଦ୍ଦିଷ୍ଟ',
+    directorOverviewHeading: 'ପ୍ରଡକ୍ସନ୍ ସ୍ଥିତି ସମୀକ୍ଷା',
+    directorOverviewCastLabel: 'କାଷ୍ଟ',
+    directorOverviewLocationsLabel: 'ଲୋକେସନ୍',
+    directorOverviewCrewLabel: 'କ୍ରୁ',
+    directorOverviewScenesLabel: 'ସୁଟିଂ ପ୍ରଗତି',
+    directorOverviewAllCastFinalized: 'ସମସ୍ତ ଚରିତ୍ର କାଷ୍ଟ ହୋଇସାରିଛି — କିଛି ବାକି ନାହିଁ।',
+    directorOverviewPendingCastNote: 'ଏହି ଚରିତ୍ରଗୁଡ଼ିକ ଏପର୍ଯ୍ୟନ୍ତ କାଷ୍ଟ ହୋଇନାହିଁ:',
+    directorOverviewAllLocationsFinalized: 'ସମସ୍ତ ଲୋକେସନ୍ କନଫର୍ମ ହୋଇସାରିଛି — କିଛି ବାକି ନାହିଁ।',
+    directorOverviewPendingLocationsNote: 'ଏହି ଲୋକେସନ୍ ଏପର୍ଯ୍ୟନ୍ତ କନଫର୍ମ ହୋଇନାହିଁ:',
+    directorOverviewNoCrewNote: 'ଏପର୍ଯ୍ୟନ୍ତ କୌଣସି କ୍ରୁ ମେମ୍ବର ଯୋଡ଼ା ହୋଇନାହିଁ।',
+    shotLabel: 'ସୁଟ୍ ହୋଇଗଲା',
+    pendingLabel: 'ବାକି',
+    showDetailsButton: 'ଦୃଶ୍ୟ-ଅନୁସାରେ ବିବରଣୀ ଦେଖାନ୍ତୁ',
+    hideDetailsButton: 'ଦୃଶ୍ୟ-ଅନୁସାରେ ବିବରଣୀ ଲୁଚାନ୍ତୁ',
+    loadingOverviewLabel: 'ପ୍ରଡକ୍ସନ୍ ସ୍ଥିତି ଲୋଡ୍ ହେଉଛି…',
     findMissingCharactersButton: 'ମିଳିନଥିବା ଚରିତ୍ର ପାଇଁ ପୁନଃ ବିଶ୍ଳେଷଣ କରନ୍ତୁ',
     findingMissingCharactersLabel: 'ସ୍କ୍ରିପ୍ଟ ସ୍କାନ୍ ହେଉଛି...',
     findMissingCharactersHint: 'ସମ୍ପୂର୍ଣ୍ଣ ସ୍କ୍ରିପ୍ଟକୁ ପୁଙ୍ଖାନୁପୁଙ୍ଖ ଭାବରେ ପୁନଃ ସ୍କାନ୍ କରି ଏହି ତାଲିକାରେ ନଥିବା କୌଣସି ଚରିତ୍ର (ନିରବ ଚରିତ୍ର ସହିତ) ଥିଲେ ଯୋଡ଼ିଥାଏ। ପୂର୍ବରୁ ଥିବା ଏଣ୍ଟ୍ରି କେବେ ହଟାଏ ନାହିଁ କି ପରିବର୍ତ୍ତନ କରେ ନାହିଁ। ଅଜଣା ଏକ୍ସଟ୍ରା/ଜନତାକୁ ବାଦ୍ ଦିଏ।',
@@ -1235,6 +1265,155 @@ function CrewSection({ category, heading, members, characterOptions, onAdd, onUp
             {t.addCrewMemberButton}
           </button>
         </form>
+      )}
+    </div>
+  )
+}
+
+// A single at-a-glance status view for the Director (and admin) — what's
+// finalized versus still pending, computed entirely server-side from data
+// that already exists (crew_members entries, completed shoot-schedule days)
+// rather than a separate status flag anyone has to remember to set. The
+// moment Production attaches a real actor/location or marks a shoot day
+// complete, this view reflects it on its own next load.
+function DirectorOverviewPanel({ sceneListId, t, BACKEND_URL }) {
+  const [overview, setOverview] = useState(null)
+  const [isLoading, setIsLoading] = useState(false)
+  const [error, setError] = useState(null)
+  const [isSceneDetailOpen, setIsSceneDetailOpen] = useState(false)
+
+  useEffect(() => {
+    if (!sceneListId) return
+    let cancelled = false
+    setIsLoading(true)
+    setError(null)
+    fetch(`${BACKEND_URL}/api/scene-lists/${sceneListId}/director-overview`)
+      .then((res) => res.json())
+      .then((data) => {
+        if (cancelled) return
+        if (data.error) {
+          setError(data.error)
+          return
+        }
+        setOverview(data)
+      })
+      .catch(() => {
+        if (!cancelled) setError('Could not load production status.')
+      })
+      .finally(() => {
+        if (!cancelled) setIsLoading(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [sceneListId, BACKEND_URL])
+
+  if (!sceneListId) return null
+
+  return (
+    <div className="director-overview-panel">
+      <h3>{t.directorOverviewHeading}</h3>
+      {isLoading && <p className="sidebar-section-note">{t.loadingOverviewLabel}</p>}
+      {error && <p className="error-text">{error}</p>}
+      {overview && (
+        <>
+          <div className="director-overview-summary">
+            <div className="director-overview-stat">
+              <strong>{overview.cast.finalizedCount}/{overview.cast.totalCount}</strong>
+              <span>{t.directorOverviewCastLabel}</span>
+            </div>
+            <div className="director-overview-stat">
+              <strong>{overview.locations.finalizedCount}/{overview.locations.totalCount}</strong>
+              <span>{t.directorOverviewLocationsLabel}</span>
+            </div>
+            <div className="director-overview-stat">
+              <strong>{overview.scenes.shotCount}/{overview.scenes.totalCount}</strong>
+              <span>{t.directorOverviewScenesLabel}</span>
+            </div>
+            <div className="director-overview-stat">
+              <strong>{overview.crewRoster.length}</strong>
+              <span>{t.directorOverviewCrewLabel}</span>
+            </div>
+          </div>
+
+          <div className="director-overview-section">
+            <h4>{t.directorOverviewCastLabel}</h4>
+            {overview.cast.characters.filter((c) => !c.finalized).length === 0 ? (
+              <p className="director-overview-all-done">{t.directorOverviewAllCastFinalized}</p>
+            ) : (
+              <>
+                <p className="director-overview-pending-note">{t.directorOverviewPendingCastNote}</p>
+                <div className="director-overview-chip-list">
+                  {overview.cast.characters
+                    .filter((c) => !c.finalized)
+                    .map((c) => (
+                      <span key={c.label} className="director-overview-chip pending">
+                        {c.label}
+                        {c.age ? ` (${c.age}${c.gender && c.gender !== 'Unspecified' ? `, ${c.gender}` : ''})` : ''}
+                      </span>
+                    ))}
+                </div>
+              </>
+            )}
+          </div>
+
+          <div className="director-overview-section">
+            <h4>{t.directorOverviewLocationsLabel}</h4>
+            {overview.locations.locations.filter((l) => !l.finalized).length === 0 ? (
+              <p className="director-overview-all-done">{t.directorOverviewAllLocationsFinalized}</p>
+            ) : (
+              <>
+                <p className="director-overview-pending-note">{t.directorOverviewPendingLocationsNote}</p>
+                <div className="director-overview-chip-list">
+                  {overview.locations.locations
+                    .filter((l) => !l.finalized)
+                    .map((l) => (
+                      <span key={l.label} className="director-overview-chip pending">
+                        {l.label}
+                      </span>
+                    ))}
+                </div>
+              </>
+            )}
+          </div>
+
+          <div className="director-overview-section">
+            <h4>{t.directorOverviewCrewLabel}</h4>
+            {overview.crewRoster.length === 0 ? (
+              <p className="director-overview-pending-note">{t.directorOverviewNoCrewNote}</p>
+            ) : (
+              <div className="director-overview-crew-list">
+                {overview.crewRoster.map((c, i) => (
+                  <div key={i} className="director-overview-crew-row">
+                    <strong>{c.name}</strong> — {c.role || t.unspecifiedLabel}
+                    {c.contactNumber ? ` (${c.contactNumber})` : ''}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div className="director-overview-section">
+            <h4>{t.directorOverviewScenesLabel}</h4>
+            <button className="breakdown-action-button" onClick={() => setIsSceneDetailOpen(!isSceneDetailOpen)}>
+              {isSceneDetailOpen ? t.hideDetailsButton : t.showDetailsButton}
+            </button>
+            {isSceneDetailOpen && (
+              <div className="director-overview-scene-list">
+                {overview.scenes.scenes.map((s, i) => (
+                  <div key={i} className={s.shot ? 'director-overview-scene-row shot' : 'director-overview-scene-row pending'}>
+                    <span className="director-overview-scene-label">
+                      {s.episodeLabel ? `${s.episodeLabel}, ` : ''}
+                      {cleanSceneNumber(s.sceneNumber)}
+                    </span>
+                    <span className="director-overview-scene-oneliner">{s.oneLiner}</span>
+                    <span className="director-overview-scene-status">{s.shot ? t.shotLabel : t.pendingLabel}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </>
       )}
     </div>
   )
@@ -4949,6 +5128,10 @@ function App() {
       {activeAgent === 'production' && (
         <div className="three-act-structure" id="stage-production">
           <h2>{t.productionHeading}</h2>
+
+          {canReviewProduction && sceneList && (
+            <DirectorOverviewPanel sceneListId={sceneList.id} t={t} BACKEND_URL={BACKEND_URL} />
+          )}
 
           {!(sceneList && sceneList.status === 'approved') && !canAnalyzeScript && (
             <p className="sidebar-section-note">{t.waitingOnProductionManagerImportNotice}</p>

@@ -2012,3 +2012,151 @@ body {
     overflow-x: auto;
   }
 }
+
+.director-overview-panel {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+  padding: 20px;
+  margin-bottom: 24px;
+}
+
+.director-overview-panel h3 {
+  margin: 0 0 14px;
+  color: var(--text-primary);
+}
+
+.director-overview-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 18px;
+}
+
+.director-overview-stat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  background: var(--bg-surface-raised);
+  border-radius: 10px;
+  padding: 10px 18px;
+  min-width: 90px;
+}
+
+.director-overview-stat strong {
+  font-size: 20px;
+  color: var(--accent-strong);
+}
+
+.director-overview-stat span {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.director-overview-section {
+  margin-bottom: 16px;
+}
+
+.director-overview-section h4 {
+  margin: 0 0 6px;
+  color: var(--text-primary);
+  font-size: 14px;
+}
+
+.director-overview-all-done {
+  color: var(--success);
+  font-size: 13px;
+  margin: 0;
+}
+
+.director-overview-pending-note {
+  color: var(--warning);
+  font-size: 13px;
+  margin: 0 0 6px;
+}
+
+.director-overview-chip-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.director-overview-chip {
+  font-size: 12px;
+  padding: 4px 10px;
+  border-radius: 12px;
+  background: var(--warning-bg);
+  color: var(--warning);
+  white-space: nowrap;
+}
+
+.director-overview-crew-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.director-overview-crew-row {
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.director-overview-scene-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 10px;
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+.director-overview-scene-row {
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+  font-size: 12px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: var(--bg-surface-raised);
+}
+
+.director-overview-scene-row.shot {
+  border-left: 3px solid var(--success);
+}
+
+.director-overview-scene-row.pending {
+  border-left: 3px solid var(--warning);
+}
+
+.director-overview-scene-label {
+  flex: 0 0 auto;
+  color: var(--text-primary);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.director-overview-scene-oneliner {
+  flex: 1 1 auto;
+  color: var(--text-secondary);
+}
+
+.director-overview-scene-status {
+  flex: 0 0 auto;
+  white-space: nowrap;
+  font-weight: 600;
+}
+
+.director-overview-scene-row.shot .director-overview-scene-status {
+  color: var(--success);
+}
+
+.director-overview-scene-row.pending .director-overview-scene-status {
+  color: var(--warning);
+}
+
+@media (max-width: 640px) {
+  .director-overview-scene-row {
+    flex-wrap: wrap;
+  }
+}

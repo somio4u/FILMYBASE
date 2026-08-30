@@ -5733,6 +5733,110 @@ function serializeCrewMember(row) {
   };
 }
 
+// The Director's status view: everything is derived straight from data that
+// already exists elsewhere, never a separate "finalized" flag to remember to
+// flip — a character/location is "finalized" purely because the production
+// team has already attached a real crew_members entry to it (the same
+// InlineCastAttachment add-flow used everywhere else), and a scene is "shot"
+// purely because it sits inside a shoot-schedule day marked completed. So the
+// moment production adds an actor or records a completed shoot day, this view
+// updates itself with no extra step.
+function computeDirectorOverview(sceneList, breakdownContent, shootSchedule, crewMembers) {
+  const castFinalized = new Set(
+    crewMembers.filter((m) => m.category === "artist").map((m) => m.characterName.toLowerCase())
+  );
+  const locationFinalized = new Set(
+    crewMembers.filter((m) => m.category === "location").map((m) => m.characterName.toLowerCase())
+  );
+
+  const characters = (breakdownContent?.artistList ?? []).map((item) => ({
+    label: item.label,
+    age: item.age ?? null,
+    gender: item.gender ?? null,
+    finalized: castFinalized.has(item.label.toLowerCase()),
+  }));
+
+  const locations = (breakdownContent?.locationList ?? []).map((item) => ({
+    label: item.location?.en ?? "",
+    intExt: item.intExt,
+    finalized: locationFinalized.has((item.location?.en ?? "").toLowerCase()),
+  }));
+
+  const crewRoster = crewMembers
+    .filter((m) => m.category === "crew")
+    .map((m) => ({ name: m.name, role: m.role, contactNumber: m.contactNumber }));
+
+  // Reuses the exact same "e{episodeIndex}-s{sceneIndex}" identity scheme the
+  // shoot-schedule generator already verifies coverage against, so a scene
+  // only counts as shot when it's inside a day the AD has actually marked
+  // completed — a scheduled-but-not-yet-shot day doesn't count.
+  const isSeries = Boolean(sceneList.episodeScenes);
+  const shotIdentities = new Set();
+  (shootSchedule?.scheduleDays ?? [])
+    .filter((day) => day.completed)
+    .forEach((day) =>
+      (day.sceneRefs ?? []).forEach((ref) => {
+        shotIdentities.add(isSeries ? `e${ref.episodeIndex}-s${ref.sceneIndex}` : `s${ref.sceneIndex}`);
+      })
+    );
+
+  const identities = allSceneIdentities(sceneList);
+  const scenes = flattenScenesForAdSheet(sceneList).map((scene, index) => ({
+    episodeLabel: scene.episodeLabel,
+    sceneNumber: scene.sceneNumber,
+    oneLiner: scene.oneLiner?.en ?? "",
+    shot: shotIdentities.has(identities[index]),
+  }));
+
+  return {
+    cast: {
+      finalizedCount: characters.filter((c) => c.finalized).length,
+      totalCount: characters.length,
+      characters,
+    },
+    locations: {
+      finalizedCount: locations.filter((l) => l.finalized).length,
+      totalCount: locations.length,
+      locations,
+    },
+    crewRoster,
+    scenes: {
+      shotCount: scenes.filter((s) => s.shot).length,
+      totalCount: scenes.length,
+      scenes,
+    },
+  };
+}
+
+app.get("/api/scene-lists/:sceneListId/director-overview", requireLogin, async (req, res) => {
+  const { sceneListId } = req.params;
+  if (!(await userOwnsSceneList(req.user, sceneListId))) {
+    res.status(403).json({ error: "You don't have access to this project." });
+    return;
+  }
+
+  const sceneListResult = await db.query("SELECT content FROM scene_lists WHERE id = $1", [sceneListId]);
+  if (sceneListResult.rows.length === 0) {
+    res.status(404).json({ error: "Scene list not found" });
+    return;
+  }
+
+  const [breakdownResult, scheduleResult, crewResult] = await Promise.all([
+    db.query("SELECT content FROM script_breakdowns WHERE scene_list_id = $1 ORDER BY created_at DESC LIMIT 1", [sceneListId]),
+    db.query("SELECT content FROM shoot_schedules WHERE scene_list_id = $1 ORDER BY created_at DESC LIMIT 1", [sceneListId]),
+    db.query("SELECT * FROM crew_members WHERE scene_list_id = $1", [sceneListId]),
+  ]);
+
+  const overview = computeDirectorOverview(
+    sceneListResult.rows[0].content,
+    breakdownResult.rows[0]?.content ?? null,
+    scheduleResult.rows[0]?.content ?? null,
+    crewResult.rows.map(serializeCrewMember)
+  );
+
+  res.json(overview);
+});
+
 app.get("/api/crew", requireLogin, async (req, res) => {
   if (!(await userOwnsSceneList(req.user, req.query.sceneListId))) {
     res.status(403).json({ error: "You don't have access to this project." });

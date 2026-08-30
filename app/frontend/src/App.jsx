@@ -1762,6 +1762,7 @@ function App() {
   }
 
   const [expandedScheduleDays, setExpandedScheduleDays] = useState({})
+  const [isArtistScheduleExpanded, setIsArtistScheduleExpanded] = useState(false)
 
   function toggleScheduleDay(dayNumber) {
     setExpandedScheduleDays((prev) => ({ ...prev, [dayNumber]: !prev[dayNumber] }))
@@ -5960,12 +5961,18 @@ function App() {
 
               {shootSchedule.artistSchedule?.length > 0 && (
                 <div className="artist-schedule-summary">
-                  <h4>{t.artistScheduleHeading}</h4>
-                  {shootSchedule.artistSchedule.map((entry) => (
-                    <p key={entry.character} className="artist-schedule-row">
-                      <strong>{entry.character}</strong> — {t.totalDaysLabel}: {entry.totalDays} ({entry.days.map((d) => `${t.shootDayLabel} ${d.dayNumber}${d.date ? ` (${d.date})` : ''}`).join(', ')})
-                    </p>
-                  ))}
+                  <button className="breakdown-item-toggle" onClick={() => setIsArtistScheduleExpanded(!isArtistScheduleExpanded)}>
+                    <span className={isArtistScheduleExpanded ? 'breakdown-item-chevron expanded' : 'breakdown-item-chevron'}>▸</span>
+                    <h4>
+                      {t.artistScheduleHeading} <span className="breakdown-item-meta">({shootSchedule.artistSchedule.length})</span>
+                    </h4>
+                  </button>
+                  {isArtistScheduleExpanded &&
+                    shootSchedule.artistSchedule.map((entry) => (
+                      <p key={entry.character} className="artist-schedule-row">
+                        <strong>{entry.character}</strong> — {t.totalDaysLabel}: {entry.totalDays} ({entry.days.map((d) => `${t.shootDayLabel} ${d.dayNumber}${d.date ? ` (${d.date})` : ''}`).join(', ')})
+                      </p>
+                    ))}
                 </div>
               )}
 

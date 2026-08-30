@@ -1525,6 +1525,12 @@ body {
   cursor: pointer;
 }
 
+.breakdown-category-toggle {
+  width: auto;
+  flex: 1 1 auto;
+  min-width: 160px;
+}
+
 .breakdown-item-chevron {
   flex: 0 0 auto;
   display: inline-block;

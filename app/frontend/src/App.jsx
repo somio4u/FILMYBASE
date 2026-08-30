@@ -1876,6 +1876,16 @@ function App() {
     setExpandedBreakdownItems((prev) => ({ ...prev, [key]: !prev[key] }))
   }
 
+  // Categories collapse to just their heading by default — only the items
+  // inside expand further (per-item, handled by expandedBreakdownItems
+  // above), so a long breakdown starts as a short list of category names
+  // rather than everything open at once.
+  const [expandedBreakdownCategories, setExpandedBreakdownCategories] = useState({})
+
+  function toggleBreakdownCategory(category) {
+    setExpandedBreakdownCategories((prev) => ({ ...prev, [category]: !prev[category] }))
+  }
+
   const [expandedScheduleDays, setExpandedScheduleDays] = useState({})
   const [isArtistScheduleExpanded, setIsArtistScheduleExpanded] = useState(false)
 
@@ -3371,11 +3381,17 @@ function App() {
     const items = scriptBreakdown[category] ?? []
     const isEditing = editingBreakdownCategory === category
     const isReanalyzing = reanalyzingCategory === category
+    const isCategoryExpanded = Boolean(expandedBreakdownCategories[category])
 
     return (
       <div className="breakdown-category" key={category}>
         <div className="breakdown-category-header">
-          <h4>{t[headingKey]}</h4>
+          <button className="breakdown-item-toggle breakdown-category-toggle" onClick={() => toggleBreakdownCategory(category)}>
+            <span className={isCategoryExpanded ? 'breakdown-item-chevron expanded' : 'breakdown-item-chevron'}>▸</span>
+            <h4>
+              {t[headingKey]} <span className="breakdown-item-meta">({items.length})</span>
+            </h4>
+          </button>
           <div className="breakdown-category-actions">
             <a
               className="breakdown-pdf-link"
@@ -3410,7 +3426,7 @@ function App() {
           </div>
         </div>
 
-        {!isEditing && items.length > 1 && (
+        {!isEditing && isCategoryExpanded && items.length > 1 && (
           <button
             className="breakdown-action-button breakdown-expand-all-button"
             onClick={() => {
@@ -3430,6 +3446,7 @@ function App() {
         )}
 
         {!isEditing &&
+          isCategoryExpanded &&
           items.map((item, index) => {
             const itemKey = `${category}:${index}`
             const isExpanded = Boolean(expandedBreakdownItems[itemKey])
@@ -3520,7 +3537,7 @@ function App() {
             )
           })}
 
-        {!isEditing && category === 'artistList' && canEditProduction && (
+        {!isEditing && isCategoryExpanded && category === 'artistList' && canEditProduction && (
           <div className="add-missing-character-form">
             <input
               type="text"
@@ -3548,7 +3565,7 @@ function App() {
           </div>
         )}
 
-        {!isEditing && category === 'artistList' && foundMissingCharacters !== null && (
+        {!isEditing && isCategoryExpanded && category === 'artistList' && foundMissingCharacters !== null && (
           <p className="sidebar-section-note">
             {foundMissingCharacters.length > 0
               ? `${t.foundMissingCharactersLabel}: ${foundMissingCharacters.join(', ')}`

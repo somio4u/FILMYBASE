@@ -3462,6 +3462,20 @@ function App() {
               category === 'locationList' &&
               crewMembers.some((m) => m.category === 'location' && m.characterName === item.location.en)
 
+            // Same wrapped/pending/in-progress classification as the Shoot
+            // Schedule's Artist-Wise Summary (and its PDF) — cross-referenced
+            // here too so a character's shoot status is visible right where
+            // casting happens, not only on the separate schedule page.
+            let shootStatus = null
+            if (category === 'artistList' && shootSchedule?.artistSchedule && shootSchedule?.scheduleDays) {
+              const entry = shootSchedule.artistSchedule.find((e) => e.character.toLowerCase() === item.label.toLowerCase())
+              if (entry) {
+                const completedByDayNumber = Object.fromEntries(shootSchedule.scheduleDays.map((d) => [d.dayNumber, Boolean(d.completed)]))
+                const completedFlags = entry.days.map((d) => completedByDayNumber[d.dayNumber])
+                shootStatus = completedFlags.every(Boolean) ? 'wrapped' : completedFlags.every((c) => !c) ? 'pending' : 'in-progress'
+              }
+            }
+
             return (
               <div key={index} className="breakdown-item">
                 <button className="breakdown-item-toggle" onClick={() => toggleBreakdownItem(itemKey)}>
@@ -3480,10 +3494,15 @@ function App() {
                     <strong>{item.character}</strong>
                   ) : category === 'artistList' ? (
                     <>
-                      <strong>{item.label}</strong>{' '}
+                      <strong className={shootStatus ? `artist-name-${shootStatus}` : ''}>{item.label}</strong>{' '}
                       <span className="breakdown-item-meta">
                         ({item.gender || t.unspecifiedLabel}, {item.age || t.unspecifiedLabel})
                       </span>
+                      {shootStatus && (
+                        <span className={`artist-schedule-status-chip ${shootStatus}`}>
+                          {shootStatus === 'wrapped' ? t.artistStatusWrappedLabel : shootStatus === 'in-progress' ? t.artistStatusInProgressLabel : t.artistStatusPendingLabel}
+                        </span>
+                      )}
                       <span className={isCastFinalized ? 'breakdown-item-chip finalized' : 'breakdown-item-chip pending'}>
                         {isCastFinalized ? '✓' : '…'}
                       </span>

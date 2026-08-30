@@ -1924,6 +1924,14 @@ body {
   color: var(--accent-strong);
 }
 
+.artist-name-wrapped {
+  color: var(--danger) !important;
+}
+
+.artist-name-in-progress {
+  color: var(--accent-strong) !important;
+}
+
 .schedule-scene-meta {
   color: var(--text-muted);
   font-size: 12px;

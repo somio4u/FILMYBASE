@@ -957,6 +957,29 @@ function cleanSceneNumber(raw) {
   return String(raw).replace(/^\s*(SCENE|SC)\.?\s*/i, '')
 }
 
+// Stored dates stay ISO (yyyy-mm-dd) — that's what <input type="date"> and
+// the backend's own date arithmetic need — this only reformats one for
+// DISPLAY, to the day-month-year order this production actually uses.
+function formatDisplayDate(isoDate) {
+  if (!isoDate) return isoDate
+  const [y, m, d] = isoDate.split('-')
+  if (!y || !m || !d) return isoDate
+  return `${d}-${m}-${y}`
+}
+
+// Every client-downloaded file gets the same "when was this generated"
+// stamp the server's own exports use, so a saved project file is dated too.
+function formatExportTimestamp(date = new Date()) {
+  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+  const day = date.getDate()
+  const month = months[date.getMonth()]
+  const year = date.getFullYear()
+  const minutes = String(date.getMinutes()).padStart(2, '0')
+  const hours12 = date.getHours() % 12 || 12
+  const ampm = date.getHours() >= 12 ? 'PM' : 'AM'
+  return `${day}-${month}-${year}_${hours12}.${minutes}${ampm}`
+}
+
 // wa.me needs the number in full international form with no "+", spaces, or
 // leading zero. Every contact number seen in this app so far is a plain
 // 10-digit Indian mobile number with no country code typed in, so that's the
@@ -2492,7 +2515,7 @@ function App() {
       const link = document.createElement('a')
       const nameBase = (projectTitle || concept || 'project').slice(0, 40).replace(/[^\w\- ]/g, '').trim() || 'project'
       link.href = url
-      link.download = `${nameBase}.json`
+      link.download = `${nameBase}-${formatExportTimestamp()}.json`
       link.click()
       URL.revokeObjectURL(url)
     } catch {
@@ -6141,7 +6164,7 @@ function App() {
                             <span className={`artist-schedule-status-chip ${statusClass}`}>{statusLabel}</span>{' '}
                             <strong>{entry.character}</strong> — {t.totalDaysLabel}: {entry.totalDays} (
                             {entry.days
-                              .map((d) => `${t.shootDayLabel} ${d.dayNumber}${d.date ? ` (${d.date})` : ''}${completedByDayNumber[d.dayNumber] ? ' ✓' : ''}`)
+                              .map((d) => `${t.shootDayLabel} ${d.dayNumber}${d.date ? ` (${formatDisplayDate(d.date)})` : ''}${completedByDayNumber[d.dayNumber] ? ' ✓' : ''}`)
                               .join(', ')}
                             )
                           </p>

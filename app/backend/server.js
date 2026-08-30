@@ -91,6 +91,30 @@ async function mapWithConcurrency(items, limit, fn) {
   return results;
 }
 
+// Every export filename gets a "when was this generated" stamp — the AD
+// prints these repeatedly as a schedule changes, and without a timestamp
+// there's no way to tell which paper copy is the current one.
+function formatExportTimestamp(date = new Date()) {
+  const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  const day = date.getDate();
+  const month = months[date.getMonth()];
+  const year = date.getFullYear();
+  const minutes = String(date.getMinutes()).padStart(2, "0");
+  const hours12 = date.getHours() % 12 || 12;
+  const ampm = date.getHours() >= 12 ? "PM" : "AM";
+  return `${day}-${month}-${year}_${hours12}.${minutes}${ampm}`;
+}
+
+// Stored/computed dates stay ISO (yyyy-mm-dd) internally — that's what date
+// arithmetic and <input type="date"> both need — this only reformats a date
+// for DISPLAY, to the day-month-year order this production actually uses.
+function formatDisplayDate(isoDate) {
+  if (!isoDate) return isoDate;
+  const [y, m, d] = isoDate.split("-");
+  if (!y || !m || !d) return isoDate;
+  return `${d}-${m}-${y}`;
+}
+
 const FONTS_DIR = path.join(import.meta.dirname, "fonts");
 const FONTS = {
   odiaRegular: path.join(FONTS_DIR, "NotoSansOriya.ttf"),
@@ -2540,7 +2564,7 @@ app.get("/api/pitch-deck/:id/export", requireLogin, async (req, res) => {
     res.setHeader("Content-Type", "application/pdf");
     res.setHeader(
       "Content-Disposition",
-      `attachment; filename="${deck.title.en.replace(/[^a-z0-9]+/gi, "-")}-pitch-deck-${lang}.pdf"`
+      `attachment; filename="${deck.title.en.replace(/[^a-z0-9]+/gi, "-")}-pitch-deck-${lang}-${formatExportTimestamp()}.pdf"`
     );
     doc.pipe(res);
 
@@ -4506,7 +4530,7 @@ app.get("/api/script-breakdown/:id/export", requireLogin, async (req, res) => {
     doc.font(headerFont);
 
     res.setHeader("Content-Type", "application/pdf");
-    res.setHeader("Content-Disposition", `attachment; filename="${category}-${lang}.pdf"`);
+    res.setHeader("Content-Disposition", `attachment; filename="${category}-${lang}-${formatExportTimestamp()}.pdf"`);
     doc.pipe(res);
 
     doc.font(headerFont).fontSize(22).text(categoryLabels[category][lang]);
@@ -4658,7 +4682,7 @@ app.get("/api/script-breakdown/:id/export-excel", requireLogin, async (req, res)
     });
 
     res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
-    res.setHeader("Content-Disposition", `attachment; filename="${category}-${lang}.xlsx"`);
+    res.setHeader("Content-Disposition", `attachment; filename="${category}-${lang}-${formatExportTimestamp()}.xlsx"`);
     await workbook.xlsx.write(res);
     res.end();
   } catch (error) {
@@ -4708,7 +4732,7 @@ app.get("/api/script-breakdown/:id/export-ad-sheet", requireLogin, async (req, r
     doc.registerFont("odiaBold", FONTS.odiaBold);
 
     res.setHeader("Content-Type", "application/pdf");
-    res.setHeader("Content-Disposition", `attachment; filename="ad-breakdown-sheet-${lang}.pdf"`);
+    res.setHeader("Content-Disposition", `attachment; filename="ad-breakdown-sheet-${lang}-${formatExportTimestamp()}.pdf"`);
     doc.pipe(res);
 
     const pageLeft = doc.page.margins.left;
@@ -4884,7 +4908,10 @@ function renderCharacterScriptPdf(res, characterLabel, lang, scenes) {
   doc.registerFont("odiaBold", FONTS.odiaBold);
 
   res.setHeader("Content-Type", "application/pdf");
-  res.setHeader("Content-Disposition", `attachment; filename="character-script-${characterLabel.trim().replace(/\s+/g, "-")}.pdf"`);
+  res.setHeader(
+    "Content-Disposition",
+    `attachment; filename="character-script-${characterLabel.trim().replace(/\s+/g, "-")}-${formatExportTimestamp()}.pdf"`
+  );
   doc.pipe(res);
 
   doc.font(headerFont).fontSize(20).text(`${labels.title} — ${characterLabel.trim()}`);
@@ -5672,7 +5699,7 @@ app.get("/api/shoot-schedule/:id/export", requireLogin, async (req, res) => {
     doc.registerFont("odiaBold", FONTS.odiaBold);
 
     res.setHeader("Content-Type", "application/pdf");
-    res.setHeader("Content-Disposition", `attachment; filename="shoot-schedule-${lang}.pdf"`);
+    res.setHeader("Content-Disposition", `attachment; filename="shoot-schedule-${lang}-${formatExportTimestamp()}.pdf"`);
     doc.pipe(res);
 
     const pageLeft = doc.page.margins.left;
@@ -5709,7 +5736,7 @@ app.get("/api/shoot-schedule/:id/export", requireLogin, async (req, res) => {
       // A completed day gets a red band behind its header so it reads as
       // "already shot" at a glance when flipping through a printed copy,
       // matching the same red the app's own UI uses for a wrapped day.
-      const dayTitle = `${day.date ? `${day.date}  —  ` : ""}${labels.day} ${day.dayNumber}${day.completed ? `  — ${labels.completed}` : ""}`;
+      const dayTitle = `${day.date ? `${formatDisplayDate(day.date)}  —  ` : ""}${labels.day} ${day.dayNumber}${day.completed ? `  — ${labels.completed}` : ""}`;
       if (day.completed) {
         const bandHeight = 30;
         doc.rect(pageLeft, doc.page.margins.top - 4, doc.page.width - pageLeft - doc.page.margins.right, bandHeight).fill("#fdecea");
@@ -5818,7 +5845,7 @@ app.get("/api/shoot-schedule/:id/export", requireLogin, async (req, res) => {
         .font(bodyFont)
         .fontSize(11)
         .text(
-          `${labels.totalDays}: ${entry.totalDays}  —  ${labels.days}: ${entry.days.map((d) => `Day ${d.dayNumber}${d.date ? ` (${d.date})` : ""}${completedByDayNumber[d.dayNumber] ? " (done)" : ""}`).join(", ")}`,
+          `${labels.totalDays}: ${entry.totalDays}  —  ${labels.days}: ${entry.days.map((d) => `Day ${d.dayNumber}${d.date ? ` (${formatDisplayDate(d.date)})` : ""}${completedByDayNumber[d.dayNumber] ? " (done)" : ""}`).join(", ")}`,
           { indent: 10 }
         );
       doc.moveDown(0.6);
@@ -6052,7 +6079,7 @@ app.get("/api/crew/export-excel", requireLogin, async (req, res) => {
     });
 
     res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
-    res.setHeader("Content-Disposition", `attachment; filename="cast-and-crew-${lang}.xlsx"`);
+    res.setHeader("Content-Disposition", `attachment; filename="cast-and-crew-${lang}-${formatExportTimestamp()}.xlsx"`);
     await workbook.xlsx.write(res);
     res.end();
   } catch (error) {

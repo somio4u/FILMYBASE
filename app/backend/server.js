@@ -398,6 +398,34 @@ const AD_SHEET_ROW_SCHEMA = {
   required: ["mainCharacters", "extras", "property", "costumeRemarks"],
 };
 
+// Audition sides for one character — a single real scene's dialogue,
+// transcribed VERBATIM from the actual script (never translated or
+// paraphrased, since the actor needs to say exactly what's written, in
+// whatever language/script mix the original already uses). Other
+// characters' lines are included too since the actor needs their cues,
+// with isTargetCharacter marking which ones are actually this actor's.
+const AUDITION_SIDES_SCHEMA = {
+  type: Type.OBJECT,
+  properties: {
+    sceneHeading: { type: Type.STRING },
+    sceneNumberLabel: { type: Type.STRING },
+    contextNote: { type: Type.STRING },
+    lines: {
+      type: Type.ARRAY,
+      items: {
+        type: Type.OBJECT,
+        properties: {
+          character: { type: Type.STRING },
+          text: { type: Type.STRING },
+          isTargetCharacter: { type: Type.BOOLEAN },
+        },
+        required: ["character", "text", "isTargetCharacter"],
+      },
+    },
+  },
+  required: ["sceneHeading", "sceneNumberLabel", "contextNote", "lines"],
+};
+
 const BREAKDOWN_CATEGORY_ITEM_SCHEMAS = {
   artistList: BREAKDOWN_ARTIST_SCHEMA,
   locationList: BREAKDOWN_LOCATION_SCHEMA,
@@ -4750,6 +4778,126 @@ app.get("/api/script-breakdown/:id/export-ad-sheet", requireLogin, async (req, r
     doc.end();
   } catch (error) {
     console.error("AD sheet PDF export failed:", error.message);
+    if (!res.headersSent) {
+      res.status(500).json({ error: error.message });
+    } else {
+      res.end();
+    }
+  }
+});
+
+// Finds this character's best real scene for a self-tape audition and
+// transcribes their dialogue for it VERBATIM from the actual script — never
+// translated or paraphrased, since the actor has to say exactly what's
+// written. Other characters' lines are kept too, for cueing, but only
+// marked isTargetCharacter for the one being cast.
+async function generateAuditionSides(sourceText, characterLabel) {
+  const contents = `The full script material:\n${sourceText}\n\nYou are preparing AUDITION SIDES for an actor auditioning to play the character "${characterLabel}". Find ONE scene where this character has substantial, meaningful dialogue (not just a single throwaway line) — ideally their most characterful or dramatically interesting scene in the whole script. Extract the COMPLETE dialogue exchange for that scene, copying every line VERBATIM exactly as written in the script — do not paraphrase, summarize, translate, or invent a single word, and preserve whatever mix of language/script the original already uses. Include every other character's lines too (the actor needs their cues to know when to speak), marking "isTargetCharacter": true only on "${characterLabel}"'s own lines. Give the scene's heading (e.g. "INT. LIVING ROOM - DAY"), its real number/label from the script if there is one (e.g. "Episode 1, Scene 1"), and a short one-sentence contextNote in plain English (a stage-direction-style note for the actor about what's happening right before this excerpt starts — this note itself is NOT dialogue and should not be translated or dramatized).`;
+
+  const response = await generateContentWithRetry({
+    model: "gemini-flash-lite-latest",
+    contents,
+    config: {
+      systemInstruction: SCRIPT_BREAKDOWN_SYSTEM_PROMPT,
+      responseMimeType: "application/json",
+      maxOutputTokens: 8192,
+      responseSchema: AUDITION_SIDES_SCHEMA,
+    },
+  });
+
+  return JSON.parse(response.text);
+}
+
+app.get("/api/scene-lists/:sceneListId/audition-sides", requireLogin, async (req, res) => {
+  const { sceneListId } = req.params;
+  const characterLabel = req.query.character;
+
+  if (!characterLabel?.trim()) {
+    res.status(400).json({ error: "A character name is required." });
+    return;
+  }
+  if (!(await userOwnsSceneList(req.user, sceneListId))) {
+    res.status(403).json({ error: "You don't have access to this project." });
+    return;
+  }
+
+  try {
+    const sceneListResult = await db.query("SELECT content FROM scene_lists WHERE id = $1", [sceneListId]);
+    if (sceneListResult.rows.length === 0) {
+      res.status(404).json({ error: "Scene list not found" });
+      return;
+    }
+
+    const sourceText = await buildBreakdownSourceText(sceneListResult.rows[0].content, sceneListId);
+    const sides = await generateAuditionSides(sourceText, characterLabel.trim());
+    res.json(sides);
+  } catch (error) {
+    console.error("Audition sides generation failed:", error.message);
+    res.status(502).json({ error: error.message });
+  }
+});
+
+app.get("/api/scene-lists/:sceneListId/audition-sides/export", requireLogin, async (req, res) => {
+  const { sceneListId } = req.params;
+  const characterLabel = req.query.character;
+  const lang = req.query.lang === "or" ? "or" : "en";
+
+  if (!characterLabel?.trim()) {
+    res.status(400).json({ error: "A character name is required." });
+    return;
+  }
+  if (!(await userOwnsSceneList(req.user, sceneListId))) {
+    res.status(403).json({ error: "You don't have access to this project." });
+    return;
+  }
+
+  try {
+    const sceneListResult = await db.query("SELECT content FROM scene_lists WHERE id = $1", [sceneListId]);
+    if (sceneListResult.rows.length === 0) {
+      res.status(404).json({ error: "Scene list not found" });
+      return;
+    }
+
+    const sourceText = await buildBreakdownSourceText(sceneListResult.rows[0].content, sceneListId);
+    const sides = await generateAuditionSides(sourceText, characterLabel.trim());
+
+    const bodyFont = lang === "or" ? "odiaRegular" : "Helvetica";
+    const headerFont = lang === "or" ? "odiaBold" : "Helvetica-Bold";
+    const labels =
+      lang === "or"
+        ? { title: "AUDITION SIDES", scene: "ଦୃଶ୍ୟ", note: "ଟିପ୍ପଣୀ" }
+        : { title: "AUDITION SIDES", scene: "Scene", note: "Note" };
+
+    const doc = new PDFDocument({ size: "A4", margin: 50 });
+    doc.registerFont("odiaRegular", FONTS.odiaRegular);
+    doc.registerFont("odiaBold", FONTS.odiaBold);
+
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", `attachment; filename="audition-sides-${characterLabel.trim().replace(/\s+/g, "-")}.pdf"`);
+    doc.pipe(res);
+
+    doc.font(headerFont).fontSize(20).text(`${labels.title} — ${characterLabel.trim()}`);
+    doc.moveDown(0.3);
+    doc.font(bodyFont).fontSize(12).fillColor("#555").text(`${sides.sceneNumberLabel} — ${sides.sceneHeading}`).fillColor("#000");
+    doc.moveDown(0.5);
+    doc.font(bodyFont).fontSize(11).fillColor("#555").text(`${labels.note}: ${sides.contextNote}`).fillColor("#000");
+    doc.moveDown(1);
+
+    sides.lines.forEach((line) => {
+      if (line.isTargetCharacter) {
+        doc.font(headerFont).fontSize(12).fillColor("#000").text(line.character.toUpperCase());
+        doc.font(headerFont).fontSize(12).fillColor("#000").text(line.text, { indent: 20 });
+      } else {
+        doc.font(bodyFont).fontSize(11).fillColor("#777").text(line.character.toUpperCase());
+        doc.font(bodyFont).fontSize(11).fillColor("#777").text(line.text, { indent: 20 });
+      }
+      doc.fillColor("#000");
+      doc.moveDown(0.6);
+    });
+
+    doc.end();
+  } catch (error) {
+    console.error("Audition sides PDF export failed:", error.message);
     if (!res.headersSent) {
       res.status(500).json({ error: error.message });
     } else {

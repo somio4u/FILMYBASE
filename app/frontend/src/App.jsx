@@ -111,6 +111,8 @@ const LABELS = {
     googleContactsConnectedNotice: 'Google Contacts connected.',
     googleContactsErrorNotice: 'Could not connect Google Contacts. Please try again.',
     pickFromContactsButton: 'Pick from Google Contacts',
+    downloadAuditionSidesButton: 'Download Audition Sides (PDF)',
+    auditionSidesHint: "Finds this character's best scene and transcribes their real dialogue from the script, so you can send it to the actor for a self-tape audition.",
     searchContactsPlaceholder: 'Search contacts…',
     loadingContactsLabel: 'Loading contacts…',
     noContactsFound: 'No matching contacts.',
@@ -435,6 +437,8 @@ const LABELS = {
     googleContactsConnectedNotice: 'Google Contacts ସଂଯୁକ୍ତ ହୋଇଗଲା।',
     googleContactsErrorNotice: 'Google Contacts ସଂଯୋଗ ହୋଇପାରିଲା ନାହିଁ। ପୁଣି ଚେଷ୍ଟା କରନ୍ତୁ।',
     pickFromContactsButton: 'Google Contacts ରୁ ବାଛନ୍ତୁ',
+    downloadAuditionSidesButton: 'ଅଡିସନ୍ ସାଇଡ୍ସ ଡାଉନଲୋଡ୍ କରନ୍ତୁ (PDF)',
+    auditionSidesHint: 'ଏହି ଚରିତ୍ରର ସର୍ବୋତ୍ତମ ଦୃଶ୍ୟ ଖୋଜି ସ୍କ୍ରିପ୍ଟରୁ ତାଙ୍କ ପ୍ରକୃତ ସଂଳାପ ଲେଖିଥାଏ, ଯାହା ଦ୍ୱାରା ଆପଣ ଅଭିନେତାଙ୍କୁ ଏକ ସେଲ୍ଫ-ଟେପ୍ ଅଡିସନ୍ ପାଇଁ ପଠାଇ ପାରିବେ।',
     searchContactsPlaceholder: 'ଯୋଗାଯୋଗ ଖୋଜନ୍ତୁ…',
     loadingContactsLabel: 'ଯୋଗାଯୋଗ ଲୋଡ୍ ହେଉଛି…',
     noContactsFound: 'କୌଣସି ମେଳ ଖାଉଥିବା ଯୋଗାଯୋଗ ନାହିଁ।',
@@ -1258,6 +1262,8 @@ function InlineCastAttachment({
   isLoadingGoogleContacts,
   onLoadGoogleContacts,
   onAddFromContact,
+  sceneListId,
+  language,
 }) {
   const [name, setName] = useState('')
   const [contactNumber, setContactNumber] = useState('')
@@ -1364,6 +1370,16 @@ function InlineCastAttachment({
             </button>
           )}
         </form>
+      )}
+
+      {category === 'artist' && (
+        <a
+          className="breakdown-pdf-link audition-sides-link"
+          href={`${BACKEND_URL}/api/scene-lists/${sceneListId}/audition-sides/export?character=${encodeURIComponent(linkKey)}&lang=${language}`}
+          title={t.auditionSidesHint}
+        >
+          {t.downloadAuditionSidesButton}
+        </a>
       )}
 
       {isPickerOpen && (
@@ -3064,6 +3080,8 @@ function App() {
                   isLoadingGoogleContacts={isLoadingGoogleContacts}
                   onLoadGoogleContacts={loadGoogleContacts}
                   onAddFromContact={handleAddCrewMemberFromContact}
+                  sceneListId={sceneList.id}
+                  language={language}
                 />
               )}
               {category === 'locationList' && (

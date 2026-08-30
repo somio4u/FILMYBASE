@@ -104,6 +104,11 @@ const LABELS = {
     reviseSceneListPlaceholder: 'Type changes for the scene list, then press Enter…',
     reviseSchedulePlaceholder: 'Type changes for the shoot schedule, then press Enter…',
     idlePlaceholder: 'Nothing to revise right now — use the buttons above to continue',
+    changesChatToggleLabel: 'Ask for changes',
+    changesChatHeading: 'Changes',
+    changesChatEmptyNote: 'Type a change below and it will show up here, along with what happened.',
+    changesChatAppliedMessage: '✅ Done — applied and regenerated.',
+    changesChatErrorMessage: '⚠️ Something went wrong — please try again.',
     exportButtonLabel: 'Save Project',
     exportingProjectLabel: 'Saving…',
     connectGoogleContactsButton: 'Connect Google Contacts',
@@ -451,6 +456,11 @@ const LABELS = {
     reviseSceneListPlaceholder: 'ସିନ୍ ଲିଷ୍ଟ ପାଇଁ ପରିବର୍ତ୍ତନ ଲେଖନ୍ତୁ, ତାପରେ Enter ଦବାନ୍ତୁ…',
     reviseSchedulePlaceholder: 'ସୁଟିଂ ସିଡ୍ୟୁଲ୍ ପାଇଁ ପରିବର୍ତ୍ତନ ଲେଖନ୍ତୁ, ତାପରେ Enter ଦବାନ୍ତୁ…',
     idlePlaceholder: 'ବର୍ତ୍ତମାନ ପରିବର୍ତ୍ତନ କରିବାକୁ କିଛି ନାହିଁ — ଉପରର ବଟନ୍ ବ୍ୟବହାର କରନ୍ତୁ',
+    changesChatToggleLabel: 'ପରିବର୍ତ୍ତନ ପାଇଁ ପଚାରନ୍ତୁ',
+    changesChatHeading: 'ପରିବର୍ତ୍ତନ',
+    changesChatEmptyNote: 'ତଳେ ଏକ ପରିବର୍ତ୍ତନ ଲେଖନ୍ତୁ, ଏହା ଏଠାରେ ଦେଖାଯିବ, ସହିତ କଣ ହେଲା ତାହା ମଧ୍ୟ।',
+    changesChatAppliedMessage: '✅ ହୋଇଗଲା — ପ୍ରୟୋଗ ଏବଂ ପୁନଃତିଆରି ହୋଇଗଲା।',
+    changesChatErrorMessage: '⚠️ କିଛି ଭୁଲ ହେଲା — ପୁଣି ଚେଷ୍ଟା କରନ୍ତୁ।',
     exportButtonLabel: 'ପ୍ରୋଜେକ୍ଟ ସେଭ୍ କରନ୍ତୁ',
     exportingProjectLabel: 'ସେଭ୍ ହେଉଛି…',
     connectGoogleContactsButton: 'Google ଯୋଗାଯୋଗ ସଂଯୋଗ କରନ୍ତୁ',
@@ -1302,6 +1312,111 @@ function CrewSection({ category, heading, members, characterOptions, onAdd, onUp
         </>
       )}
     </div>
+  )
+}
+
+// A Messenger-style slide-in panel that replaces the old bare bottom input
+// bar for every "type your changes" flow in the app (breakdown revise,
+// schedule revise, pitch deck revise, etc. — one per barConfig.stageKey).
+// The real problem this fixes: the old bar cleared itself on submit with no
+// visible trace of what was typed or whether anything actually happened —
+// exactly what silently swallowed a real request earlier in this project.
+// History persists per (project, stage) in localStorage so re-opening the
+// panel later still shows what was asked and what happened.
+function ChangesChatPanel({ t, historyKey, barConfig, isBusy }) {
+  const [isOpen, setIsOpen] = useState(false)
+  const [historiesByKey, setHistoriesByKey] = useState(() => {
+    try {
+      return JSON.parse(localStorage.getItem('filmmaking-app:chatHistories') || '{}')
+    } catch {
+      return {}
+    }
+  })
+  const wasBusyRef = useRef(false)
+  const messagesEndRef = useRef(null)
+
+  const messages = historiesByKey[historyKey] ?? []
+
+  function appendMessage(msg) {
+    setHistoriesByKey((prev) => {
+      const next = { ...prev, [historyKey]: [...(prev[historyKey] ?? []), msg] }
+      try {
+        localStorage.setItem('filmmaking-app:chatHistories', JSON.stringify(next))
+      } catch {
+        // Private-browsing/storage-blocked — the chat still works for this
+        // session, it just won't survive a reload. Not worth surfacing.
+      }
+      return next
+    })
+  }
+
+  useEffect(() => {
+    if (wasBusyRef.current && !isBusy) {
+      appendMessage({ role: 'system', text: t.changesChatAppliedMessage })
+    }
+    wasBusyRef.current = isBusy
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isBusy])
+
+  useEffect(() => {
+    if (isOpen) messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+  }, [messages.length, isOpen, isBusy])
+
+  function handleSend() {
+    if (!barConfig.canSubmit) return
+    appendMessage({ role: 'user', text: barConfig.value })
+    barConfig.onSubmit()
+  }
+
+  return (
+    <>
+      <button className="changes-chat-toggle" onClick={() => setIsOpen(!isOpen)} title={t.changesChatToggleLabel}>
+        {ICONS.penNib}
+      </button>
+      <div className={isOpen ? 'changes-chat-panel open' : 'changes-chat-panel'}>
+        <div className="changes-chat-header">
+          <strong>{t.changesChatHeading}</strong>
+          <button className="changes-chat-close" onClick={() => setIsOpen(false)}>
+            ✕
+          </button>
+        </div>
+        <div className="changes-chat-messages">
+          {messages.length === 0 && <p className="changes-chat-empty">{t.changesChatEmptyNote}</p>}
+          {messages.map((m, i) => (
+            <div key={i} className={m.role === 'user' ? 'changes-chat-bubble user' : 'changes-chat-bubble system'}>
+              {m.text}
+            </div>
+          ))}
+          {isBusy && (
+            <div className="changes-chat-bubble system changes-chat-progress">
+              <span className="changes-chat-dot" />
+              <span className="changes-chat-dot" />
+              <span className="changes-chat-dot" />
+            </div>
+          )}
+          <div ref={messagesEndRef} />
+        </div>
+        <div className="changes-chat-input-row">
+          <input
+            type="text"
+            className="changes-chat-input"
+            value={barConfig.value}
+            onChange={(e) => barConfig.onChange(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault()
+                handleSend()
+              }
+            }}
+            placeholder={barConfig.placeholder}
+            disabled={barConfig.disabled}
+          />
+          <button className="changes-chat-send" onClick={handleSend} disabled={!barConfig.canSubmit}>
+            {isBusy ? '…' : '↵'}
+          </button>
+        </div>
+      </div>
+    </>
   )
 }
 
@@ -4059,12 +4174,16 @@ function App() {
     isSubmittingFeedback ||
     isSubmittingStructureFeedback ||
     isSubmittingBitSheetFeedback ||
-    isSubmittingSceneListFeedback
+    isSubmittingSceneListFeedback ||
+    isSubmittingBreakdownFeedback ||
+    isSubmittingScheduleFeedback ||
+    isSubmittingCharacterSheetFeedback
 
   let barConfig
   if (activeAgent === 'production') {
     if (scriptBreakdown && scriptBreakdown.status !== 'approved') {
       barConfig = {
+        stageKey: 'breakdown',
         value: reviseFeedback,
         onChange: setReviseFeedback,
         placeholder: t.reviseBreakdownPlaceholder,
@@ -4078,6 +4197,7 @@ function App() {
       }
     } else if (shootSchedule && shootSchedule.status !== 'approved') {
       barConfig = {
+        stageKey: 'schedule',
         value: reviseFeedback,
         onChange: setReviseFeedback,
         placeholder: t.reviseSchedulePlaceholder,
@@ -4091,6 +4211,7 @@ function App() {
       }
     } else {
       barConfig = {
+        stageKey: 'idle',
         value: '',
         onChange: () => {},
         placeholder: t.idlePlaceholder,
@@ -4101,6 +4222,7 @@ function App() {
     }
   } else if (!storylines?.length || projectType !== 'story') {
     barConfig = {
+      stageKey: 'idea',
       value: concept,
       onChange: setConcept,
       placeholder: t.emptyGreeting,
@@ -4110,6 +4232,7 @@ function App() {
     }
   } else if (pendingStoryline && !pitchDeck) {
     barConfig = {
+      stageKey: 'awaiting-format',
       value: '',
       onChange: () => {},
       placeholder: t.awaitingFormatPlaceholder,
@@ -4122,6 +4245,7 @@ function App() {
     // state that doesn't survive a reload, but if a pitch deck already exists we skip
     // straight past this "still picking a storyline" mode further down instead.
     barConfig = {
+      stageKey: 'storylines',
       value: regenerateFeedback,
       onChange: setRegenerateFeedback,
       placeholder: t.regeneratePlaceholder,
@@ -4131,6 +4255,7 @@ function App() {
     }
   } else if (pitchDeck.status !== 'approved') {
     barConfig = {
+      stageKey: 'pitch-deck',
       value: reviseFeedback,
       onChange: setReviseFeedback,
       placeholder: t.revisePitchDeckPlaceholder,
@@ -4144,6 +4269,7 @@ function App() {
     }
   } else if (characterSheet && characterSheet.status !== 'approved') {
     barConfig = {
+      stageKey: 'character-sheet',
       value: reviseFeedback,
       onChange: setReviseFeedback,
       placeholder: t.reviseCharacterSheetPlaceholder,
@@ -4157,6 +4283,7 @@ function App() {
     }
   } else if (threeActStructure && threeActStructure.status !== 'locked') {
     barConfig = {
+      stageKey: 'three-act',
       value: reviseFeedback,
       onChange: setReviseFeedback,
       placeholder: t.reviseThreeActPlaceholder,
@@ -4170,6 +4297,7 @@ function App() {
     }
   } else if (bitSheet && bitSheet.status !== 'approved') {
     barConfig = {
+      stageKey: 'bit-sheet',
       value: reviseFeedback,
       onChange: setReviseFeedback,
       placeholder: t.reviseBitSheetPlaceholder,
@@ -4183,6 +4311,7 @@ function App() {
     }
   } else if (sceneList && sceneList.status !== 'approved') {
     barConfig = {
+      stageKey: 'scene-list',
       value: reviseFeedback,
       onChange: setReviseFeedback,
       placeholder: t.reviseSceneListPlaceholder,
@@ -4196,6 +4325,7 @@ function App() {
     }
   } else {
     barConfig = {
+      stageKey: 'idle',
       value: '',
       onChange: () => {},
       placeholder: t.idlePlaceholder,
@@ -4743,26 +4873,12 @@ function App() {
       {(activeAgent === 'story'
         ? startStage === 'idea' || (conceptId && projectType === 'story')
         : (scriptBreakdown && scriptBreakdown.status !== 'approved') || (shootSchedule && shootSchedule.status !== 'approved')) && (
-      <div className="persistent-input-bar">
-        <span className="persistent-input-icon">{ICONS.penNib}</span>
-        <input
-          type="text"
-          className="persistent-input"
-          value={barConfig.value}
-          onChange={(e) => barConfig.onChange(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') {
-              e.preventDefault()
-              if (barConfig.canSubmit) barConfig.onSubmit()
-            }
-          }}
-          placeholder={barConfig.placeholder}
-          disabled={barConfig.disabled}
+        <ChangesChatPanel
+          t={t}
+          historyKey={`${conceptId ?? 'new'}:${barConfig.stageKey}`}
+          barConfig={barConfig}
+          isBusy={isBarBusy}
         />
-        <button className="persistent-input-send" onClick={barConfig.onSubmit} disabled={!barConfig.canSubmit}>
-          {isBarBusy ? '…' : '↵'}
-        </button>
-      </div>
       )}
 
       {activeAgent === 'story' && (

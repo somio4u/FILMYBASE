@@ -116,6 +116,11 @@ const LABELS = {
     changesChatErrorMessage: '⚠️ Something went wrong — please try again.',
     agentChatInputPlaceholder: 'Ask a question or describe a change — attach a photo too if it helps…',
     agentChatAttachPhotoLabel: 'Attach a photo (handwritten note or cast photo)',
+    useCameraLabel: 'Use camera',
+    cameraModalHeading: 'Take a photo',
+    captureButtonLabel: 'Capture',
+    cameraAccessError: 'Could not access the camera — check your browser permissions and try again.',
+    cameraNotAvailableError: 'Camera is not available in this browser.',
     agentChatPhotoAttachedNote: 'Photo attached',
     agentChatCancelledNote: 'Cancelled — nothing was changed.',
     agentChatGreetingHi: 'Hi',
@@ -518,6 +523,11 @@ const LABELS = {
     changesChatErrorMessage: '⚠️ କିଛି ଭୁଲ ହେଲା — ପୁଣି ଚେଷ୍ଟା କରନ୍ତୁ।',
     agentChatInputPlaceholder: 'ଏକ ପ୍ରଶ୍ନ ପଚାରନ୍ତୁ କିମ୍ବା ପରିବର୍ତ୍ତନ ବର୍ଣ୍ଣନା କରନ୍ତୁ — ସାହାଯ୍ୟ ହେଲେ ଏକ ଫଟୋ ମଧ୍ୟ ଲଗାନ୍ତୁ…',
     agentChatAttachPhotoLabel: 'ଏକ ଫଟୋ ଲଗାନ୍ତୁ (ହସ୍ତଲିଖିତ ନୋଟ୍ କିମ୍ବା କାଷ୍ଟ ଫଟୋ)',
+    useCameraLabel: 'କ୍ୟାମେରା ବ୍ୟବହାର କରନ୍ତୁ',
+    cameraModalHeading: 'ଏକ ଫଟୋ ନିଅନ୍ତୁ',
+    captureButtonLabel: 'କ୍ୟାପଚର୍ କରନ୍ତୁ',
+    cameraAccessError: 'କ୍ୟାମେରା ପ୍ରବେଶ କରିହେଲା ନାହିଁ — ଆପଣଙ୍କର ବ୍ରାଉଜର୍ ଅନୁମତି ଯାଞ୍ଚ କରନ୍ତୁ ଏବଂ ପୁଣି ଚେଷ୍ଟା କରନ୍ତୁ।',
+    cameraNotAvailableError: 'ଏହି ବ୍ରାଉଜରରେ କ୍ୟାମେରା ଉପଲବ୍ଧ ନାହିଁ।',
     agentChatPhotoAttachedNote: 'ଫଟୋ ଲଗାଗଲା',
     agentChatCancelledNote: 'ବାତିଲ୍ ହୋଇଗଲା — କିଛି ପରିବର୍ତ୍ତନ ହେଲା ନାହିଁ।',
     agentChatGreetingHi: 'ନମସ୍କାର',
@@ -866,6 +876,12 @@ const ICONS = {
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
       <path d="M4 5h16a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1Z" strokeLinecap="round" strokeLinejoin="round" />
       <path d="M3 10h18M8 3v4M16 3v4" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  ),
+  camera: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+      <path d="M4 8h3l1.5-2h7L17 8h3a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1Z" strokeLinecap="round" strokeLinejoin="round" />
+      <circle cx="12" cy="14" r="3.5" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   ),
   pencil: (
@@ -1352,10 +1368,13 @@ function CrewMemberEditForm({ member, onSave, onCancel, isSaving, t, showRole })
   const [editRole, setEditRole] = useState(member.role ?? '')
   const [editContactNumber, setEditContactNumber] = useState(member.contactNumber ?? '')
   const [editPhotoFile, setEditPhotoFile] = useState(null)
+  const [isCameraOpen, setIsCameraOpen] = useState(false)
 
   return (
     <div className="crew-member-card crew-member-card-editing">
-      {member.photoUrl ? (
+      {editPhotoFile ? (
+        <img className="crew-member-photo" src={URL.createObjectURL(editPhotoFile)} alt={editName} />
+      ) : member.photoUrl ? (
         <img className="crew-member-photo" src={member.photoUrl} alt={member.name} />
       ) : (
         <div className="crew-member-photo crew-member-photo-placeholder">{member.name.charAt(0).toUpperCase()}</div>
@@ -1366,7 +1385,12 @@ function CrewMemberEditForm({ member, onSave, onCancel, isSaving, t, showRole })
           <input type="text" placeholder={t.crewRoleLabel} value={editRole} onChange={(e) => setEditRole(e.target.value)} />
         )}
         <input type="tel" placeholder={t.crewContactLabel} value={editContactNumber} onChange={(e) => setEditContactNumber(e.target.value)} />
-        <input type="file" accept="image/*" onChange={(e) => setEditPhotoFile(e.target.files[0] ?? null)} />
+        <div className="photo-input-row">
+          <input type="file" accept="image/*" onChange={(e) => setEditPhotoFile(e.target.files[0] ?? null)} />
+          <button type="button" className="camera-trigger-button" onClick={() => setIsCameraOpen(true)} title={t.useCameraLabel}>
+            {ICONS.camera}
+          </button>
+        </div>
       </div>
       <div className="crew-member-edit-actions">
         <button
@@ -1380,6 +1404,16 @@ function CrewMemberEditForm({ member, onSave, onCancel, isSaving, t, showRole })
           {t.cancelEditButton}
         </button>
       </div>
+      {isCameraOpen && (
+        <CameraCaptureModal
+          t={t}
+          onCapture={(file) => {
+            setEditPhotoFile(file)
+            setIsCameraOpen(false)
+          }}
+          onClose={() => setIsCameraOpen(false)}
+        />
+      )}
     </div>
   )
 }
@@ -1392,6 +1426,7 @@ function CrewSection({ category, heading, members, characterOptions, onAdd, onUp
   const [photoFile, setPhotoFile] = useState(null)
   const [editingMemberId, setEditingMemberId] = useState(null)
   const [isExpanded, setIsExpanded] = useState(false)
+  const [isCameraOpen, setIsCameraOpen] = useState(false)
   const fileInputRef = useRef(null)
 
   // characterOptions shrinks as characters get cast (from here or from the
@@ -1499,6 +1534,15 @@ function CrewSection({ category, heading, members, characterOptions, onAdd, onUp
                 ref={fileInputRef}
                 onChange={(e) => setPhotoFile(e.target.files[0] ?? null)}
               />
+              <button
+                type="button"
+                className="camera-trigger-button"
+                onClick={() => setIsCameraOpen(true)}
+                title={t.useCameraLabel}
+              >
+                {ICONS.camera}
+              </button>
+              {photoFile && <span className="photo-file-selected-note">{photoFile.name}</span>}
               <button className="breakdown-action-button" type="submit" disabled={isAdding || !name.trim()}>
                 {t.addCrewMemberButton}
               </button>
@@ -1506,6 +1550,101 @@ function CrewSection({ category, heading, members, characterOptions, onAdd, onUp
           )}
         </>
       )}
+      {isCameraOpen && (
+        <CameraCaptureModal
+          t={t}
+          onCapture={(file) => {
+            setPhotoFile(file)
+            setIsCameraOpen(false)
+          }}
+          onClose={() => setIsCameraOpen(false)}
+        />
+      )}
+    </div>
+  )
+}
+
+// A live camera capture, used everywhere a photo can be attached (chat,
+// adding cast/location/crew, editing an existing member's photo) as an
+// alternative to picking a file. Requests { facingMode: { ideal:
+// 'environment' } } — on a phone with a back camera that opens the back
+// camera directly (no gallery/roll detour); on a laptop with only one
+// (front-facing) camera the "ideal" constraint is simply unsatisfiable so
+// the browser falls back to that camera instead of failing. No manual
+// desktop-vs-mobile detection needed. The captured frame becomes a plain
+// File, used exactly like a normal file-picker selection downstream.
+function CameraCaptureModal({ t, onCapture, onClose }) {
+  const videoRef = useRef(null)
+  const streamRef = useRef(null)
+  const [error, setError] = useState(null)
+  const [isReady, setIsReady] = useState(false)
+
+  useEffect(() => {
+    let cancelled = false
+    if (!navigator.mediaDevices?.getUserMedia) {
+      setError(t.cameraNotAvailableError)
+      return undefined
+    }
+    navigator.mediaDevices
+      .getUserMedia({ video: { facingMode: { ideal: 'environment' } }, audio: false })
+      .then((stream) => {
+        if (cancelled) {
+          stream.getTracks().forEach((track) => track.stop())
+          return
+        }
+        streamRef.current = stream
+        if (videoRef.current) videoRef.current.srcObject = stream
+        setIsReady(true)
+      })
+      .catch(() => {
+        if (!cancelled) setError(t.cameraAccessError)
+      })
+    return () => {
+      cancelled = true
+      streamRef.current?.getTracks().forEach((track) => track.stop())
+    }
+  }, [t])
+
+  function handleCaptureClick() {
+    const video = videoRef.current
+    if (!video) return
+    const canvas = document.createElement('canvas')
+    canvas.width = video.videoWidth
+    canvas.height = video.videoHeight
+    canvas.getContext('2d').drawImage(video, 0, 0, canvas.width, canvas.height)
+    canvas.toBlob(
+      (blob) => {
+        if (!blob) return
+        onCapture(new File([blob], `capture-${Date.now()}.jpg`, { type: 'image/jpeg' }))
+      },
+      'image/jpeg',
+      0.92
+    )
+  }
+
+  return (
+    <div className="camera-modal-overlay" onClick={onClose}>
+      <div className="camera-modal" onClick={(e) => e.stopPropagation()}>
+        <div className="camera-modal-header">
+          <strong>{t.cameraModalHeading}</strong>
+          <button className="changes-chat-close" onClick={onClose} type="button">
+            ✕
+          </button>
+        </div>
+        {error ? (
+          <p className="feedback-note">{error}</p>
+        ) : (
+          <video ref={videoRef} autoPlay playsInline muted className="camera-modal-video" />
+        )}
+        <div className="camera-modal-controls">
+          <button className="choose-button" onClick={handleCaptureClick} disabled={!isReady} type="button">
+            {t.captureButtonLabel}
+          </button>
+          <button className="cancel-button" onClick={onClose} type="button">
+            {t.cancelEditButton}
+          </button>
+        </div>
+      </div>
     </div>
   )
 }
@@ -1673,6 +1812,7 @@ function AgentChatPanel({ t, BACKEND_URL, conceptId, stageKey, currentUserName, 
   const [isSending, setIsSending] = useState(false)
   const [resolvingId, setResolvingId] = useState(null)
   const [error, setError] = useState(null)
+  const [isCameraOpen, setIsCameraOpen] = useState(false)
   const messagesEndRef = useRef(null)
   const closeTimeoutRef = useRef(null)
   const fileInputRef = useRef(null)
@@ -1865,10 +2005,18 @@ function AgentChatPanel({ t, BACKEND_URL, conceptId, stageKey, currentUserName, 
           >
             {ICONS.upload}
           </button>
+          <button
+            className="changes-chat-attach"
+            onClick={() => setIsCameraOpen(true)}
+            title={t.useCameraLabel}
+            disabled={isSending}
+            type="button"
+          >
+            {ICONS.camera}
+          </button>
           <input
             type="file"
             accept="image/*"
-            capture="environment"
             ref={fileInputRef}
             onChange={handleFileSelected}
             style={{ display: 'none' }}
@@ -1892,6 +2040,16 @@ function AgentChatPanel({ t, BACKEND_URL, conceptId, stageKey, currentUserName, 
           </button>
         </div>
       </div>
+      {isCameraOpen && (
+        <CameraCaptureModal
+          t={t}
+          onCapture={(file) => {
+            setAttachedFile(file)
+            setIsCameraOpen(false)
+          }}
+          onClose={() => setIsCameraOpen(false)}
+        />
+      )}
     </>
   )
 }
@@ -2078,6 +2236,7 @@ function InlineCastAttachment({
   const [searchTerm, setSearchTerm] = useState('')
   const [editingMemberId, setEditingMemberId] = useState(null)
   const [whatsappSendingId, setWhatsappSendingId] = useState(null)
+  const [isCameraOpen, setIsCameraOpen] = useState(false)
   const fileInputRef = useRef(null)
 
   async function handleSendWhatsApp(member) {
@@ -2205,6 +2364,10 @@ function InlineCastAttachment({
             <input type="tel" placeholder={t.crewContactLabel} value={contactNumber} onChange={(e) => setContactNumber(e.target.value)} />
           )}
           <input type="file" accept="image/*" ref={fileInputRef} onChange={(e) => setPhotoFile(e.target.files[0] ?? null)} />
+          <button type="button" className="camera-trigger-button" onClick={() => setIsCameraOpen(true)} title={t.useCameraLabel}>
+            {ICONS.camera}
+          </button>
+          {photoFile && <span className="photo-file-selected-note">{photoFile.name}</span>}
           <button className="breakdown-action-button" type="submit" disabled={isAdding || !name.trim()}>
             {t.addCrewMemberButton}
           </button>
@@ -2214,6 +2377,16 @@ function InlineCastAttachment({
             </button>
           )}
         </form>
+      )}
+      {isCameraOpen && (
+        <CameraCaptureModal
+          t={t}
+          onCapture={(file) => {
+            setPhotoFile(file)
+            setIsCameraOpen(false)
+          }}
+          onClose={() => setIsCameraOpen(false)}
+        />
       )}
 
       {category === 'artist' && (

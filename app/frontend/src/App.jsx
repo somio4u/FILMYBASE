@@ -119,6 +119,10 @@ const LABELS = {
     useCameraLabel: 'Use camera',
     cameraModalHeading: 'Take a photo',
     captureButtonLabel: 'Capture',
+    captureAnotherButtonLabel: 'Capture Another',
+    doneCapturingButtonLabel: 'Done',
+    whatIsThisPrompt: 'What is this?',
+    describeAttachmentPlaceholder: 'What is this? Describe it, then send…',
     cameraAccessError: 'Could not access the camera — check your browser permissions and try again.',
     cameraNotAvailableError: 'Camera is not available in this browser.',
     agentChatPhotoAttachedNote: 'Photo attached',
@@ -526,6 +530,10 @@ const LABELS = {
     useCameraLabel: 'କ୍ୟାମେରା ବ୍ୟବହାର କରନ୍ତୁ',
     cameraModalHeading: 'ଏକ ଫଟୋ ନିଅନ୍ତୁ',
     captureButtonLabel: 'କ୍ୟାପଚର୍ କରନ୍ତୁ',
+    captureAnotherButtonLabel: 'ଆଉ ଏକ କ୍ୟାପଚର୍ କରନ୍ତୁ',
+    doneCapturingButtonLabel: 'ହୋଇଗଲା',
+    whatIsThisPrompt: 'ଏହା କଣ?',
+    describeAttachmentPlaceholder: 'ଏହା କଣ? ବର୍ଣ୍ଣନା କରନ୍ତୁ, ତାପରେ ପଠାନ୍ତୁ…',
     cameraAccessError: 'କ୍ୟାମେରା ପ୍ରବେଶ କରିହେଲା ନାହିଁ — ଆପଣଙ୍କର ବ୍ରାଉଜର୍ ଅନୁମତି ଯାଞ୍ଚ କରନ୍ତୁ ଏବଂ ପୁଣି ଚେଷ୍ଟା କରନ୍ତୁ।',
     cameraNotAvailableError: 'ଏହି ବ୍ରାଉଜରରେ କ୍ୟାମେରା ଉପଲବ୍ଧ ନାହିଁ।',
     agentChatPhotoAttachedNote: 'ଫଟୋ ଲଗାଗଲା',
@@ -1573,11 +1581,20 @@ function CrewSection({ category, heading, members, characterOptions, onAdd, onUp
 // the browser falls back to that camera instead of failing. No manual
 // desktop-vs-mobile detection needed. The captured frame becomes a plain
 // File, used exactly like a normal file-picker selection downstream.
-function CameraCaptureModal({ t, onCapture, onClose }) {
+// multiple=false (the default, used when adding a single cast/location/crew
+// photo): capturing immediately hands that one file back via onCapture and
+// the caller closes the modal. multiple=true (the chat box, for a
+// multi-page handwritten note like several pages of a Day 2 schedule):
+// each capture is added to a running batch shown as removable thumbnails
+// right in the modal — the camera stays live so the AD can keep
+// photographing page after page — and onCapture is only called once, with
+// the whole batch array, when they click Done.
+function CameraCaptureModal({ t, onCapture, onClose, multiple = false }) {
   const videoRef = useRef(null)
   const streamRef = useRef(null)
   const [error, setError] = useState(null)
   const [isReady, setIsReady] = useState(false)
+  const [capturedFiles, setCapturedFiles] = useState([])
 
   useEffect(() => {
     let cancelled = false
@@ -1615,11 +1632,20 @@ function CameraCaptureModal({ t, onCapture, onClose }) {
     canvas.toBlob(
       (blob) => {
         if (!blob) return
-        onCapture(new File([blob], `capture-${Date.now()}.jpg`, { type: 'image/jpeg' }))
+        const file = new File([blob], `capture-${Date.now()}.jpg`, { type: 'image/jpeg' })
+        if (multiple) {
+          setCapturedFiles((prev) => [...prev, file])
+        } else {
+          onCapture(file)
+        }
       },
       'image/jpeg',
       0.92
     )
+  }
+
+  function handleRemoveCapturedClick(index) {
+    setCapturedFiles((prev) => prev.filter((_, i) => i !== index))
   }
 
   return (
@@ -1636,10 +1662,32 @@ function CameraCaptureModal({ t, onCapture, onClose }) {
         ) : (
           <video ref={videoRef} autoPlay playsInline muted className="camera-modal-video" />
         )}
+        {multiple && capturedFiles.length > 0 && (
+          <div className="camera-modal-captured-list">
+            {capturedFiles.map((file, i) => (
+              <div className="camera-modal-captured-thumb" key={i}>
+                <img src={URL.createObjectURL(file)} alt="" />
+                <button onClick={() => handleRemoveCapturedClick(i)} type="button" title={t.removeCostumeSetButton}>
+                  ✕
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
         <div className="camera-modal-controls">
           <button className="choose-button" onClick={handleCaptureClick} disabled={!isReady} type="button">
-            {t.captureButtonLabel}
+            {multiple && capturedFiles.length > 0 ? t.captureAnotherButtonLabel : t.captureButtonLabel}
           </button>
+          {multiple && (
+            <button
+              className="choose-button"
+              onClick={() => onCapture(capturedFiles)}
+              disabled={capturedFiles.length === 0}
+              type="button"
+            >
+              {t.doneCapturingButtonLabel} {capturedFiles.length > 0 ? `(${capturedFiles.length})` : ''}
+            </button>
+          )}
           <button className="cancel-button" onClick={onClose} type="button">
             {t.cancelEditButton}
           </button>
@@ -1808,7 +1856,7 @@ function AgentChatPanel({ t, BACKEND_URL, conceptId, stageKey, currentUserName, 
   const [isOpen, setIsOpen] = useState(false)
   const [messages, setMessages] = useState([])
   const [inputText, setInputText] = useState('')
-  const [attachedFile, setAttachedFile] = useState(null)
+  const [attachedFiles, setAttachedFiles] = useState([])
   const [isSending, setIsSending] = useState(false)
   const [resolvingId, setResolvingId] = useState(null)
   const [error, setError] = useState(null)
@@ -1852,21 +1900,25 @@ function AgentChatPanel({ t, BACKEND_URL, conceptId, stageKey, currentUserName, 
   }, [messages.length, isOpen, isSending])
 
   function handleFileSelected(event) {
-    const file = event.target.files[0]
+    const files = Array.from(event.target.files ?? [])
     event.target.value = ''
-    if (file) setAttachedFile(file)
+    if (files.length > 0) setAttachedFiles((prev) => [...prev, ...files])
+  }
+
+  function handleRemoveAttachedFileClick(index) {
+    setAttachedFiles((prev) => prev.filter((_, i) => i !== index))
   }
 
   async function handleSend() {
-    if (isSending || (!inputText.trim() && !attachedFile)) return
+    if (isSending || (!inputText.trim() && attachedFiles.length === 0)) return
     setIsSending(true)
     setError(null)
 
     const formData = new FormData()
     formData.append('message', inputText.trim())
-    if (attachedFile) formData.append('image', attachedFile)
+    attachedFiles.forEach((file) => formData.append('attachments', file))
     setInputText('')
-    setAttachedFile(null)
+    setAttachedFiles([])
 
     try {
       const response = await fetch(`${BACKEND_URL}/api/agent-chat/${conceptId}/${stageKey}/message`, {
@@ -1955,7 +2007,13 @@ function AgentChatPanel({ t, BACKEND_URL, conceptId, stageKey, currentUserName, 
           )}
           {messages.map((m) => (
             <div key={m.id} className={m.role === 'user' ? 'changes-chat-bubble user' : 'changes-chat-bubble system'}>
-              {m.attachment_photo_url && <img src={m.attachment_photo_url} alt="" className="changes-chat-attachment-thumb" />}
+              {m.attachment_photo_urls?.length > 0 && (
+                <div className="changes-chat-attachment-thumbs">
+                  {m.attachment_photo_urls.map((url, i) => (
+                    <img key={i} src={url} alt="" className="changes-chat-attachment-thumb" />
+                  ))}
+                </div>
+              )}
               <div>{m.content}</div>
               {m.proposed_action && m.proposed_action.type !== 'none' && !m.resolved && (
                 <div className="skip-ahead-controls">
@@ -1989,10 +2047,24 @@ function AgentChatPanel({ t, BACKEND_URL, conceptId, stageKey, currentUserName, 
           {error && <div className="changes-chat-bubble system">{`${t.changesChatErrorMessage} ${error}`}</div>}
           <div ref={messagesEndRef} />
         </div>
-        {attachedFile && (
-          <div className="changes-chat-attachment-preview">
-            <span>{t.agentChatPhotoAttachedNote}: {attachedFile.name}</span>
-            <button onClick={() => setAttachedFile(null)}>✕</button>
+        {attachedFiles.length > 0 && (
+          <div className="changes-chat-attachment-preview-list">
+            <p className="agent-chat-what-is-this-prompt">{t.whatIsThisPrompt}</p>
+            <div className="changes-chat-attachment-chips">
+              {attachedFiles.map((file, i) => (
+                <div className="changes-chat-attachment-chip" key={i}>
+                  {/^image\//.test(file.type) ? (
+                    <img src={URL.createObjectURL(file)} alt="" className="changes-chat-attachment-chip-thumb" />
+                  ) : (
+                    <span className="changes-chat-attachment-chip-icon">{ICONS.upload}</span>
+                  )}
+                  <span className="changes-chat-attachment-chip-name">{file.name}</span>
+                  <button onClick={() => handleRemoveAttachedFileClick(i)} type="button" title={t.removeCostumeSetButton}>
+                    ✕
+                  </button>
+                </div>
+              ))}
+            </div>
           </div>
         )}
         <div className="changes-chat-input-row">
@@ -2016,7 +2088,8 @@ function AgentChatPanel({ t, BACKEND_URL, conceptId, stageKey, currentUserName, 
           </button>
           <input
             type="file"
-            accept="image/*"
+            accept="image/*,.pdf,.doc,.docx"
+            multiple
             ref={fileInputRef}
             onChange={handleFileSelected}
             style={{ display: 'none' }}
@@ -2032,10 +2105,10 @@ function AgentChatPanel({ t, BACKEND_URL, conceptId, stageKey, currentUserName, 
                 handleSend()
               }
             }}
-            placeholder={t.agentChatInputPlaceholder}
+            placeholder={attachedFiles.length > 0 ? t.describeAttachmentPlaceholder : t.agentChatInputPlaceholder}
             disabled={isSending}
           />
-          <button className="changes-chat-send" onClick={handleSend} disabled={isSending || (!inputText.trim() && !attachedFile)}>
+          <button className="changes-chat-send" onClick={handleSend} disabled={isSending || (!inputText.trim() && attachedFiles.length === 0)}>
             {isSending ? '…' : '↵'}
           </button>
         </div>
@@ -2043,8 +2116,9 @@ function AgentChatPanel({ t, BACKEND_URL, conceptId, stageKey, currentUserName, 
       {isCameraOpen && (
         <CameraCaptureModal
           t={t}
-          onCapture={(file) => {
-            setAttachedFile(file)
+          multiple
+          onCapture={(files) => {
+            setAttachedFiles((prev) => [...prev, ...files])
             setIsCameraOpen(false)
           }}
           onClose={() => setIsCameraOpen(false)}

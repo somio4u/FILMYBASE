@@ -3046,32 +3046,126 @@ button, input, textarea, select {
   cursor: default;
 }
 
-.changes-chat-attachment-preview {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
+.changes-chat-attachment-preview-list {
   padding: 8px 14px;
-  font-size: 13px;
-  color: var(--text-muted);
   border-top: 1px solid var(--border-subtle);
 }
 
-.changes-chat-attachment-preview button {
+.agent-chat-what-is-this-prompt {
+  margin: 0 0 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--accent-strong);
+}
+
+.changes-chat-attachment-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.changes-chat-attachment-chip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px 4px 4px;
+  background: var(--bg-surface-raised);
+  border: 1px solid var(--border-subtle);
+  border-radius: 20px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  max-width: 180px;
+}
+
+.changes-chat-attachment-chip-thumb {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  object-fit: cover;
+  flex-shrink: 0;
+}
+
+.changes-chat-attachment-chip-icon {
+  display: flex;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--bg-input);
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.changes-chat-attachment-chip-icon svg {
+  width: 12px;
+  height: 12px;
+}
+
+.changes-chat-attachment-chip-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.changes-chat-attachment-chip button {
   border: none;
   background: none;
   color: var(--text-muted);
   cursor: pointer;
-  font-size: 13px;
+  font-size: 11px;
+  flex-shrink: 0;
+}
+
+.changes-chat-attachment-thumbs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 6px;
 }
 
 .changes-chat-attachment-thumb {
   display: block;
-  max-width: 160px;
-  max-height: 160px;
+  width: 120px;
+  height: 120px;
   border-radius: 10px;
-  margin-bottom: 6px;
   object-fit: cover;
+}
+
+.camera-modal-captured-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 10px 16px 0;
+}
+
+.camera-modal-captured-thumb {
+  position: relative;
+  width: 64px;
+  height: 64px;
+}
+
+.camera-modal-captured-thumb img {
+  width: 100%;
+  height: 100%;
+  border-radius: 8px;
+  object-fit: cover;
+}
+
+.camera-modal-captured-thumb button {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: none;
+  background: var(--danger);
+  color: #fff;
+  font-size: 10px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .changes-chat-resolved-note {

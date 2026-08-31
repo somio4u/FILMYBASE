@@ -1471,13 +1471,13 @@ const AGENT_CHAT_SYSTEM_PROMPTS = {
     '\n\nsceneEdits must always be an empty array (this stage never edits scenes).\n\nCRITICAL — your reply text must NEVER claim or imply a change already happened: never say "I\'ve added...", "Done", "I\'ve updated...", or similar past-tense/completed phrasing. You are only ever PROPOSING a change for them to review — nothing is applied until the human clicks confirm outside this conversation. Phrase it as an offer instead: "I\'d like to add one more nightwear set for Shruti — want me to go ahead?". Getting this wrong would make them think a change happened when it didn\'t.\n\nCurrent script breakdown summary:\n',
 };
 
-async function generateAgentChatReply(stageKey, stateSummaryText, history, userMessage, image) {
+async function generateAgentChatReply(stageKey, stateSummaryText, history, userMessage, attachmentParts) {
   const systemPrompt =
     (AGENT_CHAT_SYSTEM_PROMPTS[stageKey] ??
       `You are a helpful production management assistant having a conversation about this project. No project data is wired up for this stage yet and you cannot take direct actions here — always set proposedAction.type to "none". ${AGENT_CHAT_NONE_ACTION_INSTRUCTION}\n\n`) +
     stateSummaryText;
 
-  const lastUserParts = image ? [{ inlineData: { data: image.data, mimeType: image.mimeType } }, { text: userMessage }] : [{ text: userMessage }];
+  const lastUserParts = [...(attachmentParts ?? []), { text: userMessage }];
 
   const contents = [
     ...history.map((m) => ({ role: m.role === "assistant" ? "model" : "user", parts: [{ text: m.content }] })),
@@ -1502,11 +1502,61 @@ function requireConceptAccess(req, conceptId) {
   return req.user.role === "admin" || String(req.user.concept_id) === String(conceptId);
 }
 
-const agentChatImageUpload = multer({
+// No fileFilter — a handwritten multi-page note might be several photos,
+// but the AD may just as easily attach a PDF or Word doc (e.g. a typed
+// call sheet draft) instead. Anything not actually readable is caught
+// per-file in extractContentPartsForAttachments below rather than
+// rejecting the whole upload for one bad file. No maxCount either — the
+// AD can attach as many pages/files as one message actually needs.
+const agentChatAttachmentUpload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 8 * 1024 * 1024 },
-  fileFilter: (req, file, cb) => cb(null, /^image\//.test(file.mimetype)),
+  limits: { fileSize: 25 * 1024 * 1024 },
 });
+
+// A handwritten multi-page note (e.g. several pages of a Day 2 schedule)
+// needs more than one photo in the same message — attachment_photo_path
+// holds a JSON-encoded array of bare filenames (never a single bare path)
+// so one column covers both "no photo", "one photo", and "several". Only
+// images go here (they're the only attachment type shown as a thumbnail in
+// chat history) — PDFs/Word docs are read once for the AI call and not
+// persisted, same as the screenplay import flow.
+function parseAttachmentPhotoPaths(raw) {
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [raw];
+  } catch {
+    return [raw]; // pre-existing rows before this array format, if any
+  }
+}
+
+function photoUrlsFor(raw) {
+  return parseAttachmentPhotoPaths(raw).map((path) => photoUrlFor(path));
+}
+
+// Images go in as real inlineData (the model needs to actually see a
+// handwritten note or a cast photo); PDFs and Word docs are text-extracted
+// with the exact same readers the screenplay import already uses, since
+// Gemini reading raw document bytes is far less reliable than reusing a
+// reader this app has already proven out. A file neither an image nor a
+// readable document type still gets acknowledged (rather than silently
+// dropped) so the reply doesn't look like it ignored an attachment.
+async function extractContentPartsForAttachments(files) {
+  const parts = [];
+  for (const file of files) {
+    if (/^image\//.test(file.mimetype)) {
+      parts.push({ inlineData: { data: file.buffer.toString("base64"), mimeType: file.mimetype } });
+      continue;
+    }
+    try {
+      const text = await extractTextFromUploadedScreenplay(file);
+      parts.push({ text: `Content of attached file "${file.originalname}":\n${text}` });
+    } catch (error) {
+      parts.push({ text: `(Attached file "${file.originalname}" could not be read: ${error.message})` });
+    }
+  }
+  return parts;
+}
 
 app.get("/api/agent-chat/:conceptId/:stageKey/history", requireLogin, async (req, res) => {
   const { conceptId, stageKey } = req.params;
@@ -1519,62 +1569,86 @@ app.get("/api/agent-chat/:conceptId/:stageKey/history", requireLogin, async (req
     "SELECT id, role, content, author_name, attachment_photo_path, proposed_action, resolved, created_at FROM agent_chat_messages WHERE concept_id = $1 AND stage_key = $2 ORDER BY created_at ASC",
     [conceptId, stageKey]
   );
-  res.json({ messages: result.rows.map((m) => ({ ...m, attachment_photo_url: photoUrlFor(m.attachment_photo_path) })) });
+  res.json({ messages: result.rows.map((m) => ({ ...m, attachment_photo_urls: photoUrlsFor(m.attachment_photo_path) })) });
 });
 
-app.post("/api/agent-chat/:conceptId/:stageKey/message", requireLogin, agentChatImageUpload.single("image"), async (req, res) => {
-  const { conceptId, stageKey } = req.params;
-  const { message } = req.body;
+app.post(
+  "/api/agent-chat/:conceptId/:stageKey/message",
+  requireLogin,
+  agentChatAttachmentUpload.array("attachments"),
+  async (req, res) => {
+    const { conceptId, stageKey } = req.params;
+    const { message } = req.body;
+    const files = req.files ?? [];
+    const imageFiles = files.filter((file) => /^image\//.test(file.mimetype));
 
-  if (!requireConceptAccess(req, conceptId)) {
-    res.status(403).json({ error: "You don't have access to this project." });
-    return;
+    if (!requireConceptAccess(req, conceptId)) {
+      res.status(403).json({ error: "You don't have access to this project." });
+      return;
+    }
+    if (!message?.trim() && files.length === 0) {
+      res.status(400).json({ error: "A message or at least one attachment is required." });
+      return;
+    }
+
+    try {
+      // Only images are persisted (as chat-history thumbnails) — a PDF/Word
+      // attachment is read once for this call, same as the screenplay
+      // import flow, and not kept.
+      const attachmentPhotoPaths = await Promise.all(imageFiles.map((file) => savePhotoBuffer(file.buffer, file.originalname)));
+
+      const userInsert = await db.query(
+        "INSERT INTO agent_chat_messages (concept_id, stage_key, role, content, author_name, attachment_photo_path) VALUES ($1, $2, 'user', $3, $4, $5) RETURNING id, role, content, author_name, attachment_photo_path, proposed_action, resolved, created_at",
+        [
+          conceptId,
+          stageKey,
+          message?.trim() || (files.length > 1 ? `(${files.length} files attached)` : "(file attached)"),
+          req.user.name,
+          attachmentPhotoPaths.length > 0 ? JSON.stringify(attachmentPhotoPaths) : null,
+        ]
+      );
+
+      // Last 20 messages only — enough context for a real conversation
+      // without the token cost (and cash cost) growing without bound as a
+      // thread gets long.
+      const historyResult = await db.query(
+        "SELECT role, content FROM agent_chat_messages WHERE concept_id = $1 AND stage_key = $2 ORDER BY created_at DESC LIMIT 20",
+        [conceptId, stageKey]
+      );
+      const history = historyResult.rows.reverse().slice(0, -1); // drop the message we just inserted, already passed separately
+
+      const { summary } = await buildStageSummaryForChat(conceptId, stageKey);
+      const attachmentParts = await extractContentPartsForAttachments(files);
+      const parsed = await generateAgentChatReply(
+        stageKey,
+        summary,
+        history,
+        message?.trim() || "(see attached file(s))",
+        attachmentParts
+      );
+
+      const hasAction = parsed.proposedAction?.type && parsed.proposedAction.type !== "none";
+      // The photo is only kept in memory for the vision call above — an
+      // assign_cast action needs it again at confirm time to actually save it
+      // onto the crew_members row, so it's carried inside proposed_action
+      // (the first photo, if several were attached — a cast assignment only
+      // ever needs one representative photo).
+      const proposedAction = hasAction ? { ...parsed.proposedAction, photoPath: attachmentPhotoPaths[0] ?? null } : null;
+      const assistantInsert = await db.query(
+        "INSERT INTO agent_chat_messages (concept_id, stage_key, role, content, proposed_action) VALUES ($1, $2, 'assistant', $3, $4) RETURNING id, role, content, author_name, attachment_photo_path, proposed_action, resolved, created_at",
+        [conceptId, stageKey, parsed.reply, proposedAction ? JSON.stringify(proposedAction) : null]
+      );
+
+      res.json({
+        userMessage: { ...userInsert.rows[0], attachment_photo_urls: photoUrlsFor(userInsert.rows[0].attachment_photo_path) },
+        assistantMessage: assistantInsert.rows[0],
+      });
+    } catch (error) {
+      console.error("Agent chat message failed:", error.message);
+      res.status(502).json({ error: error.message });
+    }
   }
-  if (!message?.trim() && !req.file) {
-    res.status(400).json({ error: "A message or a photo is required." });
-    return;
-  }
-
-  try {
-    const attachmentPhotoPath = req.file ? await savePhotoBuffer(req.file.buffer, req.file.originalname) : null;
-
-    const userInsert = await db.query(
-      "INSERT INTO agent_chat_messages (concept_id, stage_key, role, content, author_name, attachment_photo_path) VALUES ($1, $2, 'user', $3, $4, $5) RETURNING id, role, content, author_name, attachment_photo_path, proposed_action, resolved, created_at",
-      [conceptId, stageKey, message?.trim() || "(photo attached)", req.user.name, attachmentPhotoPath]
-    );
-
-    // Last 20 messages only — enough context for a real conversation
-    // without the token cost (and cash cost) growing without bound as a
-    // thread gets long.
-    const historyResult = await db.query(
-      "SELECT role, content FROM agent_chat_messages WHERE concept_id = $1 AND stage_key = $2 ORDER BY created_at DESC LIMIT 20",
-      [conceptId, stageKey]
-    );
-    const history = historyResult.rows.reverse().slice(0, -1); // drop the message we just inserted, already passed separately
-
-    const { summary } = await buildStageSummaryForChat(conceptId, stageKey);
-    const image = req.file ? { data: req.file.buffer.toString("base64"), mimeType: req.file.mimetype } : null;
-    const parsed = await generateAgentChatReply(stageKey, summary, history, message?.trim() || "(see attached photo)", image);
-
-    const hasAction = parsed.proposedAction?.type && parsed.proposedAction.type !== "none";
-    // The photo is only kept in memory for the vision call above — an
-    // assign_cast action needs it again at confirm time to actually save it
-    // onto the crew_members row, so it's carried inside proposed_action.
-    const proposedAction = hasAction ? { ...parsed.proposedAction, photoPath: attachmentPhotoPath } : null;
-    const assistantInsert = await db.query(
-      "INSERT INTO agent_chat_messages (concept_id, stage_key, role, content, proposed_action) VALUES ($1, $2, 'assistant', $3, $4) RETURNING id, role, content, author_name, attachment_photo_path, proposed_action, resolved, created_at",
-      [conceptId, stageKey, parsed.reply, proposedAction ? JSON.stringify(proposedAction) : null]
-    );
-
-    res.json({
-      userMessage: { ...userInsert.rows[0], attachment_photo_url: photoUrlFor(userInsert.rows[0].attachment_photo_path) },
-      assistantMessage: assistantInsert.rows[0],
-    });
-  } catch (error) {
-    console.error("Agent chat message failed:", error.message);
-    res.status(502).json({ error: error.message });
-  }
-});
+);
 
 app.post("/api/agent-chat/:conceptId/:stageKey/resolve-action", requireLogin, async (req, res) => {
   const { conceptId, stageKey } = req.params;

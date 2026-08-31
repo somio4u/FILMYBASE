@@ -1605,6 +1605,7 @@ app.post("/api/agent-chat/:conceptId/:stageKey/resolve-action", requireLogin, as
 
   let appliedSchedule = null;
   let appliedCastMember = null;
+  let appliedBreakdown = null;
 
   if (decision === "applied" && action.type === "edit_scenes" && Array.isArray(action.sceneEdits) && action.sceneEdits.length > 0) {
     const sceneListId = await findSceneListIdForConcept(conceptId);
@@ -1653,6 +1654,30 @@ app.post("/api/agent-chat/:conceptId/:stageKey/resolve-action", requireLogin, as
       [sceneListId, JSON.stringify(updatedContent), latest.rows[0].status, "Applied a change agreed in the Changes chat"]
     );
     appliedSchedule = { ...insertResult.rows[0], sceneListId, ...updatedContent };
+
+    // Keep the AD Scene Breakdown Sheet's matching rows in sync with this
+    // same chat-agreed edit — see applySceneEditsToAdSheet's own comment
+    // for why these two documents would otherwise silently drift apart.
+    const latestBreakdownForSync = await db.query(
+      "SELECT id, content, status FROM script_breakdowns WHERE scene_list_id = $1 ORDER BY created_at DESC LIMIT 1",
+      [sceneListId]
+    );
+    if (latestBreakdownForSync.rows.length > 0) {
+      const sceneListResult = await db.query("SELECT content FROM scene_lists WHERE id = $1", [sceneListId]);
+      const { adSheet, touched } = applySceneEditsToAdSheet(
+        latestBreakdownForSync.rows[0].content,
+        sceneListResult.rows[0].content,
+        action.sceneEdits
+      );
+      if (touched) {
+        const updatedBreakdownContent = { ...latestBreakdownForSync.rows[0].content, adSheet };
+        const breakdownInsertResult = await db.query(
+          "INSERT INTO script_breakdowns (scene_list_id, content, status, feedback) VALUES ($1, $2, $3, $4) RETURNING id, status, feedback",
+          [sceneListId, JSON.stringify(updatedBreakdownContent), latestBreakdownForSync.rows[0].status, "AD Sheet synced from a change agreed in the Changes chat"]
+        );
+        appliedBreakdown = { ...breakdownInsertResult.rows[0], sceneListId, ...updatedBreakdownContent };
+      }
+    }
   }
 
   if (decision === "applied" && action.type === "assign_cast" && action.castAssignment?.characterName?.trim()) {
@@ -1681,7 +1706,6 @@ app.post("/api/agent-chat/:conceptId/:stageKey/resolve-action", requireLogin, as
     }
   }
 
-  let appliedBreakdown = null;
   if (decision === "applied" && action.type === "edit_costume" && action.costumeEdit?.character?.trim()) {
     const sceneListId = await findSceneListIdForConcept(conceptId);
     const { character, sets } = action.costumeEdit;
@@ -6218,6 +6242,43 @@ function allSceneIdentities(sceneList) {
   return sceneList.scenes.map((_, sceneIndex) => `s${sceneIndex}`);
 }
 
+// Keeps the AD Scene Breakdown Sheet's per-scene property/costumeRemarks in
+// sync whenever a scene's costume or properties change through ANY route —
+// the manual scene editor, a chat-agreed edit, or a handwritten note. These
+// are two independent copies of overlapping information (the shoot
+// schedule's sceneRefs carry a costume/properties note per scheduled scene;
+// the AD sheet carries the same per real scene) — letting them drift apart
+// is exactly the kind of thing that erodes trust in either document. Each
+// edit writes the COMPLETE resulting value (matching how the shoot schedule
+// side is written), replacing that row's field outright, not appending to
+// it; a field an edit didn't touch is left as-is on that row.
+function applySceneEditsToAdSheet(breakdownContent, sceneList, edits) {
+  if (!Array.isArray(breakdownContent?.adSheet)) return { adSheet: breakdownContent?.adSheet, touched: false };
+  const identities = allSceneIdentities(sceneList);
+  let touched = false;
+  const adSheet = breakdownContent.adSheet.map((row, flatIndex) => {
+    const identity = identities[flatIndex];
+    const match = /^e(\d+)-s(\d+)$/.exec(identity) ?? /^s(\d+)$/.exec(identity);
+    const rowEpisodeIndex = match?.[2] !== undefined ? Number(match[1]) : null;
+    const rowSceneIndex = match?.[2] !== undefined ? Number(match[2]) : Number(match?.[1]);
+    const edit = edits.find((e) => e.sceneIndex === rowSceneIndex && (e.episodeIndex ?? null) === (rowEpisodeIndex ?? null));
+    if (!edit) return row;
+    const hasProperties = Boolean(edit.properties?.trim());
+    const hasCostume = Boolean(edit.costume?.trim());
+    if (!hasProperties && !hasCostume) return row;
+    touched = true;
+    return {
+      ...row,
+      property: hasProperties ? { en: edit.properties.trim(), or: row.property?.or ?? "" } : row.property,
+      // The Odia side has no translation for a hand-typed/chat-written note,
+      // so it's cleared rather than left showing stale text next to a
+      // completely different English value.
+      costumeRemarks: hasCostume ? { en: edit.costume.trim(), or: "" } : row.costumeRemarks,
+    };
+  });
+  return { adSheet, touched };
+}
+
 function scheduledSceneIdentities(scheduleDays, isSeries) {
   const ids = new Set();
   scheduleDays.forEach((day) => {
@@ -6892,7 +6953,30 @@ app.post("/api/shoot-schedule/:id/edit-scene", requireRole("admin", "production_
     [sceneListId, JSON.stringify(updatedContent), latest.rows[0].status, "AD edited a scene's costume/properties/remark directly"]
   );
 
-  res.json({ ...insertResult.rows[0], sceneListId, ...updatedContent });
+  // Keep the AD Scene Breakdown Sheet's matching row in sync with this same
+  // edit — see applySceneEditsToAdSheet's own comment for why these two
+  // documents would otherwise silently drift apart.
+  let breakdownResult = null;
+  const latestBreakdown = await db.query(
+    "SELECT id, content, status FROM script_breakdowns WHERE scene_list_id = $1 ORDER BY created_at DESC LIMIT 1",
+    [sceneListId]
+  );
+  if (latestBreakdown.rows.length > 0) {
+    const sceneListResult = await db.query("SELECT content FROM scene_lists WHERE id = $1", [sceneListId]);
+    const { adSheet, touched } = applySceneEditsToAdSheet(latestBreakdown.rows[0].content, sceneListResult.rows[0].content, [
+      { episodeIndex, sceneIndex, costume, properties },
+    ]);
+    if (touched) {
+      const updatedBreakdownContent = { ...latestBreakdown.rows[0].content, adSheet };
+      const breakdownInsertResult = await db.query(
+        "INSERT INTO script_breakdowns (scene_list_id, content, status, feedback) VALUES ($1, $2, $3, $4) RETURNING id, status, feedback",
+        [sceneListId, JSON.stringify(updatedBreakdownContent), latestBreakdown.rows[0].status, "AD Sheet synced from a direct scene edit"]
+      );
+      breakdownResult = { ...breakdownInsertResult.rows[0], sceneListId, ...updatedBreakdownContent };
+    }
+  }
+
+  res.json({ ...insertResult.rows[0], sceneListId, ...updatedContent, breakdown: breakdownResult });
 });
 
 app.post("/api/shoot-schedule/:id/approve", requireRole("admin", "director"), async (req, res) => {

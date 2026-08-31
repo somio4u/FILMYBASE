@@ -2632,6 +2632,7 @@ function App() {
       }
 
       setShootSchedule(data)
+      if (data.breakdown) setScriptBreakdown(data.breakdown)
       setEditingSceneKey(null)
     } catch {
       setErrorMessage(t.genericError)

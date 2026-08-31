@@ -1414,7 +1414,7 @@ const AGENT_CHAT_RESPONSE_SCHEMA = {
     proposedAction: {
       type: Type.OBJECT,
       properties: {
-        type: { type: Type.STRING, enum: ["edit_scenes", "assign_cast", "edit_costume", "none"] },
+        type: { type: Type.STRING, enum: ["edit_scenes", "assign_cast", "edit_costume", "regenerate_schedule", "regenerate_breakdown", "none"] },
         sceneEdits: {
           type: Type.ARRAY,
           items: {
@@ -1458,15 +1458,16 @@ const AGENT_CHAT_RESPONSE_SCHEMA = {
           required: ["character", "sets"],
         },
         description: { type: Type.STRING },
+        regenerateInstructions: { type: Type.STRING },
       },
-      required: ["type", "sceneEdits", "castAssignment", "costumeEdit", "description"],
+      required: ["type", "sceneEdits", "castAssignment", "costumeEdit", "description", "regenerateInstructions"],
     },
   },
   required: ["reply", "proposedAction"],
 };
 
 const AGENT_CHAT_NONE_ACTION_INSTRUCTION =
-  'Every field in proposedAction is required by the response format even when unused: when proposedAction.type is "none", still set sceneEdits to an empty array, castAssignment to {characterName:"", actorName:"", contactNumber:""}, costumeEdit to {character:"", sets:[]}, and leave description as an empty string.';
+  'Every field in proposedAction is required by the response format even when unused: when proposedAction.type is "none", still set sceneEdits to an empty array, castAssignment to {characterName:"", actorName:"", contactNumber:""}, costumeEdit to {character:"", sets:[]}, description to an empty string, and regenerateInstructions to an empty string.';
 
 const AGENT_CHAT_CAST_ASSIGNMENT_INSTRUCTION =
   'You can also propose reassigning who plays a character — e.g. the AD types a phone number and attaches a photo of a person, saying something like "she\'s Priyanka, cast her as Pushpa" (meaning: the real person in the photo is named Priyanka, and she should play the character Pushpa). To propose this, set proposedAction.type to "assign_cast" and fill castAssignment: characterName is the ROLE/character being cast (match it to one of the known cast entries above if it already exists, otherwise use the name exactly as given), actorName is the real person\'s name, and contactNumber is their phone number if given (empty string if not). Only propose this when both the character and the actor\'s name are clear — ask if either is ambiguous. When proposing assign_cast, leave sceneEdits and costumeEdit at their empty defaults.';
@@ -1475,20 +1476,25 @@ const AGENT_CHAT_STAY_ON_TOPIC_INSTRUCTION =
   "CRITICAL — always respond to the AD's MOST RECENT message specifically, on its own terms. If it raises a new topic, a correction, or a request unrelated to whatever was being discussed before, engage with THAT — don't drift back to or re-propose an earlier idea (especially one they just cancelled) unless they explicitly bring it up again. If they attach a new photo/document, its content is what this turn is actually about — read it fresh rather than assuming it repeats an earlier attachment's content.";
 
 // A real gap this caught in production: asked to restructure which scenes
-// fall on which shoot day, the model had no matching action type, but still
-// attached the schema's required proposedAction object — and rather than
-// defaulting it to "none", it reused a stale, unrelated proposedAction still
-// sitting in the conversation from an earlier, already-resolved request. The
-// human confirmed it (the reply text sounded like it addressed their actual
-// ask), and that old unrelated edit got silently reapplied while the actual
-// request was never attempted — a false "done" with real consequences on
-// real production data. Named explicitly per stage because "point them to
-// the right place" differs each time.
-function agentChatOutOfScopeInstruction(redirectText) {
+// fall on which shoot day — a wholesale rebuild, not a named-scene edit —
+// the model had no matching action type, but still attached the schema's
+// required proposedAction object, and rather than defaulting it to "none"
+// it reused a stale, unrelated proposedAction still sitting in the
+// conversation from an earlier, already-resolved request. The human
+// confirmed it (the reply text sounded like it addressed their actual ask),
+// and that old unrelated edit got silently reapplied while the real request
+// was never attempted — a false "done" with real consequences on real
+// production data. The fix isn't just "admit you can't" (that pushes the AD
+// out to a different page for something they came to this one panel to get
+// done — the whole point of this chat existing) — it's a real action type
+// that hands the broad request to the same full-document regeneration a
+// dedicated "Request Changes" button already uses, without ever leaving
+// this conversation. Named explicitly per stage: actionType is which
+// proposedAction.type to use, subjectLabel names what gets rebuilt.
+function agentChatRegenerateInstruction(actionType, subjectLabel) {
   return (
-    'CRITICAL — you only have the specific action types spelled out below, nothing else. If the AD asks for something none of them cover — reorganizing which scenes fall on which day, a wholesale rebuild/restructure, or any other request outside those specific types — that is NOT something this chat can do, no matter how reasonable it sounds. In that exact case: set proposedAction.type to "none" with every field at its empty default, and your reply must say plainly, in your own words, that this specific kind of change isn\'t something you can do through this chat, then point them to the right place: ' +
-    redirectText +
-    ' Never attach a proposedAction left over from an earlier, different request just because the schema requires one to be present — reusing an unrelated old action and letting the human confirm it as if it fulfilled their new request is far worse than honestly saying you can\'t do this one.'
+    `You can also handle BROAD requests — reorganizing which scenes are on which day, filtering the ${subjectLabel} down to specific characters/locations, or any other wholesale restructuring that isn't a small named-scene tweak. For these, set proposedAction.type to "${actionType}" and write regenerateInstructions: a clear, complete, self-contained restatement of exactly what they want changed — written the way a Production Manager would type it into a formal written revision request, in plain English, folding in every constraint they've given across this conversation (not just their latest message) so nothing gets lost. Do NOT try to compute the actual scene-by-scene result yourself — leave sceneEdits, castAssignment, and costumeEdit at their empty defaults; a separate full regeneration step rebuilds the ${subjectLabel} from your instructions once they confirm, and it can take a little while since it replaces the whole thing. Your reply should briefly reflect back what you understood they want and ask them to confirm before you rebuild it — don't downplay that this replaces the current ${subjectLabel} entirely. Reserve this for genuinely broad requests; a single named scene's costume/property/remark still goes through the narrower edit above.\n\n` +
+    `CRITICAL — you only have the specific action types spelled out in this whole prompt, nothing else. If the AD asks for something truly none of them cover (not actually about the ${subjectLabel} at all), set proposedAction.type to "none" with every field at its empty default and say so honestly. But never punt a request to reorganize/restructure the ${subjectLabel} to "go do that somewhere else" — that capability lives right here now, use it. And never attach a proposedAction left over from an earlier, different request just because the schema requires one to be present — reusing an unrelated old action and letting the human confirm it as if it fulfilled their new request is far worse than asking one more clarifying question.`
   );
 }
 
@@ -1523,9 +1529,7 @@ const AGENT_CHAT_SYSTEM_PROMPTS = {
     "\n\n" +
     AGENT_CHAT_NEVER_CLAIM_DONE_INSTRUCTION +
     "\n\n" +
-    agentChatOutOfScopeInstruction(
-      'the "Request Changes" option on the Shoot Schedule page itself, which regenerates the whole schedule from their written instructions — that\'s built for exactly this kind of broad restructuring, this chat isn\'t.'
-    ) +
+    agentChatRegenerateInstruction("regenerate_schedule", "shoot schedule") +
     "\n\nCurrent shoot schedule:\n",
   breakdown:
     'You are a sharp Script Breakdown Assistant, having a real back-and-forth conversation with a Production Manager or Director about the script breakdown (cast, locations, props, costumes, art/set). You cannot edit scenes from here, but you can handle casting and costume recommendations.\n\n' +
@@ -1541,9 +1545,7 @@ const AGENT_CHAT_SYSTEM_PROMPTS = {
     "\n\n" +
     AGENT_CHAT_NEVER_CLAIM_DONE_INSTRUCTION +
     "\n\n" +
-    agentChatOutOfScopeInstruction(
-      'the "Request Changes" option on the Script Breakdown page itself, which regenerates the relevant part of the breakdown from their written instructions — that\'s built for exactly this kind of broad restructuring, this chat isn\'t.'
-    ) +
+    agentChatRegenerateInstruction("regenerate_breakdown", "script breakdown") +
     "\n\nsceneEdits must always be an empty array (this stage never edits scenes).\n\nCurrent script breakdown summary:\n",
 };
 
@@ -1926,6 +1928,77 @@ app.post("/api/agent-chat/:conceptId/:stageKey/resolve-action", requireLogin, as
       );
       appliedBreakdown = { ...insertResult.rows[0], sceneListId, ...updatedBreakdownContent };
     }
+  }
+
+  // A broad, whole-document rebuild — "restructure Day 2 around just these
+  // characters", "reorganize this by location" — driven from right inside
+  // this chat instead of forcing the AD out to the standalone "Request
+  // Changes" button, which does the exact same full regeneration. Reuses
+  // that route's own generation function so behavior stays identical
+  // either way this gets triggered.
+  if (decision === "applied" && action.type === "regenerate_schedule" && action.regenerateInstructions?.trim()) {
+    const sceneListId = await findSceneListIdForConcept(conceptId);
+    const existing = await db.query(
+      "SELECT content FROM shoot_schedules WHERE scene_list_id = $1 ORDER BY created_at DESC LIMIT 1",
+      [sceneListId]
+    );
+    if (existing.rows.length > 0) {
+      const previous = existing.rows[0].content;
+      const sceneListResult = await db.query("SELECT content FROM scene_lists WHERE id = $1", [sceneListId]);
+      const sceneList = sceneListResult.rows[0].content;
+      const characterNames = await fetchCharacterNamesForSceneList(sceneListId, sceneList);
+      const breakdownResult = await db.query(
+        "SELECT content FROM script_breakdowns WHERE scene_list_id = $1 ORDER BY created_at DESC LIMIT 1",
+        [sceneListId]
+      );
+      const completedDays = (previous.scheduleDays ?? []).filter((d) => d.completed);
+      const sourceText = await buildBreakdownSourceText(sceneList, sceneListId);
+
+      const revisedContent = await generateShootScheduleContent(
+        sceneList,
+        characterNames,
+        previous.availability,
+        previous.targetDays,
+        { feedback: action.regenerateInstructions.trim(), previous },
+        {
+          specialInstructions: previous.specialInstructions,
+          completedDays,
+          sourceText,
+          breakdownContent: breakdownResult.rows[0]?.content ?? null,
+        }
+      );
+
+      // Same as the standalone Request Changes route — a full rebuild
+      // intentionally drops back to pending for genuine re-review, unlike
+      // the narrow edit_scenes action above which carries status forward.
+      const insertResult = await db.query(
+        "INSERT INTO shoot_schedules (scene_list_id, content, feedback) VALUES ($1, $2, $3) RETURNING id, status, feedback",
+        [sceneListId, JSON.stringify(revisedContent), `Restructured via the Changes chat: ${action.regenerateInstructions.trim()}`]
+      );
+      appliedSchedule = { ...insertResult.rows[0], sceneListId, ...revisedContent };
+    }
+  }
+
+  if (decision === "applied" && action.type === "regenerate_breakdown" && action.regenerateInstructions?.trim()) {
+    const sceneListId = await findSceneListIdForConcept(conceptId);
+    const sceneListResult = await db.query("SELECT content FROM scene_lists WHERE id = $1", [sceneListId]);
+    const sourceText = await buildBreakdownSourceText(sceneListResult.rows[0].content, sceneListId);
+    const existing = await db.query(
+      "SELECT content FROM script_breakdowns WHERE scene_list_id = $1 ORDER BY created_at DESC LIMIT 1",
+      [sceneListId]
+    );
+    const previous = existing.rows[0]?.content ?? null;
+
+    const revisedContent = await generateDeepScriptBreakdownContent(sourceText, {
+      feedback: action.regenerateInstructions.trim(),
+      previous,
+    });
+
+    const insertResult = await db.query(
+      "INSERT INTO script_breakdowns (scene_list_id, content, feedback) VALUES ($1, $2, $3) RETURNING id, status, feedback",
+      [sceneListId, JSON.stringify(revisedContent), `Restructured via the Changes chat: ${action.regenerateInstructions.trim()}`]
+    );
+    appliedBreakdown = { ...insertResult.rows[0], sceneListId, ...revisedContent };
   }
 
   await db.query("UPDATE agent_chat_messages SET resolved = $1 WHERE id = $2", [decision, messageId]);

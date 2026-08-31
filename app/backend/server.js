@@ -2061,6 +2061,12 @@ app.post("/api/import-screenplay-for-production", requireRole("admin"), async (r
 
 const screenplayUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 25 * 1024 * 1024 } });
 
+const handwrittenNoteUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 8 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => cb(null, /^image\//.test(file.mimetype)),
+});
+
 // Final Draft's native XML format: a flat list of <Paragraph Type="..."> ->
 // <Text> runs. Reassembled into plain screenplay text good enough for the
 // AI extraction step — this is a format reader, not a full FDX renderer.
@@ -4196,6 +4202,103 @@ function flattenScenesForAdSheet(sceneList) {
   }));
 }
 
+// Resolves a scene as an AD would write it by hand (an episode label plus
+// the script's own literal scene number, e.g. "Episode 4" + "7") back to
+// this app's internal {episodeIndex, sceneIndex} identity — the reverse of
+// flattenScenesForAdSheet's sceneNumber/episodeLabel. Returns null rather
+// than guessing when nothing matches, so an unresolved handwritten note
+// item can be surfaced to the AD instead of silently applied to the wrong
+// scene.
+function resolveSceneIdentityFromLabels(sceneList, episodeLabelRaw, sceneNumberLabelRaw) {
+  const target = String(sceneNumberLabelRaw || "")
+    .replace(/^\s*(SCENE|SC)\.?\s*/i, "")
+    .trim()
+    .toLowerCase();
+  if (!target) return null;
+
+  if (sceneList.episodeScenes) {
+    const epMatch = /(\d+)/.exec(episodeLabelRaw || "");
+    const candidateEpisodeIndexes = epMatch
+      ? [Number(epMatch[1]) - 1]
+      : sceneList.episodeScenes.map((_, i) => i);
+
+    for (const episodeIndex of candidateEpisodeIndexes) {
+      const episode = sceneList.episodeScenes[episodeIndex];
+      if (!episode) continue;
+      const sceneIndex = episode.scenes.findIndex(
+        (s) => (s.sceneNumber || "").replace(/^\s*(SCENE|SC)\.?\s*/i, "").trim().toLowerCase() === target
+      );
+      if (sceneIndex !== -1) return { episodeIndex, sceneIndex };
+    }
+    return null;
+  }
+
+  const sceneIndex = sceneList.scenes.findIndex(
+    (s) => (s.sceneNumber || "").replace(/^\s*(SCENE|SC)\.?\s*/i, "").trim().toLowerCase() === target
+  );
+  return sceneIndex !== -1 ? { episodeIndex: null, sceneIndex } : null;
+}
+
+// One item per distinct scene mentioned in the photo, each with the scene
+// identity resolved server-side (never trusting the model's own guess at
+// which internal scene that corresponds to) — unresolved items are still
+// returned, flagged, so the AD can see exactly what couldn't be placed
+// automatically rather than having it silently dropped or misapplied.
+const HANDWRITTEN_SCHEDULE_CHANGES_SCHEMA = {
+  type: Type.OBJECT,
+  properties: {
+    summary: { type: Type.STRING },
+    changes: {
+      type: Type.ARRAY,
+      items: {
+        type: Type.OBJECT,
+        properties: {
+          episodeLabel: { type: Type.STRING },
+          sceneNumberLabel: { type: Type.STRING },
+          propertiesToAdd: { type: Type.ARRAY, items: { type: Type.STRING } },
+          costumeNote: { type: Type.STRING },
+          remark: { type: Type.STRING },
+        },
+        required: ["episodeLabel", "sceneNumberLabel", "propertiesToAdd", "costumeNote", "remark"],
+      },
+    },
+  },
+  required: ["summary", "changes"],
+};
+
+async function parseHandwrittenScheduleNote(imageBuffer, mimeType, sceneList, sceneListId) {
+  const isSeries = Boolean(sceneList.episodeScenes);
+  const seriesLine = isSeries
+    ? "This is a multi-episode series — if an episode number is written for an item, capture it exactly (e.g. \"Episode 4\"); if none is written, leave episodeLabel empty and it will be searched for across all episodes."
+    : "This is a single film with no episodes — always leave episodeLabel empty.";
+
+  const contents = [
+    { inlineData: { data: imageBuffer.toString("base64"), mimeType } },
+    {
+      text: `This is a photo of an Assistant Director's handwritten note about changes to make to the shoot schedule and/or scene breakdown sheet — typically properties/props to add for a scene, a costume note, or some other remark. Read the handwriting carefully; it may be messy, abbreviated, or in a mix of English and another language written in Latin script.\n\n${seriesLine}\n\nFor each distinct scene mentioned, extract: the episode label exactly as written (or empty), the scene number exactly as written — copy it verbatim (e.g. "7", "12A"), never guess or renumber it — any properties/props to add for that scene (as a list of short item names, one per prop, not one long sentence), any costume note, and any other remark. If something in the note clearly isn't tied to a specific scene number, still include it with sceneNumberLabel left empty. Also write one short, plain-English summary paragraph covering everything you read, for a human to review before anything is applied — if any part of the handwriting was illegible or ambiguous, say so plainly in the summary instead of guessing at it.`,
+    },
+  ];
+
+  const response = await generateContentWithRetry({
+    model: "gemini-flash-lite-latest",
+    contents,
+    config: {
+      systemInstruction: SCRIPT_BREAKDOWN_SYSTEM_PROMPT,
+      responseMimeType: "application/json",
+      maxOutputTokens: 4096,
+      responseSchema: HANDWRITTEN_SCHEDULE_CHANGES_SCHEMA,
+    },
+  });
+
+  const parsed = JSON.parse(response.text);
+  const changes = parsed.changes.map((change) => {
+    const identity = resolveSceneIdentityFromLabels(sceneList, change.episodeLabel, change.sceneNumberLabel);
+    return { ...change, episodeIndex: identity?.episodeIndex ?? null, sceneIndex: identity?.sceneIndex ?? null, resolved: identity !== null };
+  });
+
+  return { summary: parsed.summary, changes };
+}
+
 // Only the four columns that genuinely need inference — who's in each
 // scene, extras, properties, and costume remarks — using the already
 // generated category breakdown (character/prop/costume names) as the
@@ -5306,7 +5409,7 @@ async function generateShootScheduleContent(
     ? `\n\nThe Production Manager's specific instructions for this schedule — follow these exactly, they override any default assumption: "${specialInstructions.trim()}"`
     : "";
 
-  let contents = `${formatLine}\n\nMajor characters: ${characterNamesText}\n\nScene list:\n${sceneText}\n\n${availabilityText}${targetDaysText}${alreadyShotText}${groundingText}${specialInstructionsText}\n\nIMPORTANT: every one of the ${remainingSceneCount} remaining scenes must appear in exactly one shoot day's sceneRefs — do not skip any scene and do not invent scenes that aren't listed above, and never include a scene already marked as shot.\n\nTOP PRIORITY — minimize each character's number of distinct shoot days: for every character who isn't in nearly every scene (a guest role, a day player, a recurring-but-not-daily character), the production is paying for their call days, so group ALL of their scenes onto as FEW days as possible — ideally exactly one single day — even if that means deviating from pure location-based grouping to do it. Only split a character across more than one day when it's genuinely unavoidable (e.g. their scenes are simply too many to fit in one realistic shoot day). When a character's own availability was given as "unknown" (no specific constraint), treat that as freedom to consolidate — schedule all of their scenes together in whichever single day makes that possible, rather than spreading them across the schedule by story or location order.\n\nSecondary approach — shoot LINEARLY by location, not by episode or story order: group every scene that shares the same physical location together (even across different episodes) and shoot them back-to-back in scene order within that group, exactly like a real production would, rather than following story chronology, EXCEPT where doing so would split a character (per the top priority above) across more days than necessary. Keep INT (indoor) and EXT (outdoor) scenes in separate day groups — outdoor scenes depend on weather/daylight, so schedule them as their own block and say so explicitly in that day's "notes" (e.g. "Weather-dependent — reschedule if rain"). For each shoot day, also give "charactersNeeded": the major characters (from the list above, by exact name) who appear in at least one of that day's scenes, inferred from the scenes' one-liners and locations — this is what tells each artist which shoot days they're actually called for. For EACH scene in sceneRefs, also give: "costume" (continuity relative to shoot order — "Fresh" for a new/changed outfit, "Cont. Scene X" when it's the same outfit as an already-scheduled scene X with no change, or a short costume description if genuinely a first appearance); "properties" (objects/set-dressing that scene needs, preferring the established property list above); and "adRemark" (leave as an empty string "" when nothing is uncertain — only write something here when you are genuinely not confident about a costume-continuity call or a property and need the Assistant Director to confirm it by hand).`;
+  let contents = `${formatLine}\n\nMajor characters: ${characterNamesText}\n\nScene list:\n${sceneText}\n\n${availabilityText}${targetDaysText}${alreadyShotText}${groundingText}${specialInstructionsText}\n\nIMPORTANT: every one of the ${remainingSceneCount} remaining scenes must appear in exactly one shoot day's sceneRefs — do not skip any scene and do not invent scenes that aren't listed above, and never include a scene already marked as shot.\n\nTOP PRIORITY — minimize each character's number of distinct shoot days: for every character who isn't in nearly every scene (a guest role, a day player, a recurring-but-not-daily character), the production is paying for their call days, so group ALL of their scenes onto as FEW days as possible — ideally exactly one single day — even if that means deviating from pure location-based grouping to do it. Only split a character across more than one day when it's genuinely unavoidable (e.g. their scenes are simply too many to fit in one realistic shoot day). When a character's own availability was given as "unknown" (no specific constraint), treat that as freedom to consolidate — schedule all of their scenes together in whichever single day makes that possible, rather than spreading them across the schedule by story or location order.\n\nSECOND PRIORITY — never split a continuity block of scenes: whenever a set of scenes shares the same standing set decoration, an expensive or hard-to-repeat art/property setup, or a costume that has real cost/time attached (a built set, a special installation, a rented prop, a costume that takes real time to get in and out of), schedule that ENTIRE bundle of scenes together in one continuous run within a single day, in their natural order, rather than moving just one scene out of the group by itself. Treat these bundles as a single indivisible unit when building the day-by-day plan — the crew strikes and re-dresses a set once, not repeatedly, so once a bundle is scheduled, every scene in it stays together.\n\nThird priority — shoot LINEARLY by location, not by episode or story order: group every scene that shares the same physical location together (even across different episodes) and shoot them back-to-back in scene order within that group, exactly like a real production would, rather than following story chronology, EXCEPT where doing so would split a character (per the top priority above) across more days than necessary. Keep INT (indoor) and EXT (outdoor) scenes in separate day groups — outdoor scenes depend on weather/daylight, so schedule them as their own block and say so explicitly in that day's "notes" (e.g. "Weather-dependent — reschedule if rain"). For each shoot day, also give "charactersNeeded": the major characters (from the list above, by exact name) who appear in at least one of that day's scenes, inferred from the scenes' one-liners and locations — this is what tells each artist which shoot days they're actually called for. For EACH scene in sceneRefs, also give: "costume" (continuity relative to shoot order — "Fresh" for a new/changed outfit, "Cont. Scene X" when it's the same outfit as an already-scheduled scene X with no change, or a short costume description if genuinely a first appearance); "properties" (objects/set-dressing that scene needs, preferring the established property list above); and "adRemark" (leave as an empty string "" when nothing is uncertain — only write something here when you are genuinely not confident about a costume-continuity call or a property and need the Assistant Director to confirm it by hand).`;
 
   if (revision) {
     contents += `\n\nThis is a REVISION of a previous shoot schedule. The Production Manager reviewed it and requested changes.\nFeedback: "${revision.feedback}"\nRevise the schedule to address the feedback directly.`;
@@ -5621,6 +5724,153 @@ app.post("/api/shoot-schedule/:sceneListId/parse-day-completion", requireRole("a
   }
 });
 
+// Reads a photo of a handwritten AD note and returns what it understood —
+// never applies anything itself. The AD reviews the summary and the
+// per-scene breakdown (each one flagged resolved/unresolved) and only then
+// confirms, which calls /apply-handwritten-changes below with the exact
+// list shown on screen (possibly edited first).
+app.post(
+  "/api/shoot-schedule/:sceneListId/interpret-handwritten-note",
+  requireRole("admin", "production_manager"),
+  handwrittenNoteUpload.single("image"),
+  async (req, res) => {
+    const { sceneListId } = req.params;
+
+    if (!(await userOwnsSceneList(req.user, sceneListId))) {
+      res.status(403).json({ error: "You don't have access to this project." });
+      return;
+    }
+    if (!req.file) {
+      res.status(400).json({ error: "An image file is required." });
+      return;
+    }
+
+    try {
+      const sceneListResult = await db.query("SELECT content FROM scene_lists WHERE id = $1", [sceneListId]);
+      if (sceneListResult.rows.length === 0) {
+        res.status(404).json({ error: "Scene list not found" });
+        return;
+      }
+      const sceneList = sceneListResult.rows[0].content;
+
+      const result = await parseHandwrittenScheduleNote(req.file.buffer, req.file.mimetype, sceneList, sceneListId);
+      res.json(result);
+    } catch (error) {
+      console.error("Interpreting handwritten note failed:", error.message);
+      res.status(502).json({ error: error.message });
+    }
+  }
+);
+
+// Applies a confirmed list of per-scene changes (from the route above,
+// reviewed and confirmed by the AD) directly — no AI call here at all, so
+// this is exactly as reliable as the manual per-scene edit endpoint it
+// reuses: properties are ADDED to whatever's already there (never
+// overwritten), and both the shoot schedule's sceneRefs and the AD Scene
+// Breakdown Sheet's matching row are updated together, in one INSERT-only
+// revision each, so the two stay in sync.
+app.post("/api/shoot-schedule/:sceneListId/apply-handwritten-changes", requireRole("admin", "production_manager"), async (req, res) => {
+  const { sceneListId } = req.params;
+  const { changes } = req.body;
+
+  if (!(await userOwnsSceneList(req.user, sceneListId))) {
+    res.status(403).json({ error: "You don't have access to this project." });
+    return;
+  }
+  if (!Array.isArray(changes) || changes.length === 0) {
+    res.status(400).json({ error: "A list of changes is required." });
+    return;
+  }
+
+  const resolvedChanges = changes.filter((c) => typeof c.sceneIndex === "number");
+  if (resolvedChanges.length === 0) {
+    res.status(400).json({ error: "None of these changes had a resolved scene to apply to." });
+    return;
+  }
+
+  try {
+    const latestSchedule = await db.query(
+      "SELECT id, content FROM shoot_schedules WHERE scene_list_id = $1 ORDER BY created_at DESC LIMIT 1",
+      [sceneListId]
+    );
+    let scheduleResult = null;
+    if (latestSchedule.rows.length > 0) {
+      const scheduleContent = latestSchedule.rows[0].content;
+      let scheduleTouched = false;
+      const scheduleDays = scheduleContent.scheduleDays.map((day) => ({
+        ...day,
+        sceneRefs: day.sceneRefs.map((ref) => {
+          const change = resolvedChanges.find(
+            (c) => c.sceneIndex === ref.sceneIndex && (c.episodeIndex ?? null) === (ref.episodeIndex ?? null)
+          );
+          if (!change) return ref;
+          scheduleTouched = true;
+          const mergedProperties = [ref.properties, ...(change.propertiesToAdd ?? [])].filter(Boolean).join(", ");
+          return {
+            ...ref,
+            properties: mergedProperties,
+            costume: change.costumeNote?.trim() ? change.costumeNote.trim() : ref.costume,
+            adRemark: change.remark?.trim() ? [ref.adRemark, change.remark.trim()].filter(Boolean).join(" — ") : ref.adRemark,
+          };
+        }),
+      }));
+
+      if (scheduleTouched) {
+        const updatedScheduleContent = { ...scheduleContent, scheduleDays };
+        const insertResult = await db.query(
+          "INSERT INTO shoot_schedules (scene_list_id, content, feedback) VALUES ($1, $2, $3) RETURNING id, status, feedback",
+          [sceneListId, JSON.stringify(updatedScheduleContent), "Applied changes from a handwritten AD note (photo)"]
+        );
+        scheduleResult = { ...insertResult.rows[0], sceneListId, ...updatedScheduleContent };
+      }
+    }
+
+    const latestBreakdown = await db.query(
+      "SELECT id, content FROM script_breakdowns WHERE scene_list_id = $1 ORDER BY created_at DESC LIMIT 1",
+      [sceneListId]
+    );
+    let breakdownResult = null;
+    if (latestBreakdown.rows.length > 0 && Array.isArray(latestBreakdown.rows[0].content.adSheet)) {
+      const breakdownContent = latestBreakdown.rows[0].content;
+      const sceneListResult = await db.query("SELECT content FROM scene_lists WHERE id = $1", [sceneListId]);
+      const identities = allSceneIdentities(sceneListResult.rows[0].content);
+      let breakdownTouched = false;
+      const adSheet = breakdownContent.adSheet.map((row, flatIndex) => {
+        const identity = identities[flatIndex];
+        const match = /^e(\d+)-s(\d+)$/.exec(identity) ?? /^s(\d+)$/.exec(identity);
+        const rowEpisodeIndex = match?.[2] !== undefined ? Number(match[1]) : null;
+        const rowSceneIndex = match?.[2] !== undefined ? Number(match[2]) : Number(match?.[1]);
+        const change = resolvedChanges.find((c) => c.sceneIndex === rowSceneIndex && (c.episodeIndex ?? null) === (rowEpisodeIndex ?? null));
+        if (!change) return row;
+        breakdownTouched = true;
+        const addedProps = (change.propertiesToAdd ?? []).join(", ");
+        return {
+          ...row,
+          property: { en: [row.property?.en, addedProps].filter(Boolean).join(", "), or: row.property?.or ?? "" },
+          // The Odia side has no translation for a hand-typed note, so it's
+          // cleared rather than left showing the old costume's description
+          // next to a completely different English value.
+          costumeRemarks: change.costumeNote?.trim() ? { en: change.costumeNote.trim(), or: "" } : row.costumeRemarks,
+        };
+      });
+
+      if (breakdownTouched) {
+        const updatedBreakdownContent = { ...breakdownContent, adSheet };
+        const insertResult = await db.query(
+          "INSERT INTO script_breakdowns (scene_list_id, content, feedback) VALUES ($1, $2, $3) RETURNING id, status, feedback",
+          [sceneListId, JSON.stringify(updatedBreakdownContent), "Applied changes from a handwritten AD note (photo) to the AD Sheet"]
+        );
+        breakdownResult = { ...insertResult.rows[0], sceneListId, ...updatedBreakdownContent };
+      }
+    }
+
+    res.json({ schedule: scheduleResult, breakdown: breakdownResult });
+  } catch (error) {
+    console.error("Applying handwritten changes failed:", error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 app.post("/api/shoot-schedule/:sceneListId/record-day", requireRole("admin", "production_manager"), async (req, res) => {
   const { sceneListId } = req.params;
   const { day } = req.body;
@@ -5666,6 +5916,73 @@ app.post("/api/shoot-schedule/:sceneListId/record-day", requireRole("admin", "pr
   }
 });
 
+// Direct, deterministic edit of one scene's costume/properties/AD-remark —
+// no AI call at all. Free-text "request changes" feedback goes through a
+// full Gemini regeneration of the whole schedule, which is unreliable for
+// a small tweak like adding one prop (it can reshuffle days that were
+// already carefully hand-balanced) and gives no visible confirmation the
+// AD can trust. This is the fix: a plain field edit the AD can add to or
+// remove from directly, applied instantly and exactly as typed.
+app.post("/api/shoot-schedule/:id/edit-scene", requireRole("admin", "production_manager"), async (req, res) => {
+  const { episodeIndex, sceneIndex, costume, properties, adRemark } = req.body;
+
+  if (typeof sceneIndex !== "number") {
+    res.status(400).json({ error: "A sceneIndex is required." });
+    return;
+  }
+
+  const existing = await db.query("SELECT scene_list_id FROM shoot_schedules WHERE id = $1", [req.params.id]);
+  if (existing.rows.length === 0) {
+    res.status(404).json({ error: "Shoot schedule not found" });
+    return;
+  }
+
+  const sceneListId = existing.rows[0].scene_list_id;
+  if (!(await userOwnsSceneList(req.user, sceneListId))) {
+    res.status(403).json({ error: "You don't have access to this project." });
+    return;
+  }
+
+  const latest = await db.query(
+    "SELECT id, content FROM shoot_schedules WHERE scene_list_id = $1 ORDER BY created_at DESC LIMIT 1",
+    [sceneListId]
+  );
+  if (String(latest.rows[0].id) !== String(req.params.id)) {
+    res.status(409).json({ error: "Someone else updated this shoot schedule since you loaded it. Reload the page and try again." });
+    return;
+  }
+
+  const content = latest.rows[0].content;
+  let found = false;
+  const scheduleDays = content.scheduleDays.map((day) => ({
+    ...day,
+    sceneRefs: day.sceneRefs.map((ref) => {
+      if (ref.sceneIndex !== sceneIndex || (ref.episodeIndex ?? null) !== (episodeIndex ?? null)) return ref;
+      found = true;
+      return {
+        ...ref,
+        costume: costume ?? ref.costume,
+        properties: properties ?? ref.properties,
+        adRemark: adRemark ?? ref.adRemark,
+      };
+    }),
+  }));
+
+  if (!found) {
+    res.status(404).json({ error: "That scene wasn't found in the current schedule." });
+    return;
+  }
+
+  const updatedContent = { ...content, scheduleDays };
+
+  const insertResult = await db.query(
+    "INSERT INTO shoot_schedules (scene_list_id, content, feedback) VALUES ($1, $2, $3) RETURNING id, status, feedback",
+    [sceneListId, JSON.stringify(updatedContent), "AD edited a scene's costume/properties/remark directly"]
+  );
+
+  res.json({ ...insertResult.rows[0], sceneListId, ...updatedContent });
+});
+
 app.post("/api/shoot-schedule/:id/approve", requireRole("admin", "director"), async (req, res) => {
   const target = await db.query("SELECT scene_list_id FROM shoot_schedules WHERE id = $1", [req.params.id]);
   if (target.rows.length === 0) {
@@ -5691,7 +6008,7 @@ app.post("/api/shoot-schedule/:id/approve", requireRole("admin", "director"), as
   res.json({ id: row.id, sceneListId: row.scene_list_id, status: row.status, feedback: row.feedback, ...row.content });
 });
 
-app.post("/api/shoot-schedule/:id/request-changes", requireRole("admin", "director"), async (req, res) => {
+app.post("/api/shoot-schedule/:id/request-changes", requireRole("admin", "director", "production_manager"), async (req, res) => {
   const { feedback } = req.body;
 
   try {
@@ -5724,14 +6041,32 @@ app.post("/api/shoot-schedule/:id/request-changes", requireRole("admin", "direct
     ]);
 
     const sceneListResult = await db.query("SELECT content FROM scene_lists WHERE id = $1", [sceneListId]);
-    const characterNames = await fetchCharacterNamesForSceneList(sceneListId, sceneListResult.rows[0].content);
+    const sceneList = sceneListResult.rows[0].content;
+    const characterNames = await fetchCharacterNamesForSceneList(sceneListId, sceneList);
+
+    // Same grounding the initial generation gets — this route was silently
+    // regenerating from just the one-line scene summaries with no memory of
+    // which days are already shot, which would both re-schedule completed
+    // days and lose the costume/property continuity the full script gives.
+    const breakdownResult = await db.query(
+      "SELECT content FROM script_breakdowns WHERE scene_list_id = $1 ORDER BY created_at DESC LIMIT 1",
+      [sceneListId]
+    );
+    const completedDays = (previous.scheduleDays ?? []).filter((d) => d.completed);
+    const sourceText = await buildBreakdownSourceText(sceneList, sceneListId);
 
     const revisedContent = await generateShootScheduleContent(
-      sceneListResult.rows[0].content,
+      sceneList,
       characterNames,
       previous.availability,
       previous.targetDays,
-      { feedback, previous }
+      { feedback, previous },
+      {
+        specialInstructions: previous.specialInstructions,
+        completedDays,
+        sourceText,
+        breakdownContent: breakdownResult.rows[0]?.content ?? null,
+      }
     );
 
     const insertResult = await db.query(

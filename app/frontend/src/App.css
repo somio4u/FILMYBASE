@@ -1550,6 +1550,50 @@ button, input, textarea, select {
   margin: 4px 0;
 }
 
+.handwritten-note-panel {
+  margin-bottom: 18px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.handwritten-note-confirm {
+  margin-top: 12px;
+  padding: 12px 14px;
+  background: var(--bg-surface-raised);
+  border: 1px solid var(--accent);
+  border-radius: 10px;
+}
+
+.handwritten-note-summary {
+  margin: 0 0 10px;
+  font-size: 13px;
+  color: var(--text-primary);
+  font-style: italic;
+}
+
+.handwritten-note-changes {
+  margin: 0 0 10px;
+  padding-left: 18px;
+  font-size: 13px;
+}
+
+.handwritten-note-changes li {
+  margin-bottom: 6px;
+}
+
+.handwritten-note-changes li.unresolved {
+  color: var(--text-muted);
+}
+
+.handwritten-note-unresolved-badge {
+  margin-left: 6px;
+  font-size: 11px;
+  padding: 1px 8px;
+  border-radius: 10px;
+  background: var(--warning-bg);
+  color: var(--warning);
+}
+
 .breakdown-action-button {
   flex: 0 0 auto;
   font-size: 12px;
@@ -2137,6 +2181,51 @@ button, input, textarea, select {
 .schedule-scene-ad-remark {
   margin: 2px 0 4px 18px;
   font-size: 12px;
+}
+
+.scene-edit-toggle {
+  margin-left: 6px;
+  font-size: 11px;
+  padding: 1px 8px;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--text-muted);
+  border: 1px solid var(--border-subtle);
+  cursor: pointer;
+  transition: color 0.15s ease, border-color 0.15s ease;
+}
+
+.scene-edit-toggle:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+.scene-edit-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 6px 0 8px 18px;
+  padding: 8px;
+  background: var(--bg-surface-raised);
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+}
+
+.scene-edit-form input {
+  flex: 1 1 140px;
+  min-width: 120px;
+  padding: 6px 8px;
+  font-size: 12px;
+  background: var(--bg-input);
+  color: var(--text-primary);
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+}
+
+.scene-edit-form-actions {
+  display: flex;
+  gap: 6px;
+  flex: 0 0 auto;
 }
 
 /* --- Mobile responsive layout ---

@@ -300,6 +300,15 @@ const LABELS = {
     costumeLabel: 'Costume',
     propertiesLabel: 'Properties',
     adRemarkLabel: 'AD Remark',
+    editSceneButton: 'Edit',
+    saveButton: 'Save',
+    savingLabel: 'Saving…',
+    uploadHandwrittenNoteButton: 'Upload Handwritten Note (Photo)',
+    interpretingHandwrittenNoteLabel: 'Reading photo…',
+    handwrittenNoteHint: 'Take or upload a photo of a handwritten note (properties, costume notes, remarks) — it will be read and shown to you for confirmation before anything is changed.',
+    couldNotPlaceLabel: "Couldn't place — add manually",
+    confirmApplyButton: 'Confirm & Apply',
+    applyingLabel: 'Applying…',
     markDayShotButton: 'Mark Day as Shot',
     confirmShotScenesButton: 'Confirm Shot Scenes',
     completionNotePlaceholder: 'Uncheck any scene not actually completed, and add a note if useful (e.g. "rained in the afternoon, milkman scene needs a reshoot"). Unchecked scenes move to the next schedule automatically.',
@@ -662,6 +671,15 @@ const LABELS = {
     costumeLabel: 'ପୋଷାକ',
     propertiesLabel: 'ପ୍ରପର୍ଟି',
     adRemarkLabel: 'AD ମନ୍ତବ୍ୟ',
+    editSceneButton: 'ସମ୍ପାଦନା',
+    saveButton: 'ସେଭ୍ କରନ୍ତୁ',
+    savingLabel: 'ସେଭ୍ ହେଉଛି…',
+    uploadHandwrittenNoteButton: 'ହସ୍ତଲିଖିତ ନୋଟ୍ ଅପଲୋଡ୍ କରନ୍ତୁ (ଫଟୋ)',
+    interpretingHandwrittenNoteLabel: 'ଫଟୋ ପଢ଼ାଯାଉଛି…',
+    handwrittenNoteHint: 'ଏକ ହସ୍ତଲିଖିତ ନୋଟ୍ (ପ୍ରପର୍ଟି, ପୋଷାକ ଟିପ୍ପଣୀ, ମନ୍ତବ୍ୟ) ର ଏକ ଫଟୋ ନିଅନ୍ତୁ କିମ୍ବା ଅପଲୋଡ୍ କରନ୍ତୁ — କିଛି ପରିବର୍ତ୍ତନ ହେବା ପୂର୍ବରୁ ଏହା ପଢ଼ାଯାଇ ଆପଣଙ୍କୁ ନିଶ୍ଚିତ କରିବାକୁ ଦେଖାଯିବ।',
+    couldNotPlaceLabel: 'ରଖାଯାଇପାରିଲା ନାହିଁ — ହାତରେ ଯୋଡ଼ନ୍ତୁ',
+    confirmApplyButton: 'ନିଶ୍ଚିତ କରନ୍ତୁ ଏବଂ ପ୍ରୟୋଗ କରନ୍ତୁ',
+    applyingLabel: 'ପ୍ରୟୋଗ ହେଉଛି…',
     markDayShotButton: 'ଦିନଟି ସୁଟ୍ ହେଲା ବୋଲି ଚିହ୍ନଟ କରନ୍ତୁ',
     confirmShotScenesButton: 'ସୁଟ୍ ହୋଇଥିବା ସିନ୍ ନିଶ୍ଚିତ କରନ୍ତୁ',
     completionNotePlaceholder: 'ପ୍ରକୃତରେ ସମାପ୍ତ ହୋଇନଥିବା ଯେକୌଣସି ସିନ୍‌ର ଚେକ୍‌ବକ୍ସ ହଟାନ୍ତୁ, ଏବଂ ଉପଯୋଗୀ ହେଲେ ଏକ ମନ୍ତବ୍ୟ ଯୋଡ଼ନ୍ତୁ। ଅନ୍‌ଚେକ୍ ହୋଇଥିବା ସିନ୍ ପରବର୍ତ୍ତୀ ସିଡ୍ୟୁଲ୍‌କୁ ସ୍ୱଚାଳିତ ଭାବରେ ଯାଇଥାଏ।',
@@ -1378,7 +1396,7 @@ function CrewSection({ category, heading, members, characterOptions, onAdd, onUp
 // exactly what silently swallowed a real request earlier in this project.
 // History persists per (project, stage) in localStorage so re-opening the
 // panel later still shows what was asked and what happened.
-function ChangesChatPanel({ t, historyKey, barConfig, isBusy }) {
+function ChangesChatPanel({ t, historyKey, barConfig, isBusy, errorMessage }) {
   const [isOpen, setIsOpen] = useState(false)
   const [historiesByKey, setHistoriesByKey] = useState(() => {
     try {
@@ -1427,7 +1445,14 @@ function ChangesChatPanel({ t, historyKey, barConfig, isBusy }) {
 
   useEffect(() => {
     if (wasBusyRef.current && !isBusy) {
-      appendMessage({ role: 'system', text: t.changesChatAppliedMessage })
+      // A submit handler clears the global error at its own start and only
+      // ever sets it again on ITS OWN failure — so by the time busy flips
+      // back to false in the same update, this reliably reflects whether
+      // THIS submission succeeded, not some unrelated stale error.
+      appendMessage({
+        role: 'system',
+        text: errorMessage ? `${t.changesChatErrorMessage} ${errorMessage}` : t.changesChatAppliedMessage,
+      })
     }
     wasBusyRef.current = isBusy
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1878,6 +1903,7 @@ function App() {
   const importFileInputRef = useRef(null)
   const screenplayFileInputRef = useRef(null)
   const reimportScreenplayFileInputRef = useRef(null)
+  const handwrittenNoteFileInputRef = useRef(null)
   const [isSidebarOpen, setIsSidebarOpen] = useState(false)
   const [language, setLanguage] = useState('en')
   const [concept, setConcept] = useState('')
@@ -2024,6 +2050,116 @@ function App() {
   const [scheduleSpecialInstructions, setScheduleSpecialInstructions] = useState('')
   const [markingShotDayNumber, setMarkingShotDayNumber] = useState(null)
   const [shotSceneSelections, setShotSceneSelections] = useState({})
+  const [isInterpretingHandwrittenNote, setIsInterpretingHandwrittenNote] = useState(false)
+  const [handwrittenNoteResult, setHandwrittenNoteResult] = useState(null)
+  const [isApplyingHandwrittenChanges, setIsApplyingHandwrittenChanges] = useState(false)
+
+  async function handleHandwrittenNoteFileSelected(event) {
+    const file = event.target.files[0]
+    event.target.value = ''
+    if (!file) return
+
+    setIsInterpretingHandwrittenNote(true)
+    setErrorMessage(null)
+    setHandwrittenNoteResult(null)
+
+    try {
+      const formData = new FormData()
+      formData.append('image', file)
+
+      const response = await fetch(`${BACKEND_URL}/api/shoot-schedule/${sceneList.id}/interpret-handwritten-note`, {
+        method: 'POST',
+        body: formData,
+      })
+      const data = await response.json()
+
+      if (!response.ok) {
+        setErrorMessage(data.error || t.genericError)
+        setIsInterpretingHandwrittenNote(false)
+        return
+      }
+
+      setHandwrittenNoteResult(data)
+    } catch {
+      setErrorMessage(t.genericError)
+    }
+
+    setIsInterpretingHandwrittenNote(false)
+  }
+
+  async function handleConfirmHandwrittenChangesClick() {
+    setIsApplyingHandwrittenChanges(true)
+    setErrorMessage(null)
+
+    try {
+      const response = await fetch(`${BACKEND_URL}/api/shoot-schedule/${sceneList.id}/apply-handwritten-changes`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ changes: handwrittenNoteResult.changes }),
+      })
+      const data = await response.json()
+
+      if (!response.ok) {
+        setErrorMessage(data.error || t.genericError)
+        setIsApplyingHandwrittenChanges(false)
+        return
+      }
+
+      if (data.schedule) setShootSchedule(data.schedule)
+      if (data.breakdown) setScriptBreakdown(data.breakdown)
+      setHandwrittenNoteResult(null)
+    } catch {
+      setErrorMessage(t.genericError)
+    }
+
+    setIsApplyingHandwrittenChanges(false)
+  }
+
+  const [editingSceneKey, setEditingSceneKey] = useState(null)
+  const [editSceneCostume, setEditSceneCostume] = useState('')
+  const [editSceneProperties, setEditSceneProperties] = useState('')
+  const [editSceneAdRemark, setEditSceneAdRemark] = useState('')
+  const [isSavingSceneEdit, setIsSavingSceneEdit] = useState(false)
+
+  function handleStartSceneEditClick(ref) {
+    setEditingSceneKey(`${ref.episodeIndex ?? ''}-${ref.sceneIndex}`)
+    setEditSceneCostume(ref.costume || '')
+    setEditSceneProperties(ref.properties || '')
+    setEditSceneAdRemark(ref.adRemark || '')
+  }
+
+  async function handleSaveSceneEditClick(ref) {
+    setIsSavingSceneEdit(true)
+    setErrorMessage(null)
+
+    try {
+      const response = await fetch(`${BACKEND_URL}/api/shoot-schedule/${shootSchedule.id}/edit-scene`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          episodeIndex: typeof ref.episodeIndex === 'number' ? ref.episodeIndex : null,
+          sceneIndex: ref.sceneIndex,
+          costume: editSceneCostume,
+          properties: editSceneProperties,
+          adRemark: editSceneAdRemark,
+        }),
+      })
+      const data = await response.json()
+
+      if (!response.ok) {
+        setErrorMessage(data.error || t.genericError)
+        setIsSavingSceneEdit(false)
+        return
+      }
+
+      setShootSchedule(data)
+      setEditingSceneKey(null)
+    } catch {
+      setErrorMessage(t.genericError)
+    }
+
+    setIsSavingSceneEdit(false)
+  }
   const [shotCompletionNote, setShotCompletionNote] = useState('')
   const [isRecordingShotDay, setIsRecordingShotDay] = useState(false)
   const [dayCompletionReportText, setDayCompletionReportText] = useState('')
@@ -5047,6 +5183,7 @@ function App() {
           historyKey={`${conceptId ?? 'new'}:${barConfig.stageKey}`}
           barConfig={barConfig}
           isBusy={isBarBusy}
+          errorMessage={errorMessage}
         />
       )}
 
@@ -5959,6 +6096,64 @@ function App() {
         <div className="three-act-structure" id="stage-schedule">
           <h2>{t.shootScheduleHeading}</h2>
 
+          {shootSchedule && canEditProduction && (
+            <div className="handwritten-note-panel">
+              <button
+                className="import-export-button"
+                onClick={() => handwrittenNoteFileInputRef.current?.click()}
+                disabled={isInterpretingHandwrittenNote}
+              >
+                <span className="import-export-icon">{ICONS.upload}</span>
+                {isInterpretingHandwrittenNote ? t.interpretingHandwrittenNoteLabel : t.uploadHandwrittenNoteButton}
+              </button>
+              <input
+                type="file"
+                accept="image/*"
+                capture="environment"
+                ref={handwrittenNoteFileInputRef}
+                onChange={handleHandwrittenNoteFileSelected}
+                style={{ display: 'none' }}
+              />
+              <p className="sidebar-section-note">{t.handwrittenNoteHint}</p>
+
+              {handwrittenNoteResult && (
+                <div className="handwritten-note-confirm">
+                  <p className="handwritten-note-summary">{handwrittenNoteResult.summary}</p>
+                  <ul className="handwritten-note-changes">
+                    {handwrittenNoteResult.changes.map((change, i) => (
+                      <li key={i} className={change.resolved ? 'resolved' : 'unresolved'}>
+                        <strong>
+                          {change.episodeLabel ? `${change.episodeLabel}, ` : ''}
+                          {t.sceneLabel} {change.sceneNumberLabel || '?'}
+                        </strong>
+                        {!change.resolved && <span className="handwritten-note-unresolved-badge">{t.couldNotPlaceLabel}</span>}
+                        {change.propertiesToAdd?.length > 0 && <span> — {t.propertiesLabel}: {change.propertiesToAdd.join(', ')}</span>}
+                        {change.costumeNote && <span> — {t.costumeLabel}: {change.costumeNote}</span>}
+                        {change.remark && <span> — {change.remark}</span>}
+                      </li>
+                    ))}
+                  </ul>
+                  <div className="skip-ahead-controls">
+                    <button
+                      className="choose-button"
+                      onClick={handleConfirmHandwrittenChangesClick}
+                      disabled={isApplyingHandwrittenChanges || !handwrittenNoteResult.changes.some((c) => c.resolved)}
+                    >
+                      {isApplyingHandwrittenChanges ? t.applyingLabel : t.confirmApplyButton}
+                    </button>
+                    <button
+                      className="cancel-button"
+                      onClick={() => setHandwrittenNoteResult(null)}
+                      disabled={isApplyingHandwrittenChanges}
+                    >
+                      {t.cancelEditButton}
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
           {!shootSchedule && canEditProduction && (
             <div className="availability-form">
               <p className="availability-form-intro">{t.scheduleSetupIntro}</p>
@@ -6136,6 +6331,8 @@ function App() {
                             const scene = lookupScene(sceneList, ref)
                             if (!scene) return null
                             const isMarking = markingShotDayNumber === day.dayNumber
+                            const sceneKey = `${ref.episodeIndex ?? ''}-${ref.sceneIndex}`
+                            const isEditingScene = editingSceneKey === sceneKey
                             return (
                               <li key={index}>
                                 {isMarking && (
@@ -6155,13 +6352,54 @@ function App() {
                                     <span className="schedule-scene-meta"> — {t.castCalledLabel}: {sceneCast.join(', ')}</span>
                                   ) : null
                                 })()}
-                                {(ref.costume || ref.properties) && (
+                                {!isEditingScene && (ref.costume || ref.properties) && (
                                   <span className="schedule-scene-meta">
                                     {ref.costume && ` — ${t.costumeLabel}: ${ref.costume}`}
                                     {ref.properties && ` — ${t.propertiesLabel}: ${ref.properties}`}
                                   </span>
                                 )}
-                                {ref.adRemark && <p className="feedback-note schedule-scene-ad-remark">{t.adRemarkLabel}: {ref.adRemark}</p>}
+                                {!isEditingScene && ref.adRemark && (
+                                  <p className="feedback-note schedule-scene-ad-remark">{t.adRemarkLabel}: {ref.adRemark}</p>
+                                )}
+                                {canEditProduction && !isEditingScene && (
+                                  <button className="scene-edit-toggle" onClick={() => handleStartSceneEditClick(ref)}>
+                                    {t.editSceneButton}
+                                  </button>
+                                )}
+                                {isEditingScene && (
+                                  <div className="scene-edit-form">
+                                    <input
+                                      type="text"
+                                      placeholder={t.costumeLabel}
+                                      value={editSceneCostume}
+                                      onChange={(e) => setEditSceneCostume(e.target.value)}
+                                    />
+                                    <input
+                                      type="text"
+                                      placeholder={t.propertiesLabel}
+                                      value={editSceneProperties}
+                                      onChange={(e) => setEditSceneProperties(e.target.value)}
+                                    />
+                                    <input
+                                      type="text"
+                                      placeholder={t.adRemarkLabel}
+                                      value={editSceneAdRemark}
+                                      onChange={(e) => setEditSceneAdRemark(e.target.value)}
+                                    />
+                                    <div className="scene-edit-form-actions">
+                                      <button
+                                        className="choose-button"
+                                        onClick={() => handleSaveSceneEditClick(ref)}
+                                        disabled={isSavingSceneEdit}
+                                      >
+                                        {isSavingSceneEdit ? t.savingLabel : t.saveButton}
+                                      </button>
+                                      <button className="cancel-button" onClick={() => setEditingSceneKey(null)} disabled={isSavingSceneEdit}>
+                                        {t.cancelEditButton}
+                                      </button>
+                                    </div>
+                                  </div>
+                                )}
                               </li>
                             )
                           })}

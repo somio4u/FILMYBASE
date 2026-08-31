@@ -8486,18 +8486,31 @@ async function buildCallSheetData(sceneListId, schedule, sceneList, adSheet, day
         })
       )
     );
-    return { rows, charactersInDay };
+    // Day scenes shot before night scenes — a stable sort keeps each
+    // group's existing location/episode order intact within DAY and
+    // within NIGHT, it just moves NIGHT scenes after all the DAY ones.
+    const dnWeight = { DAY: 0, NIGHT: 1 };
+    const sortedRows = rows
+      .map((row, index) => ({ row, index }))
+      .sort((a, b) => (dnWeight[a.row.dn] ?? 0) - (dnWeight[b.row.dn] ?? 0) || a.index - b.index)
+      .map(({ row }) => row);
+    return { rows: sortedRows, charactersInDay };
   }
 
   const { rows: sceneRows, charactersInDay } = buildSceneRows(day?.sceneRefs);
   const { rows: advanceRows } = nextDay ? buildSceneRows(nextDay.sceneRefs) : { rows: [] };
 
+  const juniorsContact = schedule.callSheetConfig?.juniorsContact || "";
   const castRows = [...charactersInDay].map((character) => {
     const cast = castByCharacter.get(character.toLowerCase());
+    // A junior/background player with no individually confirmed contact
+    // routes to the production's own juniors point-of-contact instead of
+    // showing up with a blank number.
+    const contact = cast?.contact_number || (!cast?.name || cast.name.toUpperCase().includes("JUNIOR") ? juniorsContact : "");
     return {
       character,
       actor: cast?.name || "",
-      contact: cast?.contact_number || "",
+      contact,
       status: computeCastStatus(schedule.artistSchedule, character, dayNumber),
       reportTime: day?.crewCallTime || "",
       hairMakeupTime: day?.crewCallTime || "",
@@ -8579,7 +8592,7 @@ app.get("/api/shoot-schedule/:id/call-sheet", requireLogin, async (req, res) => 
     const left = doc.page.margins.left;
     const pageWidth = doc.page.width - doc.page.margins.left - doc.page.margins.right;
 
-    doc.font(headerFont).fontSize(18).text(title || "Call Sheet", left, doc.y, { width: pageWidth, align: "center" });
+    doc.font(headerFont).fontSize(20).fillColor("#1a56b0").text(title || "Call Sheet", left, doc.y, { width: pageWidth, align: "center" }).fillColor("#000");
     doc.font(headerFont).fontSize(13).text(`SHOOT DAY ${dayNumber}${day.date ? `  —  ${formatDisplayDate(day.date)}` : ""}`, { align: "center" });
     doc.moveDown(0.8);
 
@@ -8594,11 +8607,11 @@ app.get("/api/shoot-schedule/:id/call-sheet", requireLogin, async (req, res) => 
     labeledLine("Crew Call", day.crewCallTime);
     labeledLine("Shoot Call", day.shootCallTime);
     labeledLine("Breakfast / Lunch / Est. Wrap", [day.breakfastTime, day.lunchTime, day.wrapTime].filter(Boolean).join("  /  "));
-    labeledLine("Sunrise / Sunset / Weather", [day.sunrise, day.sunset, day.weather].filter(Boolean).join("  /  ") || "— fill in by hand —");
+    labeledLine("Sunrise / Sunset / Weather", [day.sunrise, day.sunset, day.weather].filter(Boolean).join("  /  "));
     doc.moveDown(0.4);
     labeledLine("Shooting Location", day.actualLocation?.[lang] || day.location?.[lang]);
-    labeledLine("Basecamp / Crew Parking", [day.basecamp, day.crewParking].filter(Boolean).join("  /  ") || "— fill in by hand —");
-    labeledLine("Nearest Hospital", day.nearestHospital || "— fill in by hand —");
+    labeledLine("Basecamp / Crew Parking", [day.basecamp, day.crewParking].filter(Boolean).join("  /  "));
+    labeledLine("Nearest Hospital", day.nearestHospital);
     doc.moveDown(0.8);
 
     const sceneColumns = [
@@ -8720,7 +8733,7 @@ app.get("/api/shoot-schedule/:id/call-sheet-excel", requireLogin, async (req, re
 
     sheet.mergeCells("A1:E1");
     sheet.getCell("A1").value = `${title || "Call Sheet"} — SHOOT DAY ${dayNumber}${day.date ? `  —  ${formatDisplayDate(day.date)}` : ""}`;
-    sheet.getCell("A1").font = { bold: true, size: 14 };
+    sheet.getCell("A1").font = { bold: true, size: 14, color: { argb: "FF1A56B0" } };
     sheet.getCell("A1").alignment = { horizontal: "center" };
     sheet.addRow([]);
 

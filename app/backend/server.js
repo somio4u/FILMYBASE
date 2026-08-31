@@ -8418,8 +8418,11 @@ app.get("/api/crew/export-excel", requireLogin, async (req, res) => {
     : { category: "Category", linkedTo: "Character / Location", name: "Name", role: "Role", contactNumber: "Contact Number" };
 
   try {
+    // Cast is excluded — it's already shown against each character in the
+    // Script Breakdown's Artist List, so this sheet stays crew-only rather
+    // than replicating it.
     const result = await db.query(
-      "SELECT category, character_name, name, role, contact_number FROM crew_members WHERE scene_list_id = $1 ORDER BY category, created_at ASC",
+      "SELECT category, character_name, name, role, contact_number FROM crew_members WHERE scene_list_id = $1 AND category != 'artist' ORDER BY category, created_at ASC",
       [req.query.sceneListId]
     );
 

@@ -77,17 +77,15 @@ const LABELS = {
     stageScreenplayLabel: 'Screenplay',
     stageProductionLabel: 'Production',
     stageBreakdownLabel: 'Script Breakdown',
-    stageCrewLabel: 'Crew & Cast',
+    stageCrewLabel: 'Crew',
     stageScheduleLabel: 'Shoot Schedule',
-    crewHeading: 'Crew & Cast',
-    downloadAllCrewExcelLabel: 'Download All Cast & Crew (Excel)',
-    castSectionHeading: 'Cast',
+    crewHeading: 'Crew',
+    downloadAllCrewExcelLabel: 'Download All Crew (Excel)',
     artDepartmentHeading: 'Art Department',
     costumeDepartmentHeading: 'Costume Department',
     directionTeamHeading: 'Direction Team',
     productionTeamHeading: 'Production Team',
     otherCrewHeading: 'Other / Additional Crew',
-    castGroupHeading: 'Cast',
     crewGroupHeading: 'Crew',
     crewNameLabel: 'Name',
     crewRoleLabel: 'Role / Designation',
@@ -495,17 +493,15 @@ const LABELS = {
     stageScreenplayLabel: 'ସ୍କ୍ରିନପ୍ଲେ',
     stageProductionLabel: 'ପ୍ରଡକ୍ସନ୍',
     stageBreakdownLabel: 'ସ୍କ୍ରିପ୍ଟ ବ୍ରେକଡାଉନ୍',
-    stageCrewLabel: 'କ୍ରୁ ଓ କାଷ୍ଟ',
+    stageCrewLabel: 'କ୍ରୁ',
     stageScheduleLabel: 'ସୁଟିଂ ସିଡ୍ୟୁଲ୍',
-    crewHeading: 'କ୍ରୁ ଓ କାଷ୍ଟ',
-    downloadAllCrewExcelLabel: 'ସମସ୍ତ କାଷ୍ଟ ଓ କ୍ରୁ ଡାଉନଲୋଡ୍ କରନ୍ତୁ (Excel)',
-    castSectionHeading: 'କାଷ୍ଟ',
+    crewHeading: 'କ୍ରୁ',
+    downloadAllCrewExcelLabel: 'ସମସ୍ତ କ୍ରୁ ଡାଉନଲୋଡ୍ କରନ୍ତୁ (Excel)',
     artDepartmentHeading: 'ଆର୍ଟ ବିଭାଗ',
     costumeDepartmentHeading: 'ପୋଷାକ ବିଭାଗ',
     directionTeamHeading: 'ନିର୍ଦ୍ଦେଶନା ଦଳ',
     productionTeamHeading: 'ପ୍ରଡକ୍ସନ୍ ଦଳ',
     otherCrewHeading: 'ଅନ୍ୟାନ୍ୟ କ୍ରୁ',
-    castGroupHeading: 'କାଷ୍ଟ',
     crewGroupHeading: 'କ୍ରୁ',
     crewNameLabel: 'ନାମ',
     crewRoleLabel: 'ଭୂମିକା / ପଦବୀ',
@@ -6902,36 +6898,6 @@ function App() {
           >
             {t.downloadAllCrewExcelLabel}
           </a>
-
-          <div className="crew-cast-group">
-            <h3 className="crew-cast-group-heading">{t.castGroupHeading}</h3>
-            <CrewSection
-              category="artist"
-              heading={t.castSectionHeading}
-              members={crewMembers.filter((m) => m.category === 'artist')}
-              characterOptions={
-                scriptBreakdown?.artistList
-                  ? scriptBreakdown.artistList
-                      .map((item) => item.label)
-                      // Only characters that don't already have a confirmed
-                      // artist attached — once cast (from here or from the
-                      // Script Breakdown page itself, same underlying data),
-                      // they drop out of the "still needs casting" picker
-                      // instead of being asked for again.
-                      .filter((label) => !crewMembers.some((m) => m.category === 'artist' && m.characterName === label))
-                  : null
-              }
-              onAdd={handleAddCrewMember}
-              onUpdate={handleUpdateCrewMember}
-              onDelete={handleDeleteCrewMember}
-              isAdding={isAddingCrew}
-              deletingId={crewDeletingId}
-              updatingId={crewUpdatingId}
-              t={t}
-              BACKEND_URL={BACKEND_URL}
-              canEdit={canEditProduction}
-            />
-          </div>
 
           <div className="crew-cast-group">
             <h3 className="crew-cast-group-heading">{t.crewGroupHeading}</h3>

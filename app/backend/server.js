@@ -692,6 +692,28 @@ async function deletePhoto(filename) {
   }
 }
 
+// The other direction of savePhotoBuffer — needed so a photo attached a
+// few turns back in the agent chat can still actually be SEEN by the
+// model on a later turn (a plain text history entry like "(photo
+// attached)" gives it no way to answer "what does that note say again?").
+// Returns null rather than throwing on any failure so one unreadable old
+// photo can't break the whole conversation.
+async function loadPhotoBuffer(filename) {
+  if (!filename) return null;
+  const ext = path.extname(filename).toLowerCase();
+  const mimeType = MIME_TYPES_BY_EXT[ext] || "image/jpeg";
+  try {
+    if (supabase) {
+      const { data, error } = await supabase.storage.from(SUPABASE_STORAGE_BUCKET).download(filename);
+      if (error) return null;
+      return { buffer: Buffer.from(await data.arrayBuffer()), mimeType };
+    }
+    return { buffer: await fsPromises.readFile(path.join(UPLOADS_DIR, filename)), mimeType };
+  } catch {
+    return null;
+  }
+}
+
 // Always a fully-qualified URL — Supabase Storage only ever hands out
 // absolute URLs, so the local-disk branch matches that shape too (rather
 // than a bare "/uploads/..." the frontend would have to know to prefix
@@ -1449,12 +1471,17 @@ const AGENT_CHAT_NONE_ACTION_INSTRUCTION =
 const AGENT_CHAT_CAST_ASSIGNMENT_INSTRUCTION =
   'You can also propose reassigning who plays a character — e.g. the AD types a phone number and attaches a photo of a person, saying something like "she\'s Priyanka, cast her as Pushpa" (meaning: the real person in the photo is named Priyanka, and she should play the character Pushpa). To propose this, set proposedAction.type to "assign_cast" and fill castAssignment: characterName is the ROLE/character being cast (match it to one of the known cast entries above if it already exists, otherwise use the name exactly as given), actorName is the real person\'s name, and contactNumber is their phone number if given (empty string if not). Only propose this when both the character and the actor\'s name are clear — ask if either is ambiguous. When proposing assign_cast, leave sceneEdits and costumeEdit at their empty defaults.';
 
+const AGENT_CHAT_STAY_ON_TOPIC_INSTRUCTION =
+  "CRITICAL — always respond to the AD's MOST RECENT message specifically, on its own terms. If it raises a new topic, a correction, or a request unrelated to whatever was being discussed before, engage with THAT — don't drift back to or re-propose an earlier idea (especially one they just cancelled) unless they explicitly bring it up again. If they attach a new photo/document, its content is what this turn is actually about — read it fresh rather than assuming it repeats an earlier attachment's content.";
+
 const AGENT_CHAT_COSTUME_EDIT_INSTRUCTION =
   'You can also propose changing a character\'s costume recommendation list — e.g. "add 2 more nightwear sets for Shruti" or "Abhi doesn\'t need festive wear, drop it". To propose this, set proposedAction.type to "edit_costume" and fill costumeEdit: character is the character\'s name, and sets is the COMPLETE resulting list of costume sets for that character — read their CURRENT sets from the costume recommendations below and write back the full list with the requested change folded in (added, removed, or adjusted), not just the delta — each set has a category, a quantity, and a short plain-English reason. If that character has no costume recommendation yet, sets is just the new set(s) being added. Only propose this when the character and the change are both clear. Note: once a character\'s costume recommendation is approved it\'s meant to be locked, but a direct chat request like this is a deliberate override — go ahead and propose it; the human still confirms before anything actually changes.';
 
 const AGENT_CHAT_SYSTEM_PROMPTS = {
   schedule:
     'You are a sharp, friendly Production Scheduling Assistant, having a real back-and-forth conversation with an Assistant Director or Production Manager about their shoot schedule. Ask clarifying questions whenever something is ambiguous — never guess. Keep replies concise and practical, like a helpful colleague, not a formal report. The AD may attach a photo — it could be a handwritten note (properties/costume/remarks for one or more scenes) or a photo of a person for a casting decision; read it carefully and figure out which kind it is from context.\n\n' +
+    AGENT_CHAT_STAY_ON_TOPIC_INSTRUCTION +
+    "\n\n" +
     'You can propose editing one or more scenes\' costume, properties, or AD remark — ADDING to what\'s already there, never silently replacing or deleting existing info unless they explicitly ask you to remove/replace something. To propose this you must know EXACTLY which scene(s) (matching the [episodeIndex=X, sceneIndex=Y] identities in the schedule below) and what should change for each — if a handwritten note covers several scenes, include one entry in sceneEdits per scene. If you don\'t have enough information yet — which scene, or what exactly to change — ask instead of guessing.\n\n' +
     'When you DO have enough to propose concrete edits: set proposedAction.type to "edit_scenes"; for each scene, fill in the matching episodeIndex/sceneIndex exactly as shown in the schedule below; for whichever of costume/properties/adRemark is actually changing on that scene, write the COMPLETE resulting value — read that scene\'s current value from the schedule above and write it back with the new part folded in (e.g. if properties currently says "Portable Projector & Laptop" and they ask to add a bucket, write "Portable Projector & Laptop, bucket" — the full list, not just "bucket" alone), leaving whichever fields are NOT changing on that scene as empty strings. Also write a one-sentence description of the change(s) for them to confirm.\n\n' +
     AGENT_CHAT_CAST_ASSIGNMENT_INSTRUCTION +
@@ -1463,6 +1490,8 @@ const AGENT_CHAT_SYSTEM_PROMPTS = {
     '\n\nCRITICAL — your reply text must NEVER claim or imply the change already happened: never say "I\'ve added...", "Done", "I\'ve updated...", or similar past-tense/completed phrasing. You are only ever PROPOSING a change for them to review — nothing is applied until the human clicks confirm outside this conversation. Phrase it as an offer instead: "I\'d like to add a bucket to the properties for Episode 1 Scene 2 — want me to go ahead?" or "Here\'s what I\'m proposing: ...". Getting this wrong would make the AD think a change happened when it didn\'t.\n\nCurrent shoot schedule:\n',
   breakdown:
     'You are a sharp, friendly Script Breakdown Assistant, having a real back-and-forth conversation with a Production Manager or Director about the script breakdown (cast, locations, props, costumes, art/set). Ask clarifying questions whenever something is ambiguous. You cannot edit scenes from here, but you can handle casting and costume recommendations.\n\n' +
+    AGENT_CHAT_STAY_ON_TOPIC_INSTRUCTION +
+    "\n\n" +
     AGENT_CHAT_CAST_ASSIGNMENT_INSTRUCTION +
     "\n\n" +
     AGENT_CHAT_COSTUME_EDIT_INSTRUCTION +
@@ -1479,8 +1508,15 @@ async function generateAgentChatReply(stageKey, stateSummaryText, history, userM
 
   const lastUserParts = [...(attachmentParts ?? []), { text: userMessage }];
 
+  // history entries carry their own imageParts (re-loaded photo bytes) when
+  // one was attached — otherwise an earlier "here's a photo of my note"
+  // turn becomes literally unanswerable a few messages later, since all
+  // the model would have left to go on is the plain text placeholder.
   const contents = [
-    ...history.map((m) => ({ role: m.role === "assistant" ? "model" : "user", parts: [{ text: m.content }] })),
+    ...history.map((m) => ({
+      role: m.role === "assistant" ? "model" : "user",
+      parts: [...(m.imageParts ?? []), { text: m.content }],
+    })),
     { role: "user", parts: lastUserParts },
   ];
 
@@ -1594,15 +1630,23 @@ app.post(
     try {
       // Only images are persisted (as chat-history thumbnails) — a PDF/Word
       // attachment is read once for this call, same as the screenplay
-      // import flow, and not kept.
+      // import flow, and not kept. Its filename is still folded into the
+      // stored content below, since it's the only trace of that document
+      // that survives past this one turn — without it, a document
+      // attachment would look like it silently vanished from history.
       const attachmentPhotoPaths = await Promise.all(imageFiles.map((file) => savePhotoBuffer(file.buffer, file.originalname)));
+      const documentFiles = files.filter((file) => !/^image\//.test(file.mimetype));
+      const documentNote = documentFiles.length > 0 ? `(attached: ${documentFiles.map((f) => f.originalname).join(", ")})` : "";
+      const storedContent =
+        [message?.trim(), documentNote].filter(Boolean).join(" ") ||
+        (files.length > 1 ? `(${files.length} files attached)` : "(file attached)");
 
       const userInsert = await db.query(
         "INSERT INTO agent_chat_messages (concept_id, stage_key, role, content, author_name, attachment_photo_path) VALUES ($1, $2, 'user', $3, $4, $5) RETURNING id, role, content, author_name, attachment_photo_path, proposed_action, resolved, created_at",
         [
           conceptId,
           stageKey,
-          message?.trim() || (files.length > 1 ? `(${files.length} files attached)` : "(file attached)"),
+          storedContent,
           req.user.name,
           attachmentPhotoPaths.length > 0 ? JSON.stringify(attachmentPhotoPaths) : null,
         ]
@@ -1612,10 +1656,32 @@ app.post(
       // without the token cost (and cash cost) growing without bound as a
       // thread gets long.
       const historyResult = await db.query(
-        "SELECT role, content FROM agent_chat_messages WHERE concept_id = $1 AND stage_key = $2 ORDER BY created_at DESC LIMIT 20",
+        "SELECT role, content, attachment_photo_path FROM agent_chat_messages WHERE concept_id = $1 AND stage_key = $2 ORDER BY created_at DESC LIMIT 20",
         [conceptId, stageKey]
       );
-      const history = historyResult.rows.reverse().slice(0, -1); // drop the message we just inserted, already passed separately
+      const historyRows = historyResult.rows.reverse().slice(0, -1); // drop the message we just inserted, already passed separately
+
+      // A photo attached a few turns back needs to still be genuinely
+      // visible to the model on a later turn ("what does that note say
+      // again?"), not just a text placeholder — but re-sending EVERY past
+      // photo on every turn would make a long thread's token cost balloon,
+      // so only the 2 most recent photo-bearing turns get their images
+      // reloaded; older ones fall back to plain text.
+      const photoBearingIndexes = historyRows
+        .map((row, i) => (parseAttachmentPhotoPaths(row.attachment_photo_path).length > 0 ? i : null))
+        .filter((i) => i !== null)
+        .slice(-2);
+      const history = await Promise.all(
+        historyRows.map(async (row, i) => {
+          if (!photoBearingIndexes.includes(i)) return row;
+          const paths = parseAttachmentPhotoPaths(row.attachment_photo_path);
+          const loaded = await Promise.all(paths.map((p) => loadPhotoBuffer(p)));
+          const imageParts = loaded
+            .filter(Boolean)
+            .map((photo) => ({ inlineData: { data: photo.buffer.toString("base64"), mimeType: photo.mimeType } }));
+          return { ...row, imageParts };
+        })
+      );
 
       const { summary } = await buildStageSummaryForChat(conceptId, stageKey);
       const attachmentParts = await extractContentPartsForAttachments(files);

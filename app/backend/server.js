@@ -5000,6 +5000,138 @@ app.post("/api/script-breakdown/:id/classify-cast-categories", requireRole("admi
   }
 });
 
+// How many physical costume sets the wardrobe department should actually
+// prepare for each character — not just what they wear, but HOW MANY of
+// each look, inferred from how many scenes they're in and what kind of
+// scenes those are (office, home/night, casual outings, etc.). categories
+// are named per-character by the model (a doctor gets "hospital uniform",
+// not a forced generic label) rather than drawn from a fixed list. A day
+// player in one or two scenes should come back as a single set, quantity
+// 1 — this only gets elaborate for characters who are actually in enough
+// varied scenes to need it.
+const COSTUME_RECOMMENDATION_SCHEMA = {
+  type: Type.OBJECT,
+  properties: {
+    recommendations: {
+      type: Type.ARRAY,
+      items: {
+        type: Type.OBJECT,
+        properties: {
+          character: { type: Type.STRING },
+          totalScenes: { type: Type.INTEGER },
+          sets: {
+            type: Type.ARRAY,
+            items: {
+              type: Type.OBJECT,
+              properties: {
+                category: { type: Type.STRING },
+                quantity: { type: Type.INTEGER },
+                reason: BILINGUAL_TEXT_SCHEMA,
+              },
+              required: ["category", "quantity", "reason"],
+            },
+          },
+        },
+        required: ["character", "totalScenes", "sets"],
+      },
+    },
+  },
+  required: ["recommendations"],
+};
+
+// Same "don't trust one giant pass" lesson as AD_SHEET_BATCH_SIZE — a cast
+// of 30+ characters, each needing several reasoned sets, comfortably blows
+// past a single call's output budget and comes back as truncated/invalid
+// JSON. Small batches keep each response well within budget and reliable.
+const COSTUME_RECOMMENDATION_BATCH_SIZE = 8;
+
+async function generateCostumeRecommendationsForBatch(characterBriefs) {
+  const prompt = `You are a costume department head planning how many physical costume sets to prepare for each character in this production, based on how many scenes they're in and what kind of scenes those are (office, home/night, outdoor/casual, festive, etc.).\n\nFor EACH character below, infer the distinct costume categories they'd realistically need from the scenes they actually appear in — name each category in plain terms that genuinely fit THIS character (e.g. "Hospital Uniform" for a doctor, "School Uniform" for a student) rather than forcing a generic fixed list — and recommend a realistic QUANTITY of each. Continuity means the same physical outfit is usually reused across scenes set at the same "look", but production still needs spares of frequently-worn categories for laundry, damage, or reshoots, so quantity should reflect that, not just "1 per look". A character in very few scenes (a day player, a one-scene role) should get a single set, quantity 1, with a short reason — don't invent an elaborate breakdown for them. A lead appearing across dozens of varied scenes should get a fuller breakdown across several categories. Write each "reason" as a short bilingual note (English, and Odia if you can — leave "or" empty if not confident) explaining the recommendation, e.g. "Worn across 18 office scenes — 2 sets recommended for continuity while one is being laundered."\n\nCharacters:\n\n${characterBriefs.join("\n\n")}`;
+
+  const response = await generateContentWithRetry({
+    model: "gemini-flash-lite-latest",
+    contents: prompt,
+    config: {
+      responseMimeType: "application/json",
+      maxOutputTokens: 8192,
+      responseSchema: COSTUME_RECOMMENDATION_SCHEMA,
+    },
+  });
+
+  return JSON.parse(response.text).recommendations ?? [];
+}
+
+async function generateCostumeRecommendations(scriptBreakdown, sceneList) {
+  const flatScenes = flattenScenesForAdSheet(sceneList);
+  const adSheet = scriptBreakdown.adSheet ?? [];
+  const costumeByCharacter = new Map((scriptBreakdown.costumes ?? []).map((c) => [c.character.toLowerCase(), c]));
+
+  const characterBriefs = (scriptBreakdown.artistList ?? []).map((artist) => {
+    const sceneLines = [];
+    adSheet.forEach((row, i) => {
+      if (!row.mainCharacters?.some((c) => c.toLowerCase() === artist.label.toLowerCase())) return;
+      const scene = flatScenes[i];
+      if (!scene) return;
+      sceneLines.push(
+        `${scene.episodeLabel ? `${scene.episodeLabel}, ` : ""}Scene ${scene.sceneNumber}: ${scene.intExt}. ${scene.location?.en ?? ""} — ${scene.timeOfDay ?? ""}. ${scene.oneLiner?.en ?? ""}`
+      );
+    });
+    const costume = costumeByCharacter.get(artist.label.toLowerCase());
+    return `${artist.label} (${artist.gender || "Unspecified"}, ${artist.age || "Unspecified"}) — appears in ${sceneLines.length} scene(s).\nInvolvement: ${artist.notes?.en ?? ""}\nExisting costume note: ${costume?.description?.en ?? "(none yet)"}\nScenes:\n${sceneLines.join("\n") || "(no AD sheet scenes found for this character)"}`;
+  });
+
+  const batches = [];
+  for (let i = 0; i < characterBriefs.length; i += COSTUME_RECOMMENDATION_BATCH_SIZE) {
+    batches.push(characterBriefs.slice(i, i + COSTUME_RECOMMENDATION_BATCH_SIZE));
+  }
+
+  const results = await mapWithConcurrency(batches, 3, generateCostumeRecommendationsForBatch);
+  return results.flat();
+}
+
+app.post("/api/script-breakdown/:id/generate-costume-recommendations", requireRole("admin", "production_manager"), async (req, res) => {
+  const existing = await db.query("SELECT scene_list_id FROM script_breakdowns WHERE id = $1", [req.params.id]);
+  if (existing.rows.length === 0) {
+    res.status(404).json({ error: "Script breakdown not found" });
+    return;
+  }
+
+  const sceneListId = existing.rows[0].scene_list_id;
+  if (!(await userOwnsSceneList(req.user, sceneListId))) {
+    res.status(403).json({ error: "You don't have access to this project." });
+    return;
+  }
+
+  const latest = await db.query(
+    "SELECT id, content FROM script_breakdowns WHERE scene_list_id = $1 ORDER BY created_at DESC LIMIT 1",
+    [sceneListId]
+  );
+  if (String(latest.rows[0].id) !== String(req.params.id)) {
+    res.status(409).json({ error: "Someone else updated this breakdown since you loaded it. Reload the page and try again." });
+    return;
+  }
+  if (!Array.isArray(latest.rows[0].content.adSheet) || latest.rows[0].content.adSheet.length === 0) {
+    res.status(400).json({ error: "Generate the AD Scene Breakdown Sheet first — costume recommendations need it to know which scenes each character is in." });
+    return;
+  }
+
+  try {
+    const sceneListResult = await db.query("SELECT content FROM scene_lists WHERE id = $1", [sceneListId]);
+    const recommendations = await generateCostumeRecommendations(latest.rows[0].content, sceneListResult.rows[0].content);
+    const updatedContent = { ...latest.rows[0].content, costumeRecommendations: recommendations };
+
+    const insertResult = await db.query(
+      "INSERT INTO script_breakdowns (scene_list_id, content, feedback) VALUES ($1, $2, $3) RETURNING id, status, feedback",
+      [sceneListId, JSON.stringify(updatedContent), "Generated costume quantity recommendations"]
+    );
+
+    res.json({ ...insertResult.rows[0], sceneListId, ...updatedContent });
+  } catch (error) {
+    console.error("Costume recommendation generation failed:", error.message);
+    res.status(502).json({ error: error.message });
+  }
+});
+
 // The classic AD (Assistant Director) Scene Breakdown Sheet — one row per
 // scene, handed to the whole crew as a single production reference.
 // Generation is allowed for production_manager too (not admin-only like
@@ -5122,7 +5254,12 @@ app.get("/api/script-breakdown/:id/export", requireLogin, async (req, res) => {
   const lang = req.query.lang === "or" ? "or" : "en";
   const category = req.query.category;
 
-  if (!BREAKDOWN_CATEGORY_KEYS.includes(category)) {
+  // "propsAndArt" is a display-only pseudo-category — properties and art
+  // department notes share the exact same {label, notes} shape, so they're
+  // just concatenated into one combined document rather than being a real
+  // stored category of their own (props/art stay independently editable
+  // and reanalyzable on their own, unaffected by this).
+  if (category !== "propsAndArt" && !BREAKDOWN_CATEGORY_KEYS.includes(category)) {
     res.status(400).json({ error: "Unknown breakdown category." });
     return;
   }
@@ -5143,13 +5280,21 @@ app.get("/api/script-breakdown/:id/export", requireLogin, async (req, res) => {
     );
 
     const breakdown = result.rows[0].content;
-    const items = breakdown[category] ?? [];
+    const propsAndArtTag = { en: { prop: " (Property)", art: " (Art Note)" }, or: { prop: " (ପ୍ରପର୍ଟି)", art: " (ଆର୍ଟ ନୋଟ୍)" } };
+    const items =
+      category === "propsAndArt"
+        ? [
+            ...(breakdown.props ?? []).map((item) => ({ ...item, kind: "prop" })),
+            ...(breakdown.art ?? []).map((item) => ({ ...item, kind: "art" })),
+          ]
+        : (breakdown[category] ?? []);
     const categoryLabels = {
       artistList: { en: "Artist List", or: "କଳାକାର ତାଲିକା" },
       locationList: { en: "Location List", or: "ସ୍ଥାନ ତାଲିକା" },
       props: { en: "Property List", or: "ପ୍ରପର୍ଟି ତାଲିକା" },
       costumes: { en: "Costume Breakdown", or: "ପୋଷାକ ବିବରଣୀ" },
       art: { en: "Art Department Notes", or: "ଆର୍ଟ ବିଭାଗ ନୋଟ୍" },
+      propsAndArt: { en: "Properties & Art Department Notes", or: "ସାମଗ୍ରୀ ଓ କଳା ବିଭାଗ ମନ୍ତବ୍ୟ" },
     };
     const bodyFont = lang === "or" ? "odiaRegular" : "Helvetica";
     const headerFont = lang === "or" ? "odiaBold" : "Helvetica-Bold";
@@ -5166,6 +5311,9 @@ app.get("/api/script-breakdown/:id/export", requireLogin, async (req, res) => {
       castByCharacter = new Map(castResult.rows.map((row) => [row.character_name, row]));
     }
     const notCastLabel = lang === "or" ? "ଏପର୍ଯ୍ୟନ୍ତ କାଷ୍ଟ ହୋଇନାହିଁ — ଦୟାକରି ଅପଡେଟ୍ କରନ୍ତୁ" : "Not yet cast — please update";
+    const recommendationsByCharacter = new Map(
+      (breakdown.costumeRecommendations ?? []).map((rec) => [rec.character.toLowerCase(), rec])
+    );
 
     const doc = new PDFDocument({ size: "A4", margin: 50 });
     doc.registerFont("odiaRegular", FONTS.odiaRegular);
@@ -5185,7 +5333,12 @@ app.get("/api/script-breakdown/:id/export", requireLogin, async (req, res) => {
     }
 
     items.forEach((item) => {
-      const label = category === "locationList" ? item.location[lang] : category === "costumes" ? item.character : item.label;
+      const label =
+        category === "locationList"
+          ? item.location[lang]
+          : category === "costumes"
+            ? item.character
+            : item.label + (category === "propsAndArt" ? propsAndArtTag[lang][item.kind] : "");
       const noteField = category === "costumes" ? item.description : item.notes;
       doc.font(headerFont).fontSize(13).text(label, { continued: category === "locationList" });
       if (category === "locationList") {
@@ -5201,6 +5354,17 @@ app.get("/api/script-breakdown/:id/export", requireLogin, async (req, res) => {
           ? `କଳାକାର: ${cast ? cast.name : notCastLabel}${cast?.contact_number ? ` — ${cast.contact_number}` : ""}`
           : `Played by: ${cast ? cast.name : notCastLabel}${cast?.contact_number ? ` — ${cast.contact_number}` : ""}`;
         doc.font(bodyFont).fontSize(11).text(playedByLine, { indent: 10 });
+      }
+      if (category === "costumes") {
+        const rec = recommendationsByCharacter.get(item.character.toLowerCase());
+        if (rec) {
+          const recommendedLabel = lang === "or" ? "ପ୍ରସ୍ତାବିତ ପରିମାଣ" : "Recommended quantities";
+          doc.font(headerFont).fontSize(10).text(`${recommendedLabel} (${rec.totalScenes} ${lang === "or" ? "ଦୃଶ୍ୟ" : "scenes"}):`, { indent: 10 });
+          rec.sets.forEach((set) => {
+            const reasonText = set.reason?.[lang] ? ` — ${set.reason[lang]}` : "";
+            doc.font(bodyFont).fontSize(10).text(`${set.quantity}× ${set.category}${reasonText}`, { indent: 20 });
+          });
+        }
       }
       doc.moveDown(0.8);
     });
@@ -5225,33 +5389,49 @@ app.get("/api/script-breakdown/:id/export-excel", requireLogin, async (req, res)
   const lang = req.query.lang === "or" ? "or" : "en";
   const category = req.query.category;
 
-  if (!BREAKDOWN_CATEGORY_KEYS.includes(category)) {
+  if (category !== "propsAndArt" && !BREAKDOWN_CATEGORY_KEYS.includes(category)) {
     res.status(400).json({ error: "Unknown breakdown category." });
     return;
   }
 
   try {
-    const result = await db.query("SELECT content, scene_list_id FROM script_breakdowns WHERE id = $1", [req.params.id]);
-
-    if (result.rows.length === 0) {
+    // Same latest-revision fix as the PDF export above — :id only resolves
+    // which project this is, the content is always the current revision.
+    const idLookup = await db.query("SELECT scene_list_id FROM script_breakdowns WHERE id = $1", [req.params.id]);
+    if (idLookup.rows.length === 0) {
       res.status(404).json({ error: "Script breakdown not found" });
       return;
     }
+    const result = await db.query(
+      "SELECT content, scene_list_id FROM script_breakdowns WHERE scene_list_id = $1 ORDER BY created_at DESC LIMIT 1",
+      [idLookup.rows[0].scene_list_id]
+    );
 
-    const items = result.rows[0].content[category] ?? [];
+    const propsAndArtTag = { en: { prop: " (Property)", art: " (Art Note)" }, or: { prop: " (ପ୍ରପର୍ଟି)", art: " (ଆର୍ଟ ନୋଟ୍)" } };
+    const items =
+      category === "propsAndArt"
+        ? [
+            ...(result.rows[0].content.props ?? []).map((item) => ({ ...item, kind: "prop" })),
+            ...(result.rows[0].content.art ?? []).map((item) => ({ ...item, kind: "art" })),
+          ]
+        : (result.rows[0].content[category] ?? []);
     const categoryLabels = {
       artistList: { en: "Artist List", or: "କଳାକାର ତାଲିକା" },
       locationList: { en: "Location List", or: "ସ୍ଥାନ ତାଲିକା" },
       props: { en: "Property List", or: "ପ୍ରପର୍ଟି ତାଲିକା" },
       costumes: { en: "Costume Breakdown", or: "ପୋଷାକ ବିବରଣୀ" },
       art: { en: "Art Department Notes", or: "ଆର୍ଟ ବିଭାଗ ନୋଟ୍" },
+      propsAndArt: { en: "Properties & Art Department Notes", or: "ସାମଗ୍ରୀ ଓ କଳା ବିଭାଗ ମନ୍ତବ୍ୟ" },
     };
     const statusLabels = lang === "or" ? ["ବାକି ଅଛି", "ହୋଇଗଲା"] : ["Pending", "Done"];
     const columnLabels =
       lang === "or"
-        ? { name: "ନାମ", location: "ସ୍ଥାନ", intExt: "INT/EXT", sceneCount: "ଦୃଶ୍ୟ ସଂଖ୍ୟା", character: "ଚରିତ୍ର", notes: "ନୋଟ୍", status: "ସ୍ଥିତି", remarks: "ମନ୍ତବ୍ୟ", playedBy: "କଳାକାର", contactNumber: "ଯୋଗାଯୋଗ ନମ୍ବର", age: "ବୟସ", gender: "ଲିଙ୍ଗ" }
-        : { name: "Name", location: "Location", intExt: "INT/EXT", sceneCount: "Scene Count", character: "Character", notes: "Notes", status: "Status", remarks: "Remarks", playedBy: "Played By", contactNumber: "Contact Number", age: "Age", gender: "Gender" };
+        ? { name: "ନାମ", location: "ସ୍ଥାନ", intExt: "INT/EXT", sceneCount: "ଦୃଶ୍ୟ ସଂଖ୍ୟା", character: "ଚରିତ୍ର", notes: "ନୋଟ୍", status: "ସ୍ଥିତି", remarks: "ମନ୍ତବ୍ୟ", playedBy: "କଳାକାର", contactNumber: "ଯୋଗାଯୋଗ ନମ୍ବର", age: "ବୟସ", gender: "ଲିଙ୍ଗ", recommendedQuantities: "ପ୍ରସ୍ତାବିତ ପରିମାଣ" }
+        : { name: "Name", location: "Location", intExt: "INT/EXT", sceneCount: "Scene Count", character: "Character", notes: "Notes", status: "Status", remarks: "Remarks", playedBy: "Played By", contactNumber: "Contact Number", age: "Age", gender: "Gender", recommendedQuantities: "Recommended Quantities" };
     const notCastLabel = lang === "or" ? "ଏପର୍ଯ୍ୟନ୍ତ କାଷ୍ଟ ହୋଇନାହିଁ — ଦୟାକରି ଅପଡେଟ୍ କରନ୍ତୁ" : "Not yet cast — please update";
+    const recommendationsByCharacter = new Map(
+      (result.rows[0].content.costumeRecommendations ?? []).map((rec) => [rec.character.toLowerCase(), rec])
+    );
 
     // Real-world casting info lives in crew_members, not the AI-analyzed
     // breakdown content — join it in here so the exported sheet reflects
@@ -5282,8 +5462,16 @@ app.get("/api/script-breakdown/:id/export-excel", requireLogin, async (req, res)
       columns = [
         { header: columnLabels.character, key: "character", width: 22 },
         { header: columnLabels.notes, key: "notes", width: 55 },
+        { header: columnLabels.recommendedQuantities, key: "recommendedQuantities", width: 45 },
       ];
-      rows = items.map((item) => ({ character: item.character, notes: item.description[lang] }));
+      rows = items.map((item) => {
+        const rec = recommendationsByCharacter.get(item.character.toLowerCase());
+        return {
+          character: item.character,
+          notes: item.description[lang],
+          recommendedQuantities: rec ? rec.sets.map((set) => `${set.quantity}× ${set.category}`).join("; ") : "",
+        };
+      });
     } else if (category === "artistList") {
       columns = [
         { header: columnLabels.name, key: "name", width: 22 },
@@ -5309,7 +5497,10 @@ app.get("/api/script-breakdown/:id/export-excel", requireLogin, async (req, res)
         { header: columnLabels.name, key: "name", width: 22 },
         { header: columnLabels.notes, key: "notes", width: 55 },
       ];
-      rows = items.map((item) => ({ name: item.label, notes: item.notes[lang] }));
+      rows = items.map((item) => ({
+        name: item.label + (category === "propsAndArt" ? propsAndArtTag[lang][item.kind] : ""),
+        notes: item.notes[lang],
+      }));
     }
     columns.push({ header: columnLabels.status, key: "status", width: 12 }, { header: columnLabels.remarks, key: "remarks", width: 30 });
 

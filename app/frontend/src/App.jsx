@@ -16,6 +16,7 @@ window.fetch = (url, options = {}) => nativeFetch(url, { ...options, credentials
 const LABELS = {
   en: {
     heading: 'Filmmaking App',
+    loginWelcomeHeading: 'Get into your project — happy filming. Log in to explore.',
     openMenuLabel: 'Open menu',
     closeMenuLabel: 'Close menu',
     usernameLabel: 'Username',
@@ -84,6 +85,10 @@ const LABELS = {
     artDepartmentHeading: 'Art Department',
     costumeDepartmentHeading: 'Costume Department',
     masterCrewHeading: 'Master Crew List',
+    castGroupHeading: 'Cast',
+    crewGroupHeading: 'Crew',
+    locationGroupHeading: 'Location List',
+    locationSectionHeading: 'Locations',
     crewNameLabel: 'Name',
     crewRoleLabel: 'Role / Designation',
     crewContactLabel: 'Contact Number',
@@ -113,6 +118,14 @@ const LABELS = {
     agentChatAttachPhotoLabel: 'Attach a photo (handwritten note or cast photo)',
     agentChatPhotoAttachedNote: 'Photo attached',
     agentChatCancelledNote: 'Cancelled — nothing was changed.',
+    agentChatGreetingHi: 'Hi',
+    agentChatGreetingPrompt: 'What would you like to do?',
+    scheduleSuggestion1: "Change something in a scene",
+    scheduleSuggestion2: 'Reassign who plays a character',
+    scheduleSuggestion3: "Ask what's scheduled for a given day",
+    breakdownSuggestion1: 'Reassign who plays a character',
+    breakdownSuggestion2: 'Ask about the cast list',
+    breakdownSuggestion3: 'Ask about locations or props',
     exportButtonLabel: 'Save Project',
     exportingProjectLabel: 'Saving…',
     connectGoogleContactsButton: 'Connect Google Contacts',
@@ -264,6 +277,12 @@ const LABELS = {
     propsHeading: 'Property List (Props)',
     costumesHeading: 'Costume Changes',
     artHeading: 'Art Department Notes',
+    propsAndArtHeading: 'Properties & Art Department Notes',
+    costumeRecommendationsHeading: 'Recommended Costume Quantities',
+    generateCostumeRecommendationsButton: 'Recommend Costume Quantities',
+    generatingCostumeRecommendationsLabel: 'Analyzing scenes…',
+    noCostumeRecommendationsYet: 'Not generated yet — click "Recommend Costume Quantities" to see how many sets each character needs.',
+    costumeRecommendationsNeedsAdSheetHint: 'Generate the AD Scene Breakdown Sheet first — this needs it to know which scenes each character is in.',
     downloadPdfLabel: 'Download PDF',
     downloadExcelLabel: 'Download Excel',
     scenesLabel: 'scenes',
@@ -391,6 +410,7 @@ const LABELS = {
   },
   or: {
     heading: 'ଚଳଚ୍ଚିତ୍ର ନିର୍ମାଣ ଆପ୍',
+    loginWelcomeHeading: 'ଆପଣଙ୍କର ପ୍ରୋଜେକ୍ଟରେ ପ୍ରବେଶ କରନ୍ତୁ — ଶୁଭ ଚିତ୍ରଗ୍ରହଣ। ଅନ୍ୱେଷଣ କରିବାକୁ ଲଗ୍ ଇନ୍ କରନ୍ତୁ।',
     openMenuLabel: 'ମେନୁ ଖୋଲନ୍ତୁ',
     closeMenuLabel: 'ମେନୁ ବନ୍ଦ କରନ୍ତୁ',
     usernameLabel: 'ୟୁଜରନେମ୍',
@@ -459,6 +479,10 @@ const LABELS = {
     artDepartmentHeading: 'ଆର୍ଟ ବିଭାଗ',
     costumeDepartmentHeading: 'ପୋଷାକ ବିଭାଗ',
     masterCrewHeading: 'ମାଷ୍ଟର କ୍ରୁ ତାଲିକା',
+    castGroupHeading: 'କାଷ୍ଟ',
+    crewGroupHeading: 'କ୍ରୁ',
+    locationGroupHeading: 'ସ୍ଥାନ ତାଲିକା',
+    locationSectionHeading: 'ସ୍ଥାନଗୁଡ଼ିକ',
     crewNameLabel: 'ନାମ',
     crewRoleLabel: 'ଭୂମିକା / ପଦବୀ',
     crewContactLabel: 'ଯୋଗାଯୋଗ ନମ୍ବର',
@@ -488,6 +512,14 @@ const LABELS = {
     agentChatAttachPhotoLabel: 'ଏକ ଫଟୋ ଲଗାନ୍ତୁ (ହସ୍ତଲିଖିତ ନୋଟ୍ କିମ୍ବା କାଷ୍ଟ ଫଟୋ)',
     agentChatPhotoAttachedNote: 'ଫଟୋ ଲଗାଗଲା',
     agentChatCancelledNote: 'ବାତିଲ୍ ହୋଇଗଲା — କିଛି ପରିବର୍ତ୍ତନ ହେଲା ନାହିଁ।',
+    agentChatGreetingHi: 'ନମସ୍କାର',
+    agentChatGreetingPrompt: 'ଆପଣ କଣ କରିବାକୁ ଚାହାଁନ୍ତି?',
+    scheduleSuggestion1: 'ଏକ ଦୃଶ୍ୟରେ କିଛି ପରିବର୍ତ୍ତନ କରନ୍ତୁ',
+    scheduleSuggestion2: 'ଏକ ଚରିତ୍ର କିଏ ଅଭିନୟ କରୁଛନ୍ତି ତାହା ବଦଳାନ୍ତୁ',
+    scheduleSuggestion3: 'ଏକ ନିର୍ଦ୍ଦିଷ୍ଟ ଦିନ ପାଇଁ କଣ ସିଡ୍ୟୁଲ୍ ହୋଇଛି ପଚାରନ୍ତୁ',
+    breakdownSuggestion1: 'ଏକ ଚରିତ୍ର କିଏ ଅଭିନୟ କରୁଛନ୍ତି ତାହା ବଦଳାନ୍ତୁ',
+    breakdownSuggestion2: 'କାଷ୍ଟ ତାଲିକା ବିଷୟରେ ପଚାରନ୍ତୁ',
+    breakdownSuggestion3: 'ସ୍ଥାନ କିମ୍ବା ପ୍ରପର୍ଟି ବିଷୟରେ ପଚାରନ୍ତୁ',
     exportButtonLabel: 'ପ୍ରୋଜେକ୍ଟ ସେଭ୍ କରନ୍ତୁ',
     exportingProjectLabel: 'ସେଭ୍ ହେଉଛି…',
     connectGoogleContactsButton: 'Google ଯୋଗାଯୋଗ ସଂଯୋଗ କରନ୍ତୁ',
@@ -639,6 +671,12 @@ const LABELS = {
     propsHeading: 'ସାମଗ୍ରୀ ତାଲିକା (ପ୍ରପ୍ସ)',
     costumesHeading: 'ପୋଷାକ ପରିବର୍ତ୍ତନ',
     artHeading: 'କଳା ବିଭାଗ ମନ୍ତବ୍ୟ',
+    propsAndArtHeading: 'ସାମଗ୍ରୀ ଓ କଳା ବିଭାଗ ମନ୍ତବ୍ୟ',
+    costumeRecommendationsHeading: 'ପ୍ରସ୍ତାବିତ ପୋଷାକ ପରିମାଣ',
+    generateCostumeRecommendationsButton: 'ପୋଷାକ ପରିମାଣ ପ୍ରସ୍ତାବ କରନ୍ତୁ',
+    generatingCostumeRecommendationsLabel: 'ଦୃଶ୍ୟ ବିଶ୍ଳେଷଣ ହେଉଛି…',
+    noCostumeRecommendationsYet: 'ଏପର୍ଯ୍ୟନ୍ତ ତିଆରି ହୋଇନାହିଁ — ପ୍ରତ୍ୟେକ ଚରିତ୍ରକୁ କେତେ ପୋଷାକ ଦରକାର ଦେଖିବାକୁ "ପୋଷାକ ପରିମାଣ ପ୍ରସ୍ତାବ କରନ୍ତୁ" କ୍ଲିକ୍ କରନ୍ତୁ।',
+    costumeRecommendationsNeedsAdSheetHint: 'ପ୍ରଥମେ AD ଦୃଶ୍ୟ ବିଭାଜନ ସିଟ୍ ତିଆରି କରନ୍ତୁ — ପ୍ରତ୍ୟେକ ଚରିତ୍ର କେଉଁ ଦୃଶ୍ୟରେ ଅଛନ୍ତି ଜାଣିବାକୁ ଏହା ଦରକାର।',
     downloadPdfLabel: 'PDF ଡାଉନଲୋଡ୍ କରନ୍ତୁ',
     downloadExcelLabel: 'Excel ଡାଉନଲୋଡ୍ କରନ୍ତୁ',
     scenesLabel: 'ଦୃଶ୍ୟ',
@@ -798,6 +836,20 @@ const ICONS = {
       <path d="M12 19l7-7 3 3-7 7-3-3Z" strokeLinecap="round" strokeLinejoin="round" />
       <path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18" strokeLinecap="round" strokeLinejoin="round" />
       <path d="M2 2l7.5 7.5" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  ),
+  users: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+      <path d="M16 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M8.5 12a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5Z" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M2.5 20c0-3 2.7-5.5 6-5.5s6 2.5 6 5.5" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M14 14.8c2.9.3 5 2.6 5 5.2" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  ),
+  calendar: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+      <path d="M4 5h16a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1Z" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M3 10h18M8 3v4M16 3v4" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   ),
   pencil: (
@@ -1040,6 +1092,17 @@ function formatDisplayDate(isoDate) {
   const [y, m, d] = isoDate.split('-')
   if (!y || !m || !d) return isoDate
   return `${d}-${m}-${y}`
+}
+
+// A long series/film title needs to fit the sidebar's fixed width without
+// being cut off or shrunk illegibly — splitting off a trailing "Season 2" /
+// "Part 1" / "S2" style suffix onto its own smaller line (like the
+// reference UI's title treatment) reads far better than one long truncated
+// line. Titles without that pattern are left as a single line.
+function splitProjectTitleForSidebar(title) {
+  const match = /^(.*?)[\s:—-]+((?:season|part|series|s)\.?\s*\d+.*)$/i.exec(title || '')
+  if (!match) return { main: title, sub: '' }
+  return { main: match[1].trim(), sub: match[2].trim() }
 }
 
 // Every client-downloaded file gets the same "when was this generated"
@@ -1439,7 +1502,7 @@ function CrewSection({ category, heading, members, characterOptions, onAdd, onUp
 // exactly what silently swallowed a real request earlier in this project.
 // History persists per (project, stage) in localStorage so re-opening the
 // panel later still shows what was asked and what happened.
-function ChangesChatPanel({ t, historyKey, barConfig, isBusy, errorMessage }) {
+function ChangesChatPanel({ t, historyKey, barConfig, isBusy, errorMessage, currentUserName }) {
   const [isOpen, setIsOpen] = useState(false)
   const [historiesByKey, setHistoriesByKey] = useState(() => {
     try {
@@ -1534,7 +1597,12 @@ function ChangesChatPanel({ t, historyKey, barConfig, isBusy, errorMessage }) {
           </button>
         </div>
         <div className="changes-chat-messages">
-          {messages.length === 0 && <p className="changes-chat-empty">{t.changesChatEmptyNote}</p>}
+          {messages.length === 0 && (
+            <div className="agent-chat-greeting">
+              <p className="agent-chat-greeting-hi">{currentUserName ? `${t.agentChatGreetingHi} ${currentUserName}` : t.agentChatGreetingHi}</p>
+              <p className="agent-chat-greeting-prompt">{t.changesChatEmptyNote}</p>
+            </div>
+          )}
           {messages.map((m, i) => (
             <div key={i} className={m.role === 'user' ? 'changes-chat-bubble user' : 'changes-chat-bubble system'}>
               {m.text}
@@ -1581,7 +1649,7 @@ function ChangesChatPanel({ t, historyKey, barConfig, isBusy, errorMessage }) {
 // doesn't need to know two different chat mechanisms exist. A photo can be
 // attached right in the input — a handwritten AD note, or a person's photo
 // for a casting decision — instead of a separate upload button elsewhere.
-function AgentChatPanel({ t, BACKEND_URL, conceptId, stageKey, onScheduleUpdated, onCastMemberUpdated }) {
+function AgentChatPanel({ t, BACKEND_URL, conceptId, stageKey, currentUserName, onScheduleUpdated, onCastMemberUpdated }) {
   const [isOpen, setIsOpen] = useState(false)
   const [messages, setMessages] = useState([])
   const [inputText, setInputText] = useState('')
@@ -1712,7 +1780,22 @@ function AgentChatPanel({ t, BACKEND_URL, conceptId, stageKey, onScheduleUpdated
           </button>
         </div>
         <div className="changes-chat-messages">
-          {messages.length === 0 && <p className="changes-chat-empty">{t.changesChatEmptyNote}</p>}
+          {messages.length === 0 && (
+            <div className="agent-chat-greeting">
+              <p className="agent-chat-greeting-hi">{currentUserName ? `${t.agentChatGreetingHi} ${currentUserName}` : t.agentChatGreetingHi}</p>
+              <p className="agent-chat-greeting-prompt">{t.agentChatGreetingPrompt}</p>
+              <div className="agent-chat-suggestions">
+                {(stageKey === 'schedule'
+                  ? [t.scheduleSuggestion1, t.scheduleSuggestion2, t.scheduleSuggestion3]
+                  : [t.breakdownSuggestion1, t.breakdownSuggestion2, t.breakdownSuggestion3]
+                ).map((suggestion) => (
+                  <button key={suggestion} className="agent-chat-suggestion-chip" onClick={() => setInputText(suggestion)}>
+                    {suggestion}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
           {messages.map((m) => (
             <div key={m.id} className={m.role === 'user' ? 'changes-chat-bubble user' : 'changes-chat-bubble system'}>
               {m.attachment_photo_url && <img src={m.attachment_photo_url} alt="" className="changes-chat-attachment-thumb" />}
@@ -2278,6 +2361,7 @@ function App() {
   const [isFindingMissingCharacters, setIsFindingMissingCharacters] = useState(false)
   const [foundMissingCharacters, setFoundMissingCharacters] = useState(null)
   const [isClassifyingCastCategories, setIsClassifyingCastCategories] = useState(false)
+  const [isGeneratingCostumeRecommendations, setIsGeneratingCostumeRecommendations] = useState(false)
   const [isExportingProject, setIsExportingProject] = useState(false)
 
   const [googleConnected, setGoogleConnected] = useState(false)
@@ -3824,6 +3908,30 @@ function App() {
     setIsClassifyingCastCategories(false)
   }
 
+  async function handleGenerateCostumeRecommendationsClick() {
+    setIsGeneratingCostumeRecommendations(true)
+    setErrorMessage(null)
+
+    try {
+      const response = await fetch(`${BACKEND_URL}/api/script-breakdown/${scriptBreakdown.id}/generate-costume-recommendations`, {
+        method: 'POST',
+      })
+      const data = await response.json()
+
+      if (!response.ok) {
+        setErrorMessage(data.error || t.genericError)
+        setIsGeneratingCostumeRecommendations(false)
+        return
+      }
+
+      setScriptBreakdown(data)
+    } catch {
+      setErrorMessage(t.genericError)
+    }
+
+    setIsGeneratingCostumeRecommendations(false)
+  }
+
   function renderBreakdownCategory(category, headingKey) {
     const items = scriptBreakdown[category] ?? []
     const isEditing = editingBreakdownCategory === category
@@ -4841,6 +4949,14 @@ function App() {
     }
   }
 
+  // The conversational agent chat should stay available for ongoing
+  // changes even after a stage is approved — it's not just a "revise before
+  // approving" tool, so its own stage is picked independently of barConfig
+  // (which goes 'idle' the moment everything's approved and would
+  // otherwise make the whole chat vanish). Prefers 'schedule' once one
+  // exists since that's the most advanced stage reached.
+  const agentChatStageKey = shootSchedule ? 'schedule' : scriptBreakdown ? 'breakdown' : null
+
   if (currentUser === undefined) {
     return <div className="app-shell" />
   }
@@ -4849,7 +4965,7 @@ function App() {
     return (
       <div className="login-screen">
         <form className="login-form" onSubmit={handleLoginSubmit}>
-          <h1>{t.heading}</h1>
+          <h1>{t.loginWelcomeHeading}</h1>
           <input
             type="text"
             placeholder={t.usernameLabel}
@@ -4882,7 +4998,7 @@ function App() {
         <button className="mobile-menu-button" onClick={() => setIsSidebarOpen(true)} aria-label={t.openMenuLabel}>
           ☰
         </button>
-        <span className="mobile-topbar-title">{t.heading}</span>
+        <span className="mobile-topbar-title">{conceptId ? sidebarProjectLabel : t.heading}</span>
       </div>
 
       {isSidebarOpen && <div className="sidebar-overlay" onClick={() => setIsSidebarOpen(false)} />}
@@ -4890,7 +5006,23 @@ function App() {
       <aside className={`sidebar ${isSidebarOpen ? 'sidebar-open' : ''}`}>
         <div className="sidebar-header">
           <span className="sidebar-logo">{ICONS.clapperboard}</span>
-          <span className="sidebar-title">{t.heading}</span>
+          <span className="sidebar-title">
+            {conceptId ? (
+              (() => {
+                const { main, sub } = splitProjectTitleForSidebar(sidebarProjectLabel)
+                return sub ? (
+                  <>
+                    <span className="sidebar-title-main">{main}</span>
+                    <span className="sidebar-title-sub">{sub}</span>
+                  </>
+                ) : (
+                  main
+                )
+              })()
+            ) : (
+              t.heading
+            )}
+          </span>
           <button className="sidebar-close-button" onClick={() => setIsSidebarOpen(false)} aria-label={t.closeMenuLabel}>
             ✕
           </button>
@@ -4985,19 +5117,6 @@ function App() {
           style={{ display: 'none' }}
         />
 
-        {googleContactsNotice && (
-          <p className={googleContactsNotice === 'connected' ? 'runtime-summary' : 'feedback-note'}>
-            {googleContactsNotice === 'connected' ? t.googleContactsConnectedNotice : t.googleContactsErrorNotice}
-          </p>
-        )}
-        {canEditProduction && (googleConnected ? (
-          <p className="sidebar-section-note">{t.googleContactsConnectedLabel}</p>
-        ) : (
-          <a className="import-export-button google-connect-button" href={`${BACKEND_URL}/api/auth/google`}>
-            {t.connectGoogleContactsButton}
-          </a>
-        ))}
-
         <div className="sidebar-section">
           <h4 className="sidebar-section-title">{t.agentsSectionTitle}</h4>
           <div className="agent-list">
@@ -5052,21 +5171,21 @@ function App() {
               {t.productionAgentLabel}
             </button>
             {activeAgent === 'production' && (
-              <div className="stage-progress agent-substages">
-                <button className={`stage-progress-item stage-${stageProduction}`} onClick={() => handleStageClick('stage-production')}>
-                  <span className="stage-progress-dot" />
+              <div className="production-main-nav">
+                <button className={`production-main-nav-item stage-${stageProduction}`} onClick={() => handleStageClick('stage-production')}>
+                  <span className="production-main-nav-icon">{ICONS.clapperboard}</span>
                   {t.stageProductionLabel}
                 </button>
-                <button className={`stage-progress-item stage-${stageBreakdown}`} onClick={() => handleStageClick('stage-breakdown')}>
-                  <span className="stage-progress-dot" />
+                <button className={`production-main-nav-item stage-${stageBreakdown}`} onClick={() => handleStageClick('stage-breakdown')}>
+                  <span className="production-main-nav-icon">{ICONS.pencil}</span>
                   {t.stageBreakdownLabel}
                 </button>
-                <button className="stage-progress-item stage-upcoming" onClick={() => handleStageClick('stage-crew')}>
-                  <span className="stage-progress-dot" />
+                <button className="production-main-nav-item stage-upcoming" onClick={() => handleStageClick('stage-crew')}>
+                  <span className="production-main-nav-icon">{ICONS.users}</span>
                   {t.stageCrewLabel}
                 </button>
-                <button className={`stage-progress-item stage-${stageSchedule}`} onClick={() => handleStageClick('stage-schedule')}>
-                  <span className="stage-progress-dot" />
+                <button className={`production-main-nav-item stage-${stageSchedule}`} onClick={() => handleStageClick('stage-schedule')}>
+                  <span className="production-main-nav-icon">{ICONS.calendar}</span>
                   {t.stageScheduleLabel}
                 </button>
               </div>
@@ -5074,6 +5193,7 @@ function App() {
           </div>
         </div>
 
+        {currentUser.role === 'admin' && (
         <div className="sidebar-section">
           <h4 className="sidebar-section-title">{t.sidebarHistoryLabel}</h4>
           <p className="sidebar-section-note">{t.sidebarHistoryNote}</p>
@@ -5121,6 +5241,7 @@ function App() {
             })
           )}
         </div>
+        )}
 
         <div className="sidebar-lang-toggle">
           <button
@@ -5375,32 +5496,6 @@ function App() {
       )}
       </>
       )}
-
-      {(activeAgent === 'story'
-        ? startStage === 'idea' || (conceptId && projectType === 'story')
-        : (scriptBreakdown && scriptBreakdown.status !== 'approved') || (shootSchedule && shootSchedule.status !== 'approved')) &&
-        (barConfig.stageKey === 'schedule' || barConfig.stageKey === 'breakdown' ? (
-          <AgentChatPanel
-            t={t}
-            BACKEND_URL={BACKEND_URL}
-            conceptId={conceptId}
-            stageKey={barConfig.stageKey}
-            onScheduleUpdated={setShootSchedule}
-            onCastMemberUpdated={(castMember) =>
-              setCrewMembers((prev) =>
-                prev.some((m) => m.id === castMember.id) ? prev.map((m) => (m.id === castMember.id ? castMember : m)) : [...prev, castMember]
-              )
-            }
-          />
-        ) : (
-          <ChangesChatPanel
-            t={t}
-            historyKey={`${conceptId ?? 'new'}:${barConfig.stageKey}`}
-            barConfig={barConfig}
-            isBusy={isBarBusy}
-            errorMessage={errorMessage}
-          />
-        ))}
 
       {activeAgent === 'story' && (
       <>
@@ -6165,9 +6260,63 @@ function App() {
 
               {renderBreakdownCategory('artistList', 'artistListHeading')}
               {renderBreakdownCategory('locationList', 'locationListHeading')}
-              {renderBreakdownCategory('props', 'propsHeading')}
               {renderBreakdownCategory('costumes', 'costumesHeading')}
-              {renderBreakdownCategory('art', 'artHeading')}
+
+              <div className="costume-recommendations-section">
+                <div className="breakdown-category-header">
+                  <h4>{t.costumeRecommendationsHeading}</h4>
+                  {canAnalyzeScript && (
+                    <button
+                      className="breakdown-action-button"
+                      onClick={handleGenerateCostumeRecommendationsClick}
+                      disabled={isGeneratingCostumeRecommendations || !scriptBreakdown.adSheet?.length}
+                      title={!scriptBreakdown.adSheet?.length ? t.costumeRecommendationsNeedsAdSheetHint : undefined}
+                    >
+                      {isGeneratingCostumeRecommendations ? t.generatingCostumeRecommendationsLabel : t.generateCostumeRecommendationsButton}
+                    </button>
+                  )}
+                </div>
+                {!scriptBreakdown.costumeRecommendations?.length ? (
+                  <p className="sidebar-section-note">{t.noCostumeRecommendationsYet}</p>
+                ) : (
+                  scriptBreakdown.costumeRecommendations.map((rec) => (
+                    <div className="costume-recommendation-card" key={rec.character}>
+                      <strong>{rec.character}</strong>{' '}
+                      <span className="breakdown-item-meta">
+                        ({rec.totalScenes} {t.scenesLabel})
+                      </span>
+                      <ul className="costume-recommendation-sets">
+                        {rec.sets.map((set, i) => (
+                          <li key={i}>
+                            <strong>{set.quantity}×</strong> {set.category}
+                            {set.reason?.[language] && <span className="costume-recommendation-reason"> — {set.reason[language]}</span>}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  ))
+                )}
+              </div>
+
+              <div className="breakdown-merged-group">
+                <div className="breakdown-merged-group-header">
+                  <h4>{t.propsAndArtHeading}</h4>
+                  <a
+                    className="breakdown-pdf-link"
+                    href={`${BACKEND_URL}/api/script-breakdown/${scriptBreakdown.id}/export?category=propsAndArt&lang=${language}`}
+                  >
+                    {t.downloadPdfLabel}
+                  </a>
+                  <a
+                    className="breakdown-pdf-link"
+                    href={`${BACKEND_URL}/api/script-breakdown/${scriptBreakdown.id}/export-excel?category=propsAndArt&lang=${language}`}
+                  >
+                    {t.downloadExcelLabel}
+                  </a>
+                </div>
+                {renderBreakdownCategory('props', 'propsHeading')}
+                {renderBreakdownCategory('art', 'artHeading')}
+              </div>
 
               {scriptBreakdown.previousFeedback && (
                 <p className="feedback-note">
@@ -6233,77 +6382,109 @@ function App() {
             {t.downloadAllCrewExcelLabel}
           </a>
 
-          <CrewSection
-            category="artist"
-            heading={t.castSectionHeading}
-            members={crewMembers.filter((m) => m.category === 'artist')}
-            characterOptions={
-              scriptBreakdown?.artistList
-                ? scriptBreakdown.artistList
-                    .map((item) => item.label)
-                    // Only characters that don't already have a confirmed
-                    // artist attached — once cast (from here or from the
-                    // Script Breakdown page itself, same underlying data),
-                    // they drop out of the "still needs casting" picker
-                    // instead of being asked for again.
-                    .filter((label) => !crewMembers.some((m) => m.category === 'artist' && m.characterName === label))
-                : null
-            }
-            onAdd={handleAddCrewMember}
-            onUpdate={handleUpdateCrewMember}
-            onDelete={handleDeleteCrewMember}
-            isAdding={isAddingCrew}
-            deletingId={crewDeletingId}
-            updatingId={crewUpdatingId}
-            t={t}
-            BACKEND_URL={BACKEND_URL}
-            canEdit={canEditProduction}
-          />
-          <CrewSection
-            category="art_department"
-            heading={t.artDepartmentHeading}
-            members={crewMembers.filter((m) => m.category === 'art_department')}
-            characterOptions={null}
-            onAdd={handleAddCrewMember}
-            onUpdate={handleUpdateCrewMember}
-            onDelete={handleDeleteCrewMember}
-            isAdding={isAddingCrew}
-            deletingId={crewDeletingId}
-            updatingId={crewUpdatingId}
-            t={t}
-            BACKEND_URL={BACKEND_URL}
-            canEdit={canEditProduction}
-          />
-          <CrewSection
-            category="costume_department"
-            heading={t.costumeDepartmentHeading}
-            members={crewMembers.filter((m) => m.category === 'costume_department')}
-            characterOptions={null}
-            onAdd={handleAddCrewMember}
-            onUpdate={handleUpdateCrewMember}
-            onDelete={handleDeleteCrewMember}
-            isAdding={isAddingCrew}
-            deletingId={crewDeletingId}
-            updatingId={crewUpdatingId}
-            t={t}
-            BACKEND_URL={BACKEND_URL}
-            canEdit={canEditProduction}
-          />
-          <CrewSection
-            category="crew"
-            heading={t.masterCrewHeading}
-            members={crewMembers.filter((m) => m.category === 'crew')}
-            characterOptions={null}
-            onAdd={handleAddCrewMember}
-            onUpdate={handleUpdateCrewMember}
-            onDelete={handleDeleteCrewMember}
-            isAdding={isAddingCrew}
-            deletingId={crewDeletingId}
-            updatingId={crewUpdatingId}
-            t={t}
-            BACKEND_URL={BACKEND_URL}
-            canEdit={canEditProduction}
-          />
+          <div className="crew-cast-group">
+            <h3 className="crew-cast-group-heading">{t.castGroupHeading}</h3>
+            <CrewSection
+              category="artist"
+              heading={t.castSectionHeading}
+              members={crewMembers.filter((m) => m.category === 'artist')}
+              characterOptions={
+                scriptBreakdown?.artistList
+                  ? scriptBreakdown.artistList
+                      .map((item) => item.label)
+                      // Only characters that don't already have a confirmed
+                      // artist attached — once cast (from here or from the
+                      // Script Breakdown page itself, same underlying data),
+                      // they drop out of the "still needs casting" picker
+                      // instead of being asked for again.
+                      .filter((label) => !crewMembers.some((m) => m.category === 'artist' && m.characterName === label))
+                  : null
+              }
+              onAdd={handleAddCrewMember}
+              onUpdate={handleUpdateCrewMember}
+              onDelete={handleDeleteCrewMember}
+              isAdding={isAddingCrew}
+              deletingId={crewDeletingId}
+              updatingId={crewUpdatingId}
+              t={t}
+              BACKEND_URL={BACKEND_URL}
+              canEdit={canEditProduction}
+            />
+          </div>
+
+          <div className="crew-cast-group">
+            <h3 className="crew-cast-group-heading">{t.crewGroupHeading}</h3>
+            <CrewSection
+              category="art_department"
+              heading={t.artDepartmentHeading}
+              members={crewMembers.filter((m) => m.category === 'art_department')}
+              characterOptions={null}
+              onAdd={handleAddCrewMember}
+              onUpdate={handleUpdateCrewMember}
+              onDelete={handleDeleteCrewMember}
+              isAdding={isAddingCrew}
+              deletingId={crewDeletingId}
+              updatingId={crewUpdatingId}
+              t={t}
+              BACKEND_URL={BACKEND_URL}
+              canEdit={canEditProduction}
+            />
+            <CrewSection
+              category="costume_department"
+              heading={t.costumeDepartmentHeading}
+              members={crewMembers.filter((m) => m.category === 'costume_department')}
+              characterOptions={null}
+              onAdd={handleAddCrewMember}
+              onUpdate={handleUpdateCrewMember}
+              onDelete={handleDeleteCrewMember}
+              isAdding={isAddingCrew}
+              deletingId={crewDeletingId}
+              updatingId={crewUpdatingId}
+              t={t}
+              BACKEND_URL={BACKEND_URL}
+              canEdit={canEditProduction}
+            />
+            <CrewSection
+              category="crew"
+              heading={t.masterCrewHeading}
+              members={crewMembers.filter((m) => m.category === 'crew')}
+              characterOptions={null}
+              onAdd={handleAddCrewMember}
+              onUpdate={handleUpdateCrewMember}
+              onDelete={handleDeleteCrewMember}
+              isAdding={isAddingCrew}
+              deletingId={crewDeletingId}
+              updatingId={crewUpdatingId}
+              t={t}
+              BACKEND_URL={BACKEND_URL}
+              canEdit={canEditProduction}
+            />
+          </div>
+
+          <div className="crew-cast-group">
+            <h3 className="crew-cast-group-heading">{t.locationGroupHeading}</h3>
+            <CrewSection
+              category="location"
+              heading={t.locationSectionHeading}
+              members={crewMembers.filter((m) => m.category === 'location')}
+              characterOptions={
+                scriptBreakdown?.locationList
+                  ? scriptBreakdown.locationList
+                      .map((item) => item.location.en)
+                      .filter((label) => !crewMembers.some((m) => m.category === 'location' && m.characterName === label))
+                  : null
+              }
+              onAdd={handleAddCrewMember}
+              onUpdate={handleUpdateCrewMember}
+              onDelete={handleDeleteCrewMember}
+              isAdding={isAddingCrew}
+              deletingId={crewDeletingId}
+              updatingId={crewUpdatingId}
+              t={t}
+              BACKEND_URL={BACKEND_URL}
+              canEdit={canEditProduction}
+            />
+          </div>
         </div>
       )}
 
@@ -6757,6 +6938,37 @@ function App() {
       )}
     </div>
       </main>
+
+      {(activeAgent === 'story'
+        ? startStage === 'idea' || (conceptId && projectType === 'story')
+        : Boolean(agentChatStageKey)) && (
+        <aside className="chat-dock">
+          {activeAgent === 'production' && agentChatStageKey ? (
+            <AgentChatPanel
+              t={t}
+              BACKEND_URL={BACKEND_URL}
+              conceptId={conceptId}
+              stageKey={agentChatStageKey}
+              currentUserName={currentUser?.name}
+              onScheduleUpdated={setShootSchedule}
+              onCastMemberUpdated={(castMember) =>
+                setCrewMembers((prev) =>
+                  prev.some((m) => m.id === castMember.id) ? prev.map((m) => (m.id === castMember.id ? castMember : m)) : [...prev, castMember]
+                )
+              }
+            />
+          ) : (
+            <ChangesChatPanel
+              t={t}
+              historyKey={`${conceptId ?? 'new'}:${barConfig.stageKey}`}
+              barConfig={barConfig}
+              isBusy={isBarBusy}
+              errorMessage={errorMessage}
+              currentUserName={currentUser?.name}
+            />
+          )}
+        </aside>
+      )}
     </div>
   )
 }

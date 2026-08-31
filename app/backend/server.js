@@ -7287,6 +7287,10 @@ function groupSceneRefsForPdf(sceneRefs, sceneList, lang) {
 // the director instead of them reading the app itself.
 app.get("/api/shoot-schedule/:id/export", requireLogin, async (req, res) => {
   const lang = req.query.lang === "or" ? "or" : "en";
+  // Optional — scopes this exact same grid-table sheet to one day instead
+  // of the whole schedule, reusing all the same per-scene grid-drawing
+  // logic rather than a separate PDF layout for a day's "master breakdown".
+  const dayFilter = req.query.day ? Number(req.query.day) : null;
 
   try {
     // The browser's own shootSchedule.id can go stale the moment a
@@ -7308,6 +7312,10 @@ app.get("/api/shoot-schedule/:id/export", requireLogin, async (req, res) => {
     );
 
     const { scene_list_id: sceneListId, content: schedule } = result.rows[0];
+    if (dayFilter && !(schedule.scheduleDays ?? []).some((d) => d.dayNumber === dayFilter)) {
+      res.status(404).json({ error: `Day ${dayFilter} was not found in this schedule.` });
+      return;
+    }
     const sceneListResult = await db.query("SELECT content FROM scene_lists WHERE id = $1", [sceneListId]);
     const sceneList = sceneListResult.rows[0]?.content ?? {};
     const isSeries = Boolean(sceneList.episodeScenes);
@@ -7363,7 +7371,10 @@ app.get("/api/shoot-schedule/:id/export", requireLogin, async (req, res) => {
     doc.registerFont("odiaBold", FONTS.odiaBold);
 
     res.setHeader("Content-Type", "application/pdf");
-    res.setHeader("Content-Disposition", `attachment; filename="shoot-schedule-${lang}-${formatExportTimestamp()}.pdf"`);
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename="shoot-schedule${dayFilter ? `-day-${dayFilter}` : ""}-${lang}-${formatExportTimestamp()}.pdf"`
+    );
     doc.pipe(res);
 
     const pageLeft = doc.page.margins.left;
@@ -7394,7 +7405,11 @@ app.get("/api/shoot-schedule/:id/export", requireLogin, async (req, res) => {
       return y + rowHeight;
     }
 
-    schedule.scheduleDays.forEach((day, dayIndex) => {
+    const scheduleDaysToRender = dayFilter
+      ? schedule.scheduleDays.filter((d) => d.dayNumber === dayFilter)
+      : schedule.scheduleDays;
+
+    scheduleDaysToRender.forEach((day, dayIndex) => {
       if (dayIndex > 0) doc.addPage({ size: "A4", layout: "landscape", margin: 24 });
 
       // A completed day gets a red band behind its header so it reads as
@@ -7500,45 +7515,50 @@ app.get("/api/shoot-schedule/:id/export", requireLogin, async (req, res) => {
       }
     });
 
-    doc.addPage({ size: "A4", margin: 50 });
-    doc.font(headerFont).fontSize(18).text(labels.artistSummary);
-    doc.moveDown(1);
+    // The Artist-Wise Summary covers the WHOLE schedule (every day an
+    // artist is needed across the project) — not meaningful once this
+    // export is scoped to a single day, so it's skipped entirely there.
+    if (!dayFilter) {
+      doc.addPage({ size: "A4", margin: 50 });
+      doc.font(headerFont).fontSize(18).text(labels.artistSummary);
+      doc.moveDown(1);
 
-    // Same wrapped/pending/in-progress classification as the app's own
-    // Artist-Wise Summary view — cross-references each artist's call days
-    // against which schedule days are actually marked completed, so the
-    // printed sheet shows who's done and no longer needed on set.
-    const completedByDayNumber = Object.fromEntries(schedule.scheduleDays.map((d) => [d.dayNumber, Boolean(d.completed)]));
-    const statusColors = {
-      wrapped: { bg: "#fdecea", text: "#b3261e", label: labels.wrapped },
-      pending: { bg: "#fdf3e0", text: "#8a5a00", label: labels.pending },
-      "in-progress": { bg: "#e8f0fe", text: "#1a56b0", label: labels.inProgress },
-    };
+      // Same wrapped/pending/in-progress classification as the app's own
+      // Artist-Wise Summary view — cross-references each artist's call days
+      // against which schedule days are actually marked completed, so the
+      // printed sheet shows who's done and no longer needed on set.
+      const completedByDayNumber = Object.fromEntries(schedule.scheduleDays.map((d) => [d.dayNumber, Boolean(d.completed)]));
+      const statusColors = {
+        wrapped: { bg: "#fdecea", text: "#b3261e", label: labels.wrapped },
+        pending: { bg: "#fdf3e0", text: "#8a5a00", label: labels.pending },
+        "in-progress": { bg: "#e8f0fe", text: "#1a56b0", label: labels.inProgress },
+      };
 
-    (schedule.artistSchedule ?? []).forEach((entry) => {
-      const completedFlags = entry.days.map((d) => completedByDayNumber[d.dayNumber]);
-      const allDone = completedFlags.every(Boolean);
-      const noneDone = completedFlags.every((c) => !c);
-      const status = statusColors[allDone ? "wrapped" : noneDone ? "pending" : "in-progress"];
+      (schedule.artistSchedule ?? []).forEach((entry) => {
+        const completedFlags = entry.days.map((d) => completedByDayNumber[d.dayNumber]);
+        const allDone = completedFlags.every(Boolean);
+        const noneDone = completedFlags.every((c) => !c);
+        const status = statusColors[allDone ? "wrapped" : noneDone ? "pending" : "in-progress"];
 
-      const chipText = status.label;
-      doc.font(headerFont).fontSize(9);
-      const chipWidth = doc.widthOfString(chipText) + 14;
-      const chipY = doc.y;
-      doc.rect(pageLeft, chipY, chipWidth, 16).fill(status.bg);
-      doc.fillColor(status.text).text(chipText, pageLeft + 7, chipY + 4);
-      doc.fillColor("#000");
-      doc.font(headerFont).fontSize(13).text(entry.character, pageLeft + chipWidth + 8, chipY - 2);
-      doc.moveDown(0.3);
-      doc
-        .font(bodyFont)
-        .fontSize(11)
-        .text(
-          `${labels.totalDays}: ${entry.totalDays}  —  ${labels.days}: ${entry.days.map((d) => `Day ${d.dayNumber}${d.date ? ` (${formatDisplayDate(d.date)})` : ""}${completedByDayNumber[d.dayNumber] ? " (done)" : ""}`).join(", ")}`,
-          { indent: 10 }
-        );
-      doc.moveDown(0.6);
-    });
+        const chipText = status.label;
+        doc.font(headerFont).fontSize(9);
+        const chipWidth = doc.widthOfString(chipText) + 14;
+        const chipY = doc.y;
+        doc.rect(pageLeft, chipY, chipWidth, 16).fill(status.bg);
+        doc.fillColor(status.text).text(chipText, pageLeft + 7, chipY + 4);
+        doc.fillColor("#000");
+        doc.font(headerFont).fontSize(13).text(entry.character, pageLeft + chipWidth + 8, chipY - 2);
+        doc.moveDown(0.3);
+        doc
+          .font(bodyFont)
+          .fontSize(11)
+          .text(
+            `${labels.totalDays}: ${entry.totalDays}  —  ${labels.days}: ${entry.days.map((d) => `Day ${d.dayNumber}${d.date ? ` (${formatDisplayDate(d.date)})` : ""}${completedByDayNumber[d.dayNumber] ? " (done)" : ""}`).join(", ")}`,
+            { indent: 10 }
+          );
+        doc.moveDown(0.6);
+      });
+    }
 
     doc.end();
   } catch (error) {

@@ -338,6 +338,7 @@ const LABELS = {
     conflictsHeading: 'Flagged Conflicts',
     castCalledLabel: 'Cast Called',
     shootDayCompletedLabel: 'Completed',
+    dayMasterBreakdownLabel: 'Day Breakdown — Master (PDF)',
     dayArtistBreakdownLabel: 'Artist Breakdown (PDF)',
     dayLocationBreakdownLabel: 'Location Breakdown (PDF)',
     dayCostumeBreakdownLabel: 'Costume Breakdown (PDF)',
@@ -754,6 +755,7 @@ const LABELS = {
     conflictsHeading: 'ଚିହ୍ନିତ ସମସ୍ୟା',
     castCalledLabel: 'କଳାକାର ଡକରା',
     shootDayCompletedLabel: 'ସମାପ୍ତ',
+    dayMasterBreakdownLabel: 'ଦିନ ବିଭାଜନ — ମାଷ୍ଟର (PDF)',
     dayArtistBreakdownLabel: 'କଳାକାର ବିଭାଜନ (PDF)',
     dayLocationBreakdownLabel: 'ସ୍ଥାନ ବିଭାଜନ (PDF)',
     dayCostumeBreakdownLabel: 'ପୋଷାକ ବିଭାଜନ (PDF)',
@@ -7157,6 +7159,12 @@ function App() {
                     </button>
 
                     <div className="schedule-day-export-row">
+                      <a
+                        className="breakdown-pdf-link"
+                        href={`${BACKEND_URL}/api/shoot-schedule/${shootSchedule.id}/export?day=${day.dayNumber}&lang=${language}`}
+                      >
+                        {t.dayMasterBreakdownLabel}
+                      </a>
                       <a
                         className="breakdown-pdf-link"
                         href={`${BACKEND_URL}/api/shoot-schedule/${shootSchedule.id}/export-day?day=${day.dayNumber}&category=artists&lang=${language}`}

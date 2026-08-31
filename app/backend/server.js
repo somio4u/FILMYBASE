@@ -1591,17 +1591,20 @@ function photoUrlsFor(raw) {
   return parseAttachmentPhotoPaths(raw).map((path) => photoUrlFor(path));
 }
 
-// Images go in as real inlineData (the model needs to actually see a
-// handwritten note or a cast photo); PDFs and Word docs are text-extracted
-// with the exact same readers the screenplay import already uses, since
-// Gemini reading raw document bytes is far less reliable than reusing a
-// reader this app has already proven out. A file neither an image nor a
-// readable document type still gets acknowledged (rather than silently
+// Images and PDFs go in as real inlineData — the model needs to actually
+// SEE them, not just get an extracted text layer, because a PDF here is
+// just as likely to be a photographed/scanned handwritten page (e.g. an
+// AD's multi-page property list) as a typed document, and a scanned page
+// has no text layer at all for a text-extraction reader to find. Gemini
+// reads PDF bytes natively (each page, including a scanned/handwritten
+// one). Word docs have no equivalent native reading, so they still go
+// through the same text-extraction reader the screenplay import uses. A
+// file that's neither still gets acknowledged (rather than silently
 // dropped) so the reply doesn't look like it ignored an attachment.
 async function extractContentPartsForAttachments(files) {
   const parts = [];
   for (const file of files) {
-    if (/^image\//.test(file.mimetype)) {
+    if (/^image\//.test(file.mimetype) || file.mimetype === "application/pdf") {
       parts.push({ inlineData: { data: file.buffer.toString("base64"), mimeType: file.mimetype } });
       continue;
     }

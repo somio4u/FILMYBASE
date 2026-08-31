@@ -1633,6 +1633,52 @@ button, input, textarea, select {
   margin-top: 8px;
 }
 
+.costume-recommendation-approved-badge {
+  margin-left: 8px;
+  font-size: 12px;
+  color: var(--success);
+}
+
+.costume-recommendation-controls {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.costume-set-edit-list {
+  margin-top: 8px;
+}
+
+.costume-set-edit-row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 6px;
+  align-items: center;
+}
+
+.costume-set-edit-row input {
+  padding: 6px 10px;
+  font-size: 13px;
+  background: var(--bg-surface-raised);
+  color: var(--text-primary);
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+}
+
+.costume-set-edit-row input[type="number"] {
+  width: 80px;
+}
+
+.costume-set-remove-button {
+  border: none;
+  background: none;
+  color: var(--danger);
+  cursor: pointer;
+  font-size: 14px;
+  padding: 4px 8px;
+}
+
 .breakdown-merged-group {
   margin-bottom: 22px;
   padding: 14px 16px 4px;

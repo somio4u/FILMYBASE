@@ -1311,12 +1311,17 @@ function buildScheduleSummaryForChat(sceneList, shootSchedule) {
 
 function buildBreakdownSummaryForChat(scriptBreakdown) {
   if (!scriptBreakdown) return "No script breakdown exists yet.";
+  const costumeRecommendationLines = (scriptBreakdown.costumeRecommendations ?? []).map(
+    (rec) =>
+      `  ${rec.character}${rec.approved ? " [APPROVED — locked]" : " [not yet approved]"}: ${rec.sets.map((s) => `${s.quantity}x ${s.category}`).join(", ") || "(no sets yet)"}`
+  );
   return [
     `Artists (${scriptBreakdown.artistList?.length ?? 0}): ${(scriptBreakdown.artistList ?? []).map((a) => a.label).join(", ")}`,
     `Locations (${scriptBreakdown.locationList?.length ?? 0}): ${(scriptBreakdown.locationList ?? []).map((l) => l.location?.en).join(", ")}`,
     `Props (${scriptBreakdown.props?.length ?? 0}): ${(scriptBreakdown.props ?? []).map((p) => p.label).join(", ")}`,
     `Costumes (${scriptBreakdown.costumes?.length ?? 0}): ${(scriptBreakdown.costumes ?? []).map((c) => c.character).join(", ")}`,
     `Art/set (${scriptBreakdown.art?.length ?? 0}): ${(scriptBreakdown.art ?? []).map((a) => a.label).join(", ")}`,
+    `Costume recommendations (quantities):\n${costumeRecommendationLines.join("\n") || "  (none generated yet)"}`,
   ].join("\n");
 }
 
@@ -1387,7 +1392,7 @@ const AGENT_CHAT_RESPONSE_SCHEMA = {
     proposedAction: {
       type: Type.OBJECT,
       properties: {
-        type: { type: Type.STRING, enum: ["edit_scenes", "assign_cast", "none"] },
+        type: { type: Type.STRING, enum: ["edit_scenes", "assign_cast", "edit_costume", "none"] },
         sceneEdits: {
           type: Type.ARRAY,
           items: {
@@ -1411,19 +1416,41 @@ const AGENT_CHAT_RESPONSE_SCHEMA = {
           },
           required: ["characterName", "actorName", "contactNumber"],
         },
+        costumeEdit: {
+          type: Type.OBJECT,
+          properties: {
+            character: { type: Type.STRING },
+            sets: {
+              type: Type.ARRAY,
+              items: {
+                type: Type.OBJECT,
+                properties: {
+                  category: { type: Type.STRING },
+                  quantity: { type: Type.INTEGER },
+                  reason: { type: Type.STRING },
+                },
+                required: ["category", "quantity", "reason"],
+              },
+            },
+          },
+          required: ["character", "sets"],
+        },
         description: { type: Type.STRING },
       },
-      required: ["type", "sceneEdits", "castAssignment", "description"],
+      required: ["type", "sceneEdits", "castAssignment", "costumeEdit", "description"],
     },
   },
   required: ["reply", "proposedAction"],
 };
 
 const AGENT_CHAT_NONE_ACTION_INSTRUCTION =
-  'Every field in proposedAction is required by the response format even when unused: when proposedAction.type is "none", still set sceneEdits to an empty array and castAssignment to {characterName:"", actorName:"", contactNumber:""}, and leave description as an empty string.';
+  'Every field in proposedAction is required by the response format even when unused: when proposedAction.type is "none", still set sceneEdits to an empty array, castAssignment to {characterName:"", actorName:"", contactNumber:""}, costumeEdit to {character:"", sets:[]}, and leave description as an empty string.';
 
 const AGENT_CHAT_CAST_ASSIGNMENT_INSTRUCTION =
-  'You can also propose reassigning who plays a character — e.g. the AD types a phone number and attaches a photo of a person, saying something like "she\'s Priyanka, cast her as Pushpa" (meaning: the real person in the photo is named Priyanka, and she should play the character Pushpa). To propose this, set proposedAction.type to "assign_cast" and fill castAssignment: characterName is the ROLE/character being cast (match it to one of the known cast entries above if it already exists, otherwise use the name exactly as given), actorName is the real person\'s name, and contactNumber is their phone number if given (empty string if not). Only propose this when both the character and the actor\'s name are clear — ask if either is ambiguous. When proposing assign_cast, leave sceneEdits as an empty array.';
+  'You can also propose reassigning who plays a character — e.g. the AD types a phone number and attaches a photo of a person, saying something like "she\'s Priyanka, cast her as Pushpa" (meaning: the real person in the photo is named Priyanka, and she should play the character Pushpa). To propose this, set proposedAction.type to "assign_cast" and fill castAssignment: characterName is the ROLE/character being cast (match it to one of the known cast entries above if it already exists, otherwise use the name exactly as given), actorName is the real person\'s name, and contactNumber is their phone number if given (empty string if not). Only propose this when both the character and the actor\'s name are clear — ask if either is ambiguous. When proposing assign_cast, leave sceneEdits and costumeEdit at their empty defaults.';
+
+const AGENT_CHAT_COSTUME_EDIT_INSTRUCTION =
+  'You can also propose changing a character\'s costume recommendation list — e.g. "add 2 more nightwear sets for Shruti" or "Abhi doesn\'t need festive wear, drop it". To propose this, set proposedAction.type to "edit_costume" and fill costumeEdit: character is the character\'s name, and sets is the COMPLETE resulting list of costume sets for that character — read their CURRENT sets from the costume recommendations below and write back the full list with the requested change folded in (added, removed, or adjusted), not just the delta — each set has a category, a quantity, and a short plain-English reason. If that character has no costume recommendation yet, sets is just the new set(s) being added. Only propose this when the character and the change are both clear. Note: once a character\'s costume recommendation is approved it\'s meant to be locked, but a direct chat request like this is a deliberate override — go ahead and propose it; the human still confirms before anything actually changes.';
 
 const AGENT_CHAT_SYSTEM_PROMPTS = {
   schedule:
@@ -1435,11 +1462,13 @@ const AGENT_CHAT_SYSTEM_PROMPTS = {
     AGENT_CHAT_NONE_ACTION_INSTRUCTION +
     '\n\nCRITICAL — your reply text must NEVER claim or imply the change already happened: never say "I\'ve added...", "Done", "I\'ve updated...", or similar past-tense/completed phrasing. You are only ever PROPOSING a change for them to review — nothing is applied until the human clicks confirm outside this conversation. Phrase it as an offer instead: "I\'d like to add a bucket to the properties for Episode 1 Scene 2 — want me to go ahead?" or "Here\'s what I\'m proposing: ...". Getting this wrong would make the AD think a change happened when it didn\'t.\n\nCurrent shoot schedule:\n',
   breakdown:
-    'You are a sharp, friendly Script Breakdown Assistant, having a real back-and-forth conversation with a Production Manager or Director about the script breakdown (cast, locations, props, costumes, art/set). Ask clarifying questions whenever something is ambiguous. You cannot edit scenes from here, but you can handle casting.\n\n' +
+    'You are a sharp, friendly Script Breakdown Assistant, having a real back-and-forth conversation with a Production Manager or Director about the script breakdown (cast, locations, props, costumes, art/set). Ask clarifying questions whenever something is ambiguous. You cannot edit scenes from here, but you can handle casting and costume recommendations.\n\n' +
     AGENT_CHAT_CAST_ASSIGNMENT_INSTRUCTION +
     "\n\n" +
+    AGENT_CHAT_COSTUME_EDIT_INSTRUCTION +
+    "\n\n" +
     AGENT_CHAT_NONE_ACTION_INSTRUCTION +
-    '\n\nWhen proposing assign_cast, sceneEdits must still be an empty array (this stage never edits scenes).\n\nCurrent script breakdown summary:\n',
+    '\n\nsceneEdits must always be an empty array (this stage never edits scenes).\n\nCRITICAL — your reply text must NEVER claim or imply a change already happened: never say "I\'ve added...", "Done", "I\'ve updated...", or similar past-tense/completed phrasing. You are only ever PROPOSING a change for them to review — nothing is applied until the human clicks confirm outside this conversation. Phrase it as an offer instead: "I\'d like to add one more nightwear set for Shruti — want me to go ahead?". Getting this wrong would make them think a change happened when it didn\'t.\n\nCurrent script breakdown summary:\n',
 };
 
 async function generateAgentChatReply(stageKey, stateSummaryText, history, userMessage, image) {
@@ -1652,9 +1681,42 @@ app.post("/api/agent-chat/:conceptId/:stageKey/resolve-action", requireLogin, as
     }
   }
 
+  let appliedBreakdown = null;
+  if (decision === "applied" && action.type === "edit_costume" && action.costumeEdit?.character?.trim()) {
+    const sceneListId = await findSceneListIdForConcept(conceptId);
+    const { character, sets } = action.costumeEdit;
+
+    const latestBreakdown = await db.query(
+      "SELECT id, content, status FROM script_breakdowns WHERE scene_list_id = $1 ORDER BY created_at DESC LIMIT 1",
+      [sceneListId]
+    );
+    if (latestBreakdown.rows.length > 0) {
+      const breakdownContent = latestBreakdown.rows[0].content;
+      const recommendations = breakdownContent.costumeRecommendations ?? [];
+      const index = recommendations.findIndex((rec) => rec.character.toLowerCase() === character.trim().toLowerCase());
+      const cleanSets = (sets ?? []).map((s) => ({ category: s.category, quantity: s.quantity, reason: { en: s.reason ?? "", or: "" } }));
+
+      const updatedRecommendations =
+        index === -1
+          ? [...recommendations, { character: character.trim(), totalScenes: 0, sets: cleanSets, approved: false }]
+          : recommendations.map((rec, i) => (i === index ? { ...rec, sets: cleanSets, approved: false } : rec));
+
+      const updatedBreakdownContent = { ...breakdownContent, costumeRecommendations: updatedRecommendations };
+      // A chat-driven edit is a deliberate override, even on a previously
+      // approved (locked) recommendation — it goes back to unapproved so
+      // it's reviewed again, but the breakdown's own overall status is
+      // preserved (this is enrichment, not a full re-analysis).
+      const insertResult = await db.query(
+        "INSERT INTO script_breakdowns (scene_list_id, content, status, feedback) VALUES ($1, $2, $3, $4) RETURNING id, status, feedback",
+        [sceneListId, JSON.stringify(updatedBreakdownContent), latestBreakdown.rows[0].status, `Edited costume recommendation for ${character.trim()} via the Changes chat`]
+      );
+      appliedBreakdown = { ...insertResult.rows[0], sceneListId, ...updatedBreakdownContent };
+    }
+  }
+
   await db.query("UPDATE agent_chat_messages SET resolved = $1 WHERE id = $2", [decision, messageId]);
 
-  res.json({ resolved: decision, schedule: appliedSchedule, castMember: appliedCastMember });
+  res.json({ resolved: decision, schedule: appliedSchedule, castMember: appliedCastMember, breakdown: appliedBreakdown });
 });
 
 // Fields that exist on the in-memory frontend objects but are metadata (id,
@@ -5059,7 +5121,7 @@ const COSTUME_RECOMMENDATION_SCHEMA = {
 const COSTUME_RECOMMENDATION_BATCH_SIZE = 8;
 
 async function generateCostumeRecommendationsForBatch(characterBriefs) {
-  const prompt = `You are a costume department head planning how many physical costume sets to prepare for each character in this production, based on how many scenes they're in and what kind of scenes those are (office, home/night, outdoor/casual, festive, etc.).\n\nFor EACH character below, infer the distinct costume categories they'd realistically need from the scenes they actually appear in — name each category in plain terms that genuinely fit THIS character (e.g. "Hospital Uniform" for a doctor, "School Uniform" for a student) rather than forcing a generic fixed list — and recommend a realistic QUANTITY of each. Continuity means the same physical outfit is usually reused across scenes set at the same "look", but production still needs spares of frequently-worn categories for laundry, damage, or reshoots, so quantity should reflect that, not just "1 per look". A character in very few scenes (a day player, a one-scene role) should get a single set, quantity 1, with a short reason — don't invent an elaborate breakdown for them. A lead appearing across dozens of varied scenes should get a fuller breakdown across several categories. Write each "reason" as a short bilingual note (English, and Odia if you can — leave "or" empty if not confident) explaining the recommendation, e.g. "Worn across 18 office scenes — 2 sets recommended for continuity while one is being laundered."\n\nCharacters:\n\n${characterBriefs.join("\n\n")}`;
+  const prompt = `You are a costume department head planning how many physical costume sets to prepare for each character in this production, based on how many scenes they're in and what kind of scenes those are (office, home/night, outdoor/casual, festive, etc.).\n\nCRITICAL — ground every recommendation strictly in the actual scene list given below for each character. Read through their specific scenes (location, time of day, one-liner) before deciding on categories — do not guess generic categories that aren't actually supported by what happens in their listed scenes, and do not copy a pattern from one character onto another. If a character's scene list says "(no AD sheet scenes found for this character)", don't invent scene context — just recommend a single minimal set and say so plainly in the reason. Each "reason" must cite something concrete from that character's own scene list (an approximate count of matching scenes, a location, or a time-of-day pattern you actually observed) — a vague reason with no reference to their real scenes is not acceptable.\n\nFor EACH character below, infer the distinct costume categories they'd realistically need from the scenes they actually appear in — name each category in plain terms that genuinely fit THIS character (e.g. "Hospital Uniform" for a doctor, "School Uniform" for a student) rather than forcing a generic fixed list — and recommend a realistic QUANTITY of each. Continuity means the same physical outfit is usually reused across scenes set at the same "look", but production still needs spares of frequently-worn categories for laundry, damage, or reshoots, so quantity should reflect that, not just "1 per look". A character in very few scenes (a day player, a one-scene role) should get a single set, quantity 1, with a short reason — don't invent an elaborate breakdown for them. A lead appearing across dozens of varied scenes should get a fuller breakdown across several categories. Write each "reason" as a short bilingual note (English, and Odia if you can — leave "or" empty if not confident) explaining the recommendation, e.g. "Worn across 18 office scenes — 2 sets recommended for continuity while one is being laundered."\n\nCharacters:\n\n${characterBriefs.join("\n\n")}`;
 
   const response = await generateContentWithRetry({
     model: "gemini-flash-lite-latest",
@@ -5221,7 +5283,10 @@ app.post(
       const existingRecommendations = latest.rows[0].content.costumeRecommendations ?? [];
       const updatedRecommendations = [
         ...existingRecommendations.filter((rec) => rec.character.toLowerCase() !== character.trim().toLowerCase()),
-        recommendation,
+        // Every freshly generated recommendation starts unapproved — the AD
+        // reviews it (optionally adding a set by hand) and explicitly
+        // approves it to lock it in.
+        { ...recommendation, approved: false },
       ];
       const updatedContent = { ...latest.rows[0].content, costumeRecommendations: updatedRecommendations };
 
@@ -5237,6 +5302,128 @@ app.post(
       console.error("Costume recommendation generation failed:", error.message);
       res.status(502).json({ error: error.message });
     }
+  }
+);
+
+// Locks in a character's costume recommendation once the AD has reviewed
+// it (and optionally added their own sets via the route below) — once
+// approved, the UI stops offering to regenerate it, since regenerating an
+// approved plan would silently throw away a human decision.
+app.post(
+  "/api/script-breakdown/:id/approve-costume-recommendation",
+  requireRole("admin", "production_manager"),
+  async (req, res) => {
+    const { character } = req.body;
+    if (!character?.trim()) {
+      res.status(400).json({ error: "A character name is required." });
+      return;
+    }
+
+    const existing = await db.query("SELECT scene_list_id FROM script_breakdowns WHERE id = $1", [req.params.id]);
+    if (existing.rows.length === 0) {
+      res.status(404).json({ error: "Script breakdown not found" });
+      return;
+    }
+
+    const sceneListId = existing.rows[0].scene_list_id;
+    if (!(await userOwnsSceneList(req.user, sceneListId))) {
+      res.status(403).json({ error: "You don't have access to this project." });
+      return;
+    }
+
+    const latest = await db.query(
+      "SELECT id, content, status FROM script_breakdowns WHERE scene_list_id = $1 ORDER BY created_at DESC LIMIT 1",
+      [sceneListId]
+    );
+    if (String(latest.rows[0].id) !== String(req.params.id)) {
+      res.status(409).json({ error: "Someone else updated this breakdown since you loaded it. Reload the page and try again." });
+      return;
+    }
+
+    const recommendations = latest.rows[0].content.costumeRecommendations ?? [];
+    const index = recommendations.findIndex((rec) => rec.character.toLowerCase() === character.trim().toLowerCase());
+    if (index === -1) {
+      res.status(404).json({ error: "No costume recommendation exists yet for that character." });
+      return;
+    }
+
+    const updatedRecommendations = recommendations.map((rec, i) => (i === index ? { ...rec, approved: true } : rec));
+    const updatedContent = { ...latest.rows[0].content, costumeRecommendations: updatedRecommendations };
+
+    const insertResult = await db.query(
+      "INSERT INTO script_breakdowns (scene_list_id, content, status, feedback) VALUES ($1, $2, $3, $4) RETURNING id, status, feedback",
+      [sceneListId, JSON.stringify(updatedContent), latest.rows[0].status, `Approved costume recommendation for ${character.trim()}`]
+    );
+
+    res.json({ ...insertResult.rows[0], sceneListId, ...updatedContent });
+  }
+);
+
+// Lets the AD hand-edit a character's costume set list directly — add a
+// new category, remove one, or change a quantity — by sending back the
+// COMPLETE resulting list (the frontend's edit UI starts from what's
+// already recommended, so the AD is editing in place, not typing from
+// scratch). Creates the character's recommendation entry if one doesn't
+// exist yet (e.g. a character too minor to bother generating one for).
+// Always left unapproved so an edit still goes through the same review
+// step before being locked in again.
+app.post(
+  "/api/script-breakdown/:id/set-costume-recommendation-sets",
+  requireRole("admin", "production_manager"),
+  async (req, res) => {
+    const { character, sets } = req.body;
+    if (!character?.trim() || !Array.isArray(sets)) {
+      res.status(400).json({ error: "A character and a list of sets are required." });
+      return;
+    }
+    if (sets.some((s) => !s.category?.trim() || !Number.isFinite(Number(s.quantity)))) {
+      res.status(400).json({ error: "Every set needs a category and a valid quantity." });
+      return;
+    }
+
+    const existing = await db.query("SELECT scene_list_id FROM script_breakdowns WHERE id = $1", [req.params.id]);
+    if (existing.rows.length === 0) {
+      res.status(404).json({ error: "Script breakdown not found" });
+      return;
+    }
+
+    const sceneListId = existing.rows[0].scene_list_id;
+    if (!(await userOwnsSceneList(req.user, sceneListId))) {
+      res.status(403).json({ error: "You don't have access to this project." });
+      return;
+    }
+
+    const latest = await db.query(
+      "SELECT id, content, status FROM script_breakdowns WHERE scene_list_id = $1 ORDER BY created_at DESC LIMIT 1",
+      [sceneListId]
+    );
+    if (String(latest.rows[0].id) !== String(req.params.id)) {
+      res.status(409).json({ error: "Someone else updated this breakdown since you loaded it. Reload the page and try again." });
+      return;
+    }
+
+    const trimmedCharacter = character.trim();
+    const cleanSets = sets.map((s) => ({
+      category: s.category.trim(),
+      quantity: Number(s.quantity),
+      reason: { en: s.reasonEn?.trim() ?? s.reason?.en ?? "", or: s.reason?.or ?? "" },
+    }));
+    const recommendations = latest.rows[0].content.costumeRecommendations ?? [];
+    const index = recommendations.findIndex((rec) => rec.character.toLowerCase() === trimmedCharacter.toLowerCase());
+
+    const updatedRecommendations =
+      index === -1
+        ? [...recommendations, { character: trimmedCharacter, totalScenes: 0, sets: cleanSets, approved: false }]
+        : recommendations.map((rec, i) => (i === index ? { ...rec, sets: cleanSets, approved: false } : rec));
+
+    const updatedContent = { ...latest.rows[0].content, costumeRecommendations: updatedRecommendations };
+
+    const insertResult = await db.query(
+      "INSERT INTO script_breakdowns (scene_list_id, content, status, feedback) VALUES ($1, $2, $3, $4) RETURNING id, status, feedback",
+      [sceneListId, JSON.stringify(updatedContent), latest.rows[0].status, `Edited costume sets for ${trimmedCharacter}`]
+    );
+
+    res.json({ ...insertResult.rows[0], sceneListId, ...updatedContent });
   }
 );
 

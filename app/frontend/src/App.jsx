@@ -281,7 +281,15 @@ const LABELS = {
     costumeRecommendationsHeading: 'Recommended Costume Quantities',
     generateCostumeRecommendationsButton: 'Recommend Costume Quantities',
     generatingCostumeRecommendationsLabel: 'Analyzing scenes…',
+    costumeApprovedBadge: '✅ Approved — locked',
     regenerateCostumeRecommendationButton: 'Regenerate',
+    editCostumeSetsButton: 'Add / Remove Costume',
+    removeCostumeSetButton: 'Remove',
+    addCostumeSetButton: 'Add Another',
+    approveCostumeButton: 'Approve',
+    costumeSetCategoryPlaceholder: 'Costume category (e.g. Office Wear)',
+    costumeSetQuantityPlaceholder: 'Quantity',
+    costumeSetReasonPlaceholder: 'Reason (optional)',
     costumeRecommendationsNeedsAdSheetHint: 'Generate the AD Scene Breakdown Sheet first — this needs it to know which scenes each character is in.',
     downloadPdfLabel: 'Download PDF',
     downloadExcelLabel: 'Download Excel',
@@ -675,7 +683,15 @@ const LABELS = {
     costumeRecommendationsHeading: 'ପ୍ରସ୍ତାବିତ ପୋଷାକ ପରିମାଣ',
     generateCostumeRecommendationsButton: 'ପୋଷାକ ପରିମାଣ ପ୍ରସ୍ତାବ କରନ୍ତୁ',
     generatingCostumeRecommendationsLabel: 'ଦୃଶ୍ୟ ବିଶ୍ଳେଷଣ ହେଉଛି…',
+    costumeApprovedBadge: '✅ ଅନୁମୋଦିତ — ଲକ୍ ହୋଇଛି',
     regenerateCostumeRecommendationButton: 'ପୁନଃ ତିଆରି କରନ୍ତୁ',
+    editCostumeSetsButton: 'ପୋଷାକ ଯୋଡ଼ନ୍ତୁ / ହଟାନ୍ତୁ',
+    removeCostumeSetButton: 'ହଟାନ୍ତୁ',
+    addCostumeSetButton: 'ଆଉ ଏକ ଯୋଡ଼ନ୍ତୁ',
+    approveCostumeButton: 'ଅନୁମୋଦନ କରନ୍ତୁ',
+    costumeSetCategoryPlaceholder: 'ପୋଷାକ ବର୍ଗ (ଉଦାହରଣ: ଅଫିସ୍ ପୋଷାକ)',
+    costumeSetQuantityPlaceholder: 'ପରିମାଣ',
+    costumeSetReasonPlaceholder: 'କାରଣ (ଇଚ୍ଛାଧୀନ)',
     costumeRecommendationsNeedsAdSheetHint: 'ପ୍ରଥମେ AD ଦୃଶ୍ୟ ବିଭାଜନ ସିଟ୍ ତିଆରି କରନ୍ତୁ — ପ୍ରତ୍ୟେକ ଚରିତ୍ର କେଉଁ ଦୃଶ୍ୟରେ ଅଛନ୍ତି ଜାଣିବାକୁ ଏହା ଦରକାର।',
     downloadPdfLabel: 'PDF ଡାଉନଲୋଡ୍ କରନ୍ତୁ',
     downloadExcelLabel: 'Excel ଡାଉନଲୋଡ୍ କରନ୍ତୁ',
@@ -1649,7 +1665,7 @@ function ChangesChatPanel({ t, historyKey, barConfig, isBusy, errorMessage, curr
 // doesn't need to know two different chat mechanisms exist. A photo can be
 // attached right in the input — a handwritten AD note, or a person's photo
 // for a casting decision — instead of a separate upload button elsewhere.
-function AgentChatPanel({ t, BACKEND_URL, conceptId, stageKey, currentUserName, onScheduleUpdated, onCastMemberUpdated }) {
+function AgentChatPanel({ t, BACKEND_URL, conceptId, stageKey, currentUserName, onScheduleUpdated, onCastMemberUpdated, onBreakdownUpdated }) {
   const [isOpen, setIsOpen] = useState(false)
   const [messages, setMessages] = useState([])
   const [inputText, setInputText] = useState('')
@@ -1750,6 +1766,7 @@ function AgentChatPanel({ t, BACKEND_URL, conceptId, stageKey, currentUserName, 
       setMessages((prev) => prev.map((m) => (m.id === messageId ? { ...m, resolved: decision } : m)))
       if (data.schedule) onScheduleUpdated?.(data.schedule)
       if (data.castMember) onCastMemberUpdated?.(data.castMember)
+      if (data.breakdown) onBreakdownUpdated?.(data.breakdown)
     } catch {
       setError(t.genericError)
     }
@@ -2362,6 +2379,10 @@ function App() {
   const [foundMissingCharacters, setFoundMissingCharacters] = useState(null)
   const [isClassifyingCastCategories, setIsClassifyingCastCategories] = useState(false)
   const [generatingCostumeRecommendationFor, setGeneratingCostumeRecommendationFor] = useState(null)
+  const [approvingCostumeRecommendationFor, setApprovingCostumeRecommendationFor] = useState(null)
+  const [editingCostumeSetsFor, setEditingCostumeSetsFor] = useState(null)
+  const [costumeSetsDraft, setCostumeSetsDraft] = useState([])
+  const [isSavingCostumeSets, setIsSavingCostumeSets] = useState(false)
   const [isExportingProject, setIsExportingProject] = useState(false)
 
   const [googleConnected, setGoogleConnected] = useState(false)
@@ -3934,6 +3955,88 @@ function App() {
     setGeneratingCostumeRecommendationFor(null)
   }
 
+  async function handleApproveCostumeRecommendationClick(characterName) {
+    setApprovingCostumeRecommendationFor(characterName)
+    setErrorMessage(null)
+
+    try {
+      const response = await fetch(`${BACKEND_URL}/api/script-breakdown/${scriptBreakdown.id}/approve-costume-recommendation`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ character: characterName }),
+      })
+      const data = await response.json()
+
+      if (!response.ok) {
+        setErrorMessage(data.error || t.genericError)
+        setApprovingCostumeRecommendationFor(null)
+        return
+      }
+
+      setScriptBreakdown(data)
+    } catch {
+      setErrorMessage(t.genericError)
+    }
+
+    setApprovingCostumeRecommendationFor(null)
+  }
+
+  function handleStartEditCostumeSets(characterName, currentSets) {
+    setEditingCostumeSetsFor(characterName)
+    setCostumeSetsDraft(
+      currentSets.map((s) => ({ category: s.category, quantity: String(s.quantity), reasonEn: s.reason?.en ?? '' }))
+    )
+  }
+
+  function handleCancelEditCostumeSets() {
+    setEditingCostumeSetsFor(null)
+    setCostumeSetsDraft([])
+  }
+
+  function handleCostumeSetDraftFieldChange(index, field, value) {
+    setCostumeSetsDraft((prev) => prev.map((row, i) => (i === index ? { ...row, [field]: value } : row)))
+  }
+
+  function handleAddCostumeSetRow() {
+    setCostumeSetsDraft((prev) => [...prev, { category: '', quantity: '1', reasonEn: '' }])
+  }
+
+  function handleRemoveCostumeSetRow(index) {
+    setCostumeSetsDraft((prev) => prev.filter((_, i) => i !== index))
+  }
+
+  async function handleSaveCostumeSetsClick(characterName) {
+    const cleanSets = costumeSetsDraft.filter((row) => row.category.trim())
+    setIsSavingCostumeSets(true)
+    setErrorMessage(null)
+
+    try {
+      const response = await fetch(`${BACKEND_URL}/api/script-breakdown/${scriptBreakdown.id}/set-costume-recommendation-sets`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          character: characterName,
+          sets: cleanSets.map((row) => ({ category: row.category.trim(), quantity: Number(row.quantity) || 1, reasonEn: row.reasonEn.trim() })),
+        }),
+      })
+      const data = await response.json()
+
+      if (!response.ok) {
+        setErrorMessage(data.error || t.genericError)
+        setIsSavingCostumeSets(false)
+        return
+      }
+
+      setScriptBreakdown(data)
+      setEditingCostumeSetsFor(null)
+      setCostumeSetsDraft([])
+    } catch {
+      setErrorMessage(t.genericError)
+    }
+
+    setIsSavingCostumeSets(false)
+  }
+
   function renderBreakdownCategory(category, headingKey) {
     const items = scriptBreakdown[category] ?? []
     const isEditing = editingBreakdownCategory === category
@@ -4125,41 +4228,118 @@ function App() {
                           (r) => r.character.toLowerCase() === item.character.toLowerCase()
                         )
                         const isGeneratingThis = generatingCostumeRecommendationFor === item.character
-                        return rec ? (
+                        const isApprovingThis = approvingCostumeRecommendationFor === item.character
+                        const isEditingSetsHere = editingCostumeSetsFor === item.character
+
+                        if (!rec) {
+                          return (
+                            canEditProduction && (
+                              <button
+                                className="breakdown-action-button costume-recommendation-trigger"
+                                onClick={() => handleGenerateCostumeRecommendationClick(item.character)}
+                                disabled={isGeneratingThis || !scriptBreakdown.adSheet?.length}
+                                title={!scriptBreakdown.adSheet?.length ? t.costumeRecommendationsNeedsAdSheetHint : undefined}
+                              >
+                                {isGeneratingThis ? t.generatingCostumeRecommendationsLabel : t.generateCostumeRecommendationsButton}
+                              </button>
+                            )
+                          )
+                        }
+
+                        return (
                           <div className="costume-recommendation-inline">
                             <strong>{t.costumeRecommendationsHeading}</strong>{' '}
                             <span className="breakdown-item-meta">
                               ({rec.totalScenes} {t.scenesLabel})
                             </span>
-                            <ul className="costume-recommendation-sets">
-                              {rec.sets.map((set, i) => (
-                                <li key={i}>
-                                  <strong>{set.quantity}×</strong> {set.category}
-                                  {set.reason?.[language] && <span className="costume-recommendation-reason"> — {set.reason[language]}</span>}
-                                </li>
-                              ))}
-                            </ul>
-                            {canEditProduction && (
-                              <button
-                                className="breakdown-action-button"
-                                onClick={() => handleGenerateCostumeRecommendationClick(item.character)}
-                                disabled={isGeneratingThis}
-                              >
-                                {isGeneratingThis ? t.generatingCostumeRecommendationsLabel : t.regenerateCostumeRecommendationButton}
-                              </button>
+                            {rec.approved && <span className="costume-recommendation-approved-badge">{t.costumeApprovedBadge}</span>}
+
+                            {!isEditingSetsHere && (
+                              <ul className="costume-recommendation-sets">
+                                {rec.sets.map((set, i) => (
+                                  <li key={i}>
+                                    <strong>{set.quantity}×</strong> {set.category}
+                                    {set.reason?.[language] && <span className="costume-recommendation-reason"> — {set.reason[language]}</span>}
+                                  </li>
+                                ))}
+                              </ul>
+                            )}
+
+                            {isEditingSetsHere && (
+                              <div className="costume-set-edit-list">
+                                {costumeSetsDraft.map((row, i) => (
+                                  <div className="costume-set-edit-row" key={i}>
+                                    <input
+                                      type="text"
+                                      placeholder={t.costumeSetCategoryPlaceholder}
+                                      value={row.category}
+                                      onChange={(e) => handleCostumeSetDraftFieldChange(i, 'category', e.target.value)}
+                                    />
+                                    <input
+                                      type="number"
+                                      min="1"
+                                      placeholder={t.costumeSetQuantityPlaceholder}
+                                      value={row.quantity}
+                                      onChange={(e) => handleCostumeSetDraftFieldChange(i, 'quantity', e.target.value)}
+                                    />
+                                    <input
+                                      type="text"
+                                      placeholder={t.costumeSetReasonPlaceholder}
+                                      value={row.reasonEn}
+                                      onChange={(e) => handleCostumeSetDraftFieldChange(i, 'reasonEn', e.target.value)}
+                                    />
+                                    <button
+                                      className="costume-set-remove-button"
+                                      onClick={() => handleRemoveCostumeSetRow(i)}
+                                      title={t.removeCostumeSetButton}
+                                    >
+                                      ✕
+                                    </button>
+                                  </div>
+                                ))}
+                                <div className="costume-recommendation-controls">
+                                  <button className="breakdown-action-button" onClick={handleAddCostumeSetRow}>
+                                    {t.addCostumeSetButton}
+                                  </button>
+                                  <button
+                                    className="choose-button"
+                                    onClick={() => handleSaveCostumeSetsClick(item.character)}
+                                    disabled={isSavingCostumeSets}
+                                  >
+                                    {isSavingCostumeSets ? t.applyingLabel : t.saveButton}
+                                  </button>
+                                  <button className="cancel-button" onClick={handleCancelEditCostumeSets} disabled={isSavingCostumeSets}>
+                                    {t.cancelEditButton}
+                                  </button>
+                                </div>
+                              </div>
+                            )}
+
+                            {canEditProduction && !rec.approved && !isEditingSetsHere && (
+                              <div className="costume-recommendation-controls">
+                                <button
+                                  className="breakdown-action-button"
+                                  onClick={() => handleGenerateCostumeRecommendationClick(item.character)}
+                                  disabled={isGeneratingThis}
+                                >
+                                  {isGeneratingThis ? t.generatingCostumeRecommendationsLabel : t.regenerateCostumeRecommendationButton}
+                                </button>
+                                <button
+                                  className="breakdown-action-button"
+                                  onClick={() => handleStartEditCostumeSets(item.character, rec.sets)}
+                                >
+                                  {t.editCostumeSetsButton}
+                                </button>
+                                <button
+                                  className="choose-button"
+                                  onClick={() => handleApproveCostumeRecommendationClick(item.character)}
+                                  disabled={isApprovingThis}
+                                >
+                                  {isApprovingThis ? t.applyingLabel : t.approveCostumeButton}
+                                </button>
+                              </div>
                             )}
                           </div>
-                        ) : (
-                          canEditProduction && (
-                            <button
-                              className="breakdown-action-button costume-recommendation-trigger"
-                              onClick={() => handleGenerateCostumeRecommendationClick(item.character)}
-                              disabled={isGeneratingThis || !scriptBreakdown.adSheet?.length}
-                              title={!scriptBreakdown.adSheet?.length ? t.costumeRecommendationsNeedsAdSheetHint : undefined}
-                            >
-                              {isGeneratingThis ? t.generatingCostumeRecommendationsLabel : t.generateCostumeRecommendationsButton}
-                            </button>
-                          )
                         )
                       })()}
                   </>
@@ -6965,6 +7145,7 @@ function App() {
                   prev.some((m) => m.id === castMember.id) ? prev.map((m) => (m.id === castMember.id ? castMember : m)) : [...prev, castMember]
                 )
               }
+              onBreakdownUpdated={setScriptBreakdown}
             />
           ) : (
             <ChangesChatPanel

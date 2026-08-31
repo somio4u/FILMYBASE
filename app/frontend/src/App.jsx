@@ -117,6 +117,7 @@ const LABELS = {
     agentChatInputPlaceholder: 'Ask a question or describe a change — attach a photo too if it helps…',
     agentChatAttachPhotoLabel: 'Attach a photo (handwritten note or cast photo)',
     useCameraLabel: 'Use camera',
+    attachDocumentLabel: 'Attach a document (PDF or Word)',
     cameraModalHeading: 'Take a photo',
     captureButtonLabel: 'Capture',
     captureAnotherButtonLabel: 'Capture Another',
@@ -528,6 +529,7 @@ const LABELS = {
     agentChatInputPlaceholder: 'ଏକ ପ୍ରଶ୍ନ ପଚାରନ୍ତୁ କିମ୍ବା ପରିବର୍ତ୍ତନ ବର୍ଣ୍ଣନା କରନ୍ତୁ — ସାହାଯ୍ୟ ହେଲେ ଏକ ଫଟୋ ମଧ୍ୟ ଲଗାନ୍ତୁ…',
     agentChatAttachPhotoLabel: 'ଏକ ଫଟୋ ଲଗାନ୍ତୁ (ହସ୍ତଲିଖିତ ନୋଟ୍ କିମ୍ବା କାଷ୍ଟ ଫଟୋ)',
     useCameraLabel: 'କ୍ୟାମେରା ବ୍ୟବହାର କରନ୍ତୁ',
+    attachDocumentLabel: 'ଏକ ଡକ୍ୟୁମେଣ୍ଟ ଲଗାନ୍ତୁ (PDF କିମ୍ବା Word)',
     cameraModalHeading: 'ଏକ ଫଟୋ ନିଅନ୍ତୁ',
     captureButtonLabel: 'କ୍ୟାପଚର୍ କରନ୍ତୁ',
     captureAnotherButtonLabel: 'ଆଉ ଏକ କ୍ୟାପଚର୍ କରନ୍ତୁ',
@@ -890,6 +892,12 @@ const ICONS = {
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
       <path d="M4 8h3l1.5-2h7L17 8h3a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1Z" strokeLinecap="round" strokeLinejoin="round" />
       <circle cx="12" cy="14" r="3.5" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  ),
+  document: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+      <path d="M6 3h8l4 4v14a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1Z" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M14 3v4h4M8 12h8M8 16h8M8 20h4" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   ),
   pencil: (
@@ -1864,6 +1872,7 @@ function AgentChatPanel({ t, BACKEND_URL, conceptId, stageKey, currentUserName, 
   const messagesEndRef = useRef(null)
   const closeTimeoutRef = useRef(null)
   const fileInputRef = useRef(null)
+  const documentInputRef = useRef(null)
 
   function cancelScheduledClose() {
     if (closeTimeoutRef.current) {
@@ -2086,11 +2095,32 @@ function AgentChatPanel({ t, BACKEND_URL, conceptId, stageKey, currentUserName, 
           >
             {ICONS.camera}
           </button>
+          <button
+            className="changes-chat-attach"
+            onClick={() => documentInputRef.current?.click()}
+            title={t.attachDocumentLabel}
+            disabled={isSending}
+            type="button"
+          >
+            {ICONS.document}
+          </button>
+          {/* Mobile browsers reliably show ONLY the photo picker when
+              image/* is mixed into the same accept list as document
+              extensions — so photos and documents get their own separate
+              inputs instead of one combined one. */}
           <input
             type="file"
-            accept="image/*,.pdf,.doc,.docx"
+            accept="image/*"
             multiple
             ref={fileInputRef}
+            onChange={handleFileSelected}
+            style={{ display: 'none' }}
+          />
+          <input
+            type="file"
+            accept="application/pdf,.pdf,application/msword,.doc,application/vnd.openxmlformats-officedocument.wordprocessingml.document,.docx"
+            multiple
+            ref={documentInputRef}
             onChange={handleFileSelected}
             style={{ display: 'none' }}
           />

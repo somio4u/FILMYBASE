@@ -2430,6 +2430,18 @@ button, input, textarea, select {
   font-weight: 600;
 }
 
+.schedule-day-export-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 6px 0 10px 24px;
+}
+
+.schedule-day-export-row .breakdown-pdf-link {
+  font-size: 11px;
+  padding: 3px 10px;
+}
+
 .artist-schedule-row {
   font-size: 13px;
   color: var(--text-secondary);

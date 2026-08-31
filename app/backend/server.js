@@ -7551,6 +7551,135 @@ app.get("/api/shoot-schedule/:id/export", requireLogin, async (req, res) => {
   }
 });
 
+// A focused, single-day version of the four Script Breakdown category
+// sheets — "just Day 2's costume/location/artist/property list" — built
+// straight from that day's own sceneRefs (which already carry the
+// costume/properties note per scene) rather than filtering the whole
+// project's catalogs, since a day's breakdown is naturally scene-scoped.
+app.get("/api/shoot-schedule/:id/export-day", requireLogin, async (req, res) => {
+  const lang = req.query.lang === "or" ? "or" : "en";
+  const dayNumber = Number(req.query.day);
+  const category = req.query.category;
+  const DAY_EXPORT_CATEGORIES = ["artists", "locations", "costumes", "properties"];
+
+  if (!Number.isFinite(dayNumber)) {
+    res.status(400).json({ error: "A day number is required." });
+    return;
+  }
+  if (!DAY_EXPORT_CATEGORIES.includes(category)) {
+    res.status(400).json({ error: "Unknown day-export category." });
+    return;
+  }
+
+  try {
+    // Same "always the latest revision" reasoning as the main export above.
+    const idLookup = await db.query("SELECT scene_list_id FROM shoot_schedules WHERE id = $1", [req.params.id]);
+    if (idLookup.rows.length === 0) {
+      res.status(404).json({ error: "Shoot schedule not found" });
+      return;
+    }
+    const result = await db.query(
+      "SELECT scene_list_id, content FROM shoot_schedules WHERE scene_list_id = $1 ORDER BY created_at DESC LIMIT 1",
+      [idLookup.rows[0].scene_list_id]
+    );
+    const { scene_list_id: sceneListId, content: schedule } = result.rows[0];
+    const day = (schedule.scheduleDays ?? []).find((d) => d.dayNumber === dayNumber);
+    if (!day) {
+      res.status(404).json({ error: `Day ${dayNumber} was not found in this schedule.` });
+      return;
+    }
+
+    const sceneListResult = await db.query("SELECT content FROM scene_lists WHERE id = $1", [sceneListId]);
+    const sceneList = sceneListResult.rows[0]?.content ?? {};
+    const isSeries = Boolean(sceneList.episodeScenes);
+    const title = await fetchProjectTitleForSceneList(sceneListId, sceneList, lang);
+
+    const bodyFont = lang === "or" ? "odiaRegular" : "Helvetica";
+    const headerFont = lang === "or" ? "odiaBold" : "Helvetica-Bold";
+    const labels =
+      lang === "or"
+        ? {
+            artists: "କଳାକାର ବିଭାଜନ", locations: "ସ୍ଥାନ ବିଭାଜନ", costumes: "ପୋଷାକ ବିଭାଜନ", properties: "ସାମଗ୍ରୀ ବିଭାଜନ",
+            day: "ଦିନ", episode: "ଏପିସୋଡ୍", scene: "ଦୃଶ୍ୟ", scenes: "ଦୃଶ୍ୟ", notCast: "ଏପର୍ଯ୍ୟନ୍ତ କାଷ୍ଟ ହୋଇନାହିଁ", none: "କିଛି ମିଳିଲା ନାହିଁ।",
+          }
+        : {
+            artists: "Artist Breakdown", locations: "Location Breakdown", costumes: "Costume Breakdown", properties: "Property Breakdown",
+            day: "Day", episode: "Episode", scene: "Scene", scenes: "scenes", notCast: "Not yet cast", none: "Nothing found for this day.",
+          };
+
+    const doc = new PDFDocument({ size: "A4", margin: 50 });
+    doc.registerFont("odiaRegular", FONTS.odiaRegular);
+    doc.registerFont("odiaBold", FONTS.odiaBold);
+
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", `attachment; filename="day-${dayNumber}-${category}-${lang}-${formatExportTimestamp()}.pdf"`);
+    doc.pipe(res);
+
+    doc.font(headerFont).fontSize(20).text(`${title} — ${labels.day} ${dayNumber}`);
+    doc.font(headerFont).fontSize(16).fillColor("#555").text(labels[category]);
+    doc.fillColor("#000");
+    doc.moveDown(1);
+
+    if (category === "artists") {
+      const characters = day.charactersNeeded ?? [];
+      const castResult = await db.query(
+        "SELECT character_name, name, contact_number FROM crew_members WHERE scene_list_id = $1 AND category = 'artist'",
+        [sceneListId]
+      );
+      const castByCharacter = new Map(castResult.rows.map((row) => [row.character_name, row]));
+
+      if (characters.length === 0) doc.font(bodyFont).fontSize(12).text(labels.none);
+      characters.forEach((name) => {
+        const cast = castByCharacter.get(name);
+        doc.font(headerFont).fontSize(13).text(name);
+        const playedByLine = cast
+          ? `${cast.name}${cast.contact_number ? ` — ${cast.contact_number}` : ""}`
+          : labels.notCast;
+        doc.font(bodyFont).fontSize(11).text(playedByLine, { indent: 10 });
+        doc.moveDown(0.6);
+      });
+    } else if (category === "locations") {
+      const groups = groupSceneRefsForPdf(day.sceneRefs ?? [], sceneList, lang);
+      let any = false;
+      groups.forEach((episodeGroup) => {
+        episodeGroup.locationGroups.forEach((locationGroup) => {
+          any = true;
+          const episodePrefix = episodeGroup.episodeIndex !== null ? `${labels.episode} ${episodeGroup.episodeIndex + 1} — ` : "";
+          const intExt = locationGroup.items[0]?.scene?.intExt ?? "";
+          doc.font(headerFont).fontSize(13).text(`${episodePrefix}${locationGroup.location}`);
+          doc.font(bodyFont).fontSize(11).text(`${intExt} — ${locationGroup.items.length} ${labels.scenes}`, { indent: 10 });
+          doc.moveDown(0.6);
+        });
+      });
+      if (!any) doc.font(bodyFont).fontSize(12).text(labels.none);
+    } else {
+      // costumes / properties — one line per scene that actually has a
+      // note for that field, in the day's own shoot order.
+      const field = category === "costumes" ? "costume" : "properties";
+      const refs = (day.sceneRefs ?? []).filter((ref) => ref[field]?.trim());
+      if (refs.length === 0) doc.font(bodyFont).fontSize(12).text(labels.none);
+      refs.forEach((ref) => {
+        const scene = lookupSceneServerSide(sceneList, ref);
+        const epLabel = isSeries ? `${labels.episode} ${ref.episodeIndex + 1}, ` : "";
+        const sceneNumber = String(scene?.sceneNumber || ref.sceneIndex + 1).replace(/^\s*(SCENE|SC)\.?\s*/i, "");
+        const sceneLabel = `${epLabel}${labels.scene} ${sceneNumber}`;
+        doc.font(headerFont).fontSize(13).text(sceneLabel);
+        doc.font(bodyFont).fontSize(11).text(ref[field], { indent: 10 });
+        doc.moveDown(0.6);
+      });
+    }
+
+    doc.end();
+  } catch (error) {
+    console.error("Day export failed:", error.message);
+    if (!res.headersSent) {
+      res.status(500).json({ error: error.message });
+    } else {
+      res.end();
+    }
+  }
+});
+
 // --- Crew & Cast: real-world data the production attaches directly onto
 // the Script Breakdown's own lists, not AI-generated content. 'artist'
 // entries are cast confirmed against a specific character from the Artist

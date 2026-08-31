@@ -338,6 +338,10 @@ const LABELS = {
     conflictsHeading: 'Flagged Conflicts',
     castCalledLabel: 'Cast Called',
     shootDayCompletedLabel: 'Completed',
+    dayArtistBreakdownLabel: 'Artist Breakdown (PDF)',
+    dayLocationBreakdownLabel: 'Location Breakdown (PDF)',
+    dayCostumeBreakdownLabel: 'Costume Breakdown (PDF)',
+    dayPropertiesBreakdownLabel: 'Properties Breakdown (PDF)',
     costumeLabel: 'Costume',
     propertiesLabel: 'Properties',
     adRemarkLabel: 'AD Remark',
@@ -750,6 +754,10 @@ const LABELS = {
     conflictsHeading: 'ଚିହ୍ନିତ ସମସ୍ୟା',
     castCalledLabel: 'କଳାକାର ଡକରା',
     shootDayCompletedLabel: 'ସମାପ୍ତ',
+    dayArtistBreakdownLabel: 'କଳାକାର ବିଭାଜନ (PDF)',
+    dayLocationBreakdownLabel: 'ସ୍ଥାନ ବିଭାଜନ (PDF)',
+    dayCostumeBreakdownLabel: 'ପୋଷାକ ବିଭାଜନ (PDF)',
+    dayPropertiesBreakdownLabel: 'ସାମଗ୍ରୀ ବିଭାଜନ (PDF)',
     costumeLabel: 'ପୋଷାକ',
     propertiesLabel: 'ପ୍ରପର୍ଟି',
     adRemarkLabel: 'AD ମନ୍ତବ୍ୟ',
@@ -7147,6 +7155,33 @@ function App() {
                         {day.completed && <span className="schedule-day-completed-badge"> ✓ {t.shootDayCompletedLabel}</span>}
                       </strong>
                     </button>
+
+                    <div className="schedule-day-export-row">
+                      <a
+                        className="breakdown-pdf-link"
+                        href={`${BACKEND_URL}/api/shoot-schedule/${shootSchedule.id}/export-day?day=${day.dayNumber}&category=artists&lang=${language}`}
+                      >
+                        {t.dayArtistBreakdownLabel}
+                      </a>
+                      <a
+                        className="breakdown-pdf-link"
+                        href={`${BACKEND_URL}/api/shoot-schedule/${shootSchedule.id}/export-day?day=${day.dayNumber}&category=locations&lang=${language}`}
+                      >
+                        {t.dayLocationBreakdownLabel}
+                      </a>
+                      <a
+                        className="breakdown-pdf-link"
+                        href={`${BACKEND_URL}/api/shoot-schedule/${shootSchedule.id}/export-day?day=${day.dayNumber}&category=costumes&lang=${language}`}
+                      >
+                        {t.dayCostumeBreakdownLabel}
+                      </a>
+                      <a
+                        className="breakdown-pdf-link"
+                        href={`${BACKEND_URL}/api/shoot-schedule/${shootSchedule.id}/export-day?day=${day.dayNumber}&category=properties&lang=${language}`}
+                      >
+                        {t.dayPropertiesBreakdownLabel}
+                      </a>
+                    </div>
 
                     {isDayExpanded && (
                       <>

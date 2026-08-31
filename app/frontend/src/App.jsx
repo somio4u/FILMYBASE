@@ -342,6 +342,7 @@ const LABELS = {
     dayLocationBreakdownLabel: 'Location Breakdown',
     dayCostumeBreakdownLabel: 'Costume Breakdown',
     dayPropertiesBreakdownLabel: 'Properties Breakdown',
+    dayCallSheetLabel: 'Call Sheet',
     costumeLabel: 'Costume',
     propertiesLabel: 'Properties',
     adRemarkLabel: 'AD Remark',
@@ -758,6 +759,7 @@ const LABELS = {
     dayLocationBreakdownLabel: 'ସ୍ଥାନ ବିଭାଜନ',
     dayCostumeBreakdownLabel: 'ପୋଷାକ ବିଭାଜନ',
     dayPropertiesBreakdownLabel: 'ସାମଗ୍ରୀ ବିଭାଜନ',
+    dayCallSheetLabel: 'କଲ୍ ସିଟ୍',
     costumeLabel: 'ପୋଷାକ',
     propertiesLabel: 'ପ୍ରପର୍ଟି',
     adRemarkLabel: 'AD ମନ୍ତବ୍ୟ',
@@ -7184,6 +7186,12 @@ function App() {
                         label={t.dayPropertiesBreakdownLabel}
                         pdfUrl={`${BACKEND_URL}/api/shoot-schedule/${shootSchedule.id}/export-day?day=${day.dayNumber}&category=properties&lang=${language}`}
                         excelUrl={`${BACKEND_URL}/api/shoot-schedule/${shootSchedule.id}/export-day-excel?day=${day.dayNumber}&category=properties&lang=${language}`}
+                      />
+                      <DownloadChoiceButton
+                        t={t}
+                        label={t.dayCallSheetLabel}
+                        pdfUrl={`${BACKEND_URL}/api/shoot-schedule/${shootSchedule.id}/call-sheet?day=${day.dayNumber}&lang=${language}`}
+                        excelUrl={`${BACKEND_URL}/api/shoot-schedule/${shootSchedule.id}/call-sheet-excel?day=${day.dayNumber}&lang=${language}`}
                       />
                     </div>
 

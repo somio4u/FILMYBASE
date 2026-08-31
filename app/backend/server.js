@@ -8372,6 +8372,439 @@ app.get("/api/shoot-schedule/:id/export-day-excel", requireLogin, async (req, re
   }
 });
 
+// Groups a 'crew'-category member into one of the Call Sheet's Crew-tab
+// department sections by keyword-matching their role text — this app has
+// no dedicated per-department field, just a free-text role, so this is a
+// best-effort classifier rather than an exact lookup. art_department and
+// costume_department already have their own category. Direction-team
+// members (the ADs) aren't included here — they're covered by the Call
+// Sheet header fields (1st AD, 2nd AD, etc.), not the Crew-tab roster.
+function classifyCrewDepartment(category, role) {
+  const r = (role || "").toUpperCase();
+  if (category === "art_department") return "artDepartment";
+  if (category === "costume_department") return "costumes";
+  if (category === "crew") {
+    if (r.includes("PRODUCTION")) return "production";
+    if (r.includes("SOUND")) return "sound";
+    if (r.includes("DOP") || r.includes("CAMERA")) return "camera";
+    if (r.includes("MAKEUP") || r.includes("HAIR")) return "makeupHair";
+  }
+  return null;
+}
+
+const CALL_SHEET_DEPARTMENT_LABELS = {
+  production: "PRODUCTION",
+  sound: "SOUND",
+  camera: "CAMERA",
+  artDepartment: "ART DEPARTMENT",
+  costumes: "COSTUMES",
+  makeupHair: "MAKEUP & HAIR",
+};
+
+// SW = Start Work (first day this character is called), WF = Work Finish
+// (last day), SWF = both (only appears this one day), W = an ordinary
+// day in between — the standard call-sheet cast-status abbreviations.
+function computeCastStatus(artistSchedule, character, dayNumber) {
+  const entry = (artistSchedule ?? []).find((e) => e.character?.toLowerCase() === character.toLowerCase());
+  if (!entry || !entry.days?.length) return "";
+  const days = [...entry.days].map((d) => d.dayNumber).sort((a, b) => a - b);
+  const isFirst = days[0] === dayNumber;
+  const isLast = days[days.length - 1] === dayNumber;
+  if (isFirst && isLast) return "SWF";
+  if (isFirst) return "SW";
+  if (isLast) return "WF";
+  return "W";
+}
+
+// Shared by the PDF and Excel Call Sheet exports — everything both need to
+// render, computed once. dayNumber must already be validated by the caller.
+async function buildCallSheetData(sceneListId, schedule, sceneList, adSheet, dayNumber, lang) {
+  const isSeries = Boolean(sceneList.episodeScenes);
+  const day = schedule.scheduleDays.find((d) => d.dayNumber === dayNumber);
+  const scheduleDaysSorted = [...schedule.scheduleDays].sort((a, b) => a.dayNumber - b.dayNumber);
+  const nextDay = scheduleDaysSorted.find((d) => d.dayNumber > dayNumber) ?? null;
+
+  const crewResult = await db.query(
+    "SELECT category, character_name, name, role, contact_number FROM crew_members WHERE scene_list_id = $1",
+    [sceneListId]
+  );
+  const castByCharacter = new Map();
+  const locationAddressByLabel = new Map();
+  const departmentRoster = {};
+  crewResult.rows.forEach((row) => {
+    if (row.category === "artist" && row.character_name) {
+      castByCharacter.set(row.character_name.toLowerCase(), row);
+    } else if (row.category === "location" && row.character_name) {
+      locationAddressByLabel.set(row.character_name.toLowerCase(), row.name);
+    } else {
+      const dept = classifyCrewDepartment(row.category, row.role);
+      if (dept) {
+        departmentRoster[dept] = departmentRoster[dept] ?? [];
+        departmentRoster[dept].push(row);
+      }
+    }
+  });
+
+  // AD sheet lookup by (episodeIndex, sceneIndex), same flattening every
+  // other schedule export already uses.
+  const castByIdentity = new Map();
+  if (adSheet) {
+    let flatIndex = 0;
+    if (isSeries) {
+      (sceneList.episodeScenes ?? []).forEach((episodeScene, episodeIndex) => {
+        episodeScene.scenes.forEach((_, sceneIndex) => {
+          castByIdentity.set(`e${episodeIndex}-s${sceneIndex}`, adSheet[flatIndex]);
+          flatIndex += 1;
+        });
+      });
+    } else {
+      (sceneList.scenes ?? []).forEach((_, sceneIndex) => {
+        castByIdentity.set(`s${sceneIndex}`, adSheet[flatIndex]);
+        flatIndex += 1;
+      });
+    }
+  }
+
+  function buildSceneRows(refs) {
+    const charactersInDay = new Set();
+    const rows = groupSceneRefsForPdf(refs ?? [], sceneList, lang).flatMap((episodeGroup) =>
+      episodeGroup.locationGroups.flatMap((locationGroup) =>
+        locationGroup.items.map(({ ref, scene }) => {
+          const identity = isSeries ? `e${ref.episodeIndex}-s${ref.sceneIndex}` : `s${ref.sceneIndex}`;
+          const adSheetRow = castByIdentity.get(identity);
+          const realSceneNumber = (scene.sceneNumber || String(ref.sceneIndex + 1)).replace(/^\s*(SCENE|SC)\.?\s*/i, "");
+          const sceneLabel = isSeries ? `Ep${ref.episodeIndex + 1}, Sc ${realSceneNumber}` : `Sc ${realSceneNumber}`;
+          const cast = adSheetRow?.mainCharacters ?? [];
+          cast.forEach((c) => charactersInDay.add(c));
+          return {
+            sceneLabel,
+            set: scene.location?.[lang] ?? "",
+            cast: cast.join(", "),
+            dn: scene.timeOfDay || "",
+            location: locationAddressByLabel.get((scene.location?.en ?? "").toLowerCase()) || "",
+          };
+        })
+      )
+    );
+    return { rows, charactersInDay };
+  }
+
+  const { rows: sceneRows, charactersInDay } = buildSceneRows(day?.sceneRefs);
+  const { rows: advanceRows } = nextDay ? buildSceneRows(nextDay.sceneRefs) : { rows: [] };
+
+  const castRows = [...charactersInDay].map((character) => {
+    const cast = castByCharacter.get(character.toLowerCase());
+    return {
+      character,
+      actor: cast?.name || "",
+      contact: cast?.contact_number || "",
+      status: computeCastStatus(schedule.artistSchedule, character, dayNumber),
+      reportTime: day?.crewCallTime || "",
+      hairMakeupTime: day?.crewCallTime || "",
+      readyTime: day?.crewCallTime || "",
+    };
+  });
+
+  const config = schedule.callSheetConfig ?? {};
+  const activeDepartments = config.activeDepartments ?? [];
+
+  return {
+    day,
+    nextDay,
+    sceneRows,
+    advanceRows,
+    castRows,
+    config,
+    activeDepartments,
+    departmentRoster,
+  };
+}
+
+async function loadCallSheetInputs(req, res) {
+  const idLookup = await db.query("SELECT scene_list_id FROM shoot_schedules WHERE id = $1", [req.params.id]);
+  if (idLookup.rows.length === 0) {
+    res.status(404).json({ error: "Shoot schedule not found" });
+    return null;
+  }
+  const sceneListId = idLookup.rows[0].scene_list_id;
+  const dayNumber = Number(req.query.day);
+  if (!Number.isFinite(dayNumber)) {
+    res.status(400).json({ error: "A day number is required." });
+    return null;
+  }
+
+  const result = await db.query(
+    "SELECT content FROM shoot_schedules WHERE scene_list_id = $1 ORDER BY created_at DESC LIMIT 1",
+    [sceneListId]
+  );
+  const schedule = result.rows[0].content;
+  if (!(schedule.scheduleDays ?? []).some((d) => d.dayNumber === dayNumber)) {
+    res.status(404).json({ error: `Day ${dayNumber} was not found in this schedule.` });
+    return null;
+  }
+
+  const sceneListResult = await db.query("SELECT content FROM scene_lists WHERE id = $1", [sceneListId]);
+  const sceneList = sceneListResult.rows[0]?.content ?? {};
+  const title = await fetchProjectTitleForSceneList(sceneListId, sceneList, req.query.lang === "or" ? "or" : "en");
+  const breakdownResult = await db.query(
+    "SELECT content FROM script_breakdowns WHERE scene_list_id = $1 ORDER BY created_at DESC LIMIT 1",
+    [sceneListId]
+  );
+  const adSheet = breakdownResult.rows[0]?.content?.adSheet ?? null;
+
+  return { sceneListId, dayNumber, schedule, sceneList, adSheet, title };
+}
+
+app.get("/api/shoot-schedule/:id/call-sheet", requireLogin, async (req, res) => {
+  const lang = req.query.lang === "or" ? "or" : "en";
+
+  try {
+    const inputs = await loadCallSheetInputs(req, res);
+    if (!inputs) return;
+    const { sceneListId, dayNumber, schedule, sceneList, adSheet, title } = inputs;
+    const data = await buildCallSheetData(sceneListId, schedule, sceneList, adSheet, dayNumber, lang);
+    const { day, nextDay, sceneRows, advanceRows, castRows, config, activeDepartments, departmentRoster } = data;
+
+    const bodyFont = lang === "or" ? "odiaRegular" : "Helvetica";
+    const headerFont = lang === "or" ? "odiaBold" : "Helvetica-Bold";
+
+    const doc = new PDFDocument({ size: "A4", margin: 24 });
+    doc.registerFont("odiaRegular", FONTS.odiaRegular);
+    doc.registerFont("odiaBold", FONTS.odiaBold);
+
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", `attachment; filename="call-sheet-day-${dayNumber}-${lang}-${formatExportTimestamp()}.pdf"`);
+    doc.pipe(res);
+
+    const left = doc.page.margins.left;
+    const pageWidth = doc.page.width - doc.page.margins.left - doc.page.margins.right;
+
+    doc.font(headerFont).fontSize(18).text(title || "Call Sheet", left, doc.y, { width: pageWidth, align: "center" });
+    doc.font(headerFont).fontSize(13).text(`SHOOT DAY ${dayNumber}${day.date ? `  —  ${formatDisplayDate(day.date)}` : ""}`, { align: "center" });
+    doc.moveDown(0.8);
+
+    function labeledLine(label, value) {
+      doc.font(headerFont).fontSize(9).text(`${label}: `, left, doc.y, { continued: true }).font(bodyFont).text(value || "—");
+    }
+
+    labeledLine("Executive Producer", config.executiveProducer);
+    labeledLine("UPM", config.upm);
+    labeledLine("1st AD / 2nd AD / 2nd 2nd AD", [config.firstAD, config.secondAD, config.secondSecondAD].filter(Boolean).join(" / "));
+    doc.moveDown(0.4);
+    labeledLine("Crew Call", day.crewCallTime);
+    labeledLine("Shoot Call", day.shootCallTime);
+    labeledLine("Breakfast / Lunch / Est. Wrap", [day.breakfastTime, day.lunchTime, day.wrapTime].filter(Boolean).join("  /  "));
+    labeledLine("Sunrise / Sunset / Weather", [day.sunrise, day.sunset, day.weather].filter(Boolean).join("  /  ") || "— fill in by hand —");
+    doc.moveDown(0.4);
+    labeledLine("Shooting Location", day.actualLocation?.[lang] || day.location?.[lang]);
+    labeledLine("Basecamp / Crew Parking", [day.basecamp, day.crewParking].filter(Boolean).join("  /  ") || "— fill in by hand —");
+    labeledLine("Nearest Hospital", day.nearestHospital || "— fill in by hand —");
+    doc.moveDown(0.8);
+
+    const sceneColumns = [
+      { key: "sceneLabel", label: "SC#", width: 90 },
+      { key: "set", label: "SET", width: 110 },
+      { key: "cast", label: "CAST", width: 140 },
+      { key: "dn", label: "D/N", width: 40 },
+      { key: "location", label: "LOCATION", width: pageWidth - 90 - 110 - 140 - 40 },
+    ];
+    const cellPad = 4;
+    function drawTable(columns, rows, title) {
+      doc.font(headerFont).fontSize(11).text(title, left, doc.y);
+      doc.moveDown(0.2);
+      let y = doc.y;
+      const pageBottom = doc.page.height - doc.page.margins.bottom;
+
+      function drawHeader(yStart) {
+        doc.font(headerFont).fontSize(8);
+        const h = Math.max(16, ...columns.map((c) => doc.heightOfString(c.label, { width: c.width - cellPad * 2 }) + cellPad * 2));
+        let x = left;
+        columns.forEach((c) => {
+          doc.rect(x, yStart, c.width, h).fill("#000");
+          doc.fillColor("#fff").text(c.label, x + cellPad, yStart + cellPad, { width: c.width - cellPad * 2 });
+          x += c.width;
+        });
+        doc.fillColor("#000");
+        return yStart + h;
+      }
+      y = drawHeader(y);
+
+      rows.forEach((row) => {
+        doc.font(bodyFont).fontSize(8);
+        const h = Math.max(14, ...columns.map((c) => doc.heightOfString(String(row[c.key] ?? ""), { width: c.width - cellPad * 2 }) + cellPad * 2));
+        if (y + h > pageBottom) {
+          doc.addPage({ size: "A4", margin: 24 });
+          y = doc.page.margins.top;
+          y = drawHeader(y);
+        }
+        let x = left;
+        columns.forEach((c) => {
+          doc.rect(x, y, c.width, h).stroke("#cccccc");
+          doc.font(bodyFont).fontSize(8).text(String(row[c.key] ?? ""), x + cellPad, y + cellPad, { width: c.width - cellPad * 2 });
+          x += c.width;
+        });
+        y += h;
+      });
+      doc.y = y + 10;
+    }
+
+    drawTable(sceneColumns, sceneRows, "TODAY'S SCENES");
+
+    const castColumns = [
+      { key: "actor", label: "ACTOR", width: 110 },
+      { key: "character", label: "CHARACTER", width: 110 },
+      { key: "status", label: "STATUS", width: 45 },
+      { key: "reportTime", label: "RPT", width: 60 },
+      { key: "hairMakeupTime", label: "H/MU", width: 60 },
+      { key: "readyTime", label: "RDY@", width: 60 },
+      { key: "contact", label: "CONTACT", width: pageWidth - 110 - 110 - 45 - 60 - 60 - 60 },
+    ];
+    drawTable(castColumns, castRows, "CAST");
+
+    if (activeDepartments.length > 0) {
+      doc.font(headerFont).fontSize(11).text("CREW", left, doc.y);
+      doc.moveDown(0.3);
+      activeDepartments.forEach((dept) => {
+        const members = departmentRoster[dept] ?? [];
+        doc.font(headerFont).fontSize(9).text(CALL_SHEET_DEPARTMENT_LABELS[dept] ?? dept, left);
+        if (members.length === 0) {
+          doc.font(bodyFont).fontSize(9).fillColor("#999").text("— fill in —", { indent: 10 }).fillColor("#000");
+        } else {
+          members.forEach((m) => doc.font(bodyFont).fontSize(9).text(`${m.name}${m.role ? ` — ${m.role}` : ""}${m.contact_number ? ` — ${m.contact_number}` : ""}`, { indent: 10 }));
+        }
+        doc.moveDown(0.2);
+      });
+      doc.moveDown(0.4);
+    }
+
+    if (config.syncSoundNote !== undefined) {
+      doc.font(headerFont).fontSize(9).text("SYNC SOUND", left, doc.y);
+      doc.font(bodyFont).fontSize(9).text(config.syncSoundNote || "—", { indent: 10 });
+      doc.moveDown(0.4);
+    }
+
+    if (advanceRows.length > 0) {
+      drawTable(sceneColumns, advanceRows, `ADVANCE SCHEDULE — DAY ${nextDay.dayNumber}${nextDay.date ? ` (${formatDisplayDate(nextDay.date)})` : ""}`);
+    }
+
+    doc.end();
+  } catch (error) {
+    console.error("Call sheet PDF export failed:", error.message);
+    if (!res.headersSent) {
+      res.status(500).json({ error: error.message });
+    } else {
+      res.end();
+    }
+  }
+});
+
+app.get("/api/shoot-schedule/:id/call-sheet-excel", requireLogin, async (req, res) => {
+  const lang = req.query.lang === "or" ? "or" : "en";
+
+  try {
+    const inputs = await loadCallSheetInputs(req, res);
+    if (!inputs) return;
+    const { sceneListId, dayNumber, schedule, sceneList, adSheet, title } = inputs;
+    const data = await buildCallSheetData(sceneListId, schedule, sceneList, adSheet, dayNumber, lang);
+    const { day, nextDay, sceneRows, advanceRows, castRows, config, activeDepartments, departmentRoster } = data;
+
+    const workbook = new ExcelJS.Workbook();
+    const sheet = workbook.addWorksheet("Call Sheet");
+
+    const boldCenter = { font: { bold: true }, alignment: { horizontal: "center", vertical: "middle", wrapText: true } };
+    function labelValueRow(label, value) {
+      const row = sheet.addRow([label, value ?? "—"]);
+      row.getCell(1).font = { bold: true };
+      row.getCell(2).alignment = { wrapText: true };
+    }
+
+    sheet.mergeCells("A1:E1");
+    sheet.getCell("A1").value = `${title || "Call Sheet"} — SHOOT DAY ${dayNumber}${day.date ? `  —  ${formatDisplayDate(day.date)}` : ""}`;
+    sheet.getCell("A1").font = { bold: true, size: 14 };
+    sheet.getCell("A1").alignment = { horizontal: "center" };
+    sheet.addRow([]);
+
+    labelValueRow("Executive Producer", config.executiveProducer);
+    labelValueRow("UPM", config.upm);
+    labelValueRow("1st AD / 2nd AD / 2nd 2nd AD", [config.firstAD, config.secondAD, config.secondSecondAD].filter(Boolean).join(" / "));
+    labelValueRow("Crew Call", day.crewCallTime);
+    labelValueRow("Shoot Call", day.shootCallTime);
+    labelValueRow("Breakfast / Lunch / Est. Wrap", [day.breakfastTime, day.lunchTime, day.wrapTime].filter(Boolean).join("  /  "));
+    labelValueRow("Sunrise / Sunset / Weather", [day.sunrise, day.sunset, day.weather].filter(Boolean).join("  /  "));
+    labelValueRow("Shooting Location", day.actualLocation?.[lang] || day.location?.[lang]);
+    labelValueRow("Basecamp / Crew Parking", [day.basecamp, day.crewParking].filter(Boolean).join("  /  "));
+    labelValueRow("Nearest Hospital", day.nearestHospital);
+    sheet.addRow([]);
+
+    function addTable(title, columns, rows) {
+      const titleRow = sheet.addRow([title]);
+      sheet.mergeCells(titleRow.number, 1, titleRow.number, columns.length);
+      titleRow.font = { bold: true, size: 12 };
+      const headerRow = sheet.addRow(columns.map((c) => c.label));
+      headerRow.eachCell((cell) => { cell.font = boldCenter.font; cell.alignment = boldCenter.alignment; cell.border = { top: { style: "thin" }, bottom: { style: "thin" } }; });
+      rows.forEach((row) => {
+        const r = sheet.addRow(columns.map((c) => row[c.key] ?? ""));
+        r.eachCell((cell) => { cell.alignment = { wrapText: true, vertical: "middle" }; cell.border = { top: { style: "thin", color: { argb: "FFCCCCCC" } }, bottom: { style: "thin", color: { argb: "FFCCCCCC" } } }; });
+      });
+      sheet.addRow([]);
+    }
+
+    addTable("TODAY'S SCENES", [
+      { key: "sceneLabel", label: "SC#" }, { key: "set", label: "SET" }, { key: "cast", label: "CAST" },
+      { key: "dn", label: "D/N" }, { key: "location", label: "LOCATION" },
+    ], sceneRows);
+
+    addTable("CAST", [
+      { key: "actor", label: "ACTOR" }, { key: "character", label: "CHARACTER" }, { key: "status", label: "STATUS" },
+      { key: "reportTime", label: "RPT" }, { key: "hairMakeupTime", label: "H/MU" }, { key: "readyTime", label: "RDY@" },
+      { key: "contact", label: "CONTACT" },
+    ], castRows);
+
+    if (activeDepartments.length > 0) {
+      const crewTitleRow = sheet.addRow(["CREW"]);
+      crewTitleRow.font = { bold: true, size: 12 };
+      activeDepartments.forEach((dept) => {
+        const members = departmentRoster[dept] ?? [];
+        const deptRow = sheet.addRow([CALL_SHEET_DEPARTMENT_LABELS[dept] ?? dept]);
+        deptRow.font = { bold: true };
+        if (members.length === 0) {
+          sheet.addRow(["— fill in —"]);
+        } else {
+          members.forEach((m) => sheet.addRow([`${m.name}${m.role ? ` — ${m.role}` : ""}${m.contact_number ? ` — ${m.contact_number}` : ""}`]));
+        }
+      });
+      sheet.addRow([]);
+    }
+
+    if (config.syncSoundNote !== undefined) {
+      const syncRow = sheet.addRow(["SYNC SOUND", config.syncSoundNote || "—"]);
+      syncRow.getCell(1).font = { bold: true };
+      sheet.addRow([]);
+    }
+
+    if (advanceRows.length > 0) {
+      addTable(`ADVANCE SCHEDULE — DAY ${nextDay.dayNumber}${nextDay.date ? ` (${formatDisplayDate(nextDay.date)})` : ""}`, [
+        { key: "sceneLabel", label: "SC#" }, { key: "set", label: "SET" }, { key: "cast", label: "CAST" },
+        { key: "dn", label: "D/N" }, { key: "location", label: "LOCATION" },
+      ], advanceRows);
+    }
+
+    sheet.columns.forEach((col, i) => { col.width = i === 0 ? 22 : 24; });
+
+    res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+    res.setHeader("Content-Disposition", `attachment; filename="call-sheet-day-${dayNumber}-${lang}-${formatExportTimestamp()}.xlsx"`);
+    await workbook.xlsx.write(res);
+    res.end();
+  } catch (error) {
+    console.error("Call sheet Excel export failed:", error.message);
+    if (!res.headersSent) {
+      res.status(500).json({ error: error.message });
+    } else {
+      res.end();
+    }
+  }
+});
+
 // --- Crew & Cast: real-world data the production attaches directly onto
 // the Script Breakdown's own lists, not AI-generated content. 'artist'
 // entries are cast confirmed against a specific character from the Artist

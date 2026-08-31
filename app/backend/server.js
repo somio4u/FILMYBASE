@@ -6090,6 +6090,40 @@ function lookupSceneServerSide(sceneList, ref) {
   return sceneList.scenes?.[ref.sceneIndex] ?? null;
 }
 
+// Same grouping as the web UI's groupSceneRefsForDisplay — by episode, then
+// by location within that episode — so the printed sheet reads "Episode 2:
+// 3 scenes in the Living Room, 4 in the Bedroom" as clearly as the app
+// does, rather than a flat row-by-row table. Preserves the schedule's own
+// shoot order (first-appearance order) at both levels.
+function groupSceneRefsForPdf(sceneRefs, sceneList, lang) {
+  const episodeGroups = [];
+  const episodeIndexToGroup = new Map();
+
+  sceneRefs.forEach((ref) => {
+    const scene = lookupSceneServerSide(sceneList, ref);
+    if (!scene) return;
+    const episodeKey = typeof ref.episodeIndex === "number" ? ref.episodeIndex : null;
+
+    let episodeGroup = episodeIndexToGroup.get(episodeKey);
+    if (!episodeGroup) {
+      episodeGroup = { episodeIndex: episodeKey, locationGroups: [], locationKeyToGroup: new Map() };
+      episodeIndexToGroup.set(episodeKey, episodeGroup);
+      episodeGroups.push(episodeGroup);
+    }
+
+    const locationLabel = scene.location?.[lang] || scene.location?.en || "";
+    let locationGroup = episodeGroup.locationKeyToGroup.get(locationLabel);
+    if (!locationGroup) {
+      locationGroup = { location: locationLabel, items: [] };
+      episodeGroup.locationKeyToGroup.set(locationLabel, locationGroup);
+      episodeGroup.locationGroups.push(locationGroup);
+    }
+    locationGroup.items.push({ ref, scene });
+  });
+
+  return episodeGroups;
+}
+
 // The one PDF every department actually needs: a day-by-day call schedule
 // (scenes, location, cast called) followed by a per-artist summary — how
 // many days and which ones — so it can be forwarded as-is to artists and
@@ -6117,11 +6151,11 @@ app.get("/api/shoot-schedule/:id/export", requireLogin, async (req, res) => {
       lang === "or"
         ? {
             schedule: "ସୁଟିଂ ସୂଚୀ", day: "ଦିନ", location: "ସ୍ଥାନ", cast: "କଳାକାର", notes: "ଟିପ୍ପଣୀ", artistSummary: "କଳାକାର-ଅନୁଯାୟୀ ସାରାଂଶ", totalDays: "ମୋଟ ଦିନ", days: "ଦିନଗୁଡ଼ିକ", completed: "ସମାପ୍ତ", costume: "ପୋଷାକ", properties: "ପ୍ରପର୍ଟି", adRemark: "AD ମନ୍ତବ୍ୟ",
-            wrapped: "ସମାପ୍ତ", pending: "ବାକି", inProgress: "ଚାଲୁଛି",
+            wrapped: "ସମାପ୍ତ", pending: "ବାକି", inProgress: "ଚାଲୁଛି", episode: "ଏପିସୋଡ୍", scenes: "ଦୃଶ୍ୟ", unspecified: "ଅନିର୍ଦ୍ଦିଷ୍ଟ",
           }
         : {
             schedule: "Shoot Schedule", day: "Day", location: "Location", cast: "Cast Called", notes: "Notes", artistSummary: "Artist-Wise Summary", totalDays: "Total Days", days: "Days", completed: "COMPLETED", costume: "Costume", properties: "Properties", adRemark: "AD Remark",
-            wrapped: "WRAPPED", pending: "PENDING", inProgress: "IN PROGRESS",
+            wrapped: "WRAPPED", pending: "PENDING", inProgress: "IN PROGRESS", episode: "Episode", scenes: "scenes", unspecified: "Unspecified",
           };
 
     // Per-scene cast (who's actually IN that scene, not the whole day's
@@ -6213,58 +6247,83 @@ app.get("/api/shoot-schedule/:id/export", requireLogin, async (req, res) => {
       let y = doc.y;
       y = drawHeaderRow(y);
 
-      (day.sceneRefs ?? []).forEach((ref) => {
-        const scene = lookupSceneServerSide(sceneList, ref);
-        if (!scene) return;
-        const identity = isSeries ? `e${ref.episodeIndex}-s${ref.sceneIndex}` : `s${ref.sceneIndex}`;
-        const adSheetRow = castByIdentity.get(identity);
-        // The stored sceneNumber is sometimes a bare code ("1A", "7") and
-        // sometimes the verbatim script text including the word itself
-        // ("SCENE 1") — strip that prefix so the cell never reads "SCENE
-        // SCENE 1", regardless of which form this particular scene has.
-        const realSceneNumber = (scene.sceneNumber || String(ref.sceneIndex + 1)).replace(/^\s*(SCENE|SC)\.?\s*/i, "");
-        const scn = isSeries ? `Ep${ref.episodeIndex + 1}\n${realSceneNumber}` : realSceneNumber;
-        const artist = adSheetRow ? (adSheetRow.mainCharacters ?? []).join(", ") || notAvailableLabel : (day.charactersNeeded ?? []).join(", ") || notAvailableLabel;
-        const properties = [ref.properties, adSheetRow?.extras?.[lang]].filter(Boolean).join("; ");
-
-        const values = {
-          scn,
-          location: `${scene.intExt}. ${scene.location?.[lang] ?? ""}`,
-          artist,
-          costume: ref.costume || notAvailableLabel,
-          properties: properties || notAvailableLabel,
-        };
-
-        doc.font(bodyFont).fontSize(9);
-        const rowHeight = Math.max(
-          18,
-          ...columns.map((col) => doc.heightOfString(String(values[col.key] ?? ""), { width: col.width - cellPaddingX * 2 }) + cellPaddingY * 2)
-        );
-
-        if (y + rowHeight > pageBottom) {
+      const tableWidth = columns.reduce((s, c) => s + c.width, 0);
+      function drawGroupBanner(bannerY, text) {
+        const bandHeight = 18;
+        if (bannerY + bandHeight > pageBottom) {
           doc.addPage({ size: "A4", layout: "landscape", margin: 24 });
-          y = doc.page.margins.top;
-          y = drawHeaderRow(y);
+          bannerY = doc.page.margins.top;
+          bannerY = drawHeaderRow(bannerY);
         }
+        doc.rect(pageLeft, bannerY, tableWidth, bandHeight).fill("#eef2f7");
+        doc.fillColor("#1a1a1a").font(headerFont).fontSize(10).text(text, pageLeft + 6, bannerY + 4);
+        doc.fillColor("#000");
+        return bannerY + bandHeight;
+      }
 
-        let x = pageLeft;
-        columns.forEach((col) => {
-          doc.rect(x, y, col.width, rowHeight).stroke("#cccccc");
-          doc.font(bodyFont).fontSize(9).text(String(values[col.key] ?? ""), x + cellPaddingX, y + cellPaddingY, { width: col.width - cellPaddingX * 2 });
-          x += col.width;
+      // Grouped by episode, then by location within it — "Episode 2: 3
+      // scenes in the Living Room, 4 in the Bedroom" as a banner row ahead
+      // of each block, instead of a flat table the AD has to scan line by
+      // line to see the same thing.
+      groupSceneRefsForPdf(day.sceneRefs ?? [], sceneList, lang).forEach((episodeGroup) => {
+        episodeGroup.locationGroups.forEach((locationGroup) => {
+          const episodePrefix = episodeGroup.episodeIndex !== null ? `${labels.episode} ${episodeGroup.episodeIndex + 1} — ` : "";
+          const bannerText = `${episodePrefix}${locationGroup.location || labels.unspecified} (${locationGroup.items.length} ${labels.scenes})`;
+          y = drawGroupBanner(y, bannerText);
+
+          locationGroup.items.forEach(({ ref, scene }) => {
+            const identity = isSeries ? `e${ref.episodeIndex}-s${ref.sceneIndex}` : `s${ref.sceneIndex}`;
+            const adSheetRow = castByIdentity.get(identity);
+            // The stored sceneNumber is sometimes a bare code ("1A", "7") and
+            // sometimes the verbatim script text including the word itself
+            // ("SCENE 1") — strip that prefix so the cell never reads "SCENE
+            // SCENE 1", regardless of which form this particular scene has.
+            const realSceneNumber = (scene.sceneNumber || String(ref.sceneIndex + 1)).replace(/^\s*(SCENE|SC)\.?\s*/i, "");
+            const scn = isSeries ? `Ep${ref.episodeIndex + 1}\n${realSceneNumber}` : realSceneNumber;
+            const artist = adSheetRow ? (adSheetRow.mainCharacters ?? []).join(", ") || notAvailableLabel : (day.charactersNeeded ?? []).join(", ") || notAvailableLabel;
+            const properties = [ref.properties, adSheetRow?.extras?.[lang]].filter(Boolean).join("; ");
+
+            const values = {
+              scn,
+              location: `${scene.intExt}. ${scene.location?.[lang] ?? ""}`,
+              artist,
+              costume: ref.costume || notAvailableLabel,
+              properties: properties || notAvailableLabel,
+            };
+
+            doc.font(bodyFont).fontSize(9);
+            const rowHeight = Math.max(
+              18,
+              ...columns.map((col) => doc.heightOfString(String(values[col.key] ?? ""), { width: col.width - cellPaddingX * 2 }) + cellPaddingY * 2)
+            );
+
+            if (y + rowHeight > pageBottom) {
+              doc.addPage({ size: "A4", layout: "landscape", margin: 24 });
+              y = doc.page.margins.top;
+              y = drawHeaderRow(y);
+              y = drawGroupBanner(y, bannerText);
+            }
+
+            let x = pageLeft;
+            columns.forEach((col) => {
+              doc.rect(x, y, col.width, rowHeight).stroke("#cccccc");
+              doc.font(bodyFont).fontSize(9).text(String(values[col.key] ?? ""), x + cellPaddingX, y + cellPaddingY, { width: col.width - cellPaddingX * 2 });
+              x += col.width;
+            });
+            if (ref.adRemark) {
+              const remarkHeight = doc.heightOfString(`AD Remark: ${ref.adRemark}`, { width: tableWidth - cellPaddingX * 2 }) + cellPaddingY * 2;
+              doc
+                .font(bodyFont)
+                .fontSize(8)
+                .fillColor("#b45309")
+                .text(`AD Remark: ${ref.adRemark}`, pageLeft + cellPaddingX, y + rowHeight, { width: tableWidth - cellPaddingX * 2 })
+                .fillColor("#000");
+              y += rowHeight + remarkHeight;
+            } else {
+              y += rowHeight;
+            }
+          });
         });
-        if (ref.adRemark) {
-          const remarkHeight = doc.heightOfString(`AD Remark: ${ref.adRemark}`, { width: columns.reduce((s, c) => s + c.width, 0) - cellPaddingX * 2 }) + cellPaddingY * 2;
-          doc
-            .font(bodyFont)
-            .fontSize(8)
-            .fillColor("#b45309")
-            .text(`AD Remark: ${ref.adRemark}`, pageLeft + cellPaddingX, y + rowHeight, { width: columns.reduce((s, c) => s + c.width, 0) - cellPaddingX * 2 })
-            .fillColor("#000");
-          y += rowHeight + remarkHeight;
-        } else {
-          y += rowHeight;
-        }
       });
 
       if (day.notes?.[lang]) {

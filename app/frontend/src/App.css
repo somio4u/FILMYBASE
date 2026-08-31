@@ -2096,6 +2096,31 @@ button, input, textarea, select {
   margin-bottom: 3px;
 }
 
+.schedule-episode-group {
+  margin-bottom: 10px;
+}
+
+.schedule-episode-header {
+  margin: 10px 0 4px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--accent-strong);
+  font-family: var(--font-heading);
+}
+
+.schedule-location-group {
+  margin: 0 0 6px 4px;
+}
+
+.schedule-location-header {
+  margin: 4px 0 2px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  padding-left: 10px;
+  border-left: 2px solid var(--border-strong);
+}
+
 .schedule-day-notes {
   margin: 0;
   font-size: 12px;

@@ -961,6 +961,41 @@ function lookupScene(sceneList, ref) {
   return sceneList.scenes[ref.sceneIndex] ?? null
 }
 
+// Groups one shoot day's scenes by episode, then by location within that
+// episode — so "Episode 2: 3 scenes in the Living Room, 4 in the Bedroom"
+// reads as a single glance instead of a flat list the AD has to scan scene
+// by scene. Preserves the schedule's own shoot order at both levels (first
+// appearance order), rather than alphabetizing — that order is deliberate
+// (linear-by-location, continuity-bundled), not something to re-sort.
+function groupSceneRefsForDisplay(sceneRefs, sceneList, language) {
+  const episodeGroups = []
+  const episodeIndexToGroup = new Map()
+
+  sceneRefs.forEach((ref, index) => {
+    const scene = lookupScene(sceneList, ref)
+    if (!scene) return
+    const episodeKey = typeof ref.episodeIndex === 'number' ? ref.episodeIndex : null
+
+    let episodeGroup = episodeIndexToGroup.get(episodeKey)
+    if (!episodeGroup) {
+      episodeGroup = { episodeIndex: episodeKey, locationGroups: [], locationKeyToGroup: new Map() }
+      episodeIndexToGroup.set(episodeKey, episodeGroup)
+      episodeGroups.push(episodeGroup)
+    }
+
+    const locationLabel = scene.location?.[language] || scene.location?.en || ''
+    let locationGroup = episodeGroup.locationKeyToGroup.get(locationLabel)
+    if (!locationGroup) {
+      locationGroup = { location: locationLabel, items: [] }
+      episodeGroup.locationKeyToGroup.set(locationLabel, locationGroup)
+      episodeGroup.locationGroups.push(locationGroup)
+    }
+    locationGroup.items.push({ ref, index, scene })
+  })
+
+  return episodeGroups
+}
+
 // Who's actually IN this one scene — pulled from the AD Scene Breakdown
 // Sheet (if one's been generated), matched by the same positional order it
 // was built in, rather than a whole shoot day's cast list. Falls back to
@@ -6326,84 +6361,106 @@ function App() {
 
                     {isDayExpanded && (
                       <>
-                        <ul className="schedule-day-scenes">
-                          {day.sceneRefs.map((ref, index) => {
-                            const scene = lookupScene(sceneList, ref)
-                            if (!scene) return null
-                            const isMarking = markingShotDayNumber === day.dayNumber
-                            const sceneKey = `${ref.episodeIndex ?? ''}-${ref.sceneIndex}`
-                            const isEditingScene = editingSceneKey === sceneKey
-                            return (
-                              <li key={index}>
-                                {isMarking && (
-                                  <input
-                                    type="checkbox"
-                                    checked={shotSceneSelections[index] !== false}
-                                    onChange={(e) =>
-                                      setShotSceneSelections((prev) => ({ ...prev, [index]: e.target.checked }))
-                                    }
-                                  />
-                                )}
-                                {typeof ref.episodeIndex === 'number' ? `${t.episodeLabel} ${ref.episodeIndex + 1}, ` : ''}
-                                {t.sceneLabel} {scene.sceneNumber ? cleanSceneNumber(scene.sceneNumber) : ref.sceneIndex + 1}: {scene.oneLiner[language]}
-                                {(() => {
-                                  const sceneCast = lookupSceneCast(sceneList, scriptBreakdown?.adSheet, ref)
-                                  return sceneCast?.length > 0 ? (
-                                    <span className="schedule-scene-meta"> — {t.castCalledLabel}: {sceneCast.join(', ')}</span>
-                                  ) : null
-                                })()}
-                                {!isEditingScene && (ref.costume || ref.properties) && (
-                                  <span className="schedule-scene-meta">
-                                    {ref.costume && ` — ${t.costumeLabel}: ${ref.costume}`}
-                                    {ref.properties && ` — ${t.propertiesLabel}: ${ref.properties}`}
-                                  </span>
-                                )}
-                                {!isEditingScene && ref.adRemark && (
-                                  <p className="feedback-note schedule-scene-ad-remark">{t.adRemarkLabel}: {ref.adRemark}</p>
-                                )}
-                                {canEditProduction && !isEditingScene && (
-                                  <button className="scene-edit-toggle" onClick={() => handleStartSceneEditClick(ref)}>
-                                    {t.editSceneButton}
-                                  </button>
-                                )}
-                                {isEditingScene && (
-                                  <div className="scene-edit-form">
-                                    <input
-                                      type="text"
-                                      placeholder={t.costumeLabel}
-                                      value={editSceneCostume}
-                                      onChange={(e) => setEditSceneCostume(e.target.value)}
-                                    />
-                                    <input
-                                      type="text"
-                                      placeholder={t.propertiesLabel}
-                                      value={editSceneProperties}
-                                      onChange={(e) => setEditSceneProperties(e.target.value)}
-                                    />
-                                    <input
-                                      type="text"
-                                      placeholder={t.adRemarkLabel}
-                                      value={editSceneAdRemark}
-                                      onChange={(e) => setEditSceneAdRemark(e.target.value)}
-                                    />
-                                    <div className="scene-edit-form-actions">
-                                      <button
-                                        className="choose-button"
-                                        onClick={() => handleSaveSceneEditClick(ref)}
-                                        disabled={isSavingSceneEdit}
-                                      >
-                                        {isSavingSceneEdit ? t.savingLabel : t.saveButton}
-                                      </button>
-                                      <button className="cancel-button" onClick={() => setEditingSceneKey(null)} disabled={isSavingSceneEdit}>
-                                        {t.cancelEditButton}
-                                      </button>
-                                    </div>
-                                  </div>
-                                )}
-                              </li>
-                            )
-                          })}
-                        </ul>
+                        {groupSceneRefsForDisplay(day.sceneRefs, sceneList, language).map((episodeGroup, epGroupIndex) => (
+                          <div key={epGroupIndex} className="schedule-episode-group">
+                            {episodeGroup.episodeIndex !== null && (
+                              <h5 className="schedule-episode-header">
+                                {t.episodeLabel} {episodeGroup.episodeIndex + 1}
+                                <span className="breakdown-item-meta">
+                                  {' '}
+                                  ({episodeGroup.locationGroups.reduce((sum, g) => sum + g.items.length, 0)} {t.scenesLabel})
+                                </span>
+                              </h5>
+                            )}
+                            {episodeGroup.locationGroups.map((locationGroup, locGroupIndex) => (
+                              <div key={locGroupIndex} className="schedule-location-group">
+                                <h6 className="schedule-location-header">
+                                  {locationGroup.location || t.unspecifiedLabel}{' '}
+                                  <span className="breakdown-item-meta">({locationGroup.items.length} {t.scenesLabel})</span>
+                                </h6>
+                                <ul className="schedule-day-scenes">
+                                  {locationGroup.items.map(({ ref, index, scene }) => {
+                                    const isMarking = markingShotDayNumber === day.dayNumber
+                                    const sceneKey = `${ref.episodeIndex ?? ''}-${ref.sceneIndex}`
+                                    const isEditingScene = editingSceneKey === sceneKey
+                                    return (
+                                      <li key={index}>
+                                        {isMarking && (
+                                          <input
+                                            type="checkbox"
+                                            checked={shotSceneSelections[index] !== false}
+                                            onChange={(e) =>
+                                              setShotSceneSelections((prev) => ({ ...prev, [index]: e.target.checked }))
+                                            }
+                                          />
+                                        )}
+                                        {t.sceneLabel} {scene.sceneNumber ? cleanSceneNumber(scene.sceneNumber) : ref.sceneIndex + 1}: {scene.oneLiner[language]}
+                                        {(() => {
+                                          const sceneCast = lookupSceneCast(sceneList, scriptBreakdown?.adSheet, ref)
+                                          return sceneCast?.length > 0 ? (
+                                            <span className="schedule-scene-meta"> — {t.castCalledLabel}: {sceneCast.join(', ')}</span>
+                                          ) : null
+                                        })()}
+                                        {!isEditingScene && (ref.costume || ref.properties) && (
+                                          <span className="schedule-scene-meta">
+                                            {ref.costume && ` — ${t.costumeLabel}: ${ref.costume}`}
+                                            {ref.properties && ` — ${t.propertiesLabel}: ${ref.properties}`}
+                                          </span>
+                                        )}
+                                        {!isEditingScene && ref.adRemark && (
+                                          <p className="feedback-note schedule-scene-ad-remark">{t.adRemarkLabel}: {ref.adRemark}</p>
+                                        )}
+                                        {canEditProduction && !isEditingScene && (
+                                          <button className="scene-edit-toggle" onClick={() => handleStartSceneEditClick(ref)}>
+                                            {t.editSceneButton}
+                                          </button>
+                                        )}
+                                        {isEditingScene && (
+                                          <div className="scene-edit-form">
+                                            <input
+                                              type="text"
+                                              placeholder={t.costumeLabel}
+                                              value={editSceneCostume}
+                                              onChange={(e) => setEditSceneCostume(e.target.value)}
+                                            />
+                                            <input
+                                              type="text"
+                                              placeholder={t.propertiesLabel}
+                                              value={editSceneProperties}
+                                              onChange={(e) => setEditSceneProperties(e.target.value)}
+                                            />
+                                            <input
+                                              type="text"
+                                              placeholder={t.adRemarkLabel}
+                                              value={editSceneAdRemark}
+                                              onChange={(e) => setEditSceneAdRemark(e.target.value)}
+                                            />
+                                            <div className="scene-edit-form-actions">
+                                              <button
+                                                className="choose-button"
+                                                onClick={() => handleSaveSceneEditClick(ref)}
+                                                disabled={isSavingSceneEdit}
+                                              >
+                                                {isSavingSceneEdit ? t.savingLabel : t.saveButton}
+                                              </button>
+                                              <button
+                                                className="cancel-button"
+                                                onClick={() => setEditingSceneKey(null)}
+                                                disabled={isSavingSceneEdit}
+                                              >
+                                                {t.cancelEditButton}
+                                              </button>
+                                            </div>
+                                          </div>
+                                        )}
+                                      </li>
+                                    )
+                                  })}
+                                </ul>
+                              </div>
+                            ))}
+                          </div>
+                        ))}
                         {day.charactersNeeded?.length > 0 && (
                           <p className="schedule-day-cast">
                             <strong>{t.castCalledLabel}:</strong> {day.charactersNeeded.join(', ')}

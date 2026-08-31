@@ -1474,6 +1474,24 @@ const AGENT_CHAT_CAST_ASSIGNMENT_INSTRUCTION =
 const AGENT_CHAT_STAY_ON_TOPIC_INSTRUCTION =
   "CRITICAL — always respond to the AD's MOST RECENT message specifically, on its own terms. If it raises a new topic, a correction, or a request unrelated to whatever was being discussed before, engage with THAT — don't drift back to or re-propose an earlier idea (especially one they just cancelled) unless they explicitly bring it up again. If they attach a new photo/document, its content is what this turn is actually about — read it fresh rather than assuming it repeats an earlier attachment's content.";
 
+// A real gap this caught in production: asked to restructure which scenes
+// fall on which shoot day, the model had no matching action type, but still
+// attached the schema's required proposedAction object — and rather than
+// defaulting it to "none", it reused a stale, unrelated proposedAction still
+// sitting in the conversation from an earlier, already-resolved request. The
+// human confirmed it (the reply text sounded like it addressed their actual
+// ask), and that old unrelated edit got silently reapplied while the actual
+// request was never attempted — a false "done" with real consequences on
+// real production data. Named explicitly per stage because "point them to
+// the right place" differs each time.
+function agentChatOutOfScopeInstruction(redirectText) {
+  return (
+    'CRITICAL — you only have the specific action types spelled out below, nothing else. If the AD asks for something none of them cover — reorganizing which scenes fall on which day, a wholesale rebuild/restructure, or any other request outside those specific types — that is NOT something this chat can do, no matter how reasonable it sounds. In that exact case: set proposedAction.type to "none" with every field at its empty default, and your reply must say plainly, in your own words, that this specific kind of change isn\'t something you can do through this chat, then point them to the right place: ' +
+    redirectText +
+    ' Never attach a proposedAction left over from an earlier, different request just because the schema requires one to be present — reusing an unrelated old action and letting the human confirm it as if it fulfilled their new request is far worse than honestly saying you can\'t do this one.'
+  );
+}
+
 // The single biggest thing separating this from feeling like a real
 // assistant (versus a command-line tool with a chat skin) is TONE — a
 // terse, template-y reply reads as robotic even when the underlying logic
@@ -1504,6 +1522,10 @@ const AGENT_CHAT_SYSTEM_PROMPTS = {
     AGENT_CHAT_NONE_ACTION_INSTRUCTION +
     "\n\n" +
     AGENT_CHAT_NEVER_CLAIM_DONE_INSTRUCTION +
+    "\n\n" +
+    agentChatOutOfScopeInstruction(
+      'the "Request Changes" option on the Shoot Schedule page itself, which regenerates the whole schedule from their written instructions — that\'s built for exactly this kind of broad restructuring, this chat isn\'t.'
+    ) +
     "\n\nCurrent shoot schedule:\n",
   breakdown:
     'You are a sharp Script Breakdown Assistant, having a real back-and-forth conversation with a Production Manager or Director about the script breakdown (cast, locations, props, costumes, art/set). You cannot edit scenes from here, but you can handle casting and costume recommendations.\n\n' +
@@ -1518,6 +1540,10 @@ const AGENT_CHAT_SYSTEM_PROMPTS = {
     AGENT_CHAT_NONE_ACTION_INSTRUCTION +
     "\n\n" +
     AGENT_CHAT_NEVER_CLAIM_DONE_INSTRUCTION +
+    "\n\n" +
+    agentChatOutOfScopeInstruction(
+      'the "Request Changes" option on the Script Breakdown page itself, which regenerates the relevant part of the breakdown from their written instructions — that\'s built for exactly this kind of broad restructuring, this chat isn\'t.'
+    ) +
     "\n\nsceneEdits must always be an empty array (this stage never edits scenes).\n\nCurrent script breakdown summary:\n",
 };
 

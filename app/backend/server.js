@@ -4081,6 +4081,85 @@ async function findMissingCharacters(sourceText, existingArtistList) {
   return merged;
 }
 
+// Evidence for one chunk: for each known character who actually appears in
+// THIS material, whether they have any spoken line here (including a
+// voice-over/phone/radio line — dialogue attributed to them without being
+// physically present) and whether they're physically present here at all
+// (even silently). Merged across every chunk afterward using "ever" logic,
+// since a character's overall category depends on their whole-script
+// presence, not any single scene.
+const CAST_CATEGORY_EVIDENCE_SCHEMA = {
+  type: Type.OBJECT,
+  properties: {
+    evidence: {
+      type: Type.ARRAY,
+      items: {
+        type: Type.OBJECT,
+        properties: {
+          label: { type: Type.STRING },
+          hasDialogueHere: { type: Type.BOOLEAN },
+          physicallyPresentHere: { type: Type.BOOLEAN },
+        },
+        required: ["label", "hasDialogueHere", "physicallyPresentHere"],
+      },
+    },
+  },
+  required: ["evidence"],
+};
+
+async function classifyCastCategoriesInChunk(chunkText, knownLabels) {
+  const contents = `The script material (one part of the full script):\n${chunkText}\n\nKnown characters to check (exact names): ${knownLabels.join(", ")}\n\nFor EACH of these characters who appears ANYWHERE in this material (skip anyone who doesn't appear at all here), report two things based strictly on this material:\n- "hasDialogueHere": true if they have any actual spoken line here — this includes a voice-over, a phone-call voice, a radio/PA announcement, or any other line attributed to them even when they aren't physically in the scene.\n- "physicallyPresentHere": true if they are physically present and visible in a scene here — performing an action, standing, moving, silently reacting — even if they never speak. False if their only appearance here is as a disembodied voice (V.O., O.S., over the phone/radio, etc.) with no physical presence in the scene.\nA character can have both true (present and speaking), only physicallyPresentHere true (present but silent), or only hasDialogueHere true (heard but never physically there). Only include characters that actually appear in this material in some form — omit anyone absent from it entirely.`;
+
+  const response = await generateContentWithRetry({
+    model: "gemini-flash-lite-latest",
+    contents,
+    config: {
+      systemInstruction: SCRIPT_BREAKDOWN_SYSTEM_PROMPT,
+      responseMimeType: "application/json",
+      maxOutputTokens: 4096,
+      responseSchema: CAST_CATEGORY_EVIDENCE_SCHEMA,
+    },
+  });
+
+  return JSON.parse(response.text).evidence ?? [];
+}
+
+// Splits into episode-sized chunks like the missing-character scan and AD
+// sheet, since a character's category depends on evidence gathered across
+// the ENTIRE script, not just wherever they were first introduced. Merge
+// rule: ever-spoken AND ever-physically-present -> "speaking" (a real
+// speaking role, cast and called normally, regardless of whether the
+// dialogue and the physical presence happened in the same scene or
+// different ones); ever-physically-present only -> "non_speaking_action"
+// (present in scenes, never gets a line — a real on-set actor, just
+// silent); ever-spoken but NEVER physically present anywhere ->
+// "off_screen" (pure voice-over/phone/radio — the actor never needs to be
+// on this set, no call sheet slot). Existing label/notes/age/gender on
+// each artistList entry are left untouched — this only adds castCategory.
+async function classifyCastCategories(sourceText, artistList) {
+  const knownLabels = artistList.map((a) => a.label);
+  const chunks = splitScreenplayIntoEpisodes(sourceText);
+  const textChunks = chunks.length > 1 ? chunks.map((c) => c.text) : [sourceText];
+
+  const results = await mapWithConcurrency(textChunks, 3, (chunkText) => classifyCastCategoriesInChunk(chunkText, knownLabels));
+
+  const hasDialogueEver = new Set();
+  const presentEver = new Set();
+  results.flat().forEach((row) => {
+    const key = row.label.toLowerCase();
+    if (row.hasDialogueHere) hasDialogueEver.add(key);
+    if (row.physicallyPresentHere) presentEver.add(key);
+  });
+
+  return artistList.map((item) => {
+    const key = item.label.toLowerCase();
+    const speaks = hasDialogueEver.has(key);
+    const present = presentEver.has(key);
+    const castCategory = present ? (speaks ? "speaking" : "non_speaking_action") : speaks ? "off_screen" : item.castCategory ?? "speaking";
+    return { ...item, castCategory };
+  });
+}
+
 // One entry per real scene, in order — the deterministic half of the AD
 // sheet (SCN/description/INT-EXT/day-night/location all come straight from
 // the already-approved scene list, never from the AI).
@@ -4359,6 +4438,54 @@ app.post("/api/script-breakdown/:id/find-missing-characters", requireRole("admin
     res.json({ ...insertResult.rows[0], sceneListId, ...updatedContent, addedCharacters: missingCharacters.map((c) => c.label) });
   } catch (error) {
     console.error("Find missing characters failed:", error.message);
+    res.status(502).json({ error: error.message });
+  }
+});
+
+// Sorts the existing cast list into three production-relevant groups —
+// speaking/lead, present-but-silent (action only), and off-screen
+// voice/phone-only (never needs a call sheet slot on this set) — without
+// adding, removing, or renaming anyone. Same permission level as
+// add-character: a production tool, not a re-analysis of the AI's own
+// breakdown output.
+app.post("/api/script-breakdown/:id/classify-cast-categories", requireRole("admin", "production_manager"), async (req, res) => {
+  const existing = await db.query("SELECT scene_list_id FROM script_breakdowns WHERE id = $1", [req.params.id]);
+  if (existing.rows.length === 0) {
+    res.status(404).json({ error: "Script breakdown not found" });
+    return;
+  }
+
+  const sceneListId = existing.rows[0].scene_list_id;
+  if (!(await userOwnsSceneList(req.user, sceneListId))) {
+    res.status(403).json({ error: "You don't have access to this project." });
+    return;
+  }
+
+  const latest = await db.query(
+    "SELECT id, content FROM script_breakdowns WHERE scene_list_id = $1 ORDER BY created_at DESC LIMIT 1",
+    [sceneListId]
+  );
+  if (String(latest.rows[0].id) !== String(req.params.id)) {
+    res.status(409).json({ error: "Someone else updated this breakdown since you loaded it. Reload the page and try again." });
+    return;
+  }
+
+  try {
+    const sceneListResult = await db.query("SELECT content FROM scene_lists WHERE id = $1", [sceneListId]);
+    const sourceText = await buildBreakdownSourceText(sceneListResult.rows[0].content, sceneListId);
+    const existingArtistList = latest.rows[0].content.artistList ?? [];
+
+    const classifiedArtistList = await classifyCastCategories(sourceText, existingArtistList);
+    const updatedContent = { ...latest.rows[0].content, artistList: classifiedArtistList };
+
+    const insertResult = await db.query(
+      "INSERT INTO script_breakdowns (scene_list_id, content, feedback) VALUES ($1, $2, $3) RETURNING id, status, feedback",
+      [sceneListId, JSON.stringify(updatedContent), "Classified cast into speaking / action-only / off-screen categories"]
+    );
+
+    res.json({ ...insertResult.rows[0], sceneListId, ...updatedContent });
+  } catch (error) {
+    console.error("Classify cast categories failed:", error.message);
     res.status(502).json({ error: error.message });
   }
 });

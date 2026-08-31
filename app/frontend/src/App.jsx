@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, Fragment } from 'react'
 import './App.css'
 
 // Env-driven so the same build works against localhost in dev and the
@@ -198,6 +198,13 @@ const LABELS = {
     findMissingCharactersHint: 'Thoroughly re-scans the full script for any character with screen presence not yet in this list — including non-speaking characters — and adds them. Never removes or changes existing entries. Excludes unnamed extras/crowds.',
     foundMissingCharactersLabel: 'Found and added',
     noMissingCharactersFoundLabel: 'No missing characters found — the cast list already covers everyone with screen presence.',
+    classifyCastCategoriesButton: 'Classify Cast Categories',
+    classifyingCastCategoriesLabel: 'Classifying...',
+    classifyCastCategoriesHint: 'Scans the full script and sorts every character into three groups: has dialogue, present but silent (action only), or only ever heard (voice-over/phone, never physically on set).',
+    castCategorySpeakingLabel: 'Speaking / Lead Artists',
+    castCategoryActionOnlyLabel: 'Action Only (No Dialogue)',
+    castCategoryOffScreenLabel: 'Off-Screen / Voice Only (Not Called on Set)',
+    castCategoryUnclassifiedLabel: 'Not Yet Classified',
     approveButton: 'Approve',
     requestChangesButton: 'Request Changes',
     approvedBadge: '✅ Approved',
@@ -553,6 +560,13 @@ const LABELS = {
     findMissingCharactersHint: 'ସମ୍ପୂର୍ଣ୍ଣ ସ୍କ୍ରିପ୍ଟକୁ ପୁଙ୍ଖାନୁପୁଙ୍ଖ ଭାବରେ ପୁନଃ ସ୍କାନ୍ କରି ଏହି ତାଲିକାରେ ନଥିବା କୌଣସି ଚରିତ୍ର (ନିରବ ଚରିତ୍ର ସହିତ) ଥିଲେ ଯୋଡ଼ିଥାଏ। ପୂର୍ବରୁ ଥିବା ଏଣ୍ଟ୍ରି କେବେ ହଟାଏ ନାହିଁ କି ପରିବର୍ତ୍ତନ କରେ ନାହିଁ। ଅଜଣା ଏକ୍ସଟ୍ରା/ଜନତାକୁ ବାଦ୍ ଦିଏ।',
     foundMissingCharactersLabel: 'ମିଳିଲା ଏବଂ ଯୋଡ଼ାଗଲା',
     noMissingCharactersFoundLabel: 'କୌଣସି ମିଳିନଥିବା ଚରିତ୍ର ମିଳିଲା ନାହିଁ — କାଷ୍ଟ ତାଲିକା ଆଗରୁ ସମସ୍ତଙ୍କୁ ଅନ୍ତର୍ଭୁକ୍ତ କରିଥାଏ।',
+    classifyCastCategoriesButton: 'କାଷ୍ଟ ବର୍ଗ ଶ୍ରେଣୀକରଣ କରନ୍ତୁ',
+    classifyingCastCategoriesLabel: 'ଶ୍ରେଣୀକରଣ ହେଉଛି...',
+    classifyCastCategoriesHint: 'ସମ୍ପୂର୍ଣ୍ଣ ସ୍କ୍ରିପ୍ଟ ସ୍କାନ୍ କରି ପ୍ରତ୍ୟେକ ଚରିତ୍ରକୁ ତିନି ଗୋଷ୍ଠୀରେ ବିଭକ୍ତ କରେ: ସଂଳାପ ଥିବା, ଉପସ୍ଥିତ କିନ୍ତୁ ନିରବ (କେବଳ କାର୍ଯ୍ୟ), କିମ୍ବା କେବଳ ଶୁଣାଯାଏ (ଭଏସ୍-ଓଭର/ଫୋନ୍, କେବେ ସେଟ୍‌ରେ ଉପସ୍ଥିତ ନାହାନ୍ତି)।',
+    castCategorySpeakingLabel: 'ସଂଳାପ ଥିବା / ମୁଖ୍ୟ କଳାକାର',
+    castCategoryActionOnlyLabel: 'କେବଳ କାର୍ଯ୍ୟ (ସଂଳାପ ନାହିଁ)',
+    castCategoryOffScreenLabel: 'ଅଫ୍-ସ୍କ୍ରିନ୍ / କେବଳ ସ୍ୱର (ସେଟ୍‌ରେ ଡକାଯାଏ ନାହିଁ)',
+    castCategoryUnclassifiedLabel: 'ଏପର୍ଯ୍ୟନ୍ତ ଶ୍ରେଣୀକରଣ ହୋଇନାହିଁ',
     approveButton: 'ଅନୁମୋଦନ କରନ୍ତୁ',
     requestChangesButton: 'ପରିବର୍ତ୍ତନ ପାଇଁ ଅନୁରୋଧ',
     approvedBadge: '✅ ଅନୁମୋଦିତ',
@@ -978,6 +992,18 @@ function formatExportTimestamp(date = new Date()) {
   const hours12 = date.getHours() % 12 || 12
   const ampm = date.getHours() >= 12 ? 'PM' : 'AM'
   return `${day}-${month}-${year}_${hours12}.${minutes}${ampm}`
+}
+
+// Display order for the three cast categories the AI classification sorts
+// characters into — unclassified (not yet run) floats to the top so it's
+// obvious there's something to classify, before speaking/action/off-screen.
+const CAST_CATEGORY_ORDER = { speaking: 0, non_speaking_action: 1, off_screen: 2 }
+
+function castCategoryLabel(castCategory, t) {
+  if (castCategory === 'speaking') return t.castCategorySpeakingLabel
+  if (castCategory === 'non_speaking_action') return t.castCategoryActionOnlyLabel
+  if (castCategory === 'off_screen') return t.castCategoryOffScreenLabel
+  return t.castCategoryUnclassifiedLabel
 }
 
 // wa.me needs the number in full international form with no "+", spaces, or
@@ -1930,6 +1956,7 @@ function App() {
   const [isAddingCastCharacter, setIsAddingCastCharacter] = useState(false)
   const [isFindingMissingCharacters, setIsFindingMissingCharacters] = useState(false)
   const [foundMissingCharacters, setFoundMissingCharacters] = useState(null)
+  const [isClassifyingCastCategories, setIsClassifyingCastCategories] = useState(false)
   const [isExportingProject, setIsExportingProject] = useState(false)
 
   const [googleConnected, setGoogleConnected] = useState(false)
@@ -3406,6 +3433,30 @@ function App() {
     setIsFindingMissingCharacters(false)
   }
 
+  async function handleClassifyCastCategoriesClick() {
+    setIsClassifyingCastCategories(true)
+    setErrorMessage(null)
+
+    try {
+      const response = await fetch(`${BACKEND_URL}/api/script-breakdown/${scriptBreakdown.id}/classify-cast-categories`, {
+        method: 'POST',
+      })
+      const data = await response.json()
+
+      if (!response.ok) {
+        setErrorMessage(data.error || t.genericError)
+        setIsClassifyingCastCategories(false)
+        return
+      }
+
+      setScriptBreakdown(data)
+    } catch {
+      setErrorMessage(t.genericError)
+    }
+
+    setIsClassifyingCastCategories(false)
+  }
+
   function renderBreakdownCategory(category, headingKey) {
     const items = scriptBreakdown[category] ?? []
     const isEditing = editingBreakdownCategory === category
@@ -3476,8 +3527,16 @@ function App() {
 
         {!isEditing &&
           isCategoryExpanded &&
-          items.map((item, index) => {
+          (category === 'artistList'
+            ? items
+                .map((item, originalIndex) => ({ item, originalIndex }))
+                .sort((a, b) => (CAST_CATEGORY_ORDER[a.item.castCategory] ?? -1) - (CAST_CATEGORY_ORDER[b.item.castCategory] ?? -1))
+            : items.map((item, originalIndex) => ({ item, originalIndex }))
+          ).map(({ item, originalIndex }, sortedIndex, sortedArray) => {
+            const index = originalIndex
             const itemKey = `${category}:${index}`
+            const showCastCategoryHeader =
+              category === 'artistList' && (sortedIndex === 0 || sortedArray[sortedIndex - 1].item.castCategory !== item.castCategory)
             const isExpanded = Boolean(expandedBreakdownItems[itemKey])
             const isCastFinalized =
               category === 'artistList' && crewMembers.some((m) => m.category === 'artist' && m.characterName === item.label)
@@ -3500,7 +3559,11 @@ function App() {
             }
 
             return (
-              <div key={index} className="breakdown-item">
+              <Fragment key={index}>
+                {showCastCategoryHeader && (
+                  <p className="cast-category-header">{castCategoryLabel(item.castCategory, t)}</p>
+                )}
+                <div className="breakdown-item">
                 <button className="breakdown-item-toggle" onClick={() => toggleBreakdownItem(itemKey)}>
                   <span className={isExpanded ? 'breakdown-item-chevron expanded' : 'breakdown-item-chevron'}>▸</span>
                   {category === 'locationList' ? (
@@ -3581,7 +3644,8 @@ function App() {
                     )}
                   </>
                 )}
-              </div>
+                </div>
+              </Fragment>
             )
           })}
 
@@ -3608,6 +3672,16 @@ function App() {
                 title={t.findMissingCharactersHint}
               >
                 {isFindingMissingCharacters ? t.findingMissingCharactersLabel : t.findMissingCharactersButton}
+              </button>
+            )}
+            {canAnalyzeScript && (
+              <button
+                className="breakdown-action-button"
+                onClick={handleClassifyCastCategoriesClick}
+                disabled={isClassifyingCastCategories}
+                title={t.classifyCastCategoriesHint}
+              >
+                {isClassifyingCastCategories ? t.classifyingCastCategoriesLabel : t.classifyCastCategoriesButton}
               </button>
             )}
           </div>

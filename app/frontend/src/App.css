@@ -1559,6 +1559,17 @@ body {
   color: var(--warning);
 }
 
+.cast-category-header {
+  margin: 14px 0 4px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border-subtle);
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+}
+
 .master-list-section {
   margin-bottom: 28px;
 }

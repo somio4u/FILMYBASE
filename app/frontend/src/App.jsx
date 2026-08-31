@@ -1389,6 +1389,26 @@ function ChangesChatPanel({ t, historyKey, barConfig, isBusy }) {
   })
   const wasBusyRef = useRef(false)
   const messagesEndRef = useRef(null)
+  const closeTimeoutRef = useRef(null)
+
+  // Hovering the pen opens the panel without a click — closing on leave is
+  // delayed so moving the cursor from the toggle to the panel itself (or
+  // briefly off either edge) doesn't flicker it shut mid-move.
+  function cancelScheduledClose() {
+    if (closeTimeoutRef.current) {
+      clearTimeout(closeTimeoutRef.current)
+      closeTimeoutRef.current = null
+    }
+  }
+  function handleHoverEnter() {
+    cancelScheduledClose()
+    setIsOpen(true)
+  }
+  function handleHoverLeave() {
+    cancelScheduledClose()
+    closeTimeoutRef.current = setTimeout(() => setIsOpen(false), 350)
+  }
+  useEffect(() => () => cancelScheduledClose(), [])
 
   const messages = historiesByKey[historyKey] ?? []
 
@@ -1425,10 +1445,20 @@ function ChangesChatPanel({ t, historyKey, barConfig, isBusy }) {
 
   return (
     <>
-      <button className="changes-chat-toggle" onClick={() => setIsOpen(!isOpen)} title={t.changesChatToggleLabel}>
+      <button
+        className="changes-chat-toggle"
+        onClick={() => setIsOpen(!isOpen)}
+        onMouseEnter={handleHoverEnter}
+        onMouseLeave={handleHoverLeave}
+        title={t.changesChatToggleLabel}
+      >
         {ICONS.penNib}
       </button>
-      <div className={isOpen ? 'changes-chat-panel open' : 'changes-chat-panel'}>
+      <div
+        className={isOpen ? 'changes-chat-panel open' : 'changes-chat-panel'}
+        onMouseEnter={handleHoverEnter}
+        onMouseLeave={handleHoverLeave}
+      >
         <div className="changes-chat-header">
           <strong>{t.changesChatHeading}</strong>
           <button className="changes-chat-close" onClick={() => setIsOpen(false)}>

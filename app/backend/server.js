@@ -5128,12 +5128,19 @@ app.get("/api/script-breakdown/:id/export", requireLogin, async (req, res) => {
   }
 
   try {
-    const result = await db.query("SELECT content, scene_list_id FROM script_breakdowns WHERE id = $1", [req.params.id]);
-
-    if (result.rows.length === 0) {
+    // Same reasoning as the shoot-schedule export: script_breakdowns is
+    // INSERT-only, so :id is only used to resolve which project this is —
+    // the content exported is always re-fetched as the latest revision for
+    // that project, never whatever specific id the frontend had in memory.
+    const idLookup = await db.query("SELECT scene_list_id FROM script_breakdowns WHERE id = $1", [req.params.id]);
+    if (idLookup.rows.length === 0) {
       res.status(404).json({ error: "Script breakdown not found" });
       return;
     }
+    const result = await db.query(
+      "SELECT content, scene_list_id FROM script_breakdowns WHERE scene_list_id = $1 ORDER BY created_at DESC LIMIT 1",
+      [idLookup.rows[0].scene_list_id]
+    );
 
     const breakdown = result.rows[0].content;
     const items = breakdown[category] ?? [];
@@ -6539,12 +6546,23 @@ app.get("/api/shoot-schedule/:id/export", requireLogin, async (req, res) => {
   const lang = req.query.lang === "or" ? "or" : "en";
 
   try {
-    const result = await db.query("SELECT scene_list_id, content FROM shoot_schedules WHERE id = $1", [req.params.id]);
-
-    if (result.rows.length === 0) {
+    // The browser's own shootSchedule.id can go stale the moment a
+    // different login (or a different tab) creates a newer revision —
+    // shoot_schedules is INSERT-only, "latest by created_at" is always the
+    // real current state. Exporting by the exact id the frontend happened
+    // to have in memory would silently produce a PDF of an old revision
+    // even though the app itself shows the current one right next to it.
+    // :id is only used to resolve which project this is; the content
+    // exported is always re-fetched as the latest for that project.
+    const idLookup = await db.query("SELECT scene_list_id FROM shoot_schedules WHERE id = $1", [req.params.id]);
+    if (idLookup.rows.length === 0) {
       res.status(404).json({ error: "Shoot schedule not found" });
       return;
     }
+    const result = await db.query(
+      "SELECT scene_list_id, content FROM shoot_schedules WHERE scene_list_id = $1 ORDER BY created_at DESC LIMIT 1",
+      [idLookup.rows[0].scene_list_id]
+    );
 
     const { scene_list_id: sceneListId, content: schedule } = result.rows[0];
     const sceneListResult = await db.query("SELECT content FROM scene_lists WHERE id = $1", [sceneListId]);

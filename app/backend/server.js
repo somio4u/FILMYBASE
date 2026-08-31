@@ -7994,6 +7994,42 @@ app.get("/api/shoot-schedule/:id/export-excel", requireLogin, async (req, res) =
       { header: labels.adRemark, key: "adRemark", width: 30 },
     ];
 
+    // Cell styling below mirrors a real physical call-sheet chart (the AD's
+    // own reference "Range Master Chart" format) rather than a generic
+    // spreadsheet look: centered, bordered, wrap-text cells throughout, a
+    // bold Arial header, and a solid-orange banner for each shoot day —
+    // just applied to this app's own columns/data, not that chart's.
+    const CENTERED_WRAP = { horizontal: "center", vertical: "middle", wrapText: true };
+    const THIN_BORDER = { style: "thin", color: { argb: "FF000000" } };
+    const FULL_BORDER = { top: THIN_BORDER, left: THIN_BORDER, right: THIN_BORDER, bottom: THIN_BORDER };
+    const HEADER_FONT = { bold: true, size: 10, name: "Arial", color: { argb: "FF000000" } };
+    const DATA_FONT = { size: 15, name: "Arial" };
+    const DAY_BANNER_FONT = { bold: true, size: 15, name: "Arial" };
+    const DAY_BANNER_FILL = { type: "pattern", pattern: "solid", fgColor: { argb: "FFFF9900" } };
+    const GROUP_BANNER_FILL = { type: "pattern", pattern: "solid", fgColor: { argb: "FFEEF2F7" } };
+
+    function styleRow(row, { font, fill, border, height } = {}) {
+      row.eachCell({ includeEmpty: true }, (cell) => {
+        cell.alignment = CENTERED_WRAP;
+        if (font) cell.font = font;
+        if (fill) cell.fill = fill;
+        if (border) cell.border = border;
+      });
+      if (height) row.height = height;
+    }
+
+    // Excel only keeps the TOP-LEFT cell's value once a row is merged —
+    // every other cell's value is discarded. Setting the value straight on
+    // cell 1 (rather than adding a row keyed to some other column, like
+    // "scn") keeps banner text showing up correctly regardless of which
+    // column happens to be first.
+    function addMergedBannerRow(sheet, text, columnCount) {
+      const row = sheet.addRow([]);
+      row.getCell(1).value = text;
+      sheet.mergeCells(row.number, 1, row.number, columnCount);
+      return row;
+    }
+
     const workbook = new ExcelJS.Workbook();
     const scheduleDaysToRender = dayFilter
       ? schedule.scheduleDays.filter((d) => d.dayNumber === dayFilter)
@@ -8002,13 +8038,11 @@ app.get("/api/shoot-schedule/:id/export-excel", requireLogin, async (req, res) =
     scheduleDaysToRender.forEach((day) => {
       const sheet = workbook.addWorksheet(`${labels.day} ${day.dayNumber}`.slice(0, 31));
       sheet.columns = columns;
-      sheet.getRow(1).font = { bold: true };
+      styleRow(sheet.getRow(1), { font: HEADER_FONT, border: { top: THIN_BORDER, left: THIN_BORDER, right: THIN_BORDER } });
 
       const dayTitle = `${day.date ? `${formatDisplayDate(day.date)} — ` : ""}${labels.day} ${day.dayNumber}${day.completed ? ` — ${labels.completed}` : ""} — ${labels.location}: ${day.location?.[lang] ?? ""}`;
-      const titleRow = sheet.addRow({ scn: dayTitle });
-      sheet.mergeCells(titleRow.number, 1, titleRow.number, columns.length);
-      titleRow.font = { bold: true };
-      titleRow.getCell(1).fill = { type: "pattern", pattern: "solid", fgColor: { argb: day.completed ? "FFFDECEA" : "FFEEF2F7" } };
+      const titleRow = addMergedBannerRow(sheet, dayTitle, columns.length);
+      styleRow(titleRow, { font: DAY_BANNER_FONT, fill: DAY_BANNER_FILL, height: 40 });
       sheet.addRow({});
 
       let serialNumber = 1;
@@ -8016,10 +8050,8 @@ app.get("/api/shoot-schedule/:id/export-excel", requireLogin, async (req, res) =
         episodeGroup.locationGroups.forEach((locationGroup) => {
           const episodePrefix = episodeGroup.episodeIndex !== null ? `${labels.episode} ${episodeGroup.episodeIndex + 1} — ` : "";
           const bannerText = `${episodePrefix}${locationGroup.location || labels.unspecified} (${locationGroup.items.length} ${labels.scenes})`;
-          const bannerRow = sheet.addRow({ scn: bannerText });
-          sheet.mergeCells(bannerRow.number, 1, bannerRow.number, columns.length);
-          bannerRow.font = { bold: true };
-          bannerRow.getCell(1).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFEEF2F7" } };
+          const bannerRow = addMergedBannerRow(sheet, bannerText, columns.length);
+          styleRow(bannerRow, { font: { bold: true, size: 11, name: "Arial" }, fill: GROUP_BANNER_FILL });
 
           locationGroup.items.forEach(({ ref, scene }) => {
             const identity = isSeries ? `e${ref.episodeIndex}-s${ref.sceneIndex}` : `s${ref.sceneIndex}`;
@@ -8028,7 +8060,7 @@ app.get("/api/shoot-schedule/:id/export-excel", requireLogin, async (req, res) =
             const scn = isSeries ? `Ep${ref.episodeIndex + 1} ${realSceneNumber}` : realSceneNumber;
             const artist = adSheetRow ? (adSheetRow.mainCharacters ?? []).join(", ") || notAvailableLabel : (day.charactersNeeded ?? []).join(", ") || notAvailableLabel;
 
-            sheet.addRow({
+            const dataRow = sheet.addRow({
               sno: serialNumber,
               scn,
               description: adSheetRow?.oneLiner?.[lang] || notAvailableLabel,
@@ -8040,14 +8072,15 @@ app.get("/api/shoot-schedule/:id/export-excel", requireLogin, async (req, res) =
               properties: ref.properties || notAvailableLabel,
               adRemark: ref.adRemark || "",
             });
+            styleRow(dataRow, { font: DATA_FONT, border: FULL_BORDER });
             serialNumber += 1;
           });
         });
       });
 
       if (day.notes?.[lang]) {
-        const notesRow = sheet.addRow({ scn: `${labels.notes}: ${day.notes[lang]}` });
-        sheet.mergeCells(notesRow.number, 1, notesRow.number, columns.length);
+        const notesRow = addMergedBannerRow(sheet, `${labels.notes}: ${day.notes[lang]}`, columns.length);
+        styleRow(notesRow, { font: { italic: true, size: 11, name: "Arial" } });
       }
     });
 

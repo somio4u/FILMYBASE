@@ -143,7 +143,7 @@ const LABELS = {
     googleContactsConnectedNotice: 'Google Contacts connected.',
     googleContactsErrorNotice: 'Could not connect Google Contacts. Please try again.',
     pickFromContactsButton: 'Pick from Google Contacts',
-    downloadAuditionSidesButton: 'Download Character Script (PDF)',
+    downloadAuditionSidesButton: 'Download Character Script',
     auditionSidesHint: "Every scene this character appears in, with their real dialogue transcribed from the script — or a description of their actions in scenes where they don't speak — so you can send the actor a complete packet for a self-tape audition.",
     sendWhatsAppButton: 'Send via WhatsApp',
     sendingWhatsAppLabel: 'Preparing…',
@@ -192,7 +192,7 @@ const LABELS = {
     majorCharactersHeading: 'Major Characters',
     emotionalCoreLabel: 'Emotional Core',
     conflictLabel: 'Conflict',
-    exportAsPdf: 'Export as PDF (Presentation)',
+    exportAsPdf: 'Download Presentation',
     formatFilm: 'FEATURE FILM',
     formatSeries: (count, minutes) => `WEB SERIES · ${count} EPISODES × ${minutes} MIN EACH`,
     episodeBreakdown: 'Episode Breakdown',
@@ -281,7 +281,7 @@ const LABELS = {
     generatingBreakdownLabel: 'Analyzing script...',
     generateAdSheetButton: 'Generate AD Scene Breakdown Sheet',
     generatingAdSheetLabel: 'Generating AD sheet...',
-    downloadAdSheetLabel: 'Download AD Scene Breakdown Sheet (PDF)',
+    downloadAdSheetLabel: 'Download AD Scene Breakdown Sheet',
     artistListHeading: 'Artist List (Cast)',
     locationListHeading: 'Location List',
     propsHeading: 'Property List (Props)',
@@ -301,8 +301,9 @@ const LABELS = {
     costumeSetQuantityPlaceholder: 'Quantity',
     costumeSetReasonPlaceholder: 'Reason (optional)',
     costumeRecommendationsNeedsAdSheetHint: 'Generate the AD Scene Breakdown Sheet first — this needs it to know which scenes each character is in.',
-    downloadPdfLabel: 'Download PDF',
-    downloadExcelLabel: 'Download Excel',
+    downloadLabel: 'Download',
+    downloadFormatPdf: 'PDF',
+    downloadFormatExcel: 'Excel',
     scenesLabel: 'scenes',
     approveBreakdownButton: 'Approve',
     breakdownApprovedBadge: '✅ Script Breakdown Approved',
@@ -338,11 +339,11 @@ const LABELS = {
     conflictsHeading: 'Flagged Conflicts',
     castCalledLabel: 'Cast Called',
     shootDayCompletedLabel: 'Completed',
-    dayMasterBreakdownLabel: 'Day Breakdown — Master (PDF)',
-    dayArtistBreakdownLabel: 'Artist Breakdown (PDF)',
-    dayLocationBreakdownLabel: 'Location Breakdown (PDF)',
-    dayCostumeBreakdownLabel: 'Costume Breakdown (PDF)',
-    dayPropertiesBreakdownLabel: 'Properties Breakdown (PDF)',
+    dayMasterBreakdownLabel: 'Day Breakdown — Master',
+    dayArtistBreakdownLabel: 'Artist Breakdown',
+    dayLocationBreakdownLabel: 'Location Breakdown',
+    dayCostumeBreakdownLabel: 'Costume Breakdown',
+    dayPropertiesBreakdownLabel: 'Properties Breakdown',
     costumeLabel: 'Costume',
     propertiesLabel: 'Properties',
     adRemarkLabel: 'AD Remark',
@@ -560,7 +561,7 @@ const LABELS = {
     googleContactsConnectedNotice: 'Google Contacts ସଂଯୁକ୍ତ ହୋଇଗଲା।',
     googleContactsErrorNotice: 'Google Contacts ସଂଯୋଗ ହୋଇପାରିଲା ନାହିଁ। ପୁଣି ଚେଷ୍ଟା କରନ୍ତୁ।',
     pickFromContactsButton: 'Google Contacts ରୁ ବାଛନ୍ତୁ',
-    downloadAuditionSidesButton: 'କାରାକ୍ଟର ସ୍କ୍ରିପ୍ଟ ଡାଉନଲୋଡ୍ କରନ୍ତୁ (PDF)',
+    downloadAuditionSidesButton: 'କାରାକ୍ଟର ସ୍କ୍ରିପ୍ଟ ଡାଉନଲୋଡ୍ କରନ୍ତୁ',
     auditionSidesHint: 'ଏହି ଚରିତ୍ର ଥିବା ପ୍ରତ୍ୟେକ ଦୃଶ୍ୟ, ସ୍କ୍ରିପ୍ଟରୁ ତାଙ୍କ ପ୍ରକୃତ ସଂଳାପ ସହିତ — କିମ୍ବା ସେ କଥା ନ କହିଥିବା ଦୃଶ୍ୟରେ ତାଙ୍କ କାର୍ଯ୍ୟର ବର୍ଣ୍ଣନା — ଯାହା ଦ୍ୱାରା ଆପଣ ଅଭିନେତାଙ୍କୁ ଏକ ସେଲ୍ଫ-ଟେପ୍ ଅଡିସନ୍ ପାଇଁ ସମ୍ପୂର୍ଣ୍ଣ ପ୍ୟାକେଟ୍ ପଠାଇ ପାରିବେ।',
     sendWhatsAppButton: 'WhatsApp ରେ ପଠାନ୍ତୁ',
     sendingWhatsAppLabel: 'ପ୍ରସ୍ତୁତ ହେଉଛି…',
@@ -609,7 +610,7 @@ const LABELS = {
     majorCharactersHeading: 'ମୁଖ୍ୟ ଚରିତ୍ର',
     emotionalCoreLabel: 'ଭାବନାତ୍ମକ ମୂଳ',
     conflictLabel: 'ସଂଘର୍ଷ',
-    exportAsPdf: 'PDF ପ୍ରେଜେଣ୍ଟେଶନ୍ ଏକ୍ସପୋର୍ଟ କରନ୍ତୁ',
+    exportAsPdf: 'ପ୍ରେଜେଣ୍ଟେଶନ୍ ଡାଉନଲୋଡ୍ କରନ୍ତୁ',
     formatFilm: 'ପୂର୍ଣ୍ଣ ଚଳଚ୍ଚିତ୍ର',
     formatSeries: (count, minutes) => `ୱେବ ସିରିଜ୍ · ${count} ପର୍ବ × ${minutes} ମିନିଟ୍ ପ୍ରତି`,
     episodeBreakdown: 'ପର୍ବ ବିବରଣୀ',
@@ -698,7 +699,7 @@ const LABELS = {
     generatingBreakdownLabel: 'ସ୍କ୍ରିପ୍ଟ ବିଶ୍ଳେଷଣ ହେଉଛି...',
     generateAdSheetButton: 'AD ସିନ୍ ବ୍ରେକଡାଉନ୍ ସିଟ୍ ତିଆରି କରନ୍ତୁ',
     generatingAdSheetLabel: 'AD ସିଟ୍ ତିଆରି ହେଉଛି...',
-    downloadAdSheetLabel: 'AD ସିନ୍ ବ୍ରେକଡାଉନ୍ ସିଟ୍ ଡାଉନଲୋଡ୍ କରନ୍ତୁ (PDF)',
+    downloadAdSheetLabel: 'AD ସିନ୍ ବ୍ରେକଡାଉନ୍ ସିଟ୍ ଡାଉନଲୋଡ୍ କରନ୍ତୁ',
     artistListHeading: 'କଳାକାର ତାଲିକା',
     locationListHeading: 'ସ୍ଥାନ ତାଲିକା',
     propsHeading: 'ସାମଗ୍ରୀ ତାଲିକା (ପ୍ରପ୍ସ)',
@@ -718,8 +719,9 @@ const LABELS = {
     costumeSetQuantityPlaceholder: 'ପରିମାଣ',
     costumeSetReasonPlaceholder: 'କାରଣ (ଇଚ୍ଛାଧୀନ)',
     costumeRecommendationsNeedsAdSheetHint: 'ପ୍ରଥମେ AD ଦୃଶ୍ୟ ବିଭାଜନ ସିଟ୍ ତିଆରି କରନ୍ତୁ — ପ୍ରତ୍ୟେକ ଚରିତ୍ର କେଉଁ ଦୃଶ୍ୟରେ ଅଛନ୍ତି ଜାଣିବାକୁ ଏହା ଦରକାର।',
-    downloadPdfLabel: 'PDF ଡାଉନଲୋଡ୍ କରନ୍ତୁ',
-    downloadExcelLabel: 'Excel ଡାଉନଲୋଡ୍ କରନ୍ତୁ',
+    downloadLabel: 'ଡାଉନଲୋଡ୍ କରନ୍ତୁ',
+    downloadFormatPdf: 'PDF',
+    downloadFormatExcel: 'Excel',
     scenesLabel: 'ଦୃଶ୍ୟ',
     approveBreakdownButton: 'ଅନୁମୋଦନ କରନ୍ତୁ',
     breakdownApprovedBadge: '✅ ସ୍କ୍ରିପ୍ଟ ବ୍ରେକଡାଉନ୍ ଅନୁମୋଦିତ',
@@ -755,11 +757,11 @@ const LABELS = {
     conflictsHeading: 'ଚିହ୍ନିତ ସମସ୍ୟା',
     castCalledLabel: 'କଳାକାର ଡକରା',
     shootDayCompletedLabel: 'ସମାପ୍ତ',
-    dayMasterBreakdownLabel: 'ଦିନ ବିଭାଜନ — ମାଷ୍ଟର (PDF)',
-    dayArtistBreakdownLabel: 'କଳାକାର ବିଭାଜନ (PDF)',
-    dayLocationBreakdownLabel: 'ସ୍ଥାନ ବିଭାଜନ (PDF)',
-    dayCostumeBreakdownLabel: 'ପୋଷାକ ବିଭାଜନ (PDF)',
-    dayPropertiesBreakdownLabel: 'ସାମଗ୍ରୀ ବିଭାଜନ (PDF)',
+    dayMasterBreakdownLabel: 'ଦିନ ବିଭାଜନ — ମାଷ୍ଟର',
+    dayArtistBreakdownLabel: 'କଳାକାର ବିଭାଜନ',
+    dayLocationBreakdownLabel: 'ସ୍ଥାନ ବିଭାଜନ',
+    dayCostumeBreakdownLabel: 'ପୋଷାକ ବିଭାଜନ',
+    dayPropertiesBreakdownLabel: 'ସାମଗ୍ରୀ ବିଭାଜନ',
     costumeLabel: 'ପୋଷାକ',
     propertiesLabel: 'ପ୍ରପର୍ଟି',
     adRemarkLabel: 'AD ମନ୍ତବ୍ୟ',
@@ -1715,6 +1717,44 @@ function CameraCaptureModal({ t, onCapture, onClose, multiple = false }) {
   )
 }
 
+// A single "Download" link that, on click, pops up a small PDF/Excel
+// choice instead of downloading immediately — every export in the app used
+// to be a bare link straight to one format; this replaces that with one
+// consistent choice point wherever a download is offered.
+function DownloadChoiceButton({ t, label, pdfUrl, excelUrl, className = 'breakdown-pdf-link', title }) {
+  const [isOpen, setIsOpen] = useState(false)
+  const containerRef = useRef(null)
+
+  useEffect(() => {
+    if (!isOpen) return
+    function handleClickOutside(event) {
+      if (containerRef.current && !containerRef.current.contains(event.target)) {
+        setIsOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [isOpen])
+
+  return (
+    <div className="download-choice" ref={containerRef}>
+      <button type="button" className={`${className} download-choice-trigger`} onClick={() => setIsOpen((open) => !open)} title={title}>
+        {label}
+      </button>
+      {isOpen && (
+        <div className="download-choice-menu">
+          <a className="download-choice-option" href={pdfUrl} onClick={() => setIsOpen(false)}>
+            {t.downloadFormatPdf}
+          </a>
+          <a className="download-choice-option" href={excelUrl} onClick={() => setIsOpen(false)}>
+            {t.downloadFormatExcel}
+          </a>
+        </div>
+      )}
+    </div>
+  )
+}
+
 // A Messenger-style slide-in panel that replaces the old bare bottom input
 // bar for every "type your changes" flow in the app (breakdown revise,
 // schedule revise, pitch deck revise, etc. — one per barConfig.stageKey).
@@ -2504,13 +2544,14 @@ function InlineCastAttachment({
       )}
 
       {category === 'artist' && (
-        <a
+        <DownloadChoiceButton
+          t={t}
+          label={t.downloadAuditionSidesButton}
           className="breakdown-pdf-link audition-sides-link"
-          href={`${BACKEND_URL}/api/scene-lists/${sceneListId}/character-script/export?character=${encodeURIComponent(linkKey)}&lang=${language}`}
           title={t.auditionSidesHint}
-        >
-          {t.downloadAuditionSidesButton}
-        </a>
+          pdfUrl={`${BACKEND_URL}/api/scene-lists/${sceneListId}/character-script/export?character=${encodeURIComponent(linkKey)}&lang=${language}`}
+          excelUrl={`${BACKEND_URL}/api/scene-lists/${sceneListId}/character-script/export-excel?character=${encodeURIComponent(linkKey)}&lang=${language}`}
+        />
       )}
 
       {isPickerOpen && (
@@ -4349,18 +4390,12 @@ function App() {
             </h4>
           </button>
           <div className="breakdown-category-actions">
-            <a
-              className="breakdown-pdf-link"
-              href={`${BACKEND_URL}/api/script-breakdown/${scriptBreakdown.id}/export?category=${category}&lang=${language}`}
-            >
-              {t.downloadPdfLabel}
-            </a>
-            <a
-              className="breakdown-pdf-link"
-              href={`${BACKEND_URL}/api/script-breakdown/${scriptBreakdown.id}/export-excel?category=${category}&lang=${language}`}
-            >
-              {t.downloadExcelLabel}
-            </a>
+            <DownloadChoiceButton
+              t={t}
+              label={t.downloadLabel}
+              pdfUrl={`${BACKEND_URL}/api/script-breakdown/${scriptBreakdown.id}/export?category=${category}&lang=${language}`}
+              excelUrl={`${BACKEND_URL}/api/script-breakdown/${scriptBreakdown.id}/export-excel?category=${category}&lang=${language}`}
+            />
             {!isEditing && canAnalyzeScript && (
               <>
                 <button
@@ -6111,12 +6146,13 @@ function App() {
             )}
           </div>
 
-          <a
+          <DownloadChoiceButton
+            t={t}
+            label={t.exportAsPdf}
             className="export-button"
-            href={`${BACKEND_URL}/api/pitch-deck/${pitchDeck.id}/export?lang=${language}`}
-          >
-            {t.exportAsPdf}
-          </a>
+            pdfUrl={`${BACKEND_URL}/api/pitch-deck/${pitchDeck.id}/export?lang=${language}`}
+            excelUrl={`${BACKEND_URL}/api/pitch-deck/${pitchDeck.id}/export-excel?lang=${language}`}
+          />
         </div>
       )}
 
@@ -6776,12 +6812,12 @@ function App() {
                   </button>
                 )}
                 {scriptBreakdown.adSheet && (
-                  <a
-                    className="breakdown-pdf-link"
-                    href={`${BACKEND_URL}/api/script-breakdown/${scriptBreakdown.id}/export-ad-sheet?lang=${language}`}
-                  >
-                    {t.downloadAdSheetLabel}
-                  </a>
+                  <DownloadChoiceButton
+                    t={t}
+                    label={t.downloadAdSheetLabel}
+                    pdfUrl={`${BACKEND_URL}/api/script-breakdown/${scriptBreakdown.id}/export-ad-sheet?lang=${language}`}
+                    excelUrl={`${BACKEND_URL}/api/script-breakdown/${scriptBreakdown.id}/export-ad-sheet-excel?lang=${language}`}
+                  />
                 )}
               </div>
 
@@ -6792,18 +6828,12 @@ function App() {
               <div className="breakdown-merged-group">
                 <div className="breakdown-merged-group-header">
                   <h4>{t.propsAndArtHeading}</h4>
-                  <a
-                    className="breakdown-pdf-link"
-                    href={`${BACKEND_URL}/api/script-breakdown/${scriptBreakdown.id}/export?category=propsAndArt&lang=${language}`}
-                  >
-                    {t.downloadPdfLabel}
-                  </a>
-                  <a
-                    className="breakdown-pdf-link"
-                    href={`${BACKEND_URL}/api/script-breakdown/${scriptBreakdown.id}/export-excel?category=propsAndArt&lang=${language}`}
-                  >
-                    {t.downloadExcelLabel}
-                  </a>
+                  <DownloadChoiceButton
+                    t={t}
+                    label={t.downloadLabel}
+                    pdfUrl={`${BACKEND_URL}/api/script-breakdown/${scriptBreakdown.id}/export?category=propsAndArt&lang=${language}`}
+                    excelUrl={`${BACKEND_URL}/api/script-breakdown/${scriptBreakdown.id}/export-excel?category=propsAndArt&lang=${language}`}
+                  />
                 </div>
                 {renderBreakdownCategory('props', 'propsHeading')}
                 {renderBreakdownCategory('art', 'artHeading')}
@@ -7159,36 +7189,36 @@ function App() {
                     </button>
 
                     <div className="schedule-day-export-row">
-                      <a
-                        className="breakdown-pdf-link"
-                        href={`${BACKEND_URL}/api/shoot-schedule/${shootSchedule.id}/export?day=${day.dayNumber}&lang=${language}`}
-                      >
-                        {t.dayMasterBreakdownLabel}
-                      </a>
-                      <a
-                        className="breakdown-pdf-link"
-                        href={`${BACKEND_URL}/api/shoot-schedule/${shootSchedule.id}/export-day?day=${day.dayNumber}&category=artists&lang=${language}`}
-                      >
-                        {t.dayArtistBreakdownLabel}
-                      </a>
-                      <a
-                        className="breakdown-pdf-link"
-                        href={`${BACKEND_URL}/api/shoot-schedule/${shootSchedule.id}/export-day?day=${day.dayNumber}&category=locations&lang=${language}`}
-                      >
-                        {t.dayLocationBreakdownLabel}
-                      </a>
-                      <a
-                        className="breakdown-pdf-link"
-                        href={`${BACKEND_URL}/api/shoot-schedule/${shootSchedule.id}/export-day?day=${day.dayNumber}&category=costumes&lang=${language}`}
-                      >
-                        {t.dayCostumeBreakdownLabel}
-                      </a>
-                      <a
-                        className="breakdown-pdf-link"
-                        href={`${BACKEND_URL}/api/shoot-schedule/${shootSchedule.id}/export-day?day=${day.dayNumber}&category=properties&lang=${language}`}
-                      >
-                        {t.dayPropertiesBreakdownLabel}
-                      </a>
+                      <DownloadChoiceButton
+                        t={t}
+                        label={t.dayMasterBreakdownLabel}
+                        pdfUrl={`${BACKEND_URL}/api/shoot-schedule/${shootSchedule.id}/export?day=${day.dayNumber}&lang=${language}`}
+                        excelUrl={`${BACKEND_URL}/api/shoot-schedule/${shootSchedule.id}/export-excel?day=${day.dayNumber}&lang=${language}`}
+                      />
+                      <DownloadChoiceButton
+                        t={t}
+                        label={t.dayArtistBreakdownLabel}
+                        pdfUrl={`${BACKEND_URL}/api/shoot-schedule/${shootSchedule.id}/export-day?day=${day.dayNumber}&category=artists&lang=${language}`}
+                        excelUrl={`${BACKEND_URL}/api/shoot-schedule/${shootSchedule.id}/export-day-excel?day=${day.dayNumber}&category=artists&lang=${language}`}
+                      />
+                      <DownloadChoiceButton
+                        t={t}
+                        label={t.dayLocationBreakdownLabel}
+                        pdfUrl={`${BACKEND_URL}/api/shoot-schedule/${shootSchedule.id}/export-day?day=${day.dayNumber}&category=locations&lang=${language}`}
+                        excelUrl={`${BACKEND_URL}/api/shoot-schedule/${shootSchedule.id}/export-day-excel?day=${day.dayNumber}&category=locations&lang=${language}`}
+                      />
+                      <DownloadChoiceButton
+                        t={t}
+                        label={t.dayCostumeBreakdownLabel}
+                        pdfUrl={`${BACKEND_URL}/api/shoot-schedule/${shootSchedule.id}/export-day?day=${day.dayNumber}&category=costumes&lang=${language}`}
+                        excelUrl={`${BACKEND_URL}/api/shoot-schedule/${shootSchedule.id}/export-day-excel?day=${day.dayNumber}&category=costumes&lang=${language}`}
+                      />
+                      <DownloadChoiceButton
+                        t={t}
+                        label={t.dayPropertiesBreakdownLabel}
+                        pdfUrl={`${BACKEND_URL}/api/shoot-schedule/${shootSchedule.id}/export-day?day=${day.dayNumber}&category=properties&lang=${language}`}
+                        excelUrl={`${BACKEND_URL}/api/shoot-schedule/${shootSchedule.id}/export-day-excel?day=${day.dayNumber}&category=properties&lang=${language}`}
+                      />
                     </div>
 
                     {isDayExpanded && (
@@ -7455,12 +7485,13 @@ function App() {
                 </div>
               )}
 
-              <a
+              <DownloadChoiceButton
+                t={t}
+                label={t.exportAsPdf}
                 className="export-button"
-                href={`${BACKEND_URL}/api/shoot-schedule/${shootSchedule.id}/export?lang=${language}`}
-              >
-                {t.exportAsPdf}
-              </a>
+                pdfUrl={`${BACKEND_URL}/api/shoot-schedule/${shootSchedule.id}/export?lang=${language}`}
+                excelUrl={`${BACKEND_URL}/api/shoot-schedule/${shootSchedule.id}/export-excel?lang=${language}`}
+              />
             </>
           )}
         </div>

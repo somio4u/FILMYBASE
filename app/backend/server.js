@@ -3415,6 +3415,93 @@ app.get("/api/pitch-deck/:id/export", requireLogin, async (req, res) => {
   }
 });
 
+// A slide deck has no natural rows/columns, so the Excel version is a
+// simplified outline instead of a redesign of the presentation: one
+// "Overview" sheet for the single-value fields, plus a "Major Characters"
+// sheet and (series only) an "Episodes" sheet for the two list sections.
+app.get("/api/pitch-deck/:id/export-excel", requireLogin, async (req, res) => {
+  const lang = req.query.lang === "or" ? "or" : "en";
+
+  try {
+    const result = await db.query("SELECT content FROM pitch_decks WHERE id = $1", [req.params.id]);
+    if (result.rows.length === 0) {
+      res.status(404).json({ error: "Pitch deck not found" });
+      return;
+    }
+
+    const deck = result.rows[0].content;
+    const labels = SECTION_LABELS[lang];
+    const fieldLabel = lang === "or" ? "କ୍ଷେତ୍ର" : "Field";
+    const valueLabel = lang === "or" ? "ମୂଲ୍ୟ" : "Value";
+    const nameLabel = lang === "or" ? "ନାମ" : "Name";
+    const roleLabel = lang === "or" ? "ଭୂମିକା" : "Role";
+    const titleLabel = lang === "or" ? "ଆଖ୍ୟା" : "Title";
+    const loglineLabel = lang === "or" ? "ଲଗ୍‌ଲାଇନ୍" : "Logline";
+    const synopsisLabel = lang === "or" ? "ସାରାଂଶ" : "Synopsis";
+
+    const workbook = new ExcelJS.Workbook();
+
+    const overviewSheet = workbook.addWorksheet(lang === "or" ? "ସମୀକ୍ଷା" : "Overview");
+    overviewSheet.columns = [
+      { header: fieldLabel, key: "field", width: 22 },
+      { header: valueLabel, key: "value", width: 80 },
+    ];
+    overviewSheet.getRow(1).font = { bold: true };
+    overviewSheet.addRow({ field: titleLabel, value: deck.title[lang] });
+    overviewSheet.addRow({ field: loglineLabel, value: deck.logline[lang] });
+    overviewSheet.addRow({ field: labels.premise, value: deck.premise[lang] });
+    overviewSheet.addRow({ field: labels.toneGenre, value: deck.toneGenre[lang] });
+    overviewSheet.addRow({ field: labels.targetAudience, value: deck.targetAudience[lang] });
+
+    if (deck.majorCharacters && deck.majorCharacters.length > 0) {
+      const charSheet = workbook.addWorksheet(labels.majorCharacters.slice(0, 31));
+      charSheet.columns = [
+        { header: nameLabel, key: "name", width: 22 },
+        { header: roleLabel, key: "role", width: 24 },
+        { header: labels.emotionalCore, key: "emotionalCore", width: 40 },
+        { header: labels.conflict, key: "conflict", width: 40 },
+      ];
+      charSheet.getRow(1).font = { bold: true };
+      deck.majorCharacters.forEach((character) => {
+        charSheet.addRow({
+          name: character.name,
+          role: character.role[lang],
+          emotionalCore: character.emotionalCore[lang],
+          conflict: character.conflict[lang],
+        });
+      });
+    }
+
+    if (deck.episodes && deck.episodes.length > 0) {
+      const episodeSheet = workbook.addWorksheet((lang === "or" ? "ପର୍ବଗୁଡ଼ିକ" : "Episodes").slice(0, 31));
+      episodeSheet.columns = [
+        { header: labels.episode, key: "episode", width: 12 },
+        { header: titleLabel, key: "title", width: 28 },
+        { header: synopsisLabel, key: "synopsis", width: 70 },
+      ];
+      episodeSheet.getRow(1).font = { bold: true };
+      deck.episodes.forEach((episode, index) => {
+        episodeSheet.addRow({ episode: index + 1, title: episode.title[lang], synopsis: episode.synopsis[lang] });
+      });
+    }
+
+    res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename="${deck.title.en.replace(/[^a-z0-9]+/gi, "-")}-pitch-deck-${lang}-${formatExportTimestamp()}.xlsx"`
+    );
+    await workbook.xlsx.write(res);
+    res.end();
+  } catch (error) {
+    console.error("Pitch deck Excel export failed:", error.message);
+    if (!res.headersSent) {
+      res.status(500).json({ error: error.message });
+    } else {
+      res.end();
+    }
+  }
+});
+
 // Builds the full Character Sheet via Gemini, deepening the pitch deck's
 // thin Major Characters into archetype/want/need/flaw/virtues/arc etc. When
 // `revision` is given, the prompt asks for a rewrite addressing feedback.
@@ -6142,6 +6229,73 @@ app.get("/api/script-breakdown/:id/export-ad-sheet", requireLogin, async (req, r
   }
 });
 
+// Same grid as the PDF version above (one row per scene), transcribed
+// straight into an Excel sheet since the data's already rectangular.
+app.get("/api/script-breakdown/:id/export-ad-sheet-excel", requireLogin, async (req, res) => {
+  const lang = req.query.lang === "or" ? "or" : "en";
+
+  try {
+    const result = await db.query("SELECT content, scene_list_id FROM script_breakdowns WHERE id = $1", [req.params.id]);
+    if (result.rows.length === 0) {
+      res.status(404).json({ error: "Script breakdown not found" });
+      return;
+    }
+
+    const adSheet = result.rows[0].content.adSheet;
+    if (!adSheet || adSheet.length === 0) {
+      res.status(400).json({ error: "Generate the AD Scene Breakdown Sheet first." });
+      return;
+    }
+
+    const labels =
+      lang === "or"
+        ? { title: "ସ୍କ୍ରିପ୍ଟ ବ୍ରେକଡାଉନ୍ ସିଟ୍", scn: "SCN", description: "ଦୃଶ୍ୟ ବର୍ଣ୍ଣନା", type: "TYPE", dn: "D/N", location: "ମୁଖ୍ୟ ସ୍ଥାନ", characters: "ମୁଖ୍ୟ ଚରିତ୍ର", extras: "ଏକ୍ସଟ୍ରା", property: "ପ୍ରପର୍ଟି", costume: "ପୋଷାକ/ମନ୍ତବ୍ୟ" }
+        : { title: "SCRIPT BREAKDOWN SHEET", scn: "SCN", description: "SCENE DESCRIPTION", type: "TYPE", dn: "D/N", location: "PRIMARY LOCATION", characters: "MAIN CHARACTERS", extras: "EXTRAS", property: "PROPERTY", costume: "COSTUME / REMARKS" };
+
+    function rowValues(row) {
+      return {
+        scn: row.episodeLabel ? `${row.episodeLabel} ${row.sceneNumber}` : row.sceneNumber,
+        description: row.oneLiner?.[lang] ?? "",
+        type: row.intExt,
+        dn: row.timeOfDay,
+        location: row.location?.[lang] ?? "",
+        characters: (row.mainCharacters ?? []).join(", "),
+        extras: row.extras?.[lang] ?? "",
+        property: row.property?.[lang] ?? "",
+        costume: row.costumeRemarks?.[lang] ?? "",
+      };
+    }
+
+    const workbook = new ExcelJS.Workbook();
+    const sheet = workbook.addWorksheet(labels.title.slice(0, 31));
+    sheet.columns = [
+      { header: labels.scn, key: "scn", width: 14 },
+      { header: labels.description, key: "description", width: 45 },
+      { header: labels.type, key: "type", width: 10 },
+      { header: labels.dn, key: "dn", width: 8 },
+      { header: labels.location, key: "location", width: 28 },
+      { header: labels.characters, key: "characters", width: 32 },
+      { header: labels.extras, key: "extras", width: 24 },
+      { header: labels.property, key: "property", width: 28 },
+      { header: labels.costume, key: "costume", width: 28 },
+    ];
+    sheet.getRow(1).font = { bold: true };
+    adSheet.forEach((row) => sheet.addRow(rowValues(row)));
+
+    res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+    res.setHeader("Content-Disposition", `attachment; filename="ad-breakdown-sheet-${lang}-${formatExportTimestamp()}.xlsx"`);
+    await workbook.xlsx.write(res);
+    res.end();
+  } catch (error) {
+    console.error("AD sheet Excel export failed:", error.message);
+    if (!res.headersSent) {
+      res.status(500).json({ error: error.message });
+    } else {
+      res.end();
+    }
+  }
+});
+
 // One focused call per episode/chunk (never the whole script in one pass) —
 // the same "a single long pass misses things and conflates similar minor
 // characters" lesson as the AD sheet and missing-character scan. Matching
@@ -6295,6 +6449,84 @@ app.get("/api/scene-lists/:sceneListId/character-script/export", requireLogin, a
     renderCharacterScriptPdf(res, characterLabel.trim(), lang, scenes);
   } catch (error) {
     console.error("Character script PDF export failed:", error.message);
+    if (!res.headersSent) {
+      res.status(500).json({ error: error.message });
+    } else {
+      res.end();
+    }
+  }
+});
+
+// A narrative script packet doesn't map to a grid, so the Excel version is
+// a one-row-per-scene log instead of a transcript — scene heading, whether
+// this character has dialogue in it, and the dialogue/action content
+// flattened into a single cell (a reader who wants the full script layout
+// still has the PDF right next to this).
+async function renderCharacterScriptExcel(res, characterLabel, lang, scenes) {
+  const labels =
+    lang === "or"
+      ? { scene: "ଦୃଶ୍ୟ", heading: "ଦୃଶ୍ୟ ଶୀର୍ଷକ", hasDialogue: "ସଂଳାପ ଅଛି?", content: "ବିଷୟବସ୍ତୁ", yes: "ହଁ", no: "ନାହିଁ" }
+      : { scene: "Scene", heading: "Scene Heading", hasDialogue: "Has Dialogue?", content: "Content", yes: "Yes", no: "No" };
+
+  const workbook = new ExcelJS.Workbook();
+  const sheet = workbook.addWorksheet((lang === "or" ? "ଚରିତ୍ର ସ୍କ୍ରିପ୍ଟ" : "Character Script").slice(0, 31));
+  sheet.columns = [
+    { header: labels.scene, key: "scene", width: 16 },
+    { header: labels.heading, key: "heading", width: 34 },
+    { header: labels.hasDialogue, key: "hasDialogue", width: 14 },
+    { header: labels.content, key: "content", width: 80 },
+  ];
+  sheet.getRow(1).font = { bold: true };
+
+  scenes.forEach((scene) => {
+    const sceneLabel = scene.episodeLabel ? `${scene.episodeLabel}, ${scene.sceneNumberLabel}` : scene.sceneNumberLabel;
+    const content = scene.hasDialogue
+      ? scene.lines.map((line) => `${line.character.toUpperCase()}: ${line.text}`).join("\n")
+      : scene.actionDescription;
+    const addedRow = sheet.addRow({
+      scene: sceneLabel,
+      heading: scene.sceneHeading,
+      hasDialogue: scene.hasDialogue ? labels.yes : labels.no,
+      content,
+    });
+    addedRow.getCell("content").alignment = { wrapText: true, vertical: "top" };
+  });
+
+  res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+  res.setHeader(
+    "Content-Disposition",
+    `attachment; filename="character-script-${characterLabel.trim().replace(/\s+/g, "-")}-${formatExportTimestamp()}.xlsx"`
+  );
+  await workbook.xlsx.write(res);
+  res.end();
+}
+
+app.get("/api/scene-lists/:sceneListId/character-script/export-excel", requireLogin, async (req, res) => {
+  const { sceneListId } = req.params;
+  const characterLabel = req.query.character;
+  const lang = req.query.lang === "or" ? "or" : "en";
+
+  if (!characterLabel?.trim()) {
+    res.status(400).json({ error: "A character name is required." });
+    return;
+  }
+  if (!(await userOwnsSceneList(req.user, sceneListId))) {
+    res.status(403).json({ error: "You don't have access to this project." });
+    return;
+  }
+
+  try {
+    const sceneListResult = await db.query("SELECT content FROM scene_lists WHERE id = $1", [sceneListId]);
+    if (sceneListResult.rows.length === 0) {
+      res.status(404).json({ error: "Scene list not found" });
+      return;
+    }
+
+    const sourceText = await buildBreakdownSourceText(sceneListResult.rows[0].content, sceneListId);
+    const scenes = await generateCharacterScript(sourceText, characterLabel.trim());
+    await renderCharacterScriptExcel(res, characterLabel.trim(), lang, scenes);
+  } catch (error) {
+    console.error("Character script Excel export failed:", error.message);
     if (!res.headersSent) {
       res.status(500).json({ error: error.message });
     } else {
@@ -7574,6 +7806,175 @@ app.get("/api/shoot-schedule/:id/export", requireLogin, async (req, res) => {
   }
 });
 
+// Same grid data as the PDF export above — one sheet per shoot day
+// (transcribing the same episode/location group banners as merged rows
+// ahead of that group's scenes), plus an Artist-Wise Summary sheet when
+// this isn't scoped to a single day.
+app.get("/api/shoot-schedule/:id/export-excel", requireLogin, async (req, res) => {
+  const lang = req.query.lang === "or" ? "or" : "en";
+  const dayFilter = req.query.day ? Number(req.query.day) : null;
+
+  try {
+    const idLookup = await db.query("SELECT scene_list_id FROM shoot_schedules WHERE id = $1", [req.params.id]);
+    if (idLookup.rows.length === 0) {
+      res.status(404).json({ error: "Shoot schedule not found" });
+      return;
+    }
+    const result = await db.query(
+      "SELECT scene_list_id, content FROM shoot_schedules WHERE scene_list_id = $1 ORDER BY created_at DESC LIMIT 1",
+      [idLookup.rows[0].scene_list_id]
+    );
+
+    const { scene_list_id: sceneListId, content: schedule } = result.rows[0];
+    if (dayFilter && !(schedule.scheduleDays ?? []).some((d) => d.dayNumber === dayFilter)) {
+      res.status(404).json({ error: `Day ${dayFilter} was not found in this schedule.` });
+      return;
+    }
+    const sceneListResult = await db.query("SELECT content FROM scene_lists WHERE id = $1", [sceneListId]);
+    const sceneList = sceneListResult.rows[0]?.content ?? {};
+    const isSeries = Boolean(sceneList.episodeScenes);
+
+    const labels =
+      lang === "or"
+        ? {
+            day: "ଦିନ", location: "ସ୍ଥାନ", cast: "କଳାକାର", notes: "ଟିପ୍ପଣୀ", artistSummary: "କଳାକାର-ଅନୁଯାୟୀ ସାରାଂଶ", totalDays: "ମୋଟ ଦିନ", days: "ଦିନଗୁଡ଼ିକ", completed: "ସମାପ୍ତ", costume: "ପୋଷାକ", properties: "ପ୍ରପର୍ଟି", adRemark: "AD ମନ୍ତବ୍ୟ",
+            wrapped: "ସମାପ୍ତ", pending: "ବାକି", inProgress: "ଚାଲୁଛି", episode: "ଏପିସୋଡ୍", scenes: "ଦୃଶ୍ୟ", unspecified: "ଅନିର୍ଦ୍ଦିଷ୍ଟ", character: "ଚରିତ୍ର", status: "ସ୍ଥିତି",
+          }
+        : {
+            day: "Day", location: "Location", cast: "Cast Called", notes: "Notes", artistSummary: "Artist-Wise Summary", totalDays: "Total Days", days: "Days", completed: "COMPLETED", costume: "Costume", properties: "Properties", adRemark: "AD Remark",
+            wrapped: "WRAPPED", pending: "PENDING", inProgress: "IN PROGRESS", episode: "Episode", scenes: "scenes", unspecified: "Unspecified", character: "Character", status: "Status",
+          };
+
+    const breakdownResult = await db.query(
+      "SELECT content FROM script_breakdowns WHERE scene_list_id = $1 ORDER BY created_at DESC LIMIT 1",
+      [sceneListId]
+    );
+    const adSheetRows = breakdownResult.rows[0]?.content?.adSheet ?? null;
+    const castByIdentity = new Map();
+    if (adSheetRows) {
+      let flatIndex = 0;
+      if (isSeries) {
+        (sceneList.episodeScenes ?? []).forEach((episodeScene, episodeIndex) => {
+          episodeScene.scenes.forEach((_, sceneIndex) => {
+            castByIdentity.set(`e${episodeIndex}-s${sceneIndex}`, adSheetRows[flatIndex]);
+            flatIndex += 1;
+          });
+        });
+      } else {
+        (sceneList.scenes ?? []).forEach((_, sceneIndex) => {
+          castByIdentity.set(`s${sceneIndex}`, adSheetRows[flatIndex]);
+          flatIndex += 1;
+        });
+      }
+    }
+    const notAvailableLabel = "—";
+
+    const columns = [
+      { header: "SC NO", key: "scn", width: 14 },
+      { header: labels.location, key: "location", width: 28 },
+      { header: labels.cast, key: "artist", width: 32 },
+      { header: labels.costume, key: "costume", width: 30 },
+      { header: labels.properties, key: "properties", width: 40 },
+      { header: labels.adRemark, key: "adRemark", width: 30 },
+    ];
+
+    const workbook = new ExcelJS.Workbook();
+    const scheduleDaysToRender = dayFilter
+      ? schedule.scheduleDays.filter((d) => d.dayNumber === dayFilter)
+      : schedule.scheduleDays;
+
+    scheduleDaysToRender.forEach((day) => {
+      const sheet = workbook.addWorksheet(`${labels.day} ${day.dayNumber}`.slice(0, 31));
+      sheet.columns = columns;
+      sheet.getRow(1).font = { bold: true };
+
+      const dayTitle = `${day.date ? `${formatDisplayDate(day.date)} — ` : ""}${labels.day} ${day.dayNumber}${day.completed ? ` — ${labels.completed}` : ""} — ${labels.location}: ${day.location?.[lang] ?? ""}`;
+      const titleRow = sheet.addRow({ scn: dayTitle });
+      sheet.mergeCells(titleRow.number, 1, titleRow.number, columns.length);
+      titleRow.font = { bold: true };
+      titleRow.getCell(1).fill = { type: "pattern", pattern: "solid", fgColor: { argb: day.completed ? "FFFDECEA" : "FFEEF2F7" } };
+      sheet.addRow({});
+
+      groupSceneRefsForPdf(day.sceneRefs ?? [], sceneList, lang).forEach((episodeGroup) => {
+        episodeGroup.locationGroups.forEach((locationGroup) => {
+          const episodePrefix = episodeGroup.episodeIndex !== null ? `${labels.episode} ${episodeGroup.episodeIndex + 1} — ` : "";
+          const bannerText = `${episodePrefix}${locationGroup.location || labels.unspecified} (${locationGroup.items.length} ${labels.scenes})`;
+          const bannerRow = sheet.addRow({ scn: bannerText });
+          sheet.mergeCells(bannerRow.number, 1, bannerRow.number, columns.length);
+          bannerRow.font = { bold: true };
+          bannerRow.getCell(1).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFEEF2F7" } };
+
+          locationGroup.items.forEach(({ ref, scene }) => {
+            const identity = isSeries ? `e${ref.episodeIndex}-s${ref.sceneIndex}` : `s${ref.sceneIndex}`;
+            const adSheetRow = castByIdentity.get(identity);
+            const realSceneNumber = (scene.sceneNumber || String(ref.sceneIndex + 1)).replace(/^\s*(SCENE|SC)\.?\s*/i, "");
+            const scn = isSeries ? `Ep${ref.episodeIndex + 1} ${realSceneNumber}` : realSceneNumber;
+            const artist = adSheetRow ? (adSheetRow.mainCharacters ?? []).join(", ") || notAvailableLabel : (day.charactersNeeded ?? []).join(", ") || notAvailableLabel;
+            const properties = [ref.properties, adSheetRow?.extras?.[lang]].filter(Boolean).join("; ");
+
+            sheet.addRow({
+              scn,
+              location: `${scene.intExt}. ${scene.location?.[lang] ?? ""}`,
+              artist,
+              costume: ref.costume || notAvailableLabel,
+              properties: properties || notAvailableLabel,
+              adRemark: ref.adRemark || "",
+            });
+          });
+        });
+      });
+
+      if (day.notes?.[lang]) {
+        const notesRow = sheet.addRow({ scn: `${labels.notes}: ${day.notes[lang]}` });
+        sheet.mergeCells(notesRow.number, 1, notesRow.number, columns.length);
+      }
+    });
+
+    if (!dayFilter) {
+      const summarySheet = workbook.addWorksheet(labels.artistSummary.slice(0, 31));
+      summarySheet.columns = [
+        { header: labels.character, key: "character", width: 22 },
+        { header: labels.status, key: "status", width: 14 },
+        { header: labels.totalDays, key: "totalDays", width: 12 },
+        { header: labels.days, key: "days", width: 70 },
+      ];
+      summarySheet.getRow(1).font = { bold: true };
+
+      const completedByDayNumber = Object.fromEntries(schedule.scheduleDays.map((d) => [d.dayNumber, Boolean(d.completed)]));
+      const statusLabels = { wrapped: labels.wrapped, pending: labels.pending, "in-progress": labels.inProgress };
+
+      (schedule.artistSchedule ?? []).forEach((entry) => {
+        const completedFlags = entry.days.map((d) => completedByDayNumber[d.dayNumber]);
+        const allDone = completedFlags.every(Boolean);
+        const noneDone = completedFlags.every((c) => !c);
+        const status = statusLabels[allDone ? "wrapped" : noneDone ? "pending" : "in-progress"];
+
+        summarySheet.addRow({
+          character: entry.character,
+          status,
+          totalDays: entry.totalDays,
+          days: entry.days.map((d) => `Day ${d.dayNumber}${d.date ? ` (${formatDisplayDate(d.date)})` : ""}${completedByDayNumber[d.dayNumber] ? " (done)" : ""}`).join(", "),
+        });
+      });
+    }
+
+    res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename="shoot-schedule${dayFilter ? `-day-${dayFilter}` : ""}-${lang}-${formatExportTimestamp()}.xlsx"`
+    );
+    await workbook.xlsx.write(res);
+    res.end();
+  } catch (error) {
+    console.error("Shoot schedule Excel export failed:", error.message);
+    if (!res.headersSent) {
+      res.status(500).json({ error: error.message });
+    } else {
+      res.end();
+    }
+  }
+});
+
 // A focused, single-day version of the four Script Breakdown category
 // sheets — "just Day 2's costume/location/artist/property list" — built
 // straight from that day's own sceneRefs (which already carry the
@@ -7695,6 +8096,120 @@ app.get("/api/shoot-schedule/:id/export-day", requireLogin, async (req, res) => 
     doc.end();
   } catch (error) {
     console.error("Day export failed:", error.message);
+    if (!res.headersSent) {
+      res.status(500).json({ error: error.message });
+    } else {
+      res.end();
+    }
+  }
+});
+
+// Excel counterpart of the single-day category breakdown above — same
+// per-category data, one row per entry instead of a flowing list.
+app.get("/api/shoot-schedule/:id/export-day-excel", requireLogin, async (req, res) => {
+  const lang = req.query.lang === "or" ? "or" : "en";
+  const dayNumber = Number(req.query.day);
+  const category = req.query.category;
+  const DAY_EXPORT_CATEGORIES = ["artists", "locations", "costumes", "properties"];
+
+  if (!Number.isFinite(dayNumber)) {
+    res.status(400).json({ error: "A day number is required." });
+    return;
+  }
+  if (!DAY_EXPORT_CATEGORIES.includes(category)) {
+    res.status(400).json({ error: "Unknown day-export category." });
+    return;
+  }
+
+  try {
+    const idLookup = await db.query("SELECT scene_list_id FROM shoot_schedules WHERE id = $1", [req.params.id]);
+    if (idLookup.rows.length === 0) {
+      res.status(404).json({ error: "Shoot schedule not found" });
+      return;
+    }
+    const result = await db.query(
+      "SELECT scene_list_id, content FROM shoot_schedules WHERE scene_list_id = $1 ORDER BY created_at DESC LIMIT 1",
+      [idLookup.rows[0].scene_list_id]
+    );
+    const { scene_list_id: sceneListId, content: schedule } = result.rows[0];
+    const day = (schedule.scheduleDays ?? []).find((d) => d.dayNumber === dayNumber);
+    if (!day) {
+      res.status(404).json({ error: `Day ${dayNumber} was not found in this schedule.` });
+      return;
+    }
+
+    const sceneListResult = await db.query("SELECT content FROM scene_lists WHERE id = $1", [sceneListId]);
+    const sceneList = sceneListResult.rows[0]?.content ?? {};
+    const isSeries = Boolean(sceneList.episodeScenes);
+
+    const labels =
+      lang === "or"
+        ? {
+            artists: "କଳାକାର ବିଭାଜନ", locations: "ସ୍ଥାନ ବିଭାଜନ", costumes: "ପୋଷାକ ବିଭାଜନ", properties: "ସାମଗ୍ରୀ ବିଭାଜନ",
+            character: "ଚରିତ୍ର", playedBy: "କଳାକାର", contactNumber: "ଯୋଗାଯୋଗ ନମ୍ବର", notCast: "ଏପର୍ଯ୍ୟନ୍ତ କାଷ୍ଟ ହୋଇନାହିଁ",
+            location: "ସ୍ଥାନ", intExt: "INT/EXT", sceneCount: "ଦୃଶ୍ୟ ସଂଖ୍ୟା", scene: "ଦୃଶ୍ୟ", notes: "ଟିପ୍ପଣୀ",
+          }
+        : {
+            artists: "Artist Breakdown", locations: "Location Breakdown", costumes: "Costume Breakdown", properties: "Property Breakdown",
+            character: "Character", playedBy: "Played By", contactNumber: "Contact Number", notCast: "Not yet cast",
+            location: "Location", intExt: "INT/EXT", sceneCount: "Scene Count", scene: "Scene", notes: "Notes",
+          };
+
+    const workbook = new ExcelJS.Workbook();
+    const sheet = workbook.addWorksheet(labels[category].slice(0, 31));
+
+    if (category === "artists") {
+      sheet.columns = [
+        { header: labels.character, key: "character", width: 24 },
+        { header: labels.playedBy, key: "playedBy", width: 24 },
+        { header: labels.contactNumber, key: "contactNumber", width: 18 },
+      ];
+      sheet.getRow(1).font = { bold: true };
+      const characters = day.charactersNeeded ?? [];
+      const castResult = await db.query(
+        "SELECT character_name, name, contact_number FROM crew_members WHERE scene_list_id = $1 AND category = 'artist'",
+        [sceneListId]
+      );
+      const castByCharacter = new Map(castResult.rows.map((row) => [row.character_name, row]));
+      characters.forEach((name) => {
+        const cast = castByCharacter.get(name);
+        sheet.addRow({ character: name, playedBy: cast ? cast.name : labels.notCast, contactNumber: cast?.contact_number || "" });
+      });
+    } else if (category === "locations") {
+      sheet.columns = [
+        { header: labels.location, key: "location", width: 28 },
+        { header: labels.intExt, key: "intExt", width: 10 },
+        { header: labels.sceneCount, key: "sceneCount", width: 12 },
+      ];
+      sheet.getRow(1).font = { bold: true };
+      groupSceneRefsForPdf(day.sceneRefs ?? [], sceneList, lang).forEach((episodeGroup) => {
+        episodeGroup.locationGroups.forEach((locationGroup) => {
+          const intExt = locationGroup.items[0]?.scene?.intExt ?? "";
+          sheet.addRow({ location: locationGroup.location, intExt, sceneCount: locationGroup.items.length });
+        });
+      });
+    } else {
+      // costumes / properties — one row per scene that actually has a note.
+      sheet.columns = [
+        { header: labels.scene, key: "scene", width: 18 },
+        { header: labels[category], key: "note", width: 55 },
+      ];
+      sheet.getRow(1).font = { bold: true };
+      const field = category === "costumes" ? "costume" : "properties";
+      (day.sceneRefs ?? []).filter((ref) => ref[field]?.trim()).forEach((ref) => {
+        const scene = lookupSceneServerSide(sceneList, ref);
+        const epLabel = isSeries ? `Ep${ref.episodeIndex + 1} ` : "";
+        const sceneNumber = String(scene?.sceneNumber || ref.sceneIndex + 1).replace(/^\s*(SCENE|SC)\.?\s*/i, "");
+        sheet.addRow({ scene: `${epLabel}${sceneNumber}`, note: ref[field] });
+      });
+    }
+
+    res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+    res.setHeader("Content-Disposition", `attachment; filename="day-${dayNumber}-${category}-${lang}-${formatExportTimestamp()}.xlsx"`);
+    await workbook.xlsx.write(res);
+    res.end();
+  } catch (error) {
+    console.error("Day Excel export failed:", error.message);
     if (!res.headersSent) {
       res.status(500).json({ error: error.message });
     } else {

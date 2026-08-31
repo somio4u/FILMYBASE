@@ -1610,25 +1610,16 @@ button, input, textarea, select {
   flex-wrap: wrap;
 }
 
-.costume-recommendations-section {
-  margin-bottom: 22px;
-  padding: 14px 16px;
+.costume-recommendation-inline {
+  margin-top: 10px;
+  padding: 10px 12px;
   background: var(--bg-input);
   border: 1px solid var(--border-subtle);
-  border-radius: 12px;
-}
-
-.costume-recommendation-card {
-  padding: 10px 0;
-  border-top: 1px solid var(--border-subtle);
-}
-
-.costume-recommendation-card:first-of-type {
-  border-top: none;
+  border-radius: 10px;
 }
 
 .costume-recommendation-sets {
-  margin: 6px 0 0;
+  margin: 6px 0 8px;
   padding-left: 18px;
   font-size: 13px;
   color: var(--text-secondary);
@@ -1636,6 +1627,10 @@ button, input, textarea, select {
 
 .costume-recommendation-reason {
   color: var(--text-muted);
+}
+
+.costume-recommendation-trigger {
+  margin-top: 8px;
 }
 
 .breakdown-merged-group {

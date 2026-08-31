@@ -5061,24 +5061,28 @@ async function generateCostumeRecommendationsForBatch(characterBriefs) {
   return JSON.parse(response.text).recommendations ?? [];
 }
 
+function buildCostumeBrief(artist, adSheet, flatScenes, costumeByCharacter) {
+  const sceneLines = [];
+  adSheet.forEach((row, i) => {
+    if (!row.mainCharacters?.some((c) => c.toLowerCase() === artist.label.toLowerCase())) return;
+    const scene = flatScenes[i];
+    if (!scene) return;
+    sceneLines.push(
+      `${scene.episodeLabel ? `${scene.episodeLabel}, ` : ""}Scene ${scene.sceneNumber}: ${scene.intExt}. ${scene.location?.en ?? ""} — ${scene.timeOfDay ?? ""}. ${scene.oneLiner?.en ?? ""}`
+    );
+  });
+  const costume = costumeByCharacter.get(artist.label.toLowerCase());
+  return `${artist.label} (${artist.gender || "Unspecified"}, ${artist.age || "Unspecified"}) — appears in ${sceneLines.length} scene(s).\nInvolvement: ${artist.notes?.en ?? ""}\nExisting costume note: ${costume?.description?.en ?? "(none yet)"}\nScenes:\n${sceneLines.join("\n") || "(no AD sheet scenes found for this character)"}`;
+}
+
 async function generateCostumeRecommendations(scriptBreakdown, sceneList) {
   const flatScenes = flattenScenesForAdSheet(sceneList);
   const adSheet = scriptBreakdown.adSheet ?? [];
   const costumeByCharacter = new Map((scriptBreakdown.costumes ?? []).map((c) => [c.character.toLowerCase(), c]));
 
-  const characterBriefs = (scriptBreakdown.artistList ?? []).map((artist) => {
-    const sceneLines = [];
-    adSheet.forEach((row, i) => {
-      if (!row.mainCharacters?.some((c) => c.toLowerCase() === artist.label.toLowerCase())) return;
-      const scene = flatScenes[i];
-      if (!scene) return;
-      sceneLines.push(
-        `${scene.episodeLabel ? `${scene.episodeLabel}, ` : ""}Scene ${scene.sceneNumber}: ${scene.intExt}. ${scene.location?.en ?? ""} — ${scene.timeOfDay ?? ""}. ${scene.oneLiner?.en ?? ""}`
-      );
-    });
-    const costume = costumeByCharacter.get(artist.label.toLowerCase());
-    return `${artist.label} (${artist.gender || "Unspecified"}, ${artist.age || "Unspecified"}) — appears in ${sceneLines.length} scene(s).\nInvolvement: ${artist.notes?.en ?? ""}\nExisting costume note: ${costume?.description?.en ?? "(none yet)"}\nScenes:\n${sceneLines.join("\n") || "(no AD sheet scenes found for this character)"}`;
-  });
+  const characterBriefs = (scriptBreakdown.artistList ?? []).map((artist) =>
+    buildCostumeBrief(artist, adSheet, flatScenes, costumeByCharacter)
+  );
 
   const batches = [];
   for (let i = 0; i < characterBriefs.length; i += COSTUME_RECOMMENDATION_BATCH_SIZE) {
@@ -5087,6 +5091,23 @@ async function generateCostumeRecommendations(scriptBreakdown, sceneList) {
 
   const results = await mapWithConcurrency(batches, 3, generateCostumeRecommendationsForBatch);
   return results.flat();
+}
+
+// The per-character version behind each costume entry's own "Recommend"
+// trigger — cheap and fast since it's a single character, so the AD can
+// pull one up on demand without waiting for (or re-triggering) the whole
+// cast's recommendations to regenerate.
+async function generateCostumeRecommendationForCharacter(scriptBreakdown, sceneList, characterLabel) {
+  const artist = (scriptBreakdown.artistList ?? []).find((a) => a.label.toLowerCase() === characterLabel.toLowerCase());
+  if (!artist) return null;
+
+  const flatScenes = flattenScenesForAdSheet(sceneList);
+  const adSheet = scriptBreakdown.adSheet ?? [];
+  const costumeByCharacter = new Map((scriptBreakdown.costumes ?? []).map((c) => [c.character.toLowerCase(), c]));
+  const brief = buildCostumeBrief(artist, adSheet, flatScenes, costumeByCharacter);
+
+  const results = await generateCostumeRecommendationsForBatch([brief]);
+  return results[0] ?? null;
 }
 
 app.post("/api/script-breakdown/:id/generate-costume-recommendations", requireRole("admin", "production_manager"), async (req, res) => {
@@ -5131,6 +5152,76 @@ app.post("/api/script-breakdown/:id/generate-costume-recommendations", requireRo
     res.status(502).json({ error: error.message });
   }
 });
+
+// Same as above but scoped to one character — this is what each costume
+// entry's own inline "Recommend" trigger calls, so pulling up one
+// character's recommendation doesn't wait on (or re-run) the whole cast's.
+app.post(
+  "/api/script-breakdown/:id/generate-costume-recommendation",
+  requireRole("admin", "production_manager"),
+  async (req, res) => {
+    const { character } = req.body;
+    if (!character?.trim()) {
+      res.status(400).json({ error: "A character name is required." });
+      return;
+    }
+
+    const existing = await db.query("SELECT scene_list_id FROM script_breakdowns WHERE id = $1", [req.params.id]);
+    if (existing.rows.length === 0) {
+      res.status(404).json({ error: "Script breakdown not found" });
+      return;
+    }
+
+    const sceneListId = existing.rows[0].scene_list_id;
+    if (!(await userOwnsSceneList(req.user, sceneListId))) {
+      res.status(403).json({ error: "You don't have access to this project." });
+      return;
+    }
+
+    const latest = await db.query(
+      "SELECT id, content FROM script_breakdowns WHERE scene_list_id = $1 ORDER BY created_at DESC LIMIT 1",
+      [sceneListId]
+    );
+    if (String(latest.rows[0].id) !== String(req.params.id)) {
+      res.status(409).json({ error: "Someone else updated this breakdown since you loaded it. Reload the page and try again." });
+      return;
+    }
+    if (!Array.isArray(latest.rows[0].content.adSheet) || latest.rows[0].content.adSheet.length === 0) {
+      res.status(400).json({ error: "Generate the AD Scene Breakdown Sheet first — costume recommendations need it to know which scenes this character is in." });
+      return;
+    }
+
+    try {
+      const sceneListResult = await db.query("SELECT content FROM scene_lists WHERE id = $1", [sceneListId]);
+      const recommendation = await generateCostumeRecommendationForCharacter(
+        latest.rows[0].content,
+        sceneListResult.rows[0].content,
+        character.trim()
+      );
+      if (!recommendation) {
+        res.status(404).json({ error: "That character wasn't found in the Artist List." });
+        return;
+      }
+
+      const existingRecommendations = latest.rows[0].content.costumeRecommendations ?? [];
+      const updatedRecommendations = [
+        ...existingRecommendations.filter((rec) => rec.character.toLowerCase() !== character.trim().toLowerCase()),
+        recommendation,
+      ];
+      const updatedContent = { ...latest.rows[0].content, costumeRecommendations: updatedRecommendations };
+
+      const insertResult = await db.query(
+        "INSERT INTO script_breakdowns (scene_list_id, content, feedback) VALUES ($1, $2, $3) RETURNING id, status, feedback",
+        [sceneListId, JSON.stringify(updatedContent), `Generated costume quantity recommendation for ${character.trim()}`]
+      );
+
+      res.json({ ...insertResult.rows[0], sceneListId, ...updatedContent });
+    } catch (error) {
+      console.error("Costume recommendation generation failed:", error.message);
+      res.status(502).json({ error: error.message });
+    }
+  }
+);
 
 // The classic AD (Assistant Director) Scene Breakdown Sheet — one row per
 // scene, handed to the whole crew as a single production reference.

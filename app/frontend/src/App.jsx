@@ -283,7 +283,7 @@ const LABELS = {
     costumeRecommendationsHeading: 'Recommended Costume Quantities',
     generateCostumeRecommendationsButton: 'Recommend Costume Quantities',
     generatingCostumeRecommendationsLabel: 'Analyzing scenes…',
-    noCostumeRecommendationsYet: 'Not generated yet — click "Recommend Costume Quantities" to see how many sets each character needs.',
+    regenerateCostumeRecommendationButton: 'Regenerate',
     costumeRecommendationsNeedsAdSheetHint: 'Generate the AD Scene Breakdown Sheet first — this needs it to know which scenes each character is in.',
     downloadPdfLabel: 'Download PDF',
     downloadExcelLabel: 'Download Excel',
@@ -679,7 +679,7 @@ const LABELS = {
     costumeRecommendationsHeading: 'ପ୍ରସ୍ତାବିତ ପୋଷାକ ପରିମାଣ',
     generateCostumeRecommendationsButton: 'ପୋଷାକ ପରିମାଣ ପ୍ରସ୍ତାବ କରନ୍ତୁ',
     generatingCostumeRecommendationsLabel: 'ଦୃଶ୍ୟ ବିଶ୍ଳେଷଣ ହେଉଛି…',
-    noCostumeRecommendationsYet: 'ଏପର୍ଯ୍ୟନ୍ତ ତିଆରି ହୋଇନାହିଁ — ପ୍ରତ୍ୟେକ ଚରିତ୍ରକୁ କେତେ ପୋଷାକ ଦରକାର ଦେଖିବାକୁ "ପୋଷାକ ପରିମାଣ ପ୍ରସ୍ତାବ କରନ୍ତୁ" କ୍ଲିକ୍ କରନ୍ତୁ।',
+    regenerateCostumeRecommendationButton: 'ପୁନଃ ତିଆରି କରନ୍ତୁ',
     costumeRecommendationsNeedsAdSheetHint: 'ପ୍ରଥମେ AD ଦୃଶ୍ୟ ବିଭାଜନ ସିଟ୍ ତିଆରି କରନ୍ତୁ — ପ୍ରତ୍ୟେକ ଚରିତ୍ର କେଉଁ ଦୃଶ୍ୟରେ ଅଛନ୍ତି ଜାଣିବାକୁ ଏହା ଦରକାର।',
     downloadPdfLabel: 'PDF ଡାଉନଲୋଡ୍ କରନ୍ତୁ',
     downloadExcelLabel: 'Excel ଡାଉନଲୋଡ୍ କରନ୍ତୁ',
@@ -2365,7 +2365,7 @@ function App() {
   const [isFindingMissingCharacters, setIsFindingMissingCharacters] = useState(false)
   const [foundMissingCharacters, setFoundMissingCharacters] = useState(null)
   const [isClassifyingCastCategories, setIsClassifyingCastCategories] = useState(false)
-  const [isGeneratingCostumeRecommendations, setIsGeneratingCostumeRecommendations] = useState(false)
+  const [generatingCostumeRecommendationFor, setGeneratingCostumeRecommendationFor] = useState(null)
   const [isExportingProject, setIsExportingProject] = useState(false)
 
   const [googleConnected, setGoogleConnected] = useState(false)
@@ -3912,19 +3912,21 @@ function App() {
     setIsClassifyingCastCategories(false)
   }
 
-  async function handleGenerateCostumeRecommendationsClick() {
-    setIsGeneratingCostumeRecommendations(true)
+  async function handleGenerateCostumeRecommendationClick(characterName) {
+    setGeneratingCostumeRecommendationFor(characterName)
     setErrorMessage(null)
 
     try {
-      const response = await fetch(`${BACKEND_URL}/api/script-breakdown/${scriptBreakdown.id}/generate-costume-recommendations`, {
+      const response = await fetch(`${BACKEND_URL}/api/script-breakdown/${scriptBreakdown.id}/generate-costume-recommendation`, {
         method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ character: characterName }),
       })
       const data = await response.json()
 
       if (!response.ok) {
         setErrorMessage(data.error || t.genericError)
-        setIsGeneratingCostumeRecommendations(false)
+        setGeneratingCostumeRecommendationFor(null)
         return
       }
 
@@ -3933,7 +3935,7 @@ function App() {
       setErrorMessage(t.genericError)
     }
 
-    setIsGeneratingCostumeRecommendations(false)
+    setGeneratingCostumeRecommendationFor(null)
   }
 
   function renderBreakdownCategory(category, headingKey) {
@@ -4121,6 +4123,49 @@ function App() {
                         canEdit={canEditProduction}
                       />
                     )}
+                    {category === 'costumes' &&
+                      (() => {
+                        const rec = scriptBreakdown.costumeRecommendations?.find(
+                          (r) => r.character.toLowerCase() === item.character.toLowerCase()
+                        )
+                        const isGeneratingThis = generatingCostumeRecommendationFor === item.character
+                        return rec ? (
+                          <div className="costume-recommendation-inline">
+                            <strong>{t.costumeRecommendationsHeading}</strong>{' '}
+                            <span className="breakdown-item-meta">
+                              ({rec.totalScenes} {t.scenesLabel})
+                            </span>
+                            <ul className="costume-recommendation-sets">
+                              {rec.sets.map((set, i) => (
+                                <li key={i}>
+                                  <strong>{set.quantity}×</strong> {set.category}
+                                  {set.reason?.[language] && <span className="costume-recommendation-reason"> — {set.reason[language]}</span>}
+                                </li>
+                              ))}
+                            </ul>
+                            {canEditProduction && (
+                              <button
+                                className="breakdown-action-button"
+                                onClick={() => handleGenerateCostumeRecommendationClick(item.character)}
+                                disabled={isGeneratingThis}
+                              >
+                                {isGeneratingThis ? t.generatingCostumeRecommendationsLabel : t.regenerateCostumeRecommendationButton}
+                              </button>
+                            )}
+                          </div>
+                        ) : (
+                          canEditProduction && (
+                            <button
+                              className="breakdown-action-button costume-recommendation-trigger"
+                              onClick={() => handleGenerateCostumeRecommendationClick(item.character)}
+                              disabled={isGeneratingThis || !scriptBreakdown.adSheet?.length}
+                              title={!scriptBreakdown.adSheet?.length ? t.costumeRecommendationsNeedsAdSheetHint : undefined}
+                            >
+                              {isGeneratingThis ? t.generatingCostumeRecommendationsLabel : t.generateCostumeRecommendationsButton}
+                            </button>
+                          )
+                        )
+                      })()}
                   </>
                 )}
                 </div>
@@ -6260,42 +6305,6 @@ function App() {
               {renderBreakdownCategory('artistList', 'artistListHeading')}
               {renderBreakdownCategory('locationList', 'locationListHeading')}
               {renderBreakdownCategory('costumes', 'costumesHeading')}
-
-              <div className="costume-recommendations-section">
-                <div className="breakdown-category-header">
-                  <h4>{t.costumeRecommendationsHeading}</h4>
-                  {canEditProduction && (
-                    <button
-                      className="breakdown-action-button"
-                      onClick={handleGenerateCostumeRecommendationsClick}
-                      disabled={isGeneratingCostumeRecommendations || !scriptBreakdown.adSheet?.length}
-                      title={!scriptBreakdown.adSheet?.length ? t.costumeRecommendationsNeedsAdSheetHint : undefined}
-                    >
-                      {isGeneratingCostumeRecommendations ? t.generatingCostumeRecommendationsLabel : t.generateCostumeRecommendationsButton}
-                    </button>
-                  )}
-                </div>
-                {!scriptBreakdown.costumeRecommendations?.length ? (
-                  <p className="sidebar-section-note">{t.noCostumeRecommendationsYet}</p>
-                ) : (
-                  scriptBreakdown.costumeRecommendations.map((rec) => (
-                    <div className="costume-recommendation-card" key={rec.character}>
-                      <strong>{rec.character}</strong>{' '}
-                      <span className="breakdown-item-meta">
-                        ({rec.totalScenes} {t.scenesLabel})
-                      </span>
-                      <ul className="costume-recommendation-sets">
-                        {rec.sets.map((set, i) => (
-                          <li key={i}>
-                            <strong>{set.quantity}×</strong> {set.category}
-                            {set.reason?.[language] && <span className="costume-recommendation-reason"> — {set.reason[language]}</span>}
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  ))
-                )}
-              </div>
 
               <div className="breakdown-merged-group">
                 <div className="breakdown-merged-group-header">

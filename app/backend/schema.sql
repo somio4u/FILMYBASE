@@ -155,3 +155,30 @@ CREATE TABLE sessions (
   expires_at TIMESTAMPTZ NOT NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+-- The conversational "Changes" chat — server-side so the same thread shows
+-- up for every login to this project, not just the browser that typed it.
+-- One thread per (concept, stage) — stage_key matches the frontend's own
+-- barConfig.stageKey scheme ('schedule', 'breakdown', 'pitch-deck', ...).
+-- proposed_action holds the agent's suggested tool call (if any) alongside
+-- its reply, so a page reload before confirming still shows the pending
+-- Confirm/Cancel buttons instead of losing them.
+CREATE TABLE agent_chat_messages (
+  id SERIAL PRIMARY KEY,
+  concept_id INTEGER NOT NULL REFERENCES concepts(id) ON DELETE CASCADE,
+  stage_key TEXT NOT NULL,
+  role TEXT NOT NULL CHECK (role IN ('user', 'assistant')),
+  content TEXT NOT NULL,
+  author_name TEXT,
+  -- A photo attached to a user message (a handwritten AD note, or a cast
+  -- photo for an assign_cast proposal) — same uploads/ storage as crew
+  -- photos, just the bare filename.
+  attachment_photo_path TEXT,
+  proposed_action JSONB,
+  -- null while a proposed_action is still awaiting a decision; 'applied' or
+  -- 'cancelled' once the human has acted on it (so a reload doesn't show
+  -- stale Confirm/Cancel buttons for something already resolved).
+  resolved TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX agent_chat_messages_concept_stage_idx ON agent_chat_messages (concept_id, stage_key, created_at);

@@ -109,6 +109,10 @@ const LABELS = {
     changesChatEmptyNote: 'Type a change below and it will show up here, along with what happened.',
     changesChatAppliedMessage: '✅ Done — applied and regenerated.',
     changesChatErrorMessage: '⚠️ Something went wrong — please try again.',
+    agentChatInputPlaceholder: 'Ask a question or describe a change — attach a photo too if it helps…',
+    agentChatAttachPhotoLabel: 'Attach a photo (handwritten note or cast photo)',
+    agentChatPhotoAttachedNote: 'Photo attached',
+    agentChatCancelledNote: 'Cancelled — nothing was changed.',
     exportButtonLabel: 'Save Project',
     exportingProjectLabel: 'Saving…',
     connectGoogleContactsButton: 'Connect Google Contacts',
@@ -480,6 +484,10 @@ const LABELS = {
     changesChatEmptyNote: 'ତଳେ ଏକ ପରିବର୍ତ୍ତନ ଲେଖନ୍ତୁ, ଏହା ଏଠାରେ ଦେଖାଯିବ, ସହିତ କଣ ହେଲା ତାହା ମଧ୍ୟ।',
     changesChatAppliedMessage: '✅ ହୋଇଗଲା — ପ୍ରୟୋଗ ଏବଂ ପୁନଃତିଆରି ହୋଇଗଲା।',
     changesChatErrorMessage: '⚠️ କିଛି ଭୁଲ ହେଲା — ପୁଣି ଚେଷ୍ଟା କରନ୍ତୁ।',
+    agentChatInputPlaceholder: 'ଏକ ପ୍ରଶ୍ନ ପଚାରନ୍ତୁ କିମ୍ବା ପରିବର୍ତ୍ତନ ବର୍ଣ୍ଣନା କରନ୍ତୁ — ସାହାଯ୍ୟ ହେଲେ ଏକ ଫଟୋ ମଧ୍ୟ ଲଗାନ୍ତୁ…',
+    agentChatAttachPhotoLabel: 'ଏକ ଫଟୋ ଲଗାନ୍ତୁ (ହସ୍ତଲିଖିତ ନୋଟ୍ କିମ୍ବା କାଷ୍ଟ ଫଟୋ)',
+    agentChatPhotoAttachedNote: 'ଫଟୋ ଲଗାଗଲା',
+    agentChatCancelledNote: 'ବାତିଲ୍ ହୋଇଗଲା — କିଛି ପରିବର୍ତ୍ତନ ହେଲା ନାହିଁ।',
     exportButtonLabel: 'ପ୍ରୋଜେକ୍ଟ ସେଭ୍ କରନ୍ତୁ',
     exportingProjectLabel: 'ସେଭ୍ ହେଉଛି…',
     connectGoogleContactsButton: 'Google ଯୋଗାଯୋଗ ସଂଯୋଗ କରନ୍ତୁ',
@@ -1565,6 +1573,229 @@ function ChangesChatPanel({ t, historyKey, barConfig, isBusy, errorMessage }) {
   )
 }
 
+// The real conversational agent — server-persisted history shared by every
+// login, backed by the /api/agent-chat/... endpoints — replacing
+// ChangesChatPanel for the 'schedule' and 'breakdown' stages, the only ones
+// with a wired-up agent right now. Visually it reuses the exact same
+// classes/hover-open behavior as ChangesChatPanel so the rest of the app
+// doesn't need to know two different chat mechanisms exist. A photo can be
+// attached right in the input — a handwritten AD note, or a person's photo
+// for a casting decision — instead of a separate upload button elsewhere.
+function AgentChatPanel({ t, BACKEND_URL, conceptId, stageKey, onScheduleUpdated, onCastMemberUpdated }) {
+  const [isOpen, setIsOpen] = useState(false)
+  const [messages, setMessages] = useState([])
+  const [inputText, setInputText] = useState('')
+  const [attachedFile, setAttachedFile] = useState(null)
+  const [isSending, setIsSending] = useState(false)
+  const [resolvingId, setResolvingId] = useState(null)
+  const [error, setError] = useState(null)
+  const messagesEndRef = useRef(null)
+  const closeTimeoutRef = useRef(null)
+  const fileInputRef = useRef(null)
+
+  function cancelScheduledClose() {
+    if (closeTimeoutRef.current) {
+      clearTimeout(closeTimeoutRef.current)
+      closeTimeoutRef.current = null
+    }
+  }
+  function handleHoverEnter() {
+    cancelScheduledClose()
+    setIsOpen(true)
+  }
+  function handleHoverLeave() {
+    cancelScheduledClose()
+    closeTimeoutRef.current = setTimeout(() => setIsOpen(false), 350)
+  }
+  useEffect(() => () => cancelScheduledClose(), [])
+
+  useEffect(() => {
+    if (!conceptId) return
+    let cancelled = false
+    fetch(`${BACKEND_URL}/api/agent-chat/${conceptId}/${stageKey}/history`)
+      .then((res) => res.json())
+      .then((data) => {
+        if (!cancelled) setMessages(data.messages ?? [])
+      })
+      .catch(() => {})
+    return () => {
+      cancelled = true
+    }
+  }, [conceptId, stageKey, BACKEND_URL])
+
+  useEffect(() => {
+    if (isOpen) messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+  }, [messages.length, isOpen, isSending])
+
+  function handleFileSelected(event) {
+    const file = event.target.files[0]
+    event.target.value = ''
+    if (file) setAttachedFile(file)
+  }
+
+  async function handleSend() {
+    if (isSending || (!inputText.trim() && !attachedFile)) return
+    setIsSending(true)
+    setError(null)
+
+    const formData = new FormData()
+    formData.append('message', inputText.trim())
+    if (attachedFile) formData.append('image', attachedFile)
+    setInputText('')
+    setAttachedFile(null)
+
+    try {
+      const response = await fetch(`${BACKEND_URL}/api/agent-chat/${conceptId}/${stageKey}/message`, {
+        method: 'POST',
+        body: formData,
+      })
+      const data = await response.json()
+      if (!response.ok) {
+        setError(data.error || t.genericError)
+        setIsSending(false)
+        return
+      }
+      setMessages((prev) => [...prev, data.userMessage, data.assistantMessage])
+    } catch {
+      setError(t.genericError)
+    }
+
+    setIsSending(false)
+  }
+
+  async function handleResolveAction(messageId, decision) {
+    setResolvingId(messageId)
+    setError(null)
+
+    try {
+      const response = await fetch(`${BACKEND_URL}/api/agent-chat/${conceptId}/${stageKey}/resolve-action`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ messageId, decision }),
+      })
+      const data = await response.json()
+      if (!response.ok) {
+        setError(data.error || t.genericError)
+        setResolvingId(null)
+        return
+      }
+      setMessages((prev) => prev.map((m) => (m.id === messageId ? { ...m, resolved: decision } : m)))
+      if (data.schedule) onScheduleUpdated?.(data.schedule)
+      if (data.castMember) onCastMemberUpdated?.(data.castMember)
+    } catch {
+      setError(t.genericError)
+    }
+
+    setResolvingId(null)
+  }
+
+  return (
+    <>
+      <button
+        className="changes-chat-toggle"
+        onClick={() => setIsOpen(!isOpen)}
+        onMouseEnter={handleHoverEnter}
+        onMouseLeave={handleHoverLeave}
+        title={t.changesChatToggleLabel}
+      >
+        {ICONS.penNib}
+      </button>
+      <div
+        className={isOpen ? 'changes-chat-panel open' : 'changes-chat-panel'}
+        onMouseEnter={handleHoverEnter}
+        onMouseLeave={handleHoverLeave}
+      >
+        <div className="changes-chat-header">
+          <strong>{t.changesChatHeading}</strong>
+          <button className="changes-chat-close" onClick={() => setIsOpen(false)}>
+            ✕
+          </button>
+        </div>
+        <div className="changes-chat-messages">
+          {messages.length === 0 && <p className="changes-chat-empty">{t.changesChatEmptyNote}</p>}
+          {messages.map((m) => (
+            <div key={m.id} className={m.role === 'user' ? 'changes-chat-bubble user' : 'changes-chat-bubble system'}>
+              {m.attachment_photo_url && <img src={m.attachment_photo_url} alt="" className="changes-chat-attachment-thumb" />}
+              <div>{m.content}</div>
+              {m.proposed_action && m.proposed_action.type !== 'none' && !m.resolved && (
+                <div className="skip-ahead-controls">
+                  <button
+                    className="choose-button"
+                    onClick={() => handleResolveAction(m.id, 'applied')}
+                    disabled={resolvingId === m.id}
+                  >
+                    {resolvingId === m.id ? t.applyingLabel : t.confirmApplyButton}
+                  </button>
+                  <button
+                    className="cancel-button"
+                    onClick={() => handleResolveAction(m.id, 'cancelled')}
+                    disabled={resolvingId === m.id}
+                  >
+                    {t.cancelEditButton}
+                  </button>
+                </div>
+              )}
+              {m.resolved === 'applied' && <p className="changes-chat-resolved-note">{t.changesChatAppliedMessage}</p>}
+              {m.resolved === 'cancelled' && <p className="changes-chat-resolved-note">{t.agentChatCancelledNote}</p>}
+            </div>
+          ))}
+          {isSending && (
+            <div className="changes-chat-bubble system changes-chat-progress">
+              <span className="changes-chat-dot" />
+              <span className="changes-chat-dot" />
+              <span className="changes-chat-dot" />
+            </div>
+          )}
+          {error && <div className="changes-chat-bubble system">{`${t.changesChatErrorMessage} ${error}`}</div>}
+          <div ref={messagesEndRef} />
+        </div>
+        {attachedFile && (
+          <div className="changes-chat-attachment-preview">
+            <span>{t.agentChatPhotoAttachedNote}: {attachedFile.name}</span>
+            <button onClick={() => setAttachedFile(null)}>✕</button>
+          </div>
+        )}
+        <div className="changes-chat-input-row">
+          <button
+            className="changes-chat-attach"
+            onClick={() => fileInputRef.current?.click()}
+            title={t.agentChatAttachPhotoLabel}
+            disabled={isSending}
+            type="button"
+          >
+            {ICONS.upload}
+          </button>
+          <input
+            type="file"
+            accept="image/*"
+            capture="environment"
+            ref={fileInputRef}
+            onChange={handleFileSelected}
+            style={{ display: 'none' }}
+          />
+          <input
+            type="text"
+            className="changes-chat-input"
+            value={inputText}
+            onChange={(e) => setInputText(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault()
+                handleSend()
+              }
+            }}
+            placeholder={t.agentChatInputPlaceholder}
+            disabled={isSending}
+          />
+          <button className="changes-chat-send" onClick={handleSend} disabled={isSending || (!inputText.trim() && !attachedFile)}>
+            {isSending ? '…' : '↵'}
+          </button>
+        </div>
+      </div>
+    </>
+  )
+}
+
 // A single at-a-glance status view for the Director (and admin) — what's
 // finalized versus still pending, computed entirely server-side from data
 // that already exists (crew_members entries, completed shoot-schedule days)
@@ -1938,7 +2169,6 @@ function App() {
   const importFileInputRef = useRef(null)
   const screenplayFileInputRef = useRef(null)
   const reimportScreenplayFileInputRef = useRef(null)
-  const handwrittenNoteFileInputRef = useRef(null)
   const [isSidebarOpen, setIsSidebarOpen] = useState(false)
   const [language, setLanguage] = useState('en')
   const [concept, setConcept] = useState('')
@@ -2085,70 +2315,6 @@ function App() {
   const [scheduleSpecialInstructions, setScheduleSpecialInstructions] = useState('')
   const [markingShotDayNumber, setMarkingShotDayNumber] = useState(null)
   const [shotSceneSelections, setShotSceneSelections] = useState({})
-  const [isInterpretingHandwrittenNote, setIsInterpretingHandwrittenNote] = useState(false)
-  const [handwrittenNoteResult, setHandwrittenNoteResult] = useState(null)
-  const [isApplyingHandwrittenChanges, setIsApplyingHandwrittenChanges] = useState(false)
-
-  async function handleHandwrittenNoteFileSelected(event) {
-    const file = event.target.files[0]
-    event.target.value = ''
-    if (!file) return
-
-    setIsInterpretingHandwrittenNote(true)
-    setErrorMessage(null)
-    setHandwrittenNoteResult(null)
-
-    try {
-      const formData = new FormData()
-      formData.append('image', file)
-
-      const response = await fetch(`${BACKEND_URL}/api/shoot-schedule/${sceneList.id}/interpret-handwritten-note`, {
-        method: 'POST',
-        body: formData,
-      })
-      const data = await response.json()
-
-      if (!response.ok) {
-        setErrorMessage(data.error || t.genericError)
-        setIsInterpretingHandwrittenNote(false)
-        return
-      }
-
-      setHandwrittenNoteResult(data)
-    } catch {
-      setErrorMessage(t.genericError)
-    }
-
-    setIsInterpretingHandwrittenNote(false)
-  }
-
-  async function handleConfirmHandwrittenChangesClick() {
-    setIsApplyingHandwrittenChanges(true)
-    setErrorMessage(null)
-
-    try {
-      const response = await fetch(`${BACKEND_URL}/api/shoot-schedule/${sceneList.id}/apply-handwritten-changes`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ changes: handwrittenNoteResult.changes }),
-      })
-      const data = await response.json()
-
-      if (!response.ok) {
-        setErrorMessage(data.error || t.genericError)
-        setIsApplyingHandwrittenChanges(false)
-        return
-      }
-
-      if (data.schedule) setShootSchedule(data.schedule)
-      if (data.breakdown) setScriptBreakdown(data.breakdown)
-      setHandwrittenNoteResult(null)
-    } catch {
-      setErrorMessage(t.genericError)
-    }
-
-    setIsApplyingHandwrittenChanges(false)
-  }
 
   const [editingSceneKey, setEditingSceneKey] = useState(null)
   const [editSceneCostume, setEditSceneCostume] = useState('')
@@ -5212,15 +5378,29 @@ function App() {
 
       {(activeAgent === 'story'
         ? startStage === 'idea' || (conceptId && projectType === 'story')
-        : (scriptBreakdown && scriptBreakdown.status !== 'approved') || (shootSchedule && shootSchedule.status !== 'approved')) && (
-        <ChangesChatPanel
-          t={t}
-          historyKey={`${conceptId ?? 'new'}:${barConfig.stageKey}`}
-          barConfig={barConfig}
-          isBusy={isBarBusy}
-          errorMessage={errorMessage}
-        />
-      )}
+        : (scriptBreakdown && scriptBreakdown.status !== 'approved') || (shootSchedule && shootSchedule.status !== 'approved')) &&
+        (barConfig.stageKey === 'schedule' || barConfig.stageKey === 'breakdown' ? (
+          <AgentChatPanel
+            t={t}
+            BACKEND_URL={BACKEND_URL}
+            conceptId={conceptId}
+            stageKey={barConfig.stageKey}
+            onScheduleUpdated={setShootSchedule}
+            onCastMemberUpdated={(castMember) =>
+              setCrewMembers((prev) =>
+                prev.some((m) => m.id === castMember.id) ? prev.map((m) => (m.id === castMember.id ? castMember : m)) : [...prev, castMember]
+              )
+            }
+          />
+        ) : (
+          <ChangesChatPanel
+            t={t}
+            historyKey={`${conceptId ?? 'new'}:${barConfig.stageKey}`}
+            barConfig={barConfig}
+            isBusy={isBarBusy}
+            errorMessage={errorMessage}
+          />
+        ))}
 
       {activeAgent === 'story' && (
       <>
@@ -6130,64 +6310,6 @@ function App() {
       {activeAgent === 'production' && scriptBreakdown && scriptBreakdown.status === 'approved' && (
         <div className="three-act-structure" id="stage-schedule">
           <h2>{t.shootScheduleHeading}</h2>
-
-          {shootSchedule && canEditProduction && (
-            <div className="handwritten-note-panel">
-              <button
-                className="import-export-button"
-                onClick={() => handwrittenNoteFileInputRef.current?.click()}
-                disabled={isInterpretingHandwrittenNote}
-              >
-                <span className="import-export-icon">{ICONS.upload}</span>
-                {isInterpretingHandwrittenNote ? t.interpretingHandwrittenNoteLabel : t.uploadHandwrittenNoteButton}
-              </button>
-              <input
-                type="file"
-                accept="image/*"
-                capture="environment"
-                ref={handwrittenNoteFileInputRef}
-                onChange={handleHandwrittenNoteFileSelected}
-                style={{ display: 'none' }}
-              />
-              <p className="sidebar-section-note">{t.handwrittenNoteHint}</p>
-
-              {handwrittenNoteResult && (
-                <div className="handwritten-note-confirm">
-                  <p className="handwritten-note-summary">{handwrittenNoteResult.summary}</p>
-                  <ul className="handwritten-note-changes">
-                    {handwrittenNoteResult.changes.map((change, i) => (
-                      <li key={i} className={change.resolved ? 'resolved' : 'unresolved'}>
-                        <strong>
-                          {change.episodeLabel ? `${change.episodeLabel}, ` : ''}
-                          {t.sceneLabel} {change.sceneNumberLabel || '?'}
-                        </strong>
-                        {!change.resolved && <span className="handwritten-note-unresolved-badge">{t.couldNotPlaceLabel}</span>}
-                        {change.propertiesToAdd?.length > 0 && <span> — {t.propertiesLabel}: {change.propertiesToAdd.join(', ')}</span>}
-                        {change.costumeNote && <span> — {t.costumeLabel}: {change.costumeNote}</span>}
-                        {change.remark && <span> — {change.remark}</span>}
-                      </li>
-                    ))}
-                  </ul>
-                  <div className="skip-ahead-controls">
-                    <button
-                      className="choose-button"
-                      onClick={handleConfirmHandwrittenChangesClick}
-                      disabled={isApplyingHandwrittenChanges || !handwrittenNoteResult.changes.some((c) => c.resolved)}
-                    >
-                      {isApplyingHandwrittenChanges ? t.applyingLabel : t.confirmApplyButton}
-                    </button>
-                    <button
-                      className="cancel-button"
-                      onClick={() => setHandwrittenNoteResult(null)}
-                      disabled={isApplyingHandwrittenChanges}
-                    >
-                      {t.cancelEditButton}
-                    </button>
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
 
           {!shootSchedule && canEditProduction && (
             <div className="availability-form">

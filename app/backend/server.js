@@ -1248,6 +1248,413 @@ app.get("/api/concepts/:id/full", requireLogin, async (req, res) => {
   res.json(result);
 });
 
+// --- Conversational "Changes" chat agent — a real back-and-forth
+// conversation (not a single fire-and-forget instruction) that can ask
+// clarifying questions and, once it has enough specifics, PROPOSE a
+// concrete edit for the human to confirm before anything is actually
+// applied. History is stored server-side per (concept, stage) so the same
+// thread shows up for every login to this project, not just the browser
+// that typed it.
+
+// Resolves the latest scene_lists.id for a concept, walking the same
+// concept -> pitch_deck -> three_act -> bit_sheet -> scene_list chain (or
+// the direct concept_id link for a standalone production project) that
+// /api/concepts/:id/full already walks — just returning the one id this
+// needs rather than the whole aggregate.
+async function findSceneListIdForConcept(conceptId) {
+  const conceptResult = await db.query("SELECT project_type FROM concepts WHERE id = $1", [conceptId]);
+  if (conceptResult.rows.length === 0) return null;
+
+  if (conceptResult.rows[0].project_type === "production") {
+    const r = await db.query(
+      "SELECT id FROM scene_lists WHERE concept_id = $1 ORDER BY created_at DESC LIMIT 1",
+      [conceptId]
+    );
+    return r.rows[0]?.id ?? null;
+  }
+
+  const r = await db.query(
+    `SELECT sl.id FROM scene_lists sl
+     JOIN bit_sheets bs ON bs.id = sl.bit_sheet_id
+     JOIN three_act_structures tas ON tas.id = bs.three_act_structure_id
+     JOIN pitch_decks pd ON pd.id = tas.pitch_deck_id
+     WHERE pd.concept_id = $1 ORDER BY sl.created_at DESC LIMIT 1`,
+    [conceptId]
+  );
+  return r.rows[0]?.id ?? null;
+}
+
+// A compact, token-cheap text summary of the schedule — not the full
+// script — so the chat stays inexpensive per turn. Each scene line carries
+// its [episodeIndex=X, sceneIndex=Y] identity explicitly so the model can
+// reference an exact scene in a proposed edit rather than a fuzzy label.
+function buildScheduleSummaryForChat(sceneList, shootSchedule) {
+  if (!shootSchedule?.scheduleDays?.length) return "No shoot schedule has been generated yet.";
+  const isSeries = Boolean(sceneList?.episodeScenes);
+  const lines = [];
+  shootSchedule.scheduleDays.forEach((day) => {
+    lines.push(
+      `Day ${day.dayNumber}${day.date ? ` (${day.date})` : ""} — ${day.location?.en ?? ""}${day.completed ? " [COMPLETED]" : ""}`
+    );
+    (day.sceneRefs ?? []).forEach((ref) => {
+      const scene = lookupSceneServerSide(sceneList, ref);
+      if (!scene) return;
+      const epLabel = isSeries ? `Ep${ref.episodeIndex + 1} ` : "";
+      const num = (scene.sceneNumber || String(ref.sceneIndex + 1)).replace(/^\s*(SCENE|SC)\.?\s*/i, "");
+      lines.push(
+        `  [episodeIndex=${ref.episodeIndex ?? "null"}, sceneIndex=${ref.sceneIndex}] ${epLabel}Scene ${num} — ${scene.location?.en ?? ""} — ${scene.oneLiner?.en ?? ""} | costume: ${ref.costume || "(none)"} | properties: ${ref.properties || "(none)"} | adRemark: ${ref.adRemark || "(none)"}`
+      );
+    });
+  });
+  return lines.join("\n");
+}
+
+function buildBreakdownSummaryForChat(scriptBreakdown) {
+  if (!scriptBreakdown) return "No script breakdown exists yet.";
+  return [
+    `Artists (${scriptBreakdown.artistList?.length ?? 0}): ${(scriptBreakdown.artistList ?? []).map((a) => a.label).join(", ")}`,
+    `Locations (${scriptBreakdown.locationList?.length ?? 0}): ${(scriptBreakdown.locationList ?? []).map((l) => l.location?.en).join(", ")}`,
+    `Props (${scriptBreakdown.props?.length ?? 0}): ${(scriptBreakdown.props ?? []).map((p) => p.label).join(", ")}`,
+    `Costumes (${scriptBreakdown.costumes?.length ?? 0}): ${(scriptBreakdown.costumes ?? []).map((c) => c.character).join(", ")}`,
+    `Art/set (${scriptBreakdown.art?.length ?? 0}): ${(scriptBreakdown.art ?? []).map((a) => a.label).join(", ")}`,
+  ].join("\n");
+}
+
+// The already-confirmed real cast, so the agent can tell "this is a brand
+// new character" from "this role already has someone assigned" and can
+// match a spoken/written character name back to a crew_members row before
+// proposing assign_cast.
+async function buildCastRosterForChat(sceneListId) {
+  if (!sceneListId) return "Known cast: none confirmed yet.";
+  const result = await db.query(
+    "SELECT character_name, name, contact_number FROM crew_members WHERE scene_list_id = $1 AND category = 'artist' ORDER BY character_name",
+    [sceneListId]
+  );
+  if (result.rows.length === 0) return "Known cast: none confirmed yet.";
+  return (
+    "Known cast (character → actor, contact):\n" +
+    result.rows.map((r) => `  ${r.character_name || "(unlabeled)"} → ${r.name}${r.contact_number ? ` (${r.contact_number})` : ""}`).join("\n")
+  );
+}
+
+// Only 'schedule' and 'breakdown' get real project grounding and the
+// ability to propose an edit right now — every other stage still gets a
+// genuine conversation, just without deep state injected or any action to
+// propose, until those get their own deterministic tools.
+async function buildStageSummaryForChat(conceptId, stageKey) {
+  if (stageKey !== "schedule" && stageKey !== "breakdown") {
+    return { sceneListId: null, summary: "(No specific project data is wired up for this stage yet — just have a normal conversation.)" };
+  }
+
+  const sceneListId = await findSceneListIdForConcept(conceptId);
+  if (!sceneListId) return { sceneListId: null, summary: "No production data exists for this project yet." };
+
+  const roster = await buildCastRosterForChat(sceneListId);
+
+  if (stageKey === "breakdown") {
+    const breakdownResult = await db.query(
+      "SELECT content FROM script_breakdowns WHERE scene_list_id = $1 ORDER BY created_at DESC LIMIT 1",
+      [sceneListId]
+    );
+    return { sceneListId, summary: `${buildBreakdownSummaryForChat(breakdownResult.rows[0]?.content ?? null)}\n\n${roster}` };
+  }
+
+  const sceneListResult = await db.query("SELECT content FROM scene_lists WHERE id = $1", [sceneListId]);
+  const sceneList = sceneListResult.rows[0]?.content ?? null;
+  const scheduleResult = await db.query(
+    "SELECT content FROM shoot_schedules WHERE scene_list_id = $1 ORDER BY created_at DESC LIMIT 1",
+    [sceneListId]
+  );
+  return {
+    sceneListId,
+    summary: `${buildScheduleSummaryForChat(sceneList, scheduleResult.rows[0]?.content ?? null)}\n\n${roster}`,
+  };
+}
+
+// sceneEdits is an array (not one flat scene) so a single photo of a
+// handwritten note covering several scenes — or a spoken request covering
+// several scenes at once — can be proposed and confirmed as one action.
+// castAssignment covers reassigning who plays a character, optionally from
+// an attached photo (e.g. "she's Priyanka, cast her as Pushpa, her number is
+// ..."). Every field the model could otherwise decide to omit is required,
+// with an empty-array/empty-string/-1 convention for "not this kind of
+// action" — a required field left optional was silently dropped by the
+// model in testing even when the reply text implied it had a value.
+const AGENT_CHAT_RESPONSE_SCHEMA = {
+  type: Type.OBJECT,
+  properties: {
+    reply: { type: Type.STRING },
+    proposedAction: {
+      type: Type.OBJECT,
+      properties: {
+        type: { type: Type.STRING, enum: ["edit_scenes", "assign_cast", "none"] },
+        sceneEdits: {
+          type: Type.ARRAY,
+          items: {
+            type: Type.OBJECT,
+            properties: {
+              episodeIndex: { type: Type.INTEGER },
+              sceneIndex: { type: Type.INTEGER },
+              costume: { type: Type.STRING },
+              properties: { type: Type.STRING },
+              adRemark: { type: Type.STRING },
+            },
+            required: ["episodeIndex", "sceneIndex", "costume", "properties", "adRemark"],
+          },
+        },
+        castAssignment: {
+          type: Type.OBJECT,
+          properties: {
+            characterName: { type: Type.STRING },
+            actorName: { type: Type.STRING },
+            contactNumber: { type: Type.STRING },
+          },
+          required: ["characterName", "actorName", "contactNumber"],
+        },
+        description: { type: Type.STRING },
+      },
+      required: ["type", "sceneEdits", "castAssignment", "description"],
+    },
+  },
+  required: ["reply", "proposedAction"],
+};
+
+const AGENT_CHAT_NONE_ACTION_INSTRUCTION =
+  'Every field in proposedAction is required by the response format even when unused: when proposedAction.type is "none", still set sceneEdits to an empty array and castAssignment to {characterName:"", actorName:"", contactNumber:""}, and leave description as an empty string.';
+
+const AGENT_CHAT_CAST_ASSIGNMENT_INSTRUCTION =
+  'You can also propose reassigning who plays a character — e.g. the AD types a phone number and attaches a photo of a person, saying something like "she\'s Priyanka, cast her as Pushpa" (meaning: the real person in the photo is named Priyanka, and she should play the character Pushpa). To propose this, set proposedAction.type to "assign_cast" and fill castAssignment: characterName is the ROLE/character being cast (match it to one of the known cast entries above if it already exists, otherwise use the name exactly as given), actorName is the real person\'s name, and contactNumber is their phone number if given (empty string if not). Only propose this when both the character and the actor\'s name are clear — ask if either is ambiguous. When proposing assign_cast, leave sceneEdits as an empty array.';
+
+const AGENT_CHAT_SYSTEM_PROMPTS = {
+  schedule:
+    'You are a sharp, friendly Production Scheduling Assistant, having a real back-and-forth conversation with an Assistant Director or Production Manager about their shoot schedule. Ask clarifying questions whenever something is ambiguous — never guess. Keep replies concise and practical, like a helpful colleague, not a formal report. The AD may attach a photo — it could be a handwritten note (properties/costume/remarks for one or more scenes) or a photo of a person for a casting decision; read it carefully and figure out which kind it is from context.\n\n' +
+    'You can propose editing one or more scenes\' costume, properties, or AD remark — ADDING to what\'s already there, never silently replacing or deleting existing info unless they explicitly ask you to remove/replace something. To propose this you must know EXACTLY which scene(s) (matching the [episodeIndex=X, sceneIndex=Y] identities in the schedule below) and what should change for each — if a handwritten note covers several scenes, include one entry in sceneEdits per scene. If you don\'t have enough information yet — which scene, or what exactly to change — ask instead of guessing.\n\n' +
+    'When you DO have enough to propose concrete edits: set proposedAction.type to "edit_scenes"; for each scene, fill in the matching episodeIndex/sceneIndex exactly as shown in the schedule below; for whichever of costume/properties/adRemark is actually changing on that scene, write the COMPLETE resulting value — read that scene\'s current value from the schedule above and write it back with the new part folded in (e.g. if properties currently says "Portable Projector & Laptop" and they ask to add a bucket, write "Portable Projector & Laptop, bucket" — the full list, not just "bucket" alone), leaving whichever fields are NOT changing on that scene as empty strings. Also write a one-sentence description of the change(s) for them to confirm.\n\n' +
+    AGENT_CHAT_CAST_ASSIGNMENT_INSTRUCTION +
+    "\n\n" +
+    AGENT_CHAT_NONE_ACTION_INSTRUCTION +
+    '\n\nCRITICAL — your reply text must NEVER claim or imply the change already happened: never say "I\'ve added...", "Done", "I\'ve updated...", or similar past-tense/completed phrasing. You are only ever PROPOSING a change for them to review — nothing is applied until the human clicks confirm outside this conversation. Phrase it as an offer instead: "I\'d like to add a bucket to the properties for Episode 1 Scene 2 — want me to go ahead?" or "Here\'s what I\'m proposing: ...". Getting this wrong would make the AD think a change happened when it didn\'t.\n\nCurrent shoot schedule:\n',
+  breakdown:
+    'You are a sharp, friendly Script Breakdown Assistant, having a real back-and-forth conversation with a Production Manager or Director about the script breakdown (cast, locations, props, costumes, art/set). Ask clarifying questions whenever something is ambiguous. You cannot edit scenes from here, but you can handle casting.\n\n' +
+    AGENT_CHAT_CAST_ASSIGNMENT_INSTRUCTION +
+    "\n\n" +
+    AGENT_CHAT_NONE_ACTION_INSTRUCTION +
+    '\n\nWhen proposing assign_cast, sceneEdits must still be an empty array (this stage never edits scenes).\n\nCurrent script breakdown summary:\n',
+};
+
+async function generateAgentChatReply(stageKey, stateSummaryText, history, userMessage, image) {
+  const systemPrompt =
+    (AGENT_CHAT_SYSTEM_PROMPTS[stageKey] ??
+      `You are a helpful production management assistant having a conversation about this project. No project data is wired up for this stage yet and you cannot take direct actions here — always set proposedAction.type to "none". ${AGENT_CHAT_NONE_ACTION_INSTRUCTION}\n\n`) +
+    stateSummaryText;
+
+  const lastUserParts = image ? [{ inlineData: { data: image.data, mimeType: image.mimeType } }, { text: userMessage }] : [{ text: userMessage }];
+
+  const contents = [
+    ...history.map((m) => ({ role: m.role === "assistant" ? "model" : "user", parts: [{ text: m.content }] })),
+    { role: "user", parts: lastUserParts },
+  ];
+
+  const response = await generateContentWithRetry({
+    model: "gemini-flash-lite-latest",
+    contents,
+    config: {
+      systemInstruction: systemPrompt,
+      responseMimeType: "application/json",
+      maxOutputTokens: 2048,
+      responseSchema: AGENT_CHAT_RESPONSE_SCHEMA,
+    },
+  });
+
+  return JSON.parse(response.text);
+}
+
+function requireConceptAccess(req, conceptId) {
+  return req.user.role === "admin" || String(req.user.concept_id) === String(conceptId);
+}
+
+const agentChatImageUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 8 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => cb(null, /^image\//.test(file.mimetype)),
+});
+
+app.get("/api/agent-chat/:conceptId/:stageKey/history", requireLogin, async (req, res) => {
+  const { conceptId, stageKey } = req.params;
+  if (!requireConceptAccess(req, conceptId)) {
+    res.status(403).json({ error: "You don't have access to this project." });
+    return;
+  }
+
+  const result = await db.query(
+    "SELECT id, role, content, author_name, attachment_photo_path, proposed_action, resolved, created_at FROM agent_chat_messages WHERE concept_id = $1 AND stage_key = $2 ORDER BY created_at ASC",
+    [conceptId, stageKey]
+  );
+  res.json({ messages: result.rows.map((m) => ({ ...m, attachment_photo_url: photoUrlFor(m.attachment_photo_path) })) });
+});
+
+app.post("/api/agent-chat/:conceptId/:stageKey/message", requireLogin, agentChatImageUpload.single("image"), async (req, res) => {
+  const { conceptId, stageKey } = req.params;
+  const { message } = req.body;
+
+  if (!requireConceptAccess(req, conceptId)) {
+    res.status(403).json({ error: "You don't have access to this project." });
+    return;
+  }
+  if (!message?.trim() && !req.file) {
+    res.status(400).json({ error: "A message or a photo is required." });
+    return;
+  }
+
+  try {
+    const attachmentPhotoPath = req.file ? await savePhotoBuffer(req.file.buffer, req.file.originalname) : null;
+
+    const userInsert = await db.query(
+      "INSERT INTO agent_chat_messages (concept_id, stage_key, role, content, author_name, attachment_photo_path) VALUES ($1, $2, 'user', $3, $4, $5) RETURNING id, role, content, author_name, attachment_photo_path, proposed_action, resolved, created_at",
+      [conceptId, stageKey, message?.trim() || "(photo attached)", req.user.name, attachmentPhotoPath]
+    );
+
+    // Last 20 messages only — enough context for a real conversation
+    // without the token cost (and cash cost) growing without bound as a
+    // thread gets long.
+    const historyResult = await db.query(
+      "SELECT role, content FROM agent_chat_messages WHERE concept_id = $1 AND stage_key = $2 ORDER BY created_at DESC LIMIT 20",
+      [conceptId, stageKey]
+    );
+    const history = historyResult.rows.reverse().slice(0, -1); // drop the message we just inserted, already passed separately
+
+    const { summary } = await buildStageSummaryForChat(conceptId, stageKey);
+    const image = req.file ? { data: req.file.buffer.toString("base64"), mimeType: req.file.mimetype } : null;
+    const parsed = await generateAgentChatReply(stageKey, summary, history, message?.trim() || "(see attached photo)", image);
+
+    const hasAction = parsed.proposedAction?.type && parsed.proposedAction.type !== "none";
+    // The photo is only kept in memory for the vision call above — an
+    // assign_cast action needs it again at confirm time to actually save it
+    // onto the crew_members row, so it's carried inside proposed_action.
+    const proposedAction = hasAction ? { ...parsed.proposedAction, photoPath: attachmentPhotoPath } : null;
+    const assistantInsert = await db.query(
+      "INSERT INTO agent_chat_messages (concept_id, stage_key, role, content, proposed_action) VALUES ($1, $2, 'assistant', $3, $4) RETURNING id, role, content, author_name, attachment_photo_path, proposed_action, resolved, created_at",
+      [conceptId, stageKey, parsed.reply, proposedAction ? JSON.stringify(proposedAction) : null]
+    );
+
+    res.json({
+      userMessage: { ...userInsert.rows[0], attachment_photo_url: photoUrlFor(userInsert.rows[0].attachment_photo_path) },
+      assistantMessage: assistantInsert.rows[0],
+    });
+  } catch (error) {
+    console.error("Agent chat message failed:", error.message);
+    res.status(502).json({ error: error.message });
+  }
+});
+
+app.post("/api/agent-chat/:conceptId/:stageKey/resolve-action", requireLogin, async (req, res) => {
+  const { conceptId, stageKey } = req.params;
+  const { messageId, decision } = req.body;
+
+  if (!requireConceptAccess(req, conceptId)) {
+    res.status(403).json({ error: "You don't have access to this project." });
+    return;
+  }
+  if (!["applied", "cancelled"].includes(decision)) {
+    res.status(400).json({ error: "decision must be 'applied' or 'cancelled'." });
+    return;
+  }
+
+  const messageResult = await db.query(
+    "SELECT proposed_action FROM agent_chat_messages WHERE id = $1 AND concept_id = $2 AND stage_key = $3",
+    [messageId, conceptId, stageKey]
+  );
+  if (messageResult.rows.length === 0) {
+    res.status(404).json({ error: "Message not found." });
+    return;
+  }
+  const action = messageResult.rows[0].proposed_action;
+  if (!action) {
+    res.status(400).json({ error: "This message has no proposed action." });
+    return;
+  }
+
+  let appliedSchedule = null;
+  let appliedCastMember = null;
+
+  if (decision === "applied" && action.type === "edit_scenes" && Array.isArray(action.sceneEdits) && action.sceneEdits.length > 0) {
+    const sceneListId = await findSceneListIdForConcept(conceptId);
+    const latest = await db.query(
+      "SELECT id, content FROM shoot_schedules WHERE scene_list_id = $1 ORDER BY created_at DESC LIMIT 1",
+      [sceneListId]
+    );
+    if (latest.rows.length === 0) {
+      res.status(404).json({ error: "No shoot schedule found to apply this to." });
+      return;
+    }
+    const content = latest.rows[0].content;
+    const appliedEdits = new Set();
+    const scheduleDays = content.scheduleDays.map((day) => ({
+      ...day,
+      sceneRefs: day.sceneRefs.map((ref) => {
+        const edit = action.sceneEdits.find(
+          (e) => e.sceneIndex === ref.sceneIndex && (e.episodeIndex ?? null) === (ref.episodeIndex ?? null)
+        );
+        if (!edit) return ref;
+        appliedEdits.add(edit);
+        // The model is told to write each field's COMPLETE resulting value
+        // (having already read the current one from the schedule summary
+        // given to it), not just the delta — so this replaces outright
+        // rather than appending, which would otherwise double up whatever
+        // was already there.
+        return {
+          ...ref,
+          costume: edit.costume?.trim() ? edit.costume.trim() : ref.costume,
+          properties: edit.properties?.trim() ? edit.properties.trim() : ref.properties,
+          adRemark: edit.adRemark?.trim() ? edit.adRemark.trim() : ref.adRemark,
+        };
+      }),
+    }));
+
+    if (appliedEdits.size === 0) {
+      res.status(404).json({ error: "None of those scenes were found in the current schedule." });
+      return;
+    }
+
+    const updatedContent = { ...content, scheduleDays };
+    const insertResult = await db.query(
+      "INSERT INTO shoot_schedules (scene_list_id, content, feedback) VALUES ($1, $2, $3) RETURNING id, status, feedback",
+      [sceneListId, JSON.stringify(updatedContent), "Applied a change agreed in the Changes chat"]
+    );
+    appliedSchedule = { ...insertResult.rows[0], sceneListId, ...updatedContent };
+  }
+
+  if (decision === "applied" && action.type === "assign_cast" && action.castAssignment?.characterName?.trim()) {
+    const sceneListId = await findSceneListIdForConcept(conceptId);
+    const { characterName, actorName, contactNumber } = action.castAssignment;
+
+    const existing = await db.query(
+      "SELECT id, photo_path FROM crew_members WHERE scene_list_id = $1 AND category = 'artist' AND character_name = $2",
+      [sceneListId, characterName.trim()]
+    );
+
+    if (existing.rows.length > 0) {
+      if (action.photoPath && existing.rows[0].photo_path) deletePhoto(existing.rows[0].photo_path);
+      const updateResult = await db.query(
+        "UPDATE crew_members SET name = $1, contact_number = $2, photo_path = $3 WHERE id = $4 RETURNING *",
+        [actorName.trim(), contactNumber?.trim() || null, action.photoPath || existing.rows[0].photo_path, existing.rows[0].id]
+      );
+      appliedCastMember = serializeCrewMember(updateResult.rows[0]);
+    } else {
+      const insertResult = await db.query(
+        `INSERT INTO crew_members (scene_list_id, category, character_name, name, contact_number, photo_path)
+         VALUES ($1, 'artist', $2, $3, $4, $5) RETURNING *`,
+        [sceneListId, characterName.trim(), actorName.trim(), contactNumber?.trim() || null, action.photoPath || null]
+      );
+      appliedCastMember = serializeCrewMember(insertResult.rows[0]);
+    }
+  }
+
+  await db.query("UPDATE agent_chat_messages SET resolved = $1 WHERE id = $2", [decision, messageId]);
+
+  res.json({ resolved: decision, schedule: appliedSchedule, castMember: appliedCastMember });
+});
+
 // Fields that exist on the in-memory frontend objects but are metadata (id,
 // status, foreign keys) rather than actual generated content. Stripped out
 // before re-inserting an imported stage's content into a fresh row.

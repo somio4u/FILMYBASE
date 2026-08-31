@@ -89,8 +89,6 @@ const LABELS = {
     otherCrewHeading: 'Other / Additional Crew',
     castGroupHeading: 'Cast',
     crewGroupHeading: 'Crew',
-    locationGroupHeading: 'Location List',
-    locationSectionHeading: 'Locations',
     crewNameLabel: 'Name',
     crewRoleLabel: 'Role / Designation',
     crewContactLabel: 'Contact Number',
@@ -485,8 +483,6 @@ const LABELS = {
     otherCrewHeading: 'ଅନ୍ୟାନ୍ୟ କ୍ରୁ',
     castGroupHeading: 'କାଷ୍ଟ',
     crewGroupHeading: 'କ୍ରୁ',
-    locationGroupHeading: 'ସ୍ଥାନ ତାଲିକା',
-    locationSectionHeading: 'ସ୍ଥାନଗୁଡ଼ିକ',
     crewNameLabel: 'ନାମ',
     crewRoleLabel: 'ଭୂମିକା / ପଦବୀ',
     crewContactLabel: 'ଯୋଗାଯୋଗ ନମ୍ବର',
@@ -6487,31 +6483,6 @@ function App() {
               heading={t.otherCrewHeading}
               members={crewMembers.filter((m) => m.category === 'crew')}
               characterOptions={null}
-              onAdd={handleAddCrewMember}
-              onUpdate={handleUpdateCrewMember}
-              onDelete={handleDeleteCrewMember}
-              isAdding={isAddingCrew}
-              deletingId={crewDeletingId}
-              updatingId={crewUpdatingId}
-              t={t}
-              BACKEND_URL={BACKEND_URL}
-              canEdit={canEditProduction}
-            />
-          </div>
-
-          <div className="crew-cast-group">
-            <h3 className="crew-cast-group-heading">{t.locationGroupHeading}</h3>
-            <CrewSection
-              category="location"
-              heading={t.locationSectionHeading}
-              members={crewMembers.filter((m) => m.category === 'location')}
-              characterOptions={
-                scriptBreakdown?.locationList
-                  ? scriptBreakdown.locationList
-                      .map((item) => item.location.en)
-                      .filter((label) => !crewMembers.some((m) => m.category === 'location' && m.characterName === label))
-                  : null
-              }
               onAdd={handleAddCrewMember}
               onUpdate={handleUpdateCrewMember}
               onDelete={handleDeleteCrewMember}

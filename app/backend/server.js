@@ -1580,7 +1580,7 @@ app.post("/api/agent-chat/:conceptId/:stageKey/resolve-action", requireLogin, as
   if (decision === "applied" && action.type === "edit_scenes" && Array.isArray(action.sceneEdits) && action.sceneEdits.length > 0) {
     const sceneListId = await findSceneListIdForConcept(conceptId);
     const latest = await db.query(
-      "SELECT id, content FROM shoot_schedules WHERE scene_list_id = $1 ORDER BY created_at DESC LIMIT 1",
+      "SELECT id, content, status FROM shoot_schedules WHERE scene_list_id = $1 ORDER BY created_at DESC LIMIT 1",
       [sceneListId]
     );
     if (latest.rows.length === 0) {
@@ -1617,9 +1617,11 @@ app.post("/api/agent-chat/:conceptId/:stageKey/resolve-action", requireLogin, as
     }
 
     const updatedContent = { ...content, scheduleDays };
+    // A chat-agreed field edit shouldn't silently un-approve an
+    // already-approved schedule — carries the previous status forward.
     const insertResult = await db.query(
-      "INSERT INTO shoot_schedules (scene_list_id, content, feedback) VALUES ($1, $2, $3) RETURNING id, status, feedback",
-      [sceneListId, JSON.stringify(updatedContent), "Applied a change agreed in the Changes chat"]
+      "INSERT INTO shoot_schedules (scene_list_id, content, status, feedback) VALUES ($1, $2, $3, $4) RETURNING id, status, feedback",
+      [sceneListId, JSON.stringify(updatedContent), latest.rows[0].status, "Applied a change agreed in the Changes chat"]
     );
     appliedSchedule = { ...insertResult.rows[0], sceneListId, ...updatedContent };
   }
@@ -4876,7 +4878,7 @@ app.post("/api/script-breakdown/:id/add-character", requireRole("admin", "produc
   }
 
   const latest = await db.query(
-    "SELECT id, content FROM script_breakdowns WHERE scene_list_id = $1 ORDER BY created_at DESC LIMIT 1",
+    "SELECT id, content, status FROM script_breakdowns WHERE scene_list_id = $1 ORDER BY created_at DESC LIMIT 1",
     [sceneListId]
   );
   if (String(latest.rows[0].id) !== String(req.params.id)) {
@@ -4896,9 +4898,12 @@ app.post("/api/script-breakdown/:id/add-character", requireRole("admin", "produc
     artistList: [...currentArtistList, { label: trimmedLabel, notes: { en: "", or: "" }, age: "Unspecified", gender: "Unspecified" }],
   };
 
+  // A routine roster addition shouldn't silently un-approve an
+  // already-approved breakdown (and hide the Shoot Schedule with it) —
+  // carries the previous status forward.
   const insertResult = await db.query(
-    "INSERT INTO script_breakdowns (scene_list_id, content, feedback) VALUES ($1, $2, $3) RETURNING id, status, feedback",
-    [sceneListId, JSON.stringify(updatedContent), `Added missing character: ${trimmedLabel}`]
+    "INSERT INTO script_breakdowns (scene_list_id, content, status, feedback) VALUES ($1, $2, $3, $4) RETURNING id, status, feedback",
+    [sceneListId, JSON.stringify(updatedContent), latest.rows[0].status, `Added missing character: ${trimmedLabel}`]
   );
 
   res.json({ ...insertResult.rows[0], sceneListId, ...updatedContent });
@@ -4918,7 +4923,7 @@ app.post("/api/script-breakdown/:id/find-missing-characters", requireRole("admin
 
   const sceneListId = existing.rows[0].scene_list_id;
   const latest = await db.query(
-    "SELECT id, content FROM script_breakdowns WHERE scene_list_id = $1 ORDER BY created_at DESC LIMIT 1",
+    "SELECT id, content, status FROM script_breakdowns WHERE scene_list_id = $1 ORDER BY created_at DESC LIMIT 1",
     [sceneListId]
   );
   if (String(latest.rows[0].id) !== String(req.params.id)) {
@@ -4940,9 +4945,12 @@ app.post("/api/script-breakdown/:id/find-missing-characters", requireRole("admin
 
     const updatedContent = { ...latest.rows[0].content, artistList: [...existingArtistList, ...missingCharacters] };
 
+    // Additive-only scan shouldn't silently un-approve an already-approved
+    // breakdown (and hide the Shoot Schedule with it) — carries the
+    // previous status forward.
     const insertResult = await db.query(
-      "INSERT INTO script_breakdowns (scene_list_id, content, feedback) VALUES ($1, $2, $3) RETURNING id, status, feedback",
-      [sceneListId, JSON.stringify(updatedContent), `Found missing characters: ${missingCharacters.map((c) => c.label).join(", ")}`]
+      "INSERT INTO script_breakdowns (scene_list_id, content, status, feedback) VALUES ($1, $2, $3, $4) RETURNING id, status, feedback",
+      [sceneListId, JSON.stringify(updatedContent), latest.rows[0].status, `Found missing characters: ${missingCharacters.map((c) => c.label).join(", ")}`]
     );
 
     res.json({ ...insertResult.rows[0], sceneListId, ...updatedContent, addedCharacters: missingCharacters.map((c) => c.label) });
@@ -4972,7 +4980,7 @@ app.post("/api/script-breakdown/:id/classify-cast-categories", requireRole("admi
   }
 
   const latest = await db.query(
-    "SELECT id, content FROM script_breakdowns WHERE scene_list_id = $1 ORDER BY created_at DESC LIMIT 1",
+    "SELECT id, content, status FROM script_breakdowns WHERE scene_list_id = $1 ORDER BY created_at DESC LIMIT 1",
     [sceneListId]
   );
   if (String(latest.rows[0].id) !== String(req.params.id)) {
@@ -4988,9 +4996,14 @@ app.post("/api/script-breakdown/:id/classify-cast-categories", requireRole("admi
     const classifiedArtistList = await classifyCastCategories(sourceText, existingArtistList);
     const updatedContent = { ...latest.rows[0].content, artistList: classifiedArtistList };
 
+    // Pure enrichment (tags existing characters, doesn't change reviewable
+    // content) — carries the previous approval status forward instead of
+    // silently reverting an already-approved breakdown back to pending,
+    // which would hide the Shoot Schedule (it only shows once the
+    // breakdown is approved).
     const insertResult = await db.query(
-      "INSERT INTO script_breakdowns (scene_list_id, content, feedback) VALUES ($1, $2, $3) RETURNING id, status, feedback",
-      [sceneListId, JSON.stringify(updatedContent), "Classified cast into speaking / action-only / off-screen categories"]
+      "INSERT INTO script_breakdowns (scene_list_id, content, status, feedback) VALUES ($1, $2, $3, $4) RETURNING id, status, feedback",
+      [sceneListId, JSON.stringify(updatedContent), latest.rows[0].status, "Classified cast into speaking / action-only / off-screen categories"]
     );
 
     res.json({ ...insertResult.rows[0], sceneListId, ...updatedContent });
@@ -5124,7 +5137,7 @@ app.post("/api/script-breakdown/:id/generate-costume-recommendations", requireRo
   }
 
   const latest = await db.query(
-    "SELECT id, content FROM script_breakdowns WHERE scene_list_id = $1 ORDER BY created_at DESC LIMIT 1",
+    "SELECT id, content, status FROM script_breakdowns WHERE scene_list_id = $1 ORDER BY created_at DESC LIMIT 1",
     [sceneListId]
   );
   if (String(latest.rows[0].id) !== String(req.params.id)) {
@@ -5141,9 +5154,11 @@ app.post("/api/script-breakdown/:id/generate-costume-recommendations", requireRo
     const recommendations = await generateCostumeRecommendations(latest.rows[0].content, sceneListResult.rows[0].content);
     const updatedContent = { ...latest.rows[0].content, costumeRecommendations: recommendations };
 
+    // Pure enrichment — carries the previous approval status forward (see
+    // the same note on classify-cast-categories above).
     const insertResult = await db.query(
-      "INSERT INTO script_breakdowns (scene_list_id, content, feedback) VALUES ($1, $2, $3) RETURNING id, status, feedback",
-      [sceneListId, JSON.stringify(updatedContent), "Generated costume quantity recommendations"]
+      "INSERT INTO script_breakdowns (scene_list_id, content, status, feedback) VALUES ($1, $2, $3, $4) RETURNING id, status, feedback",
+      [sceneListId, JSON.stringify(updatedContent), latest.rows[0].status, "Generated costume quantity recommendations"]
     );
 
     res.json({ ...insertResult.rows[0], sceneListId, ...updatedContent });
@@ -5179,7 +5194,7 @@ app.post(
     }
 
     const latest = await db.query(
-      "SELECT id, content FROM script_breakdowns WHERE scene_list_id = $1 ORDER BY created_at DESC LIMIT 1",
+      "SELECT id, content, status FROM script_breakdowns WHERE scene_list_id = $1 ORDER BY created_at DESC LIMIT 1",
       [sceneListId]
     );
     if (String(latest.rows[0].id) !== String(req.params.id)) {
@@ -5210,9 +5225,11 @@ app.post(
       ];
       const updatedContent = { ...latest.rows[0].content, costumeRecommendations: updatedRecommendations };
 
+      // Pure enrichment — carries the previous approval status forward
+      // (see the same note on classify-cast-categories above).
       const insertResult = await db.query(
-        "INSERT INTO script_breakdowns (scene_list_id, content, feedback) VALUES ($1, $2, $3) RETURNING id, status, feedback",
-        [sceneListId, JSON.stringify(updatedContent), `Generated costume quantity recommendation for ${character.trim()}`]
+        "INSERT INTO script_breakdowns (scene_list_id, content, status, feedback) VALUES ($1, $2, $3, $4) RETURNING id, status, feedback",
+        [sceneListId, JSON.stringify(updatedContent), latest.rows[0].status, `Generated costume quantity recommendation for ${character.trim()}`]
       );
 
       res.json({ ...insertResult.rows[0], sceneListId, ...updatedContent });
@@ -5243,7 +5260,7 @@ app.post("/api/script-breakdown/:id/generate-ad-sheet", requireRole("admin", "pr
   }
 
   const latest = await db.query(
-    "SELECT id, content FROM script_breakdowns WHERE scene_list_id = $1 ORDER BY created_at DESC LIMIT 1",
+    "SELECT id, content, status FROM script_breakdowns WHERE scene_list_id = $1 ORDER BY created_at DESC LIMIT 1",
     [sceneListId]
   );
   if (String(latest.rows[0].id) !== String(req.params.id)) {
@@ -5261,9 +5278,13 @@ app.post("/api/script-breakdown/:id/generate-ad-sheet", requireRole("admin", "pr
     const adSheet = sceneEntries.map((entry, i) => ({ ...entry, ...aiDetails[i] }));
     const updatedContent = { ...latest.rows[0].content, adSheet };
 
+    // Pure enrichment (adds a derived document, normally run AFTER
+    // approval as an operational step) — carries the previous approval
+    // status forward instead of silently reverting to pending, which
+    // would hide the Shoot Schedule (it only shows once approved).
     const insertResult = await db.query(
-      "INSERT INTO script_breakdowns (scene_list_id, content, feedback) VALUES ($1, $2, $3) RETURNING id, status, feedback",
-      [sceneListId, JSON.stringify(updatedContent), "Generated AD Scene Breakdown Sheet"]
+      "INSERT INTO script_breakdowns (scene_list_id, content, status, feedback) VALUES ($1, $2, $3, $4) RETURNING id, status, feedback",
+      [sceneListId, JSON.stringify(updatedContent), latest.rows[0].status, "Generated AD Scene Breakdown Sheet"]
     );
 
     res.json({ ...insertResult.rows[0], sceneListId, ...updatedContent });
@@ -6486,7 +6507,7 @@ app.post("/api/shoot-schedule/:sceneListId/apply-handwritten-changes", requireRo
 
   try {
     const latestSchedule = await db.query(
-      "SELECT id, content FROM shoot_schedules WHERE scene_list_id = $1 ORDER BY created_at DESC LIMIT 1",
+      "SELECT id, content, status FROM shoot_schedules WHERE scene_list_id = $1 ORDER BY created_at DESC LIMIT 1",
       [sceneListId]
     );
     let scheduleResult = null;
@@ -6513,16 +6534,18 @@ app.post("/api/shoot-schedule/:sceneListId/apply-handwritten-changes", requireRo
 
       if (scheduleTouched) {
         const updatedScheduleContent = { ...scheduleContent, scheduleDays };
+        // Pure enrichment — carries the previous approval status forward
+        // instead of silently un-approving an already-approved schedule.
         const insertResult = await db.query(
-          "INSERT INTO shoot_schedules (scene_list_id, content, feedback) VALUES ($1, $2, $3) RETURNING id, status, feedback",
-          [sceneListId, JSON.stringify(updatedScheduleContent), "Applied changes from a handwritten AD note (photo)"]
+          "INSERT INTO shoot_schedules (scene_list_id, content, status, feedback) VALUES ($1, $2, $3, $4) RETURNING id, status, feedback",
+          [sceneListId, JSON.stringify(updatedScheduleContent), latestSchedule.rows[0].status, "Applied changes from a handwritten AD note (photo)"]
         );
         scheduleResult = { ...insertResult.rows[0], sceneListId, ...updatedScheduleContent };
       }
     }
 
     const latestBreakdown = await db.query(
-      "SELECT id, content FROM script_breakdowns WHERE scene_list_id = $1 ORDER BY created_at DESC LIMIT 1",
+      "SELECT id, content, status FROM script_breakdowns WHERE scene_list_id = $1 ORDER BY created_at DESC LIMIT 1",
       [sceneListId]
     );
     let breakdownResult = null;
@@ -6552,9 +6575,11 @@ app.post("/api/shoot-schedule/:sceneListId/apply-handwritten-changes", requireRo
 
       if (breakdownTouched) {
         const updatedBreakdownContent = { ...breakdownContent, adSheet };
+        // Pure enrichment — carries the previous approval status forward
+        // (see the same note on classify-cast-categories above).
         const insertResult = await db.query(
-          "INSERT INTO script_breakdowns (scene_list_id, content, feedback) VALUES ($1, $2, $3) RETURNING id, status, feedback",
-          [sceneListId, JSON.stringify(updatedBreakdownContent), "Applied changes from a handwritten AD note (photo) to the AD Sheet"]
+          "INSERT INTO script_breakdowns (scene_list_id, content, status, feedback) VALUES ($1, $2, $3, $4) RETURNING id, status, feedback",
+          [sceneListId, JSON.stringify(updatedBreakdownContent), latestBreakdown.rows[0].status, "Applied changes from a handwritten AD note (photo) to the AD Sheet"]
         );
         breakdownResult = { ...insertResult.rows[0], sceneListId, ...updatedBreakdownContent };
       }
@@ -6582,7 +6607,7 @@ app.post("/api/shoot-schedule/:sceneListId/record-day", requireRole("admin", "pr
 
   try {
     const latestSchedule = await db.query(
-      "SELECT id, content FROM shoot_schedules WHERE scene_list_id = $1 ORDER BY created_at DESC LIMIT 1",
+      "SELECT id, content, status FROM shoot_schedules WHERE scene_list_id = $1 ORDER BY created_at DESC LIMIT 1",
       [sceneListId]
     );
 
@@ -6600,9 +6625,11 @@ app.post("/api/shoot-schedule/:sceneListId/record-day", requireRole("admin", "pr
       artistSchedule: buildArtistWiseSchedule(scheduleDays),
     };
 
+    // Marking progress on an already-approved schedule shouldn't silently
+    // un-approve it — carries the previous status forward.
     const insertResult = await db.query(
-      "INSERT INTO shoot_schedules (scene_list_id, content, feedback) VALUES ($1, $2, $3) RETURNING id, status, feedback",
-      [sceneListId, JSON.stringify(updatedContent), `Recorded Day ${recordedDay.dayNumber} as shot`]
+      "INSERT INTO shoot_schedules (scene_list_id, content, status, feedback) VALUES ($1, $2, $3, $4) RETURNING id, status, feedback",
+      [sceneListId, JSON.stringify(updatedContent), latestSchedule.rows[0]?.status ?? "pending", `Recorded Day ${recordedDay.dayNumber} as shot`]
     );
 
     res.json({ ...insertResult.rows[0], sceneListId, ...updatedContent });
@@ -6640,7 +6667,7 @@ app.post("/api/shoot-schedule/:id/edit-scene", requireRole("admin", "production_
   }
 
   const latest = await db.query(
-    "SELECT id, content FROM shoot_schedules WHERE scene_list_id = $1 ORDER BY created_at DESC LIMIT 1",
+    "SELECT id, content, status FROM shoot_schedules WHERE scene_list_id = $1 ORDER BY created_at DESC LIMIT 1",
     [sceneListId]
   );
   if (String(latest.rows[0].id) !== String(req.params.id)) {
@@ -6671,9 +6698,11 @@ app.post("/api/shoot-schedule/:id/edit-scene", requireRole("admin", "production_
 
   const updatedContent = { ...content, scheduleDays };
 
+  // A direct field edit shouldn't silently un-approve an already-approved
+  // schedule — carries the previous status forward.
   const insertResult = await db.query(
-    "INSERT INTO shoot_schedules (scene_list_id, content, feedback) VALUES ($1, $2, $3) RETURNING id, status, feedback",
-    [sceneListId, JSON.stringify(updatedContent), "AD edited a scene's costume/properties/remark directly"]
+    "INSERT INTO shoot_schedules (scene_list_id, content, status, feedback) VALUES ($1, $2, $3, $4) RETURNING id, status, feedback",
+    [sceneListId, JSON.stringify(updatedContent), latest.rows[0].status, "AD edited a scene's costume/properties/remark directly"]
   );
 
   res.json({ ...insertResult.rows[0], sceneListId, ...updatedContent });

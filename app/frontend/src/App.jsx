@@ -2646,6 +2646,14 @@ function App() {
   const [dayCompletionParseResult, setDayCompletionParseResult] = useState(null)
 
   const [activeAgent, setActiveAgent] = useState('story')
+  // Which section the AD last clicked to in the sidebar nav — the chat's
+  // own stage follows this instead of defaulting to whichever of
+  // schedule/breakdown happens to exist, so a question asked while looking
+  // at the Script Breakdown page (e.g. about a costume recommendation)
+  // doesn't silently get answered/applied against the Shoot Schedule
+  // because a schedule also happens to exist. Null until the AD actually
+  // clicks one of those two nav items this session.
+  const [chatFocusStage, setChatFocusStage] = useState(null)
   const [projectType, setProjectType] = useState('story')
   const [masterProjectList, setMasterProjectList] = useState([])
   const [isLoadingMasterList, setIsLoadingMasterList] = useState(false)
@@ -5162,6 +5170,8 @@ function App() {
 
   function handleStageClick(anchorId) {
     setIsSidebarOpen(false)
+    if (anchorId === 'stage-breakdown') setChatFocusStage('breakdown')
+    if (anchorId === 'stage-schedule') setChatFocusStage('schedule')
     document.getElementById(anchorId)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
   }
 
@@ -5352,7 +5362,16 @@ function App() {
   // (which goes 'idle' the moment everything's approved and would
   // otherwise make the whole chat vanish). Prefers 'schedule' once one
   // exists since that's the most advanced stage reached.
-  const agentChatStageKey = shootSchedule ? 'schedule' : scriptBreakdown ? 'breakdown' : null
+  const agentChatStageKey =
+    chatFocusStage === 'breakdown' && scriptBreakdown
+      ? 'breakdown'
+      : chatFocusStage === 'schedule' && shootSchedule
+        ? 'schedule'
+        : shootSchedule
+          ? 'schedule'
+          : scriptBreakdown
+            ? 'breakdown'
+            : null
 
   if (currentUser === undefined) {
     return <div className="app-shell" />

@@ -7563,10 +7563,12 @@ app.get("/api/shoot-schedule/:id/export", requireLogin, async (req, res) => {
         ? {
             schedule: "ସୁଟିଂ ସୂଚୀ", day: "ଦିନ", location: "ସ୍ଥାନ", cast: "କଳାକାର", notes: "ଟିପ୍ପଣୀ", artistSummary: "କଳାକାର-ଅନୁଯାୟୀ ସାରାଂଶ", totalDays: "ମୋଟ ଦିନ", days: "ଦିନଗୁଡ଼ିକ", completed: "ସମାପ୍ତ", costume: "ପୋଷାକ", properties: "ପ୍ରପର୍ଟି", adRemark: "AD ମନ୍ତବ୍ୟ",
             wrapped: "ସମାପ୍ତ", pending: "ବାକି", inProgress: "ଚାଲୁଛି", episode: "ଏପିସୋଡ୍", scenes: "ଦୃଶ୍ୟ", unspecified: "ଅନିର୍ଦ୍ଦିଷ୍ଟ",
+            serialNo: "କ୍ର.ନଂ", description: "ଦୃଶ୍ୟ ବର୍ଣ୍ଣନା", dayNight: "D/N", juniorArtists: "ଜୁନିଅର୍ ଆର୍ଟିଷ୍ଟ",
           }
         : {
             schedule: "Shoot Schedule", day: "Day", location: "Location", cast: "Cast Called", notes: "Notes", artistSummary: "Artist-Wise Summary", totalDays: "Total Days", days: "Days", completed: "COMPLETED", costume: "Costume", properties: "Properties", adRemark: "AD Remark",
             wrapped: "WRAPPED", pending: "PENDING", inProgress: "IN PROGRESS", episode: "Episode", scenes: "scenes", unspecified: "Unspecified",
+            serialNo: "S.No", description: "Scene Description", dayNight: "D/N", juniorArtists: "Junior Artists",
           };
 
     // Per-scene cast (who's actually IN that scene, not the whole day's
@@ -7615,11 +7617,15 @@ app.get("/api/shoot-schedule/:id/export", requireLogin, async (req, res) => {
     const pageLeft = doc.page.margins.left;
     const pageBottom = doc.page.height - doc.page.margins.bottom;
     const columns = [
-      { key: "scn", label: "SC NO", width: 55 },
-      { key: "location", label: labels.location, width: 140 },
-      { key: "artist", label: labels.cast, width: 160 },
-      { key: "costume", label: labels.costume, width: 170 },
-      { key: "properties", label: labels.properties, width: 235 },
+      { key: "sno", label: labels.serialNo, width: 34 },
+      { key: "scn", label: "SC NO", width: 45 },
+      { key: "description", label: labels.description, width: 135 },
+      { key: "dn", label: labels.dayNight, width: 36 },
+      { key: "location", label: labels.location, width: 95 },
+      { key: "artist", label: labels.cast, width: 100 },
+      { key: "juniorArtists", label: labels.juniorArtists, width: 80 },
+      { key: "costume", label: labels.costume, width: 100 },
+      { key: "properties", label: labels.properties, width: 140 },
     ];
     const cellPaddingX = 4;
     const cellPaddingY = 4;
@@ -7683,6 +7689,7 @@ app.get("/api/shoot-schedule/:id/export", requireLogin, async (req, res) => {
       // scenes in the Living Room, 4 in the Bedroom" as a banner row ahead
       // of each block, instead of a flat table the AD has to scan line by
       // line to see the same thing.
+      let serialNumber = 1;
       groupSceneRefsForPdf(day.sceneRefs ?? [], sceneList, lang).forEach((episodeGroup) => {
         episodeGroup.locationGroups.forEach((locationGroup) => {
           const episodePrefix = episodeGroup.episodeIndex !== null ? `${labels.episode} ${episodeGroup.episodeIndex + 1} — ` : "";
@@ -7699,15 +7706,19 @@ app.get("/api/shoot-schedule/:id/export", requireLogin, async (req, res) => {
             const realSceneNumber = (scene.sceneNumber || String(ref.sceneIndex + 1)).replace(/^\s*(SCENE|SC)\.?\s*/i, "");
             const scn = isSeries ? `Ep${ref.episodeIndex + 1}\n${realSceneNumber}` : realSceneNumber;
             const artist = adSheetRow ? (adSheetRow.mainCharacters ?? []).join(", ") || notAvailableLabel : (day.charactersNeeded ?? []).join(", ") || notAvailableLabel;
-            const properties = [ref.properties, adSheetRow?.extras?.[lang]].filter(Boolean).join("; ");
 
             const values = {
+              sno: String(serialNumber),
               scn,
+              description: adSheetRow?.oneLiner?.[lang] || notAvailableLabel,
+              dn: scene.timeOfDay || notAvailableLabel,
               location: `${scene.intExt}. ${scene.location?.[lang] ?? ""}`,
               artist,
+              juniorArtists: adSheetRow?.extras?.[lang] || notAvailableLabel,
               costume: ref.costume || notAvailableLabel,
-              properties: properties || notAvailableLabel,
+              properties: ref.properties || notAvailableLabel,
             };
+            serialNumber += 1;
 
             doc.font(bodyFont).fontSize(9);
             const rowHeight = Math.max(
@@ -7839,10 +7850,12 @@ app.get("/api/shoot-schedule/:id/export-excel", requireLogin, async (req, res) =
         ? {
             day: "ଦିନ", location: "ସ୍ଥାନ", cast: "କଳାକାର", notes: "ଟିପ୍ପଣୀ", artistSummary: "କଳାକାର-ଅନୁଯାୟୀ ସାରାଂଶ", totalDays: "ମୋଟ ଦିନ", days: "ଦିନଗୁଡ଼ିକ", completed: "ସମାପ୍ତ", costume: "ପୋଷାକ", properties: "ପ୍ରପର୍ଟି", adRemark: "AD ମନ୍ତବ୍ୟ",
             wrapped: "ସମାପ୍ତ", pending: "ବାକି", inProgress: "ଚାଲୁଛି", episode: "ଏପିସୋଡ୍", scenes: "ଦୃଶ୍ୟ", unspecified: "ଅନିର୍ଦ୍ଦିଷ୍ଟ", character: "ଚରିତ୍ର", status: "ସ୍ଥିତି",
+            serialNo: "କ୍ର.ନଂ", description: "ଦୃଶ୍ୟ ବର୍ଣ୍ଣନା", dayNight: "D/N", juniorArtists: "ଜୁନିଅର୍ ଆର୍ଟିଷ୍ଟ",
           }
         : {
             day: "Day", location: "Location", cast: "Cast Called", notes: "Notes", artistSummary: "Artist-Wise Summary", totalDays: "Total Days", days: "Days", completed: "COMPLETED", costume: "Costume", properties: "Properties", adRemark: "AD Remark",
             wrapped: "WRAPPED", pending: "PENDING", inProgress: "IN PROGRESS", episode: "Episode", scenes: "scenes", unspecified: "Unspecified", character: "Character", status: "Status",
+            serialNo: "S.No", description: "Scene Description", dayNight: "D/N", juniorArtists: "Junior Artists",
           };
 
     const breakdownResult = await db.query(
@@ -7870,11 +7883,15 @@ app.get("/api/shoot-schedule/:id/export-excel", requireLogin, async (req, res) =
     const notAvailableLabel = "—";
 
     const columns = [
+      { header: labels.serialNo, key: "sno", width: 8 },
       { header: "SC NO", key: "scn", width: 14 },
-      { header: labels.location, key: "location", width: 28 },
-      { header: labels.cast, key: "artist", width: 32 },
-      { header: labels.costume, key: "costume", width: 30 },
-      { header: labels.properties, key: "properties", width: 40 },
+      { header: labels.description, key: "description", width: 45 },
+      { header: labels.dayNight, key: "dn", width: 8 },
+      { header: labels.location, key: "location", width: 26 },
+      { header: labels.cast, key: "artist", width: 30 },
+      { header: labels.juniorArtists, key: "juniorArtists", width: 26 },
+      { header: labels.costume, key: "costume", width: 28 },
+      { header: labels.properties, key: "properties", width: 36 },
       { header: labels.adRemark, key: "adRemark", width: 30 },
     ];
 
@@ -7895,6 +7912,7 @@ app.get("/api/shoot-schedule/:id/export-excel", requireLogin, async (req, res) =
       titleRow.getCell(1).fill = { type: "pattern", pattern: "solid", fgColor: { argb: day.completed ? "FFFDECEA" : "FFEEF2F7" } };
       sheet.addRow({});
 
+      let serialNumber = 1;
       groupSceneRefsForPdf(day.sceneRefs ?? [], sceneList, lang).forEach((episodeGroup) => {
         episodeGroup.locationGroups.forEach((locationGroup) => {
           const episodePrefix = episodeGroup.episodeIndex !== null ? `${labels.episode} ${episodeGroup.episodeIndex + 1} — ` : "";
@@ -7910,16 +7928,20 @@ app.get("/api/shoot-schedule/:id/export-excel", requireLogin, async (req, res) =
             const realSceneNumber = (scene.sceneNumber || String(ref.sceneIndex + 1)).replace(/^\s*(SCENE|SC)\.?\s*/i, "");
             const scn = isSeries ? `Ep${ref.episodeIndex + 1} ${realSceneNumber}` : realSceneNumber;
             const artist = adSheetRow ? (adSheetRow.mainCharacters ?? []).join(", ") || notAvailableLabel : (day.charactersNeeded ?? []).join(", ") || notAvailableLabel;
-            const properties = [ref.properties, adSheetRow?.extras?.[lang]].filter(Boolean).join("; ");
 
             sheet.addRow({
+              sno: serialNumber,
               scn,
+              description: adSheetRow?.oneLiner?.[lang] || notAvailableLabel,
+              dn: scene.timeOfDay || notAvailableLabel,
               location: `${scene.intExt}. ${scene.location?.[lang] ?? ""}`,
               artist,
+              juniorArtists: adSheetRow?.extras?.[lang] || notAvailableLabel,
               costume: ref.costume || notAvailableLabel,
-              properties: properties || notAvailableLabel,
+              properties: ref.properties || notAvailableLabel,
               adRemark: ref.adRemark || "",
             });
+            serialNumber += 1;
           });
         });
       });

@@ -7005,10 +7005,20 @@ app.get("/api/shoot-schedule/:id/export", requireLogin, async (req, res) => {
 // List (character_name = the character's label); 'location' entries are a
 // confirmed real-world location/photo attached to a Location List entry
 // (character_name = that location's English name, reusing the same link
-// column); 'art_department' / 'costume_department' are that department's
-// crew; 'crew' is the general master crew list. All five are the same
-// shape — only the frontend renders/groups them differently.
-const CREW_CATEGORIES = ["artist", "location", "art_department", "costume_department", "crew"];
+// column); 'art_department' / 'costume_department' / 'direction_team' /
+// 'production_team' are each that department's crew; 'crew' is the
+// catch-all "other/additional crew" list for anyone who doesn't fit the
+// named departments. All eight are the same shape — only the frontend
+// renders/groups them differently.
+const CREW_CATEGORIES = [
+  "artist",
+  "location",
+  "art_department",
+  "costume_department",
+  "direction_team",
+  "production_team",
+  "crew",
+];
 
 // True if this scene list belongs to a project the current user is
 // actually scoped to — admin is scoped to everything, a director/PM login
@@ -7083,8 +7093,8 @@ function computeDirectorOverview(sceneList, breakdownContent, shootSchedule, cre
   }));
 
   const crewRoster = crewMembers
-    .filter((m) => m.category === "crew")
-    .map((m) => ({ name: m.name, role: m.role, contactNumber: m.contactNumber }));
+    .filter((m) => !["artist", "location"].includes(m.category))
+    .map((m) => ({ name: m.name, role: m.role, contactNumber: m.contactNumber, category: m.category }));
 
   // Reuses the exact same "e{episodeIndex}-s{sceneIndex}" identity scheme the
   // shoot-schedule generator already verifies coverage against, so a scene
@@ -7182,8 +7192,8 @@ app.get("/api/crew/export-excel", requireLogin, async (req, res) => {
   }
 
   const categoryLabels = lang === "or"
-    ? { artist: "କଳାକାର", location: "ସ୍ଥାନ", art_department: "ଆର୍ଟ ବିଭାଗ", costume_department: "ପୋଷାକ ବିଭାଗ", crew: "ସାଧାରଣ କ୍ରୁ" }
-    : { artist: "Artist", location: "Location", art_department: "Art Department", costume_department: "Costume Department", crew: "General Crew" };
+    ? { artist: "କଳାକାର", location: "ସ୍ଥାନ", art_department: "ଆର୍ଟ ବିଭାଗ", costume_department: "ପୋଷାକ ବିଭାଗ", direction_team: "ନିର୍ଦ୍ଦେଶନା ଦଳ", production_team: "ପ୍ରଡକ୍ସନ୍ ଦଳ", crew: "ଅନ୍ୟାନ୍ୟ କ୍ରୁ" }
+    : { artist: "Artist", location: "Location", art_department: "Art Department", costume_department: "Costume Department", direction_team: "Direction Team", production_team: "Production Team", crew: "Other / Additional Crew" };
   const columnLabels = lang === "or"
     ? { category: "ବିଭାଗ", linkedTo: "ଚରିତ୍ର/ସ୍ଥାନ", name: "ନାମ", role: "ପଦବୀ", contactNumber: "ଯୋଗାଯୋଗ ନମ୍ବର" }
     : { category: "Category", linkedTo: "Character / Location", name: "Name", role: "Role", contactNumber: "Contact Number" };

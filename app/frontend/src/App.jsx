@@ -84,7 +84,9 @@ const LABELS = {
     castSectionHeading: 'Cast',
     artDepartmentHeading: 'Art Department',
     costumeDepartmentHeading: 'Costume Department',
-    masterCrewHeading: 'Master Crew List',
+    directionTeamHeading: 'Direction Team',
+    productionTeamHeading: 'Production Team',
+    otherCrewHeading: 'Other / Additional Crew',
     castGroupHeading: 'Cast',
     crewGroupHeading: 'Crew',
     locationGroupHeading: 'Location List',
@@ -478,7 +480,9 @@ const LABELS = {
     castSectionHeading: 'କାଷ୍ଟ',
     artDepartmentHeading: 'ଆର୍ଟ ବିଭାଗ',
     costumeDepartmentHeading: 'ପୋଷାକ ବିଭାଗ',
-    masterCrewHeading: 'ମାଷ୍ଟର କ୍ରୁ ତାଲିକା',
+    directionTeamHeading: 'ନିର୍ଦ୍ଦେଶନା ଦଳ',
+    productionTeamHeading: 'ପ୍ରଡକ୍ସନ୍ ଦଳ',
+    otherCrewHeading: 'ଅନ୍ୟାନ୍ୟ କ୍ରୁ',
     castGroupHeading: 'କାଷ୍ଟ',
     crewGroupHeading: 'କ୍ରୁ',
     locationGroupHeading: 'ସ୍ଥାନ ତାଲିକା',
@@ -4777,7 +4781,6 @@ function App() {
         ? 'current'
         : 'upcoming'
   const stageScreenplay = bitSheet?.status === 'approved' ? 'current' : 'upcoming'
-  const stageProduction = sceneList?.status === 'approved' ? 'done' : 'current'
   const stageBreakdown =
     scriptBreakdown?.status === 'approved' ? 'done' : sceneList?.status === 'approved' ? 'current' : 'upcoming'
   const stageSchedule =
@@ -5172,10 +5175,6 @@ function App() {
             </button>
             {activeAgent === 'production' && (
               <div className="production-main-nav">
-                <button className={`production-main-nav-item stage-${stageProduction}`} onClick={() => handleStageClick('stage-production')}>
-                  <span className="production-main-nav-icon">{ICONS.clapperboard}</span>
-                  {t.stageProductionLabel}
-                </button>
                 <button className={`production-main-nav-item stage-${stageBreakdown}`} onClick={() => handleStageClick('stage-breakdown')}>
                   <span className="production-main-nav-icon">{ICONS.pencil}</span>
                   {t.stageBreakdownLabel}
@@ -6265,7 +6264,7 @@ function App() {
               <div className="costume-recommendations-section">
                 <div className="breakdown-category-header">
                   <h4>{t.costumeRecommendationsHeading}</h4>
-                  {canAnalyzeScript && (
+                  {canEditProduction && (
                     <button
                       className="breakdown-action-button"
                       onClick={handleGenerateCostumeRecommendationsClick}
@@ -6415,6 +6414,36 @@ function App() {
           <div className="crew-cast-group">
             <h3 className="crew-cast-group-heading">{t.crewGroupHeading}</h3>
             <CrewSection
+              category="direction_team"
+              heading={t.directionTeamHeading}
+              members={crewMembers.filter((m) => m.category === 'direction_team')}
+              characterOptions={null}
+              onAdd={handleAddCrewMember}
+              onUpdate={handleUpdateCrewMember}
+              onDelete={handleDeleteCrewMember}
+              isAdding={isAddingCrew}
+              deletingId={crewDeletingId}
+              updatingId={crewUpdatingId}
+              t={t}
+              BACKEND_URL={BACKEND_URL}
+              canEdit={canEditProduction}
+            />
+            <CrewSection
+              category="production_team"
+              heading={t.productionTeamHeading}
+              members={crewMembers.filter((m) => m.category === 'production_team')}
+              characterOptions={null}
+              onAdd={handleAddCrewMember}
+              onUpdate={handleUpdateCrewMember}
+              onDelete={handleDeleteCrewMember}
+              isAdding={isAddingCrew}
+              deletingId={crewDeletingId}
+              updatingId={crewUpdatingId}
+              t={t}
+              BACKEND_URL={BACKEND_URL}
+              canEdit={canEditProduction}
+            />
+            <CrewSection
               category="art_department"
               heading={t.artDepartmentHeading}
               members={crewMembers.filter((m) => m.category === 'art_department')}
@@ -6446,7 +6475,7 @@ function App() {
             />
             <CrewSection
               category="crew"
-              heading={t.masterCrewHeading}
+              heading={t.otherCrewHeading}
               members={crewMembers.filter((m) => m.category === 'crew')}
               characterOptions={null}
               onAdd={handleAddCrewMember}

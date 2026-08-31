@@ -107,7 +107,7 @@ CREATE TABLE screenplay_scenes (
 CREATE TABLE crew_members (
   id SERIAL PRIMARY KEY,
   scene_list_id INTEGER REFERENCES scene_lists(id) ON DELETE CASCADE,
-  category TEXT NOT NULL, -- 'artist' | 'location' | 'art_department' | 'costume_department' | 'crew'
+  category TEXT NOT NULL, -- 'artist' | 'location' | 'art_department' | 'costume_department' | 'direction_team' | 'production_team' | 'crew'
   character_name TEXT,
   name TEXT NOT NULL,
   role TEXT,

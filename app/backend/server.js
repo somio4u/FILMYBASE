@@ -6,6 +6,7 @@ import { GoogleGenAI, Type } from "@google/genai";
 import { Pool } from "pg";
 import PDFDocument from "pdfkit";
 import ExcelJS from "exceljs";
+import PptxGenJS from "pptxgenjs";
 import path from "path";
 import fs from "fs";
 import fsPromises from "fs/promises";
@@ -3518,7 +3519,13 @@ app.get("/api/pitch-deck/:id/export", requireLogin, async (req, res) => {
 // simplified outline instead of a redesign of the presentation: one
 // "Overview" sheet for the single-value fields, plus a "Major Characters"
 // sheet and (series only) an "Episodes" sheet for the two list sections.
-app.get("/api/pitch-deck/:id/export-excel", requireLogin, async (req, res) => {
+// A real .pptx, not a spreadsheet — a presentation is what a "Download
+// Presentation" button should actually hand someone. Only reachable once
+// a Character Sheet exists (gated on the frontend): that's what turns the
+// pitch deck's thin Major Characters into archetype/want/need/flaw/arc
+// content worth putting in front of a producer, so the character slides
+// below always prefer it over the deck's own thin character blurbs.
+app.get("/api/pitch-deck/:id/export-ppt", requireLogin, async (req, res) => {
   const lang = req.query.lang === "or" ? "or" : "en";
 
   try {
@@ -3527,72 +3534,132 @@ app.get("/api/pitch-deck/:id/export-excel", requireLogin, async (req, res) => {
       res.status(404).json({ error: "Pitch deck not found" });
       return;
     }
-
     const deck = result.rows[0].content;
     const labels = SECTION_LABELS[lang];
-    const fieldLabel = lang === "or" ? "କ୍ଷେତ୍ର" : "Field";
-    const valueLabel = lang === "or" ? "ମୂଲ୍ୟ" : "Value";
-    const nameLabel = lang === "or" ? "ନାମ" : "Name";
-    const roleLabel = lang === "or" ? "ଭୂମିକା" : "Role";
-    const titleLabel = lang === "or" ? "ଆଖ୍ୟା" : "Title";
-    const loglineLabel = lang === "or" ? "ଲଗ୍‌ଲାଇନ୍" : "Logline";
-    const synopsisLabel = lang === "or" ? "ସାରାଂଶ" : "Synopsis";
+    const theme = pickTheme(deck.toneGenre.en);
+    const hex = (c) => c.replace("#", "");
 
-    const workbook = new ExcelJS.Workbook();
+    const characterSheetResult = await db.query(
+      "SELECT content FROM character_sheets WHERE pitch_deck_id = $1 ORDER BY created_at DESC LIMIT 1",
+      [req.params.id]
+    );
+    const richCharacters = characterSheetResult.rows[0]?.content?.characters ?? null;
 
-    const overviewSheet = workbook.addWorksheet(lang === "or" ? "ସମୀକ୍ଷା" : "Overview");
-    overviewSheet.columns = [
-      { header: fieldLabel, key: "field", width: 22 },
-      { header: valueLabel, key: "value", width: 80 },
-    ];
-    overviewSheet.getRow(1).font = { bold: true };
-    overviewSheet.addRow({ field: titleLabel, value: deck.title[lang] });
-    overviewSheet.addRow({ field: loglineLabel, value: deck.logline[lang] });
-    overviewSheet.addRow({ field: labels.premise, value: deck.premise[lang] });
-    overviewSheet.addRow({ field: labels.toneGenre, value: deck.toneGenre[lang] });
-    overviewSheet.addRow({ field: labels.targetAudience, value: deck.targetAudience[lang] });
+    const archetypeLabels =
+      lang === "or"
+        ? { hero: "ନାୟକ", mentor: "ଗୁରୁ", threshold_guardian: "ପ୍ରହରୀ", herald: "ଦୂତ", shapeshifter: "ରୂପ ପରିବର୍ତ୍ତନକାରୀ", shadow: "ଛାୟା", ally: "ସହଯୋଗୀ", trickster: "ଚତୁର" }
+        : { hero: "Hero", mentor: "Mentor", threshold_guardian: "Threshold Guardian", herald: "Herald", shapeshifter: "Shapeshifter", shadow: "Shadow", ally: "Ally", trickster: "Trickster" };
+    const fieldLabels =
+      lang === "or"
+        ? { want: "ଚାହିଦା", need: "ଆବଶ୍ୟକତା", flaw: "ତ୍ରୁଟି", arc: "ଚରିତ୍ର ଯାତ୍ରା", introductionBeat: "ପରିଚୟ" }
+        : { want: "Want", need: "Need", flaw: "Flaw", arc: "Arc", introductionBeat: "Introduction" };
 
-    if (deck.majorCharacters && deck.majorCharacters.length > 0) {
-      const charSheet = workbook.addWorksheet(labels.majorCharacters.slice(0, 31));
-      charSheet.columns = [
-        { header: nameLabel, key: "name", width: 22 },
-        { header: roleLabel, key: "role", width: 24 },
-        { header: labels.emotionalCore, key: "emotionalCore", width: 40 },
-        { header: labels.conflict, key: "conflict", width: 40 },
-      ];
-      charSheet.getRow(1).font = { bold: true };
-      deck.majorCharacters.forEach((character) => {
-        charSheet.addRow({
-          name: character.name,
-          role: character.role[lang],
-          emotionalCore: character.emotionalCore[lang],
-          conflict: character.conflict[lang],
+    const pptx = new PptxGenJS();
+    pptx.defineLayout({ name: "WIDE", width: 10, height: 5.63 });
+    pptx.layout = "WIDE";
+
+    function addBackground(slide, color) {
+      slide.background = { color: hex(color) };
+    }
+
+    // Cover
+    const cover = pptx.addSlide();
+    addBackground(cover, theme.bg);
+    cover.addText(formatLabel(deck.format, lang), {
+      x: 0, y: 0.4, w: "100%", h: 0.4, align: "center", fontSize: 12, bold: true, color: hex(theme.accent), charSpacing: 2,
+    });
+    cover.addText(deck.title[lang], {
+      x: 0.6, y: 2.0, w: 8.8, h: 1.2, align: "center", fontSize: 36, bold: true, color: "F5F1EA", fontFace: "Georgia",
+    });
+    cover.addText(deck.logline[lang], {
+      x: 1.2, y: 3.2, w: 7.6, h: 1.0, align: "center", fontSize: 14, italic: true, color: hex(theme.accent),
+    });
+    cover.addText(labels.tagline, {
+      x: 0.6, y: 5.0, w: 8.8, h: 0.4, align: "center", fontSize: 9, color: hex(theme.accent),
+    });
+
+    // Section slide helper — a light band with a title, dark body below.
+    function sectionSlide(title, body) {
+      const slide = pptx.addSlide();
+      addBackground(slide, theme.panel);
+      slide.addShape("rect", { x: 0, y: 0, w: "100%", h: 2.0, fill: { color: hex(theme.panel) } });
+      slide.addShape("rect", { x: 0, y: 2.0, w: "100%", h: 3.63, fill: { color: hex(theme.bg) } });
+      slide.addText(title.toUpperCase(), {
+        x: 0.6, y: 1.3, w: 8.8, h: 0.8, fontSize: 30, bold: true, color: hex(theme.accent),
+      });
+      slide.addText(body, {
+        x: 0.6, y: 2.3, w: 8.8, h: 3.0, fontSize: 15, color: "F0EEE9", valign: "top",
+      });
+    }
+
+    sectionSlide(labels.premise, deck.premise[lang]);
+    sectionSlide(labels.toneGenre, deck.toneGenre[lang]);
+    sectionSlide(labels.targetAudience, deck.targetAudience[lang]);
+
+    // Character slides — one per character, preferring the deep Character
+    // Sheet data (archetype/want/need/flaw/arc) when it exists.
+    if (richCharacters && richCharacters.length > 0) {
+      richCharacters.forEach((character) => {
+        const slide = pptx.addSlide();
+        addBackground(slide, theme.panel);
+        slide.addText(character.name, { x: 0.6, y: 0.35, w: 6.5, h: 0.6, fontSize: 26, bold: true, color: "F5F1EA" });
+        slide.addText(archetypeLabels[character.archetype] ?? character.archetype, {
+          x: 0.6, y: 0.95, w: 6.5, h: 0.4, fontSize: 13, bold: true, color: hex(theme.accent),
         });
+        slide.addText(character.role[lang], { x: 0.6, y: 1.4, w: 8.8, h: 0.5, fontSize: 13, italic: true, color: "F0EEE9" });
+
+        const bodyLines = [
+          `${fieldLabels.want}: ${character.want[lang]}`,
+          `${fieldLabels.need}: ${character.need[lang]}`,
+          `${fieldLabels.flaw}: ${character.flaw[lang]}`,
+          `${fieldLabels.arc}: ${character.arc[lang]}`,
+        ].join("\n\n");
+        slide.addText(bodyLines, { x: 0.6, y: 2.0, w: 8.8, h: 3.3, fontSize: 12, color: "F0EEE9", valign: "top", lineSpacingMultiple: 1.15 });
       });
+    } else if (deck.majorCharacters && deck.majorCharacters.length > 0) {
+      const slide = pptx.addSlide();
+      addBackground(slide, theme.panel);
+      slide.addText(labels.majorCharacters.toUpperCase(), { x: 0.6, y: 0.4, w: 8.8, h: 0.6, fontSize: 24, bold: true, color: hex(theme.accent) });
+      const rows = deck.majorCharacters.map((c) => [
+        { text: c.name, options: { bold: true, color: "F5F1EA" } },
+        { text: c.role[lang], options: { color: "F0EEE9" } },
+        { text: c.emotionalCore[lang], options: { color: "F0EEE9" } },
+      ]);
+      slide.addTable(rows, { x: 0.6, y: 1.2, w: 8.8, h: 3.8, fontSize: 11, color: "F0EEE9", border: { type: "none" } });
     }
 
-    if (deck.episodes && deck.episodes.length > 0) {
-      const episodeSheet = workbook.addWorksheet((lang === "or" ? "ପର୍ବଗୁଡ଼ିକ" : "Episodes").slice(0, 31));
-      episodeSheet.columns = [
-        { header: labels.episode, key: "episode", width: 12 },
-        { header: titleLabel, key: "title", width: 28 },
-        { header: synopsisLabel, key: "synopsis", width: 70 },
-      ];
-      episodeSheet.getRow(1).font = { bold: true };
+    // Episode slides (series only)
+    if (deck.episodes) {
       deck.episodes.forEach((episode, index) => {
-        episodeSheet.addRow({ episode: index + 1, title: episode.title[lang], synopsis: episode.synopsis[lang] });
+        const slide = pptx.addSlide();
+        addBackground(slide, theme.panel);
+        slide.addShape("rect", { x: 0, y: 0, w: 3.0, h: "100%", fill: { color: hex(theme.accent) } });
+        slide.addText(String(index + 1).padStart(2, "0"), {
+          x: 0, y: 1.8, w: 3.0, h: 2.0, align: "center", fontSize: 80, bold: true, color: hex(theme.bg),
+        });
+        slide.addText(`${labels.episode.toUpperCase()} ${index + 1}`, { x: 3.3, y: 0.5, w: 6.1, h: 0.4, fontSize: 12, bold: true, color: hex(theme.accent) });
+        slide.addText(episode.title[lang], { x: 3.3, y: 0.9, w: 6.1, h: 0.7, fontSize: 22, bold: true, color: "F5F1EA" });
+        slide.addText(episode.synopsis[lang], { x: 3.3, y: 1.7, w: 6.1, h: 3.5, fontSize: 13, color: "F0EEE9", valign: "top" });
       });
     }
 
-    res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+    // Closing
+    const closing = pptx.addSlide();
+    addBackground(closing, theme.bg);
+    closing.addText(labels.thankYou.toUpperCase(), {
+      x: 0.6, y: 2.2, w: 8.8, h: 1.0, align: "center", fontSize: 44, bold: true, color: hex(theme.accent),
+    });
+    closing.addText(labels.tagline, { x: 0.6, y: 5.0, w: 8.8, h: 0.4, align: "center", fontSize: 9, color: hex(theme.accent) });
+
+    const buffer = await pptx.write({ outputType: "nodebuffer" });
+    res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.presentationml.presentation");
     res.setHeader(
       "Content-Disposition",
-      `attachment; filename="${deck.title.en.replace(/[^a-z0-9]+/gi, "-")}-pitch-deck-${lang}-${formatExportTimestamp()}.xlsx"`
+      `attachment; filename="${deck.title.en.replace(/[^a-z0-9]+/gi, "-")}-pitch-deck-${lang}-${formatExportTimestamp()}.pptx"`
     );
-    await workbook.xlsx.write(res);
-    res.end();
+    res.send(buffer);
   } catch (error) {
-    console.error("Pitch deck Excel export failed:", error.message);
+    console.error("Pitch deck PPT export failed:", error.message);
     if (!res.headersSent) {
       res.status(500).json({ error: error.message });
     } else {

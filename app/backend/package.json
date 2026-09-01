@@ -22,6 +22,7 @@
     "pdf-parse": "^2.1.0",
     "pdfkit": "^0.15.0",
     "pg": "^8.12.0",
+    "pptxgenjs": "^4.0.1",
     "word-extractor": "^1.0.4"
   }
 }

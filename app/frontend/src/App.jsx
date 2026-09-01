@@ -85,7 +85,7 @@ const LABELS = {
     clapboardSceneManualPlaceholder: 'Or type scene number',
     clapboardShotLabel: 'Shot',
     clapboardTakeLabel: 'Take',
-    clapboardClapButton: 'CLAP',
+    clapboardTapHint: 'Tap to clap',
     clapboardLogError: "Couldn't save that clap — check your connection and try again.",
     clapboardHistoryHeading: 'Clap History',
     clapboardHistoryEmpty: 'No claps logged yet.',
@@ -312,6 +312,8 @@ const LABELS = {
     downloadLabel: 'Download',
     downloadFormatPdf: 'PDF',
     downloadFormatExcel: 'Excel',
+    downloadFormatPpt: 'PowerPoint',
+    pitchDeckDownloadHint: 'Create the characters first to unlock the presentation download — their details get included in it.',
     scenesLabel: 'scenes',
     approveBreakdownButton: 'Approve',
     breakdownApprovedBadge: '✅ Script Breakdown Approved',
@@ -512,7 +514,7 @@ const LABELS = {
     clapboardSceneManualPlaceholder: 'କିମ୍ବା ଦୃଶ୍ୟ ସଂଖ୍ୟା ଟାଇପ୍ କରନ୍ତୁ',
     clapboardShotLabel: 'ସଟ୍',
     clapboardTakeLabel: 'ଟେକ୍',
-    clapboardClapButton: 'CLAP',
+    clapboardTapHint: 'କ୍ଲାପ୍ କରିବାକୁ ଟାପ୍ କରନ୍ତୁ',
     clapboardLogError: 'ସେହି କ୍ଲାପ୍ ସେଭ୍ ହୋଇପାରିଲା ନାହିଁ — ଆପଣଙ୍କ ସଂଯୋଗ ଯାଞ୍ଚ କରି ପୁଣି ଚେଷ୍ଟା କରନ୍ତୁ।',
     clapboardHistoryHeading: 'କ୍ଲାପ୍ ଇତିହାସ',
     clapboardHistoryEmpty: 'ଏପର୍ଯ୍ୟନ୍ତ କୌଣସି କ୍ଲାପ୍ ଲଗ୍ ହୋଇନାହିଁ।',
@@ -739,6 +741,8 @@ const LABELS = {
     downloadLabel: 'ଡାଉନଲୋଡ୍ କରନ୍ତୁ',
     downloadFormatPdf: 'PDF',
     downloadFormatExcel: 'Excel',
+    downloadFormatPpt: 'PowerPoint',
+    pitchDeckDownloadHint: 'ପ୍ରେଜେଣ୍ଟେସନ୍ ଡାଉନଲୋଡ୍ ଅନଲକ୍ କରିବାକୁ ପ୍ରଥମେ ଚରିତ୍ର ତିଆରି କରନ୍ତୁ — ସେମାନଙ୍କ ବିବରଣୀ ଏଥିରେ ଅନ୍ତର୍ଭୁକ୍ତ ହେବ।',
     scenesLabel: 'ଦୃଶ୍ୟ',
     approveBreakdownButton: 'ଅନୁମୋଦନ କରନ୍ତୁ',
     breakdownApprovedBadge: '✅ ସ୍କ୍ରିପ୍ଟ ବ୍ରେକଡାଉନ୍ ଅନୁମୋଦିତ',
@@ -1739,7 +1743,7 @@ function CameraCaptureModal({ t, onCapture, onClose, multiple = false }) {
 // choice instead of downloading immediately — every export in the app used
 // to be a bare link straight to one format; this replaces that with one
 // consistent choice point wherever a download is offered.
-function DownloadChoiceButton({ t, label, pdfUrl, excelUrl, className = 'breakdown-pdf-link', title }) {
+function DownloadChoiceButton({ t, label, pdfUrl, excelUrl, className = 'breakdown-pdf-link', title, pdfLabel, excelLabel }) {
   const [isOpen, setIsOpen] = useState(false)
   const containerRef = useRef(null)
 
@@ -1762,10 +1766,10 @@ function DownloadChoiceButton({ t, label, pdfUrl, excelUrl, className = 'breakdo
       {isOpen && (
         <div className="download-choice-menu">
           <a className="download-choice-option" href={pdfUrl} onClick={() => setIsOpen(false)}>
-            {t.downloadFormatPdf}
+            {pdfLabel ?? t.downloadFormatPdf}
           </a>
           <a className="download-choice-option" href={excelUrl} onClick={() => setIsOpen(false)}>
-            {t.downloadFormatExcel}
+            {excelLabel ?? t.downloadFormatExcel}
           </a>
         </div>
       )}
@@ -1793,7 +1797,54 @@ function ClapboardFullScreen({ t, BACKEND_URL, sceneListId, sceneOptions, onClos
   const [isLoadingHistory, setIsLoadingHistory] = useState(true)
   const [isHistoryOpen, setIsHistoryOpen] = useState(false)
   const [logError, setLogError] = useState(null)
+  const [isFullscreen, setIsFullscreen] = useState(false)
+  const [timecodeStartedAt, setTimecodeStartedAt] = useState(null)
+  const [elapsedMs, setElapsedMs] = useState(0)
   const audioContextRef = useRef(null)
+  const containerRef = useRef(null)
+
+  // Runs the on-screen timecode once a clap has started it — ticks every
+  // 30ms, which is smooth enough for a readable running clock without
+  // hammering re-renders the way requestAnimationFrame would.
+  useEffect(() => {
+    if (timecodeStartedAt === null) return
+    const interval = setInterval(() => setElapsedMs(Date.now() - timecodeStartedAt), 30)
+    return () => clearInterval(interval)
+  }, [timecodeStartedAt])
+
+  // Mirrors a video player's expand button: real Fullscreen API (hides the
+  // browser chrome entirely, unlike this component's own CSS-only overlay)
+  // plus an attempt to lock into landscape — orientation lock only works
+  // inside an actual fullscreen context on the browsers that support it at
+  // all (iOS Safari doesn't; this fails silently there and the AD can just
+  // rotate the phone by hand).
+  async function handleExpandClick() {
+    try {
+      if (!document.fullscreenElement) {
+        await containerRef.current?.requestFullscreen?.()
+        if (screen.orientation?.lock) {
+          screen.orientation.lock('landscape').catch(() => {})
+        }
+      } else {
+        await document.exitFullscreen?.()
+      }
+    } catch {
+      // Fullscreen can be denied/unsupported (e.g. inside an iframe) — the
+      // slate still works, just without the immersive chrome-free view.
+    }
+  }
+
+  useEffect(() => {
+    function handleFullscreenChange() {
+      setIsFullscreen(Boolean(document.fullscreenElement))
+    }
+    document.addEventListener('fullscreenchange', handleFullscreenChange)
+    return () => {
+      document.removeEventListener('fullscreenchange', handleFullscreenChange)
+      if (document.fullscreenElement) document.exitFullscreen?.()
+      if (screen.orientation?.unlock) screen.orientation.unlock()
+    }
+  }, [])
 
   useEffect(() => {
     let cancelled = false
@@ -1843,6 +1894,9 @@ function ClapboardFullScreen({ t, BACKEND_URL, sceneListId, sceneOptions, onClos
     playBeep()
     setIsClapping(true)
     setTimeout(() => setIsClapping(false), 220)
+    // A clap starts (or restarts) the running timecode, same as a real
+    // slate marking the sync point audio/video get aligned to afterward.
+    setTimecodeStartedAt(Date.now())
 
     try {
       const res = await fetch(`${BACKEND_URL}/api/clapboard/${sceneListId}/log`, {
@@ -1864,6 +1918,16 @@ function ClapboardFullScreen({ t, BACKEND_URL, sceneListId, sceneOptions, onClos
     }
   }
 
+  function formatTimecode(ms) {
+    const totalCentiseconds = Math.floor(ms / 10)
+    const centiseconds = totalCentiseconds % 100
+    const totalSeconds = Math.floor(totalCentiseconds / 100)
+    const seconds = totalSeconds % 60
+    const minutes = Math.floor(totalSeconds / 60)
+    const pad = (n, len = 2) => String(n).padStart(len, '0')
+    return `${pad(minutes)}:${pad(seconds)}.${pad(centiseconds)}`
+  }
+
   function adjustShot(delta) {
     setShotNumber((current) => String(Math.max(1, (parseInt(current, 10) || 1) + delta)))
   }
@@ -1872,13 +1936,17 @@ function ClapboardFullScreen({ t, BACKEND_URL, sceneListId, sceneOptions, onClos
   }
 
   return (
-    <div className="clapboard-fullscreen">
+    <div className="clapboard-fullscreen" ref={containerRef}>
       <button type="button" className="clapboard-close-button" onClick={onClose} aria-label="Close">✕</button>
       <button type="button" className="clapboard-history-toggle" onClick={() => setIsHistoryOpen((o) => !o)}>
         {t.clapboardHistoryHeading}
       </button>
+      <button type="button" className="clapboard-expand-button" onClick={handleExpandClick} aria-label="Expand">
+        {isFullscreen ? '⤡' : '⤢'}
+      </button>
 
       <div className={isClapping ? 'clapboard-board clapping' : 'clapboard-board'}>
+        <div className="clapboard-board-left">
         <img src="/clapboard-banner.jpg" alt="" className="clapboard-banner" />
 
         <div className="clapboard-table">
@@ -1931,10 +1999,12 @@ function ClapboardFullScreen({ t, BACKEND_URL, sceneListId, sceneOptions, onClos
             </div>
           </div>
         </div>
+        </div>
 
-        <button type="button" className="clapboard-clap-button" onClick={handleClapClick}>
-          {t.clapboardClapButton}
-        </button>
+        <div className="clapboard-tap-zone" onClick={handleClapClick} role="button" tabIndex={0}>
+          <div className="clapboard-timecode">{formatTimecode(elapsedMs)}</div>
+          <div className="clapboard-tap-hint">{t.clapboardTapHint}</div>
+        </div>
         {logError && <p className="clapboard-error">{logError}</p>}
       </div>
 
@@ -6359,13 +6429,21 @@ function App() {
             )}
           </div>
 
-          <DownloadChoiceButton
-            t={t}
-            label={t.exportAsPdf}
-            className="export-button"
-            pdfUrl={`${BACKEND_URL}/api/pitch-deck/${pitchDeck.id}/export?lang=${language}`}
-            excelUrl={`${BACKEND_URL}/api/pitch-deck/${pitchDeck.id}/export-excel?lang=${language}`}
-          />
+          {pitchDeck.status === 'approved' && !characterSheet && (
+            <p className="pitch-deck-download-hint">{t.pitchDeckDownloadHint}</p>
+          )}
+
+          {pitchDeck.status === 'approved' && characterSheet && (
+            <DownloadChoiceButton
+              t={t}
+              label={t.exportAsPdf}
+              className="export-button"
+              pdfUrl={`${BACKEND_URL}/api/pitch-deck/${pitchDeck.id}/export?lang=${language}`}
+              excelUrl={`${BACKEND_URL}/api/pitch-deck/${pitchDeck.id}/export-ppt?lang=${language}`}
+              pdfLabel={t.downloadFormatPdf}
+              excelLabel={t.downloadFormatPpt}
+            />
+          )}
         </div>
       )}
 

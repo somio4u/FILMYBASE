@@ -2064,16 +2064,16 @@ function ClapboardFullScreen({ t, BACKEND_URL, sceneListId, sceneOptions, onClos
               <button type="button" className={dayNight === 'NIGHT' ? 'clapboard-daynight-button active' : 'clapboard-daynight-button'} onClick={() => setDayNight('NIGHT')}>NIGHT</button>
             </div>
           </div>
-        </div>
 
-        <div
-          className={isTimecodeRunning ? 'clapboard-tap-zone running' : 'clapboard-tap-zone'}
-          onClick={handleClapClick}
-          role="button"
-          tabIndex={0}
-        >
-          <div className="clapboard-timecode">{formatTimecode(elapsedMs)}</div>
-          <div className="clapboard-tap-hint">{isTimecodeRunning ? t.clapboardTapHintStop : t.clapboardTapHintStart}</div>
+          <div
+            className={isTimecodeRunning ? 'clapboard-tap-zone running' : 'clapboard-tap-zone'}
+            onClick={handleClapClick}
+            role="button"
+            tabIndex={0}
+          >
+            <div className="clapboard-timecode">{formatTimecode(elapsedMs)}</div>
+            <div className="clapboard-tap-hint">{isTimecodeRunning ? t.clapboardTapHintStop : t.clapboardTapHintStart}</div>
+          </div>
         </div>
         </div>
         {logError && <p className="clapboard-error">{logError}</p>}

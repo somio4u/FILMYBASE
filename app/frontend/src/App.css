@@ -3565,14 +3565,14 @@ button, input, textarea, select {
   border-color: #111;
 }
 
-/* No separate black panel — this is just a row inside the same white
-   board, sized generously and right-aligned (a natural spot for a thumb
-   resting on the right side of the phone while holding it in landscape),
-   without blocking the table's own inputs above it. */
+/* Lives inside .clapboard-table itself (last row, after the date/day-night
+   footer) so the date/day-night controls and the timecode read as one
+   continuous slate block, not two separate boxes with a gap between them.
+   The table's own border + border-radius + overflow:hidden wrap this row
+   too, so it only needs a top divider to match the other row borders. */
 .clapboard-tap-zone {
   min-height: clamp(70px, 14vh, 110px);
-  border-radius: 12px;
-  border: 2px solid #e5352b;
+  border-top: 2px solid #111;
   background: #fff;
   display: flex;
   flex-direction: column;

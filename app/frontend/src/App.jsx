@@ -1773,21 +1773,25 @@ function DownloadChoiceButton({ t, label, pdfUrl, excelUrl, className = 'breakdo
   )
 }
 
-// The on-set digital clapboard — a scene/shot/take slate with a big clap
-// button. Tapping it plays a short beep (a real slate's audio "sync
+// The on-set digital clapboard — a true full-screen white slate modeled on
+// a real acrylic clapboard (banner where the colored clapper-stick would
+// be, then SCENE/SHOT/TAKE, then DATE/DAY-NIGHT), not an embedded page
+// section. Tapping CLAP plays a short beep (a real slate's audio "sync
 // mark" — the beep and the visual clap both need to be sharp and instant,
 // which is why this uses the Web Audio API directly rather than an audio
-// file: zero load latency, and no asset to ship). Every clap is logged to
-// the server so it can be reviewed later; the scene field is a hybrid —
-// pick one of today's scheduled scenes from the dropdown, or just type a
-// scene number by hand like a physical slate.
-function ClapboardSection({ t, BACKEND_URL, sceneListId, sceneOptions }) {
+// file: zero load latency, and no asset to ship) and logs the clap to the
+// server. The scene field is a hybrid — pick one of today's scheduled
+// scenes from the dropdown, or just type a scene number by hand.
+function ClapboardFullScreen({ t, BACKEND_URL, sceneListId, sceneOptions, onClose }) {
   const [sceneNumber, setSceneNumber] = useState('')
   const [shotNumber, setShotNumber] = useState('1')
   const [takeNumber, setTakeNumber] = useState(1)
+  const [dayNight, setDayNight] = useState('DAY')
+  const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10))
   const [isClapping, setIsClapping] = useState(false)
   const [history, setHistory] = useState([])
   const [isLoadingHistory, setIsLoadingHistory] = useState(true)
+  const [isHistoryOpen, setIsHistoryOpen] = useState(false)
   const [logError, setLogError] = useState(null)
   const audioContextRef = useRef(null)
 
@@ -1807,6 +1811,12 @@ function ClapboardSection({ t, BACKEND_URL, sceneListId, sceneOptions }) {
     loadHistory()
     return () => { cancelled = true }
   }, [BACKEND_URL, sceneListId])
+
+  useEffect(() => {
+    function handleEscape(e) { if (e.key === 'Escape') onClose() }
+    document.addEventListener('keydown', handleEscape)
+    return () => document.removeEventListener('keydown', handleEscape)
+  }, [onClose])
 
   function playBeep() {
     try {
@@ -1839,7 +1849,7 @@ function ClapboardSection({ t, BACKEND_URL, sceneListId, sceneOptions }) {
         method: 'POST',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sceneNumber, shotNumber, takeNumber }),
+        body: JSON.stringify({ sceneNumber, shotNumber, takeNumber, dayNight, date }),
       })
       if (res.ok) {
         const saved = await res.json()
@@ -1862,50 +1872,62 @@ function ClapboardSection({ t, BACKEND_URL, sceneListId, sceneOptions }) {
   }
 
   return (
-    <div className="clapboard-panel">
-      <img src="/clapboard-banner.jpg" alt="" className="clapboard-banner" />
+    <div className="clapboard-fullscreen">
+      <button type="button" className="clapboard-close-button" onClick={onClose} aria-label="Close">✕</button>
+      <button type="button" className="clapboard-history-toggle" onClick={() => setIsHistoryOpen((o) => !o)}>
+        {t.clapboardHistoryHeading}
+      </button>
 
-      <div className={isClapping ? 'clapboard-slate clapping' : 'clapboard-slate'}>
-        <div className="clapboard-field">
-          <label>{t.clapboardSceneLabel}</label>
-          <div className="clapboard-scene-row">
-            {sceneOptions.length > 0 && (
-              <select
-                className="clapboard-scene-select"
-                value=""
-                onChange={(e) => { if (e.target.value) setSceneNumber(e.target.value) }}
-              >
-                <option value="">{t.clapboardPickFromSchedule}</option>
-                {sceneOptions.map((opt) => (
-                  <option key={opt} value={opt}>{opt}</option>
-                ))}
-              </select>
-            )}
-            <input
-              type="text"
-              className="clapboard-scene-input"
-              value={sceneNumber}
-              onChange={(e) => setSceneNumber(e.target.value)}
-              placeholder={t.clapboardSceneManualPlaceholder}
-            />
+      <div className={isClapping ? 'clapboard-board clapping' : 'clapboard-board'}>
+        <img src="/clapboard-banner.jpg" alt="" className="clapboard-banner" />
+
+        <div className="clapboard-table">
+          <div className="clapboard-table-row clapboard-table-header">
+            <div>{t.clapboardSceneLabel.toUpperCase()} NO.</div>
+            <div>{t.clapboardShotLabel.toUpperCase()} NO.</div>
+            <div>{t.clapboardTakeLabel.toUpperCase()} NO.</div>
           </div>
-        </div>
-
-        <div className="clapboard-counters">
-          <div className="clapboard-counter">
-            <label>{t.clapboardShotLabel}</label>
+          <div className="clapboard-table-row clapboard-table-values">
+            <div className="clapboard-scene-cell">
+              {sceneOptions.length > 0 && (
+                <select
+                  className="clapboard-scene-select"
+                  value=""
+                  onChange={(e) => { if (e.target.value) setSceneNumber(e.target.value) }}
+                >
+                  <option value="">{t.clapboardPickFromSchedule}</option>
+                  {sceneOptions.map((opt) => (
+                    <option key={opt} value={opt}>{opt}</option>
+                  ))}
+                </select>
+              )}
+              <input
+                type="text"
+                className="clapboard-cell-input"
+                value={sceneNumber}
+                onChange={(e) => setSceneNumber(e.target.value)}
+                placeholder={t.clapboardSceneManualPlaceholder}
+              />
+            </div>
             <div className="clapboard-counter-row">
               <button type="button" onClick={() => adjustShot(-1)}>−</button>
-              <input value={shotNumber} onChange={(e) => setShotNumber(e.target.value)} />
+              <input className="clapboard-cell-input" value={shotNumber} onChange={(e) => setShotNumber(e.target.value)} />
               <button type="button" onClick={() => adjustShot(1)}>+</button>
             </div>
-          </div>
-          <div className="clapboard-counter">
-            <label>{t.clapboardTakeLabel}</label>
             <div className="clapboard-counter-row">
               <button type="button" onClick={() => adjustTake(-1)}>−</button>
-              <input value={takeNumber} onChange={(e) => setTakeNumber(parseInt(e.target.value, 10) || 1)} />
+              <input className="clapboard-cell-input" value={takeNumber} onChange={(e) => setTakeNumber(parseInt(e.target.value, 10) || 1)} />
               <button type="button" onClick={() => adjustTake(1)}>+</button>
+            </div>
+          </div>
+          <div className="clapboard-table-row clapboard-table-footer">
+            <div className="clapboard-date-cell">
+              <span>DATE:</span>
+              <input type="date" className="clapboard-cell-input" value={date} onChange={(e) => setDate(e.target.value)} />
+            </div>
+            <div className="clapboard-daynight-cell">
+              <button type="button" className={dayNight === 'DAY' ? 'clapboard-daynight-button active' : 'clapboard-daynight-button'} onClick={() => setDayNight('DAY')}>DAY</button>
+              <button type="button" className={dayNight === 'NIGHT' ? 'clapboard-daynight-button active' : 'clapboard-daynight-button'} onClick={() => setDayNight('NIGHT')}>NIGHT</button>
             </div>
           </div>
         </div>
@@ -1916,25 +1938,27 @@ function ClapboardSection({ t, BACKEND_URL, sceneListId, sceneOptions }) {
         {logError && <p className="clapboard-error">{logError}</p>}
       </div>
 
-      <div className="clapboard-history">
-        <h4>{t.clapboardHistoryHeading}</h4>
-        {isLoadingHistory ? (
-          <p className="clapboard-history-empty">{t.loadingLabel}</p>
-        ) : history.length === 0 ? (
-          <p className="clapboard-history-empty">{t.clapboardHistoryEmpty}</p>
-        ) : (
-          <ul className="clapboard-history-list">
-            {history.map((entry) => (
-              <li key={entry.id}>
-                <strong>{entry.sceneNumber || '—'}</strong>
-                {' · '}{t.clapboardShotLabel} {entry.shotNumber || '—'}
-                {' · '}{t.clapboardTakeLabel} {entry.takeNumber}
-                <span className="clapboard-history-time">{new Date(entry.createdAt).toLocaleTimeString()}</span>
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
+      {isHistoryOpen && (
+        <div className="clapboard-history-drawer">
+          <h4>{t.clapboardHistoryHeading}</h4>
+          {isLoadingHistory ? (
+            <p className="clapboard-history-empty">{t.loadingLabel}</p>
+          ) : history.length === 0 ? (
+            <p className="clapboard-history-empty">{t.clapboardHistoryEmpty}</p>
+          ) : (
+            <ul className="clapboard-history-list">
+              {history.map((entry) => (
+                <li key={entry.id}>
+                  <strong>{entry.sceneNumber || '—'}</strong>
+                  {' · '}{t.clapboardShotLabel} {entry.shotNumber || '—'}
+                  {' · '}{t.clapboardTakeLabel} {entry.takeNumber}
+                  <span className="clapboard-history-time">{new Date(entry.createdAt).toLocaleTimeString()}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
     </div>
   )
 }
@@ -2782,6 +2806,7 @@ function App() {
   const screenplayFileInputRef = useRef(null)
   const reimportScreenplayFileInputRef = useRef(null)
   const [isSidebarOpen, setIsSidebarOpen] = useState(false)
+  const [isClapboardOpen, setIsClapboardOpen] = useState(false)
   const [language, setLanguage] = useState('en')
   const [concept, setConcept] = useState('')
   const [conceptId, setConceptId] = useState(null)
@@ -5934,7 +5959,7 @@ function App() {
                   <span className="production-main-nav-icon">{ICONS.calendar}</span>
                   {t.stageScheduleLabel}
                 </button>
-                <button className="production-main-nav-item stage-upcoming" onClick={() => handleStageClick('stage-clapboard')}>
+                <button className="production-main-nav-item stage-upcoming" onClick={() => setIsClapboardOpen(true)}>
                   <span className="production-main-nav-icon">{ICONS.calendar}</span>
                   {t.stageClapboardLabel}
                 </button>
@@ -7661,29 +7686,6 @@ function App() {
         </div>
       )}
 
-      {activeAgent === 'production' && sceneList && (
-        <div className="three-act-structure" id="stage-clapboard">
-          <h2>{t.stageClapboardLabel}</h2>
-          <ClapboardSection
-            t={t}
-            BACKEND_URL={BACKEND_URL}
-            sceneListId={sceneList.id}
-            sceneOptions={
-              shootSchedule
-                ? [...new Set(
-                    (shootSchedule.scheduleDays ?? []).flatMap((day) =>
-                      (day.sceneRefs ?? []).map((ref) => {
-                        const scene = lookupScene(sceneList, ref)
-                        const label = scene?.sceneNumber || String(ref.sceneIndex + 1)
-                        return sceneList.episodeScenes ? `Ep${ref.episodeIndex + 1} Sc${label}` : `Sc${label}`
-                      })
-                    )
-                  )]
-                : []
-            }
-          />
-        </div>
-      )}
     </div>
       </main>
 
@@ -7717,6 +7719,28 @@ function App() {
             />
           )}
         </aside>
+      )}
+
+      {isClapboardOpen && sceneList && (
+        <ClapboardFullScreen
+          t={t}
+          BACKEND_URL={BACKEND_URL}
+          sceneListId={sceneList.id}
+          sceneOptions={
+            shootSchedule
+              ? [...new Set(
+                  (shootSchedule.scheduleDays ?? []).flatMap((day) =>
+                    (day.sceneRefs ?? []).map((ref) => {
+                      const scene = lookupScene(sceneList, ref)
+                      const label = scene?.sceneNumber || String(ref.sceneIndex + 1)
+                      return sceneList.episodeScenes ? `Ep${ref.episodeIndex + 1} Sc${label}` : `Sc${label}`
+                    })
+                  )
+                )]
+              : []
+          }
+          onClose={() => setIsClapboardOpen(false)}
+        />
       )}
     </div>
   )

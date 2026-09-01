@@ -195,6 +195,8 @@ CREATE TABLE clapboard_logs (
   scene_number TEXT,
   shot_number TEXT,
   take_number INTEGER NOT NULL,
+  day_night TEXT,
+  shoot_date DATE,
   logged_by TEXT,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );

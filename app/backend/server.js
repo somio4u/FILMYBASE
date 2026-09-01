@@ -9067,7 +9067,7 @@ app.get("/api/crew/export-excel", requireLogin, async (req, res) => {
 // happen for any scene regardless of which day it's scheduled on.
 app.post("/api/clapboard/:sceneListId/log", requireLogin, async (req, res) => {
   const { sceneListId } = req.params;
-  const { sceneNumber, shotNumber, takeNumber } = req.body;
+  const { sceneNumber, shotNumber, takeNumber, dayNight, date } = req.body;
 
   if (!(await userOwnsSceneList(req.user, sceneListId))) {
     res.status(403).json({ error: "You don't have access to this project." });
@@ -9080,8 +9080,8 @@ app.post("/api/clapboard/:sceneListId/log", requireLogin, async (req, res) => {
 
   try {
     const result = await db.query(
-      "INSERT INTO clapboard_logs (scene_list_id, scene_number, shot_number, take_number, logged_by) VALUES ($1, $2, $3, $4, $5) RETURNING *",
-      [sceneListId, sceneNumber?.trim() || null, shotNumber?.trim() || null, Number(takeNumber), req.user.name]
+      "INSERT INTO clapboard_logs (scene_list_id, scene_number, shot_number, take_number, day_night, shoot_date, logged_by) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *",
+      [sceneListId, sceneNumber?.trim() || null, shotNumber?.trim() || null, Number(takeNumber), dayNight?.trim() || null, date || null, req.user.name]
     );
     const row = result.rows[0];
     res.json({
@@ -9089,6 +9089,8 @@ app.post("/api/clapboard/:sceneListId/log", requireLogin, async (req, res) => {
       sceneNumber: row.scene_number,
       shotNumber: row.shot_number,
       takeNumber: row.take_number,
+      dayNight: row.day_night,
+      date: row.shoot_date,
       loggedBy: row.logged_by,
       createdAt: row.created_at,
     });
@@ -9117,6 +9119,8 @@ app.get("/api/clapboard/:sceneListId/log", requireLogin, async (req, res) => {
         sceneNumber: row.scene_number,
         shotNumber: row.shot_number,
         takeNumber: row.take_number,
+        dayNight: row.day_night,
+        date: row.shoot_date,
         loggedBy: row.logged_by,
         createdAt: row.created_at,
       }))

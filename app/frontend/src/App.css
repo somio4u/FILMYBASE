@@ -3675,7 +3675,7 @@ button, input, textarea, select {
    rules, since visually the two should look the same either way. */
 @media (orientation: landscape) {
   .clapboard-fullscreen {
-    padding: clamp(6px, 1.5vh, 16px) clamp(16px, 4vw, 40px);
+    padding: clamp(3px, 1.5vh, 16px) clamp(16px, 4vw, 40px);
   }
 
   .clapboard-board,
@@ -3684,7 +3684,7 @@ button, input, textarea, select {
   }
 
   .clapboard-banner {
-    max-height: 12vh;
+    max-height: 26vh;
   }
 
   .clapboard-table-row {
@@ -3692,17 +3692,21 @@ button, input, textarea, select {
   }
 
   .clapboard-tap-zone {
-    min-height: clamp(48px, 9vh, 70px);
-    padding: 6px clamp(14px, 3vw, 28px);
+    min-height: clamp(30px, 5vh, 46px);
+    padding: 4px clamp(14px, 3vw, 28px);
   }
 
   .clapboard-timecode {
-    font-size: clamp(20px, 5vh, 34px);
+    font-size: clamp(15px, 3.2vh, 24px);
+  }
+
+  .clapboard-tap-hint {
+    font-size: clamp(8px, 1.4vh, 11px);
   }
 }
 
 .clapboard-fullscreen.force-landscape {
-  padding: clamp(6px, 1.5vh, 16px) clamp(16px, 4vw, 40px);
+  padding: clamp(3px, 1.5vh, 16px) clamp(16px, 4vw, 40px);
 }
 
 .clapboard-fullscreen.force-landscape .clapboard-board,
@@ -3711,14 +3715,18 @@ button, input, textarea, select {
 }
 
 .clapboard-fullscreen.force-landscape .clapboard-banner {
-  max-height: 12vh;
+  max-height: 26vh;
 }
 
 .clapboard-fullscreen.force-landscape .clapboard-tap-zone {
-  min-height: clamp(48px, 9vh, 70px);
-  padding: 6px clamp(14px, 3vw, 28px);
+  min-height: clamp(30px, 5vh, 46px);
+  padding: 4px clamp(14px, 3vw, 28px);
 }
 
 .clapboard-fullscreen.force-landscape .clapboard-timecode {
-  font-size: clamp(20px, 5vh, 34px);
+  font-size: clamp(15px, 3.2vh, 24px);
+}
+
+.clapboard-fullscreen.force-landscape .clapboard-tap-hint {
+  font-size: clamp(8px, 1.4vh, 11px);
 }

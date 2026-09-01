@@ -271,6 +271,11 @@ const LABELS = {
     generatingSceneList: 'Generating scene list...',
     sceneListHeading: 'Scene-by-Scene One-Liners',
     sceneLabel: 'Scene',
+    intExtLabel: 'INT/EXT',
+    locationLabel: 'Location',
+    descriptionLabel: 'Description',
+    movingScenesToDayLabel: 'Moving these scenes to Day',
+    affectedScenesHeading: 'Scenes this touches:',
     dayLabel: 'DAY',
     nightLabel: 'NIGHT',
     approveSceneListButton: 'Approve Scene List',
@@ -381,6 +386,12 @@ const LABELS = {
     movesToNextDayLabel: 'Not completed, moves to next day',
     noneLabel: 'none',
     reviewCheckboxesNote: 'The scene checkboxes above have been set to match this — adjust any of them by hand if something looks wrong before confirming.',
+    extraScenesReportIntro: 'Did you shoot any extra scenes today, ahead of schedule?',
+    extraScenesReportPlaceholder: 'e.g. "Also shot Episode 4 scene 12 and 13 while we were at that location."',
+    extraScenesFoundHeading: 'Extra scenes found — review before confirming:',
+    prepareNextDaysButton: 'Prepare Next Days’ Schedule',
+    preparingNextDaysLabel: 'Preparing…',
+    prepareNextDaysFeedback: 'Reflow the remaining unscheduled scenes across the remaining shoot days now that the most recently recorded day is complete — keep already-completed days untouched.',
     artistScheduleHeading: 'Artist-Wise Summary',
     artistStatusWrappedLabel: 'Wrapped',
     artistStatusPendingLabel: 'Pending',
@@ -701,6 +712,11 @@ const LABELS = {
     generatingSceneList: 'ଦୃଶ୍ୟ ତାଲିକା ତିଆରି ହେଉଛି...',
     sceneListHeading: 'ଦୃଶ୍ୟ-ଅନୁସାରେ ବିବରଣୀ',
     sceneLabel: 'ଦୃଶ୍ୟ',
+    intExtLabel: 'ଭିତର/ବାହାର',
+    locationLabel: 'ସ୍ଥାନ',
+    descriptionLabel: 'ବିବରଣୀ',
+    movingScenesToDayLabel: 'ଏହି ଦୃଶ୍ୟଗୁଡ଼ିକୁ ଏହି ଦିନକୁ ଘୁଞ୍ଚାଉଛି',
+    affectedScenesHeading: 'ଏହା ପ୍ରଭାବିତ କରୁଥିବା ଦୃଶ୍ୟ:',
     dayLabel: 'ଦିନ',
     nightLabel: 'ରାତି',
     approveSceneListButton: 'ଦୃଶ୍ୟ ତାଲିକା ଅନୁମୋଦନ କରନ୍ତୁ',
@@ -811,6 +827,12 @@ const LABELS = {
     movesToNextDayLabel: 'ସମାପ୍ତ ହୋଇନାହିଁ, ପରବର୍ତ୍ତୀ ଦିନକୁ ଯାଉଛି',
     noneLabel: 'କିଛି ନାହିଁ',
     reviewCheckboxesNote: 'ଉପରର ସିନ୍ ଚେକ୍‌ବକ୍ସଗୁଡ଼ିକ ଏହା ସହିତ ମେଳ ଖାଉଥିବା ଭାବରେ ସେଟ୍ ହୋଇଛି — ନିଶ୍ଚିତ କରିବା ପୂର୍ବରୁ କିଛି ଭୁଲ ଲାଗିଲେ ହାତରେ ପରିବର୍ତ୍ତନ କରନ୍ତୁ।',
+    extraScenesReportIntro: 'ଆଜି ଆପଣ ସିଡ୍ୟୁଲ୍‌ଠାରୁ ଆଗରୁ କୌଣସି ଅତିରିକ୍ତ ସିନ୍ ସୁଟ୍ କରିଛନ୍ତି କି?',
+    extraScenesReportPlaceholder: 'ଉଦାହରଣ: "ସେହି ଲୋକେସନ୍‌ରେ ଥିବାବେଳେ ଏପିସୋଡ୍ ୪ ର ସିନ୍ ୧୨ ଏବଂ ୧୩ ମଧ୍ୟ ସୁଟ୍ କଲୁ।"',
+    extraScenesFoundHeading: 'ଅତିରିକ୍ତ ସିନ୍ ମିଳିଲା — ନିଶ୍ଚିତ କରିବା ପୂର୍ବରୁ ସମୀକ୍ଷା କରନ୍ତୁ:',
+    prepareNextDaysButton: 'ପରବର୍ତ୍ତୀ ଦିନଗୁଡ଼ିକର ସିଡ୍ୟୁଲ୍ ପ୍ରସ୍ତୁତ କରନ୍ତୁ',
+    preparingNextDaysLabel: 'ପ୍ରସ୍ତୁତ ହେଉଛି…',
+    prepareNextDaysFeedback: 'ସାମ୍ପ୍ରତିକ ରେକର୍ଡ ହୋଇଥିବା ଦିନ ସମାପ୍ତ ହୋଇଥିବାରୁ ବାକି ଥିବା ସିନ୍‌ଗୁଡ଼ିକୁ ବାକି ଶୁଟିଂ ଦିନଗୁଡ଼ିକରେ ପୁନଃ ବଣ୍ଟନ କରନ୍ତୁ — ପୂର୍ବରୁ ସମାପ୍ତ ଦିନଗୁଡ଼ିକୁ ଅପରିବର୍ତ୍ତିତ ରଖନ୍ତୁ।',
     artistScheduleHeading: 'କଳାକାର-ଅନୁଯାୟୀ ସାରାଂଶ',
     artistStatusWrappedLabel: 'ସମାପ୍ତ',
     artistStatusPendingLabel: 'ବାକି',
@@ -2361,7 +2383,9 @@ function AgentChatPanel({ t, BACKEND_URL, conceptId, stageKey, currentUserName, 
         setResolvingId(null)
         return
       }
-      setMessages((prev) => prev.map((m) => (m.id === messageId ? { ...m, resolved: decision } : m)))
+      setMessages((prev) =>
+        prev.map((m) => (m.id === messageId ? { ...m, resolved: decision, resolvedScheduleSummary: data.scheduleSummary ?? null } : m))
+      )
       if (data.schedule) onScheduleUpdated?.(data.schedule)
       if (data.castMember) onCastMemberUpdated?.(data.castMember)
       if (data.breakdown) onBreakdownUpdated?.(data.breakdown)
@@ -2421,6 +2445,35 @@ function AgentChatPanel({ t, BACKEND_URL, conceptId, stageKey, currentUserName, 
                 </div>
               )}
               <div>{m.content}</div>
+              {m.proposed_action?.type === 'regenerate_schedule' && m.proposed_action.affectedScenes?.length > 0 && !m.resolved && (
+                <div className="changes-chat-scene-preview">
+                  <p className="sidebar-section-note">
+                    {m.proposed_action.targetDayNumber > 0
+                      ? `${t.movingScenesToDayLabel} ${m.proposed_action.targetDayNumber}:`
+                      : t.affectedScenesHeading}
+                  </p>
+                  <table className="changes-chat-scene-table">
+                    <thead>
+                      <tr>
+                        <th>{t.sceneLabel}</th>
+                        <th>{t.intExtLabel}</th>
+                        <th>{t.locationLabel}</th>
+                        <th>{t.descriptionLabel}</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {m.proposed_action.affectedScenes.map((s, i) => (
+                        <tr key={i}>
+                          <td>{typeof s.episodeIndex === 'number' ? `Ep${s.episodeIndex + 1} ` : ''}Sc{s.sceneNumber}</td>
+                          <td>{s.intExt}</td>
+                          <td>{s.location}</td>
+                          <td>{s.description}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
               {m.proposed_action && m.proposed_action.type !== 'none' && !m.resolved && (
                 <div className="skip-ahead-controls">
                   <button
@@ -2439,7 +2492,19 @@ function AgentChatPanel({ t, BACKEND_URL, conceptId, stageKey, currentUserName, 
                   </button>
                 </div>
               )}
-              {m.resolved === 'applied' && <p className="changes-chat-resolved-note">{t.changesChatAppliedMessage}</p>}
+              {m.resolved === 'applied' && (
+                <p className="changes-chat-resolved-note">
+                  {m.resolvedScheduleSummary ? (
+                    <>
+                      {t.changesChatAppliedMessage}
+                      <br />
+                      <span style={{ whiteSpace: 'pre-line' }}>{m.resolvedScheduleSummary}</span>
+                    </>
+                  ) : (
+                    t.changesChatAppliedMessage
+                  )}
+                </p>
+              )}
               {m.resolved === 'cancelled' && <p className="changes-chat-resolved-note">{t.agentChatCancelledNote}</p>}
             </div>
           ))}
@@ -3148,6 +3213,9 @@ function App() {
   const [dayCompletionReportText, setDayCompletionReportText] = useState('')
   const [isParsingDayCompletion, setIsParsingDayCompletion] = useState(false)
   const [dayCompletionParseResult, setDayCompletionParseResult] = useState(null)
+  const [extraSceneReportText, setExtraSceneReportText] = useState('')
+  const [extraSceneSelections, setExtraSceneSelections] = useState({})
+  const [isPreparingNextDays, setIsPreparingNextDays] = useState(false)
 
   const [activeAgent, setActiveAgent] = useState('story')
   // Which section the AD last clicked to in the sidebar nav — the chat's
@@ -5346,7 +5414,11 @@ function App() {
       const response = await fetch(`${BACKEND_URL}/api/shoot-schedule/${sceneList.id}/parse-day-completion`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ dayNumber: day.dayNumber, reportText: dayCompletionReportText }),
+        body: JSON.stringify({
+          dayNumber: day.dayNumber,
+          reportText: dayCompletionReportText,
+          extraReportText: extraSceneReportText,
+        }),
       })
       const data = await response.json()
 
@@ -5361,6 +5433,11 @@ function App() {
         selections[index] = data.completedIndexes.includes(index)
       })
       setShotSceneSelections(selections)
+      const extraSelections = {}
+      ;(data.extraMatches ?? []).forEach((m) => {
+        extraSelections[`${m.dayNumber}-${m.index}`] = true
+      })
+      setExtraSceneSelections(extraSelections)
       setDayCompletionParseResult(data)
     } catch {
       setErrorMessage(t.genericError)
@@ -5373,7 +5450,18 @@ function App() {
     setIsRecordingShotDay(true)
     setErrorMessage(null)
 
-    const shotSceneRefs = day.sceneRefs.filter((_, index) => shotSceneSelections[index] !== false)
+    const extraSceneRefs = Object.entries(extraSceneSelections)
+      .filter(([, checked]) => checked)
+      .map(([key]) => {
+        const [dayNumberStr, indexStr] = key.split('-')
+        const otherDay = shootSchedule.scheduleDays.find((d) => d.dayNumber === Number(dayNumberStr))
+        return otherDay?.sceneRefs?.[Number(indexStr)]
+      })
+      .filter(Boolean)
+    const shotSceneRefs = [
+      ...day.sceneRefs.filter((_, index) => shotSceneSelections[index] !== false),
+      ...extraSceneRefs,
+    ]
     const notesWithCompletion = shotCompletionNote.trim()
       ? { en: [day.notes?.en, shotCompletionNote.trim()].filter(Boolean).join(' — '), or: day.notes?.or ?? '' }
       : day.notes
@@ -5398,11 +5486,39 @@ function App() {
       setShotCompletionNote('')
       setDayCompletionReportText('')
       setDayCompletionParseResult(null)
+      setExtraSceneReportText('')
+      setExtraSceneSelections({})
     } catch {
       setErrorMessage(t.genericError)
     }
 
     setIsRecordingShotDay(false)
+  }
+
+  async function handlePrepareNextDaysClick() {
+    setIsPreparingNextDays(true)
+    setErrorMessage(null)
+
+    try {
+      const response = await fetch(`${BACKEND_URL}/api/shoot-schedule/${shootSchedule.id}/request-changes`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ feedback: t.prepareNextDaysFeedback }),
+      })
+      const data = await response.json()
+
+      if (!response.ok) {
+        setErrorMessage(data.error || t.genericError)
+        setIsPreparingNextDays(false)
+        return
+      }
+
+      setShootSchedule(data)
+    } catch {
+      setErrorMessage(t.genericError)
+    }
+
+    setIsPreparingNextDays(false)
   }
 
   async function handleApproveScheduleClick() {
@@ -7344,7 +7460,7 @@ function App() {
         </div>
       )}
 
-      {activeAgent === 'production' && scriptBreakdown && scriptBreakdown.status === 'approved' && (
+      {activeAgent === 'production' && scriptBreakdown && (
         <div className="three-act-structure" id="stage-schedule">
           <h2>{t.shootScheduleHeading}</h2>
 
@@ -7500,6 +7616,18 @@ function App() {
                   {shootSchedule.scheduleDays.every((day) => expandedScheduleDays[day.dayNumber]) ? t.collapseAllButton : t.expandAllButton}
                 </button>
               )}
+
+              {canEditProduction &&
+                shootSchedule.scheduleDays.some((day) => day.completed) &&
+                shootSchedule.scheduleDays.some((day) => !day.completed) && (
+                  <button
+                    className="breakdown-action-button"
+                    onClick={handlePrepareNextDaysClick}
+                    disabled={isPreparingNextDays}
+                  >
+                    {isPreparingNextDays ? t.preparingNextDaysLabel : t.prepareNextDaysButton}
+                  </button>
+                )}
 
               <div className="schedule-days">
                 {shootSchedule.scheduleDays.map((day) => {
@@ -7694,6 +7822,38 @@ function App() {
                                 </div>
                               )}
 
+                              <p className="availability-form-intro">{t.extraScenesReportIntro}</p>
+                              <textarea
+                                className="skip-ahead-textarea"
+                                value={extraSceneReportText}
+                                onChange={(e) => setExtraSceneReportText(e.target.value)}
+                                placeholder={t.extraScenesReportPlaceholder}
+                              />
+
+                              {dayCompletionParseResult?.extraMatches?.length > 0 && (
+                                <div className="reimport-changes-summary">
+                                  <p><strong>{t.extraScenesFoundHeading}</strong></p>
+                                  <ul className="schedule-day-scenes">
+                                    {dayCompletionParseResult.extraMatches.map((m) => {
+                                      const key = `${m.dayNumber}-${m.index}`
+                                      return (
+                                        <li key={key}>
+                                          <input
+                                            type="checkbox"
+                                            checked={extraSceneSelections[key] !== false}
+                                            onChange={(e) =>
+                                              setExtraSceneSelections((prev) => ({ ...prev, [key]: e.target.checked }))
+                                            }
+                                          />
+                                          {m.label}
+                                        </li>
+                                      )
+                                    })}
+                                  </ul>
+                                  <p className="sidebar-section-note">{t.reviewCheckboxesNote}</p>
+                                </div>
+                              )}
+
                               <textarea
                                 className="skip-ahead-textarea"
                                 value={shotCompletionNote}
@@ -7715,6 +7875,8 @@ function App() {
                                     setShotCompletionNote('')
                                     setDayCompletionReportText('')
                                     setDayCompletionParseResult(null)
+                                    setExtraSceneReportText('')
+                                    setExtraSceneSelections({})
                                   }}
                                 >
                                   {t.cancelEditButton}

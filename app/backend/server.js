@@ -1460,15 +1460,38 @@ const AGENT_CHAT_RESPONSE_SCHEMA = {
         },
         description: { type: Type.STRING },
         regenerateInstructions: { type: Type.STRING },
+        explicitSceneRefs: {
+          type: Type.ARRAY,
+          items: {
+            type: Type.OBJECT,
+            properties: {
+              episodeLabel: { type: Type.STRING },
+              sceneNumberLabel: { type: Type.STRING },
+            },
+            required: ["episodeLabel", "sceneNumberLabel"],
+          },
+        },
+        characterFilters: { type: Type.ARRAY, items: { type: Type.STRING } },
+        targetDayNumber: { type: Type.INTEGER },
       },
-      required: ["type", "sceneEdits", "castAssignment", "costumeEdit", "description", "regenerateInstructions"],
+      required: [
+        "type",
+        "sceneEdits",
+        "castAssignment",
+        "costumeEdit",
+        "description",
+        "regenerateInstructions",
+        "explicitSceneRefs",
+        "characterFilters",
+        "targetDayNumber",
+      ],
     },
   },
   required: ["reply", "proposedAction"],
 };
 
 const AGENT_CHAT_NONE_ACTION_INSTRUCTION =
-  'Every field in proposedAction is required by the response format even when unused: when proposedAction.type is "none", still set sceneEdits to an empty array, castAssignment to {characterName:"", actorName:"", contactNumber:""}, costumeEdit to {character:"", sets:[]}, description to an empty string, and regenerateInstructions to an empty string.';
+  'Every field in proposedAction is required by the response format even when unused: when proposedAction.type is "none", still set sceneEdits to an empty array, castAssignment to {characterName:"", actorName:"", contactNumber:""}, costumeEdit to {character:"", sets:[]}, description to an empty string, regenerateInstructions to an empty string, explicitSceneRefs to an empty array, characterFilters to an empty array, and targetDayNumber to 0.';
 
 const AGENT_CHAT_CAST_ASSIGNMENT_INSTRUCTION =
   'You can also propose reassigning who plays a character — e.g. the AD types a phone number and attaches a photo of a person, saying something like "she\'s Priyanka, cast her as Pushpa" (meaning: the real person in the photo is named Priyanka, and she should play the character Pushpa). To propose this, set proposedAction.type to "assign_cast" and fill castAssignment: characterName is the ROLE/character being cast (match it to one of the known cast entries above if it already exists, otherwise use the name exactly as given), actorName is the real person\'s name, and contactNumber is their phone number if given (empty string if not). Only propose this when both the character and the actor\'s name are clear — ask if either is ambiguous. When proposing assign_cast, leave sceneEdits and costumeEdit at their empty defaults.';
@@ -1495,6 +1518,7 @@ const AGENT_CHAT_STAY_ON_TOPIC_INSTRUCTION =
 function agentChatRegenerateInstruction(actionType, subjectLabel) {
   return (
     `You can also handle BROAD requests — reorganizing which scenes are on which day, filtering the ${subjectLabel} down to specific characters/locations, or any other wholesale restructuring that isn't a small named-scene tweak. For these, set proposedAction.type to "${actionType}" and write regenerateInstructions: a clear, complete, self-contained restatement of exactly what they want changed — written the way a Production Manager would type it into a formal written revision request, in plain English, folding in every constraint they've given across this conversation (not just their latest message) so nothing gets lost. Do NOT try to compute the actual scene-by-scene result yourself — leave sceneEdits, castAssignment, and costumeEdit at their empty defaults; a separate full regeneration step rebuilds the ${subjectLabel} from your instructions once they confirm, and it can take a little while since it replaces the whole thing. Your reply should briefly reflect back what you understood they want and ask them to confirm before you rebuild it — don't downplay that this replaces the current ${subjectLabel} entirely. Reserve this for genuinely broad requests; a single named scene's costume/property/remark still goes through the narrower edit above.\n\n` +
+    `Also fill in, so the AD can see a real preview of exactly which scenes this touches before confirming: explicitSceneRefs — every scene they named directly by episode/scene number (episodeLabel + sceneNumberLabel exactly as they wrote it, e.g. "Episode 2" + "3"); characterFilters — every character name they mentioned whose scenes should all be included (e.g. "Bablu" for "all of Bablu's scenes"), which will be resolved against the real script server-side, not by you; and targetDayNumber — the shoot day number they want these scenes moved to/scheduled on, or 0 if none was stated. Leave any of these at their empty default (empty array or 0) when not applicable.\n\n` +
     `CRITICAL — you only have the specific action types spelled out in this whole prompt, nothing else. If the AD asks for something truly none of them cover (not actually about the ${subjectLabel} at all), set proposedAction.type to "none" with every field at its empty default and say so honestly. But never punt a request to reorganize/restructure the ${subjectLabel} to "go do that somewhere else" — that capability lives right here now, use it. And never attach a proposedAction left over from an earlier, different request just because the schema requires one to be present — reusing an unrelated old action and letting the human confirm it as if it fulfilled their new request is far worse than asking one more clarifying question.`
   );
 }
@@ -1752,7 +1776,28 @@ app.post(
       // onto the crew_members row, so it's carried inside proposed_action
       // (the first photo, if several were attached — a cast assignment only
       // ever needs one representative photo).
-      const proposedAction = hasAction ? { ...parsed.proposedAction, photoPath: attachmentPhotoPaths[0] ?? null } : null;
+      let proposedAction = hasAction ? { ...parsed.proposedAction, photoPath: attachmentPhotoPaths[0] ?? null } : null;
+
+      // For a schedule restructuring proposal, resolve exactly which real
+      // scenes it touches (never trusting the model's own scene content) so
+      // the AD sees a concrete table before confirming, not just prose.
+      if (proposedAction?.type === "regenerate_schedule") {
+        const sceneListId = await findSceneListIdForConcept(conceptId);
+        if (sceneListId) {
+          const sceneListResult = await db.query("SELECT content FROM scene_lists WHERE id = $1", [sceneListId]);
+          const sceneList = sceneListResult.rows[0]?.content;
+          if (sceneList) {
+            proposedAction = {
+              ...proposedAction,
+              affectedScenes: resolveAffectedScenesForProposal(
+                sceneList,
+                proposedAction.explicitSceneRefs,
+                proposedAction.characterFilters
+              ),
+            };
+          }
+        }
+      }
       const assistantInsert = await db.query(
         "INSERT INTO agent_chat_messages (concept_id, stage_key, role, content, proposed_action) VALUES ($1, $2, 'assistant', $3, $4) RETURNING id, role, content, author_name, attachment_photo_path, proposed_action, resolved, created_at",
         [conceptId, stageKey, parsed.reply, proposedAction ? JSON.stringify(proposedAction) : null]
@@ -1797,6 +1842,7 @@ app.post("/api/agent-chat/:conceptId/:stageKey/resolve-action", requireLogin, as
   }
 
   let appliedSchedule = null;
+  let appliedScheduleSummary = null;
   let appliedCastMember = null;
   let appliedBreakdown = null;
 
@@ -1977,6 +2023,7 @@ app.post("/api/agent-chat/:conceptId/:stageKey/resolve-action", requireLogin, as
         [sceneListId, JSON.stringify(revisedContent), `Restructured via the Changes chat: ${action.regenerateInstructions.trim()}`]
       );
       appliedSchedule = { ...insertResult.rows[0], sceneListId, ...revisedContent };
+      appliedScheduleSummary = buildScheduleDaySummary(sceneList, revisedContent.scheduleDays);
     }
   }
 
@@ -2004,7 +2051,13 @@ app.post("/api/agent-chat/:conceptId/:stageKey/resolve-action", requireLogin, as
 
   await db.query("UPDATE agent_chat_messages SET resolved = $1 WHERE id = $2", [decision, messageId]);
 
-  res.json({ resolved: decision, schedule: appliedSchedule, castMember: appliedCastMember, breakdown: appliedBreakdown });
+  res.json({
+    resolved: decision,
+    schedule: appliedSchedule,
+    scheduleSummary: appliedScheduleSummary,
+    castMember: appliedCastMember,
+    breakdown: appliedBreakdown,
+  });
 });
 
 // Fields that exist on the in-memory frontend objects but are metadata (id,
@@ -5151,6 +5204,88 @@ function resolveSceneIdentityFromLabels(sceneList, episodeLabelRaw, sceneNumberL
   return sceneIndex !== -1 ? { episodeIndex: null, sceneIndex } : null;
 }
 
+// Turns a chat proposal's explicitSceneRefs (literal labels the AD typed)
+// and characterFilters (names the AD mentioned, e.g. "all of Bablu's
+// scenes") into a real, deterministic list of affected scenes the AD can
+// review before confirming — resolved against the actual scene_list
+// content, never trusting the model's own idea of what a scene contains.
+// Character matching is a plain substring search over each scene's real
+// one-liner (which always names every character present), not an AI call.
+function resolveAffectedScenesForProposal(sceneList, explicitSceneRefs, characterFilters) {
+  const isSeries = Boolean(sceneList.episodeScenes);
+  const refs = [];
+
+  (explicitSceneRefs ?? []).forEach(({ episodeLabel, sceneNumberLabel }) => {
+    const resolved = resolveSceneIdentityFromLabels(sceneList, episodeLabel, sceneNumberLabel);
+    if (resolved) refs.push(resolved);
+  });
+
+  (characterFilters ?? []).forEach((name) => {
+    const needle = (name || "").trim().toLowerCase();
+    if (!needle) return;
+    if (isSeries) {
+      sceneList.episodeScenes.forEach((episode, episodeIndex) => {
+        (episode.scenes ?? []).forEach((scene, sceneIndex) => {
+          if ((scene.oneLiner?.en ?? "").toLowerCase().includes(needle)) {
+            refs.push({ episodeIndex, sceneIndex });
+          }
+        });
+      });
+    } else {
+      (sceneList.scenes ?? []).forEach((scene, sceneIndex) => {
+        if ((scene.oneLiner?.en ?? "").toLowerCase().includes(needle)) {
+          refs.push({ episodeIndex: null, sceneIndex });
+        }
+      });
+    }
+  });
+
+  const seen = new Set();
+  const deduped = refs.filter((ref) => {
+    const key = `${ref.episodeIndex ?? ""}-${ref.sceneIndex}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+
+  return deduped
+    .map((ref) => {
+      const scene = lookupSceneServerSide(sceneList, ref);
+      if (!scene) return null;
+      return {
+        episodeIndex: ref.episodeIndex,
+        sceneIndex: ref.sceneIndex,
+        sceneNumber: (scene.sceneNumber || String(ref.sceneIndex + 1)).replace(/^\s*(SCENE|SC)\.?\s*/i, ""),
+        intExt: scene.intExt || "",
+        location: scene.location?.en ?? "",
+        timeOfDay: scene.timeOfDay || "",
+        description: scene.oneLiner?.en ?? "",
+      };
+    })
+    .filter(Boolean);
+}
+
+// A plain, deterministic "Day 3: Ep2 Sc3, Sc4 / Day 4: Ep2 Sc7, ..." summary
+// built straight from the real regenerated schedule content — used instead
+// of an AI-written description of what changed, so it can never mismatch
+// what was actually applied.
+function buildScheduleDaySummary(sceneList, scheduleDays) {
+  const isSeries = Boolean(sceneList.episodeScenes);
+  return (scheduleDays ?? [])
+    .slice()
+    .sort((a, b) => a.dayNumber - b.dayNumber)
+    .map((day) => {
+      const labels = (day.sceneRefs ?? []).map((ref) => {
+        const scene = lookupSceneServerSide(sceneList, ref);
+        const num = (scene?.sceneNumber || String(ref.sceneIndex + 1)).replace(/^\s*(SCENE|SC)\.?\s*/i, "");
+        const epLabel = isSeries && typeof ref.episodeIndex === "number" ? `Ep${ref.episodeIndex + 1} ` : "";
+        return `${epLabel}Sc${num}`;
+      });
+      return `Day ${day.dayNumber}${day.completed ? " (completed)" : ""}: ${labels.length ? labels.join(", ") : "(no scenes)"}`;
+    })
+    .join("\n");
+}
+
 // One item per distinct scene mentioned in the photo, each with the scene
 // identity resolved server-side (never trusting the model's own guess at
 // which internal scene that corresponds to) — unresolved items are still
@@ -7203,9 +7338,53 @@ async function parseCompletedScenesFromReport(sceneList, plannedSceneRefs, repor
   return JSON.parse(response.text);
 }
 
+// Finds scenes on OTHER, not-yet-shot days that the AD says they also shot
+// today ahead of schedule. Same "match by real script scene number, never
+// guess from position" approach as parseCompletedScenesFromReport, just
+// searching across every remaining day's sceneRefs instead of one day's.
+async function parseExtraScenesFromReport(sceneList, candidateDays, reportText) {
+  const isSeries = Boolean(sceneList.episodeScenes);
+  const candidates = [];
+  candidateDays.forEach((d) => {
+    (d.sceneRefs ?? []).forEach((ref, index) => {
+      const scene = lookupSceneServerSide(sceneList, ref);
+      const num = (scene?.sceneNumber || String(ref.sceneIndex + 1)).replace(/^\s*(SCENE|SC)\.?\s*/i, "");
+      const epLabel = isSeries ? `Episode ${ref.episodeIndex + 1}, ` : "";
+      candidates.push({
+        dayNumber: d.dayNumber,
+        index,
+        label: `Day ${d.dayNumber} — ${epLabel}Scene ${num}${scene?.oneLiner?.en ? `: ${scene.oneLiner.en}` : ""}`,
+      });
+    });
+  });
+
+  if (candidates.length === 0 || !reportText?.trim()) return [];
+
+  const listText = candidates.map((c, i) => `${i}. ${c.label}`).join("\n");
+  const contents = `Scenes currently scheduled on OTHER, not-yet-shot days, numbered:\n${listText}\n\nThe Assistant Director says they ALSO shot some extra scenes today, ahead of their originally scheduled day:\n"${reportText}"\n\nMatch by the real script scene number and episode mentioned — the AD refers to scenes by their real script scene numbers exactly as listed above, never guess from position alone. Only include an index if the report clearly says that scene was shot today. Return "matchedIndexes" (0-indexed positions from the list above).`;
+
+  const response = await generateContentWithRetry({
+    model: "gemini-flash-lite-latest",
+    contents,
+    config: {
+      systemInstruction: PRODUCTION_SYSTEM_PROMPT,
+      responseMimeType: "application/json",
+      maxOutputTokens: 2048,
+      responseSchema: {
+        type: Type.OBJECT,
+        properties: { matchedIndexes: { type: Type.ARRAY, items: { type: Type.INTEGER } } },
+        required: ["matchedIndexes"],
+      },
+    },
+  });
+
+  const { matchedIndexes } = JSON.parse(response.text);
+  return matchedIndexes.map((i) => candidates[i]).filter(Boolean);
+}
+
 app.post("/api/shoot-schedule/:sceneListId/parse-day-completion", requireRole("admin", "production_manager"), async (req, res) => {
   const { sceneListId } = req.params;
-  const { dayNumber, reportText } = req.body;
+  const { dayNumber, reportText, extraReportText } = req.body;
 
   if (!(await userOwnsSceneList(req.user, sceneListId))) {
     res.status(403).json({ error: "You don't have access to this project." });
@@ -7221,7 +7400,8 @@ app.post("/api/shoot-schedule/:sceneListId/parse-day-completion", requireRole("a
       "SELECT content FROM shoot_schedules WHERE scene_list_id = $1 ORDER BY created_at DESC LIMIT 1",
       [sceneListId]
     );
-    const day = (latestSchedule.rows[0]?.content?.scheduleDays ?? []).find((d) => d.dayNumber === dayNumber);
+    const allDays = latestSchedule.rows[0]?.content?.scheduleDays ?? [];
+    const day = allDays.find((d) => d.dayNumber === dayNumber);
     if (!day) {
       res.status(404).json({ error: "That shoot day wasn't found in the current schedule." });
       return;
@@ -7239,11 +7419,18 @@ app.post("/api/shoot-schedule/:sceneListId/parse-day-completion", requireRole("a
       return `${epLabel}Scene ${num}${scene?.oneLiner?.en ? `: ${scene.oneLiner.en}` : ""}`;
     };
 
+    let extraMatches = [];
+    if (extraReportText?.trim()) {
+      const otherDays = allDays.filter((d) => d.dayNumber !== dayNumber && !d.completed);
+      extraMatches = await parseExtraScenesFromReport(sceneList, otherDays, extraReportText);
+    }
+
     res.json({
       dayNumber,
       completedIndexes,
       completed: completedIndexes.map((i) => ({ index: i, label: describeRef(day.sceneRefs[i]) })),
       notCompleted: notCompletedIndexes.map((i) => ({ index: i, label: describeRef(day.sceneRefs[i]) })),
+      extraMatches,
     });
   } catch (error) {
     console.error("Parsing day completion failed:", error.message);

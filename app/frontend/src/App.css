@@ -728,6 +728,18 @@ button, input, textarea, select {
   margin-top: 10px;
 }
 
+/* The Mark-Day-Shot form reuses .skip-ahead-controls as its OUTER wrapper
+   (for the shared spacing), but that class is meant for a row of buttons —
+   with a multi-field form's worth of text/textareas/lists inside it as flex
+   ROW children, they all get squeezed to a sliver-width column. Force the
+   outer wrapper back to a normal stacked form; nested .skip-ahead-controls
+   button rows inside it are unaffected since this only targets the specific
+   combined class. */
+.schedule-mark-shot-controls {
+  flex-direction: column;
+  align-items: stretch;
+}
+
 .skip-ahead-runtime-label {
   display: flex;
   flex-direction: column;
@@ -3229,6 +3241,30 @@ button, input, textarea, select {
   margin: 6px 0 0;
   font-size: 12px;
   color: var(--text-muted);
+}
+
+.changes-chat-scene-preview {
+  margin: 8px 0;
+  overflow-x: auto;
+}
+
+.changes-chat-scene-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.changes-chat-scene-table th,
+.changes-chat-scene-table td {
+  border: 1px solid var(--border-color, #444);
+  padding: 4px 6px;
+  text-align: left;
+  vertical-align: top;
+}
+
+.changes-chat-scene-table th {
+  font-weight: 700;
+  background: var(--surface-2, rgba(255, 255, 255, 0.05));
 }
 
 .agent-chat-greeting {

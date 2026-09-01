@@ -1797,7 +1797,7 @@ function ClapboardFullScreen({ t, BACKEND_URL, sceneListId, sceneOptions, onClos
   const [isLoadingHistory, setIsLoadingHistory] = useState(true)
   const [isHistoryOpen, setIsHistoryOpen] = useState(false)
   const [logError, setLogError] = useState(null)
-  const [isFullscreen, setIsFullscreen] = useState(false)
+  const [isForcedLandscape, setIsForcedLandscape] = useState(false)
   const [timecodeStartedAt, setTimecodeStartedAt] = useState(null)
   const [elapsedMs, setElapsedMs] = useState(0)
   const audioContextRef = useRef(null)
@@ -1812,31 +1812,40 @@ function ClapboardFullScreen({ t, BACKEND_URL, sceneListId, sceneOptions, onClos
     return () => clearInterval(interval)
   }, [timecodeStartedAt])
 
-  // Mirrors a video player's expand button: real Fullscreen API (hides the
-  // browser chrome entirely, unlike this component's own CSS-only overlay)
-  // plus an attempt to lock into landscape — orientation lock only works
-  // inside an actual fullscreen context on the browsers that support it at
-  // all (iOS Safari doesn't; this fails silently there and the AD can just
-  // rotate the phone by hand).
+  // The real Fullscreen + Orientation Lock APIs are unreliable on mobile —
+  // iOS Safari doesn't support element-level requestFullscreen at all, and
+  // orientation lock only works inside an actual fullscreen context on a
+  // handful of Android browsers. So expand does two things: attempts the
+  // real API as a bonus (hides browser chrome where it's actually
+  // supported), and ALSO applies a pure-CSS 90° rotation that fills the
+  // screen with the landscape layout regardless of whether either API
+  // worked — this part always works, on every mobile browser, since it's
+  // just a transform, not a browser feature that can be missing.
   async function handleExpandClick() {
+    if (isForcedLandscape) {
+      setIsForcedLandscape(false)
+      if (document.fullscreenElement) {
+        try { await document.exitFullscreen?.() } catch { /* ignore */ }
+      }
+      return
+    }
+    setIsForcedLandscape(true)
     try {
-      if (!document.fullscreenElement) {
-        await containerRef.current?.requestFullscreen?.()
-        if (screen.orientation?.lock) {
-          screen.orientation.lock('landscape').catch(() => {})
-        }
-      } else {
-        await document.exitFullscreen?.()
+      await containerRef.current?.requestFullscreen?.()
+      if (screen.orientation?.lock) {
+        screen.orientation.lock('landscape').catch(() => {})
       }
     } catch {
-      // Fullscreen can be denied/unsupported (e.g. inside an iframe) — the
-      // slate still works, just without the immersive chrome-free view.
+      // Real fullscreen denied/unsupported — the CSS rotation still applies.
     }
   }
 
   useEffect(() => {
     function handleFullscreenChange() {
-      setIsFullscreen(Boolean(document.fullscreenElement))
+      // The system back gesture / browser's own fullscreen-exit control can
+      // leave fullscreen without going through handleExpandClick — drop the
+      // forced rotation too so the two states can't get out of sync.
+      if (!document.fullscreenElement) setIsForcedLandscape(false)
     }
     document.addEventListener('fullscreenchange', handleFullscreenChange)
     return () => {
@@ -1845,6 +1854,17 @@ function ClapboardFullScreen({ t, BACKEND_URL, sceneListId, sceneOptions, onClos
       if (screen.orientation?.unlock) screen.orientation.unlock()
     }
   }, [])
+
+  // If the AD physically rotates the phone into real landscape while the
+  // forced CSS rotation is active, drop the forced rotation so the two
+  // don't fight each other and turn the content sideways again.
+  useEffect(() => {
+    if (!isForcedLandscape) return
+    const query = window.matchMedia('(orientation: landscape)')
+    function handleChange(e) { if (e.matches) setIsForcedLandscape(false) }
+    query.addEventListener('change', handleChange)
+    return () => query.removeEventListener('change', handleChange)
+  }, [isForcedLandscape])
 
   useEffect(() => {
     let cancelled = false
@@ -1936,13 +1956,13 @@ function ClapboardFullScreen({ t, BACKEND_URL, sceneListId, sceneOptions, onClos
   }
 
   return (
-    <div className="clapboard-fullscreen" ref={containerRef}>
+    <div className={isForcedLandscape ? 'clapboard-fullscreen force-landscape' : 'clapboard-fullscreen'} ref={containerRef}>
       <button type="button" className="clapboard-close-button" onClick={onClose} aria-label="Close">✕</button>
       <button type="button" className="clapboard-history-toggle" onClick={() => setIsHistoryOpen((o) => !o)}>
         {t.clapboardHistoryHeading}
       </button>
       <button type="button" className="clapboard-expand-button" onClick={handleExpandClick} aria-label="Expand">
-        {isFullscreen ? '⤡' : '⤢'}
+        {isForcedLandscape ? '⤡' : '⤢'}
       </button>
 
       <div className={isClapping ? 'clapboard-board clapping' : 'clapboard-board'}>

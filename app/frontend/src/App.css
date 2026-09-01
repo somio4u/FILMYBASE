@@ -3337,6 +3337,26 @@ button, input, textarea, select {
   overflow-y: auto;
 }
 
+/* The real Fullscreen + Orientation Lock APIs don't reliably work on
+   mobile (iOS Safari has no element-level requestFullscreen at all).
+   This is a pure-CSS substitute that works everywhere: swap width/height
+   before rotating 90°, so the rotated box lines up exactly with the
+   portrait viewport it's covering — same trick sites use for "rotate
+   your phone" games. Scoped to actual portrait screens only, so it
+   doesn't double-rotate on a device that's already physically landscape. */
+@media (orientation: portrait) {
+  .clapboard-fullscreen.force-landscape {
+    top: 50%;
+    left: 50%;
+    right: auto;
+    bottom: auto;
+    width: 100vh;
+    height: 100vw;
+    transform: translate(-50%, -50%) rotate(90deg);
+    transform-origin: center center;
+  }
+}
+
 .clapboard-close-button {
   position: absolute;
   top: 16px;
@@ -3652,4 +3672,38 @@ button, input, textarea, select {
   .clapboard-timecode {
     font-size: clamp(28px, 7vh, 72px);
   }
+}
+
+/* Same landscape board layout as above, but applied via the forced-CSS-
+   rotation class instead of a media query — needed because when the
+   rotation trick is active, the device is still physically in portrait
+   (only the visual box is rotated), so `@media (orientation: landscape)`
+   above never matches even though the screen now reads as landscape. */
+.clapboard-fullscreen.force-landscape {
+  padding: clamp(8px, 2vh, 20px) clamp(16px, 4vw, 40px);
+}
+
+.clapboard-fullscreen.force-landscape .clapboard-board {
+  max-width: 100%;
+  width: 100%;
+  flex-direction: row;
+  align-items: stretch;
+  gap: clamp(10px, 2vw, 24px);
+}
+
+.clapboard-fullscreen.force-landscape .clapboard-board-left {
+  flex: 1.1;
+  display: flex;
+  flex-direction: column;
+  gap: clamp(8px, 1.5vh, 16px);
+  justify-content: center;
+}
+
+.clapboard-fullscreen.force-landscape .clapboard-tap-zone {
+  flex: 1;
+  min-height: unset;
+}
+
+.clapboard-fullscreen.force-landscape .clapboard-timecode {
+  font-size: clamp(28px, 7vh, 72px);
 }

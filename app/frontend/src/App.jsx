@@ -2028,7 +2028,6 @@ function ClapboardFullScreen({ t, BACKEND_URL, sceneListId, sceneOptions, onClos
           </div>
           <div className="clapboard-table-row clapboard-table-footer">
             <div className="clapboard-date-cell">
-              <span>DATE:</span>
               <input
                 type="text"
                 inputMode="numeric"
@@ -2063,16 +2062,15 @@ function ClapboardFullScreen({ t, BACKEND_URL, sceneListId, sceneOptions, onClos
               <button type="button" className={dayNight === 'DAY' ? 'clapboard-daynight-button active' : 'clapboard-daynight-button'} onClick={() => setDayNight('DAY')}>DAY</button>
               <button type="button" className={dayNight === 'NIGHT' ? 'clapboard-daynight-button active' : 'clapboard-daynight-button'} onClick={() => setDayNight('NIGHT')}>NIGHT</button>
             </div>
-          </div>
-
-          <div
-            className={isTimecodeRunning ? 'clapboard-tap-zone running' : 'clapboard-tap-zone'}
-            onClick={handleClapClick}
-            role="button"
-            tabIndex={0}
-          >
-            <div className="clapboard-timecode">{formatTimecode(elapsedMs)}</div>
-            <div className="clapboard-tap-hint">{isTimecodeRunning ? t.clapboardTapHintStop : t.clapboardTapHintStart}</div>
+            <div
+              className={isTimecodeRunning ? 'clapboard-tap-zone running' : 'clapboard-tap-zone'}
+              onClick={handleClapClick}
+              role="button"
+              tabIndex={0}
+            >
+              <div className="clapboard-timecode">{formatTimecode(elapsedMs)}</div>
+              <div className="clapboard-tap-hint">{isTimecodeRunning ? t.clapboardTapHintStop : t.clapboardTapHintStart}</div>
+            </div>
           </div>
         </div>
         </div>

@@ -3514,35 +3514,28 @@ button, input, textarea, select {
 }
 
 .clapboard-table-footer {
-  grid-template-columns: 1.4fr 1fr;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 0.75fr) minmax(0, 0.85fr);
 }
 
 .clapboard-date-cell,
 .clapboard-daynight-cell {
-  padding: clamp(10px, 2.5vw, 16px);
+  padding: clamp(6px, 2vw, 16px) clamp(4px, 1.5vw, 12px);
   border-right: 2px solid #111;
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 4px;
   justify-content: center;
-}
-.clapboard-date-cell span {
-  font-weight: 700;
-  font-size: clamp(12px, 2.2vw, 15px);
-  color: #111;
-  white-space: nowrap;
-}
-.clapboard-daynight-cell {
-  border-right: none;
+  min-width: 0;
 }
 
 .clapboard-date-input {
-  width: clamp(30px, 6vw, 40px);
+  width: clamp(22px, 5vw, 40px);
   flex: 0 0 auto;
-  padding: clamp(4px, 1.2vw, 8px) 2px;
+  padding: clamp(3px, 1.2vw, 8px) 2px;
+  font-size: clamp(12px, 2.6vw, 22px);
 }
 .clapboard-date-year {
-  width: clamp(48px, 9vw, 64px);
+  width: clamp(36px, 7.5vw, 64px);
 }
 .clapboard-date-sep {
   color: #111;
@@ -3550,14 +3543,15 @@ button, input, textarea, select {
 }
 
 .clapboard-daynight-button {
-  padding: clamp(6px, 1.8vw, 10px) clamp(10px, 2.5vw, 16px);
+  padding: clamp(4px, 1.4vw, 10px) clamp(6px, 2vw, 16px);
   border-radius: 6px;
   border: 1px solid #ccc;
   background: #fff;
   color: #111;
   font-weight: 700;
-  font-size: clamp(11px, 2vw, 14px);
+  font-size: clamp(9px, 1.8vw, 14px);
   cursor: pointer;
+  white-space: nowrap;
 }
 .clapboard-daynight-button.active {
   background: #111;
@@ -3565,24 +3559,23 @@ button, input, textarea, select {
   border-color: #111;
 }
 
-/* Lives inside .clapboard-table itself (last row, after the date/day-night
-   footer) so the date/day-night controls and the timecode read as one
-   continuous slate block, not two separate boxes with a gap between them.
-   The table's own border + border-radius + overflow:hidden wrap this row
-   too, so it only needs a top divider to match the other row borders. */
+/* The third cell of the date/day-night footer row — sits side by side with
+   them in one horizontal block instead of its own row underneath, so that
+   block doesn't cost extra vertical height the banner/table could use. */
 .clapboard-tap-zone {
-  min-height: clamp(70px, 14vh, 110px);
-  border-top: 2px solid #111;
+  border-left: 2px solid #111;
   background: #fff;
   display: flex;
   flex-direction: column;
-  align-items: flex-end;
+  align-items: center;
   justify-content: center;
-  gap: 4px;
-  padding: 10px clamp(14px, 3vw, 28px);
+  gap: 2px;
+  padding: clamp(4px, 1.8vw, 12px) clamp(2px, 1.2vw, 12px);
   cursor: pointer;
   user-select: none;
   transition: background 0.15s ease;
+  min-width: 0;
+  overflow: hidden;
 }
 
 .clapboard-tap-zone.running {
@@ -3595,17 +3588,22 @@ button, input, textarea, select {
 
 .clapboard-timecode {
   font-variant-numeric: tabular-nums;
-  font-size: clamp(28px, 7vw, 52px);
+  font-size: clamp(11px, 3.4vw, 26px);
   font-weight: 800;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.02em;
   color: #e5352b;
+  white-space: nowrap;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .clapboard-tap-hint {
-  font-size: clamp(10px, 1.8vw, 13px);
+  font-size: clamp(7px, 1.3vw, 10px);
   color: #b3261e;
   text-transform: uppercase;
-  letter-spacing: 0.12em;
+  letter-spacing: 0.08em;
+  white-space: nowrap;
 }
 
 .clapboard-error {
@@ -3675,7 +3673,11 @@ button, input, textarea, select {
    rules, since visually the two should look the same either way. */
 @media (orientation: landscape) {
   .clapboard-fullscreen {
-    padding: clamp(3px, 1.5vh, 16px) clamp(16px, 4vw, 40px);
+    padding: clamp(3px, 1.5vh, 16px) clamp(6px, 1.5vw, 16px);
+  }
+
+  .clapboard-board {
+    max-width: none;
   }
 
   .clapboard-board,
@@ -3684,29 +3686,28 @@ button, input, textarea, select {
   }
 
   .clapboard-banner {
-    max-height: 26vh;
+    max-height: 34vh;
   }
 
   .clapboard-table-row {
     min-height: unset;
   }
 
-  .clapboard-tap-zone {
-    min-height: clamp(30px, 5vh, 46px);
-    padding: 4px clamp(14px, 3vw, 28px);
-  }
-
   .clapboard-timecode {
-    font-size: clamp(15px, 3.2vh, 24px);
+    font-size: clamp(14px, 3vh, 22px);
   }
 
   .clapboard-tap-hint {
-    font-size: clamp(8px, 1.4vh, 11px);
+    font-size: clamp(7px, 1.3vh, 10px);
   }
 }
 
 .clapboard-fullscreen.force-landscape {
-  padding: clamp(3px, 1.5vh, 16px) clamp(16px, 4vw, 40px);
+  padding: clamp(3px, 1.5vh, 16px) clamp(6px, 1.5vw, 16px);
+}
+
+.clapboard-fullscreen.force-landscape .clapboard-board {
+  max-width: none;
 }
 
 .clapboard-fullscreen.force-landscape .clapboard-board,
@@ -3715,16 +3716,15 @@ button, input, textarea, select {
 }
 
 .clapboard-fullscreen.force-landscape .clapboard-banner {
-  max-height: 26vh;
-}
-
-.clapboard-fullscreen.force-landscape .clapboard-tap-zone {
-  min-height: clamp(30px, 5vh, 46px);
-  padding: 4px clamp(14px, 3vw, 28px);
+  max-height: 34vh;
 }
 
 .clapboard-fullscreen.force-landscape .clapboard-timecode {
-  font-size: clamp(15px, 3.2vh, 24px);
+  font-size: clamp(14px, 3vh, 22px);
+}
+
+.clapboard-fullscreen.force-landscape .clapboard-tap-hint {
+  font-size: clamp(7px, 1.3vh, 10px);
 }
 
 .clapboard-fullscreen.force-landscape .clapboard-tap-hint {

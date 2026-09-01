@@ -3422,8 +3422,11 @@ button, input, textarea, select {
 
 .clapboard-banner {
   width: 100%;
+  max-height: 30vh;
+  object-fit: contain;
   border-radius: 10px;
   display: block;
+  margin: 0 auto;
 }
 
 .clapboard-table {
@@ -3562,24 +3565,28 @@ button, input, textarea, select {
   border-color: #111;
 }
 
+/* No separate black panel — this is just a row inside the same white
+   board, sized generously and right-aligned (a natural spot for a thumb
+   resting on the right side of the phone while holding it in landscape),
+   without blocking the table's own inputs above it. */
 .clapboard-tap-zone {
-  flex: 1;
-  min-height: clamp(120px, 22vh, 220px);
-  border-radius: 14px;
-  background: #111;
-  color: #fff;
+  min-height: clamp(70px, 14vh, 110px);
+  border-radius: 12px;
+  border: 2px solid #e5352b;
+  background: #fff;
   display: flex;
   flex-direction: column;
-  align-items: center;
+  align-items: flex-end;
   justify-content: center;
-  gap: 8px;
+  gap: 4px;
+  padding: 10px clamp(14px, 3vw, 28px);
   cursor: pointer;
   user-select: none;
   transition: background 0.15s ease;
 }
 
 .clapboard-tap-zone.running {
-  background: #7a1414;
+  background: #fdecea;
 }
 
 .clapboard-tap-zone:active {
@@ -3588,16 +3595,17 @@ button, input, textarea, select {
 
 .clapboard-timecode {
   font-variant-numeric: tabular-nums;
-  font-size: clamp(32px, 9vw, 64px);
+  font-size: clamp(28px, 7vw, 52px);
   font-weight: 800;
   letter-spacing: 0.04em;
+  color: #e5352b;
 }
 
 .clapboard-tap-hint {
-  font-size: clamp(11px, 2vw, 14px);
-  color: #aaa;
+  font-size: clamp(10px, 1.8vw, 13px);
+  color: #b3261e;
   text-transform: uppercase;
-  letter-spacing: 0.14em;
+  letter-spacing: 0.12em;
 }
 
 .clapboard-error {
@@ -3657,76 +3665,60 @@ button, input, textarea, select {
   white-space: nowrap;
 }
 
-/* Landscape — the board stays ONE unified full-width slate (banner, then
-   table, then the tap/timecode strip), just scaled to fit the wide-short
-   aspect ratio instead of splitting into a separate white half and black
-   half. The tap zone gets a fixed, modest height here (not flex:1) so it
-   reads as a strip within the same board rather than a competing panel. */
+/* Landscape — no more left/right split; the board stays ONE unified
+   full-width slate (banner, table, then the red timecode row), just
+   scaled to fit the wide-short aspect ratio without needing to scroll —
+   the banner in particular shrinks further here since there's much less
+   vertical room than in portrait. Both the real media query (a device
+   that's actually physically landscape) and the .force-landscape class
+   (the CSS-rotation trick on a still-portrait device) get identical
+   rules, since visually the two should look the same either way. */
 @media (orientation: landscape) {
   .clapboard-fullscreen {
     padding: clamp(6px, 1.5vh, 16px) clamp(16px, 4vw, 40px);
   }
 
-  .clapboard-board {
-    max-width: 100%;
-    width: 100%;
-    flex-direction: row;
-    align-items: stretch;
-    gap: clamp(10px, 2vw, 20px);
-  }
-
+  .clapboard-board,
   .clapboard-board-left {
-    flex: 1;
     gap: clamp(6px, 1.2vh, 12px);
-    justify-content: center;
   }
 
-  .clapboard-tap-zone {
-    flex: 0 0 clamp(90px, 20vw, 160px);
+  .clapboard-banner {
+    max-height: 12vh;
+  }
+
+  .clapboard-table-row {
     min-height: unset;
   }
 
-  .clapboard-timecode {
-    font-size: clamp(20px, 4vh, 40px);
+  .clapboard-tap-zone {
+    min-height: clamp(48px, 9vh, 70px);
+    padding: 6px clamp(14px, 3vw, 28px);
   }
 
-  .clapboard-tap-hint {
-    font-size: 10px;
+  .clapboard-timecode {
+    font-size: clamp(20px, 5vh, 34px);
   }
 }
 
-/* Same landscape board layout as above, but applied via the forced-CSS-
-   rotation class instead of a media query — needed because when the
-   rotation trick is active, the device is still physically in portrait
-   (only the visual box is rotated), so `@media (orientation: landscape)`
-   above never matches even though the screen now reads as landscape. */
 .clapboard-fullscreen.force-landscape {
   padding: clamp(6px, 1.5vh, 16px) clamp(16px, 4vw, 40px);
 }
 
-.clapboard-fullscreen.force-landscape .clapboard-board {
-  max-width: 100%;
-  width: 100%;
-  flex-direction: row;
-  align-items: stretch;
-  gap: clamp(10px, 2vw, 20px);
+.clapboard-fullscreen.force-landscape .clapboard-board,
+.clapboard-fullscreen.force-landscape .clapboard-board-left {
+  gap: clamp(6px, 1.2vh, 12px);
 }
 
-.clapboard-fullscreen.force-landscape .clapboard-board-left {
-  flex: 1;
-  gap: clamp(6px, 1.2vh, 12px);
-  justify-content: center;
+.clapboard-fullscreen.force-landscape .clapboard-banner {
+  max-height: 12vh;
 }
 
 .clapboard-fullscreen.force-landscape .clapboard-tap-zone {
-  flex: 0 0 clamp(90px, 20vw, 160px);
-  min-height: unset;
+  min-height: clamp(48px, 9vh, 70px);
+  padding: 6px clamp(14px, 3vw, 28px);
 }
 
 .clapboard-fullscreen.force-landscape .clapboard-timecode {
-  font-size: clamp(20px, 4vh, 40px);
-}
-
-.clapboard-fullscreen.force-landscape .clapboard-tap-hint {
-  font-size: 10px;
+  font-size: clamp(20px, 5vh, 34px);
 }

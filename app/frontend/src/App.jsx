@@ -2065,7 +2065,6 @@ function ClapboardFullScreen({ t, BACKEND_URL, sceneListId, sceneOptions, onClos
             </div>
           </div>
         </div>
-        </div>
 
         <div
           className={isTimecodeRunning ? 'clapboard-tap-zone running' : 'clapboard-tap-zone'}
@@ -2075,6 +2074,7 @@ function ClapboardFullScreen({ t, BACKEND_URL, sceneListId, sceneOptions, onClos
         >
           <div className="clapboard-timecode">{formatTimecode(elapsedMs)}</div>
           <div className="clapboard-tap-hint">{isTimecodeRunning ? t.clapboardTapHintStop : t.clapboardTapHintStart}</div>
+        </div>
         </div>
         {logError && <p className="clapboard-error">{logError}</p>}
       </div>

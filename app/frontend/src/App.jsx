@@ -85,7 +85,8 @@ const LABELS = {
     clapboardSceneManualPlaceholder: 'Or type scene number',
     clapboardShotLabel: 'Shot',
     clapboardTakeLabel: 'Take',
-    clapboardTapHint: 'Tap to clap',
+    clapboardTapHintStart: 'Tap Shoot to start',
+    clapboardTapHintStop: 'Tap Shoot to stop',
     clapboardLogError: "Couldn't save that clap — check your connection and try again.",
     clapboardHistoryHeading: 'Clap History',
     clapboardHistoryEmpty: 'No claps logged yet.',
@@ -514,7 +515,8 @@ const LABELS = {
     clapboardSceneManualPlaceholder: 'କିମ୍ବା ଦୃଶ୍ୟ ସଂଖ୍ୟା ଟାଇପ୍ କରନ୍ତୁ',
     clapboardShotLabel: 'ସଟ୍',
     clapboardTakeLabel: 'ଟେକ୍',
-    clapboardTapHint: 'କ୍ଲାପ୍ କରିବାକୁ ଟାପ୍ କରନ୍ତୁ',
+    clapboardTapHintStart: 'ଆରମ୍ଭ କରିବାକୁ ସୁଟ୍ ଟାପ୍ କରନ୍ତୁ',
+    clapboardTapHintStop: 'ବନ୍ଦ କରିବାକୁ ସୁଟ୍ ଟାପ୍ କରନ୍ତୁ',
     clapboardLogError: 'ସେହି କ୍ଲାପ୍ ସେଭ୍ ହୋଇପାରିଲା ନାହିଁ — ଆପଣଙ୍କ ସଂଯୋଗ ଯାଞ୍ଚ କରି ପୁଣି ଚେଷ୍ଟା କରନ୍ତୁ।',
     clapboardHistoryHeading: 'କ୍ଲାପ୍ ଇତିହାସ',
     clapboardHistoryEmpty: 'ଏପର୍ଯ୍ୟନ୍ତ କୌଣସି କ୍ଲାପ୍ ଲଗ୍ ହୋଇନାହିଁ।',
@@ -1791,26 +1793,35 @@ function ClapboardFullScreen({ t, BACKEND_URL, sceneListId, sceneOptions, onClos
   const [shotNumber, setShotNumber] = useState('1')
   const [takeNumber, setTakeNumber] = useState(1)
   const [dayNight, setDayNight] = useState('DAY')
-  const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10))
+  // Day/Month/Year as separate fields, not a native <input type="date"> —
+  // that control displays in whatever order the browser's locale prefers
+  // (which is why this showed up as MM/DD for the AD), and there's no
+  // cross-browser way to force it to a specific order. Split fields give
+  // total control over DD/MM/YYYY everywhere.
+  const today = new Date()
+  const [dateDay, setDateDay] = useState(String(today.getDate()).padStart(2, '0'))
+  const [dateMonth, setDateMonth] = useState(String(today.getMonth() + 1).padStart(2, '0'))
+  const [dateYear, setDateYear] = useState(String(today.getFullYear()))
   const [isClapping, setIsClapping] = useState(false)
   const [history, setHistory] = useState([])
   const [isLoadingHistory, setIsLoadingHistory] = useState(true)
   const [isHistoryOpen, setIsHistoryOpen] = useState(false)
   const [logError, setLogError] = useState(null)
   const [isForcedLandscape, setIsForcedLandscape] = useState(false)
+  const [isTimecodeRunning, setIsTimecodeRunning] = useState(false)
   const [timecodeStartedAt, setTimecodeStartedAt] = useState(null)
   const [elapsedMs, setElapsedMs] = useState(0)
   const audioContextRef = useRef(null)
   const containerRef = useRef(null)
 
-  // Runs the on-screen timecode once a clap has started it — ticks every
-  // 30ms, which is smooth enough for a readable running clock without
-  // hammering re-renders the way requestAnimationFrame would.
+  // Tap Shoot to start the timecode running, tap again to stop it — the
+  // interval only exists while isTimecodeRunning is true, so stopping just
+  // freezes elapsedMs at whatever it last read instead of resetting it.
   useEffect(() => {
-    if (timecodeStartedAt === null) return
+    if (!isTimecodeRunning) return
     const interval = setInterval(() => setElapsedMs(Date.now() - timecodeStartedAt), 30)
     return () => clearInterval(interval)
-  }, [timecodeStartedAt])
+  }, [isTimecodeRunning, timecodeStartedAt])
 
   // The real Fullscreen + Orientation Lock APIs are unreliable on mobile —
   // iOS Safari doesn't support element-level requestFullscreen at all, and
@@ -1911,19 +1922,26 @@ function ClapboardFullScreen({ t, BACKEND_URL, sceneListId, sceneOptions, onClos
   }
 
   async function handleClapClick() {
+    // First tap: clap (beep + log) and start the timecode running.
+    // Second tap: just stop it where it is — no new clap, no reset.
+    if (isTimecodeRunning) {
+      setIsTimecodeRunning(false)
+      return
+    }
+
     playBeep()
     setIsClapping(true)
     setTimeout(() => setIsClapping(false), 220)
-    // A clap starts (or restarts) the running timecode, same as a real
-    // slate marking the sync point audio/video get aligned to afterward.
     setTimecodeStartedAt(Date.now())
+    setElapsedMs(0)
+    setIsTimecodeRunning(true)
 
     try {
       const res = await fetch(`${BACKEND_URL}/api/clapboard/${sceneListId}/log`, {
         method: 'POST',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sceneNumber, shotNumber, takeNumber, dayNight, date }),
+        body: JSON.stringify({ sceneNumber, shotNumber, takeNumber, dayNight, date: `${dateYear}-${dateMonth}-${dateDay}` }),
       })
       if (res.ok) {
         const saved = await res.json()
@@ -2011,7 +2029,35 @@ function ClapboardFullScreen({ t, BACKEND_URL, sceneListId, sceneOptions, onClos
           <div className="clapboard-table-row clapboard-table-footer">
             <div className="clapboard-date-cell">
               <span>DATE:</span>
-              <input type="date" className="clapboard-cell-input" value={date} onChange={(e) => setDate(e.target.value)} />
+              <input
+                type="text"
+                inputMode="numeric"
+                maxLength={2}
+                className="clapboard-cell-input clapboard-date-input"
+                value={dateDay}
+                onChange={(e) => setDateDay(e.target.value.replace(/\D/g, '').slice(0, 2))}
+                placeholder="DD"
+              />
+              <span className="clapboard-date-sep">/</span>
+              <input
+                type="text"
+                inputMode="numeric"
+                maxLength={2}
+                className="clapboard-cell-input clapboard-date-input"
+                value={dateMonth}
+                onChange={(e) => setDateMonth(e.target.value.replace(/\D/g, '').slice(0, 2))}
+                placeholder="MM"
+              />
+              <span className="clapboard-date-sep">/</span>
+              <input
+                type="text"
+                inputMode="numeric"
+                maxLength={4}
+                className="clapboard-cell-input clapboard-date-input clapboard-date-year"
+                value={dateYear}
+                onChange={(e) => setDateYear(e.target.value.replace(/\D/g, '').slice(0, 4))}
+                placeholder="YYYY"
+              />
             </div>
             <div className="clapboard-daynight-cell">
               <button type="button" className={dayNight === 'DAY' ? 'clapboard-daynight-button active' : 'clapboard-daynight-button'} onClick={() => setDayNight('DAY')}>DAY</button>
@@ -2021,9 +2067,14 @@ function ClapboardFullScreen({ t, BACKEND_URL, sceneListId, sceneOptions, onClos
         </div>
         </div>
 
-        <div className="clapboard-tap-zone" onClick={handleClapClick} role="button" tabIndex={0}>
+        <div
+          className={isTimecodeRunning ? 'clapboard-tap-zone running' : 'clapboard-tap-zone'}
+          onClick={handleClapClick}
+          role="button"
+          tabIndex={0}
+        >
           <div className="clapboard-timecode">{formatTimecode(elapsedMs)}</div>
-          <div className="clapboard-tap-hint">{t.clapboardTapHint}</div>
+          <div className="clapboard-tap-hint">{isTimecodeRunning ? t.clapboardTapHintStop : t.clapboardTapHintStart}</div>
         </div>
         {logError && <p className="clapboard-error">{logError}</p>}
       </div>

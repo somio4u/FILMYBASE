@@ -9061,6 +9061,72 @@ app.get("/api/crew/export-excel", requireLogin, async (req, res) => {
   }
 });
 
+// The digital clapboard's clap log — records scene/shot/take every time
+// the AD (or whoever's operating it) taps the clap button on set. A plain
+// append-only list, not tied to any particular shoot day, since a clap can
+// happen for any scene regardless of which day it's scheduled on.
+app.post("/api/clapboard/:sceneListId/log", requireLogin, async (req, res) => {
+  const { sceneListId } = req.params;
+  const { sceneNumber, shotNumber, takeNumber } = req.body;
+
+  if (!(await userOwnsSceneList(req.user, sceneListId))) {
+    res.status(403).json({ error: "You don't have access to this project." });
+    return;
+  }
+  if (!Number.isFinite(Number(takeNumber))) {
+    res.status(400).json({ error: "A take number is required." });
+    return;
+  }
+
+  try {
+    const result = await db.query(
+      "INSERT INTO clapboard_logs (scene_list_id, scene_number, shot_number, take_number, logged_by) VALUES ($1, $2, $3, $4, $5) RETURNING *",
+      [sceneListId, sceneNumber?.trim() || null, shotNumber?.trim() || null, Number(takeNumber), req.user.name]
+    );
+    const row = result.rows[0];
+    res.json({
+      id: row.id,
+      sceneNumber: row.scene_number,
+      shotNumber: row.shot_number,
+      takeNumber: row.take_number,
+      loggedBy: row.logged_by,
+      createdAt: row.created_at,
+    });
+  } catch (error) {
+    console.error("Clapboard log failed:", error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get("/api/clapboard/:sceneListId/log", requireLogin, async (req, res) => {
+  const { sceneListId } = req.params;
+
+  if (!(await userOwnsSceneList(req.user, sceneListId))) {
+    res.status(403).json({ error: "You don't have access to this project." });
+    return;
+  }
+
+  try {
+    const result = await db.query(
+      "SELECT * FROM clapboard_logs WHERE scene_list_id = $1 ORDER BY created_at DESC LIMIT 200",
+      [sceneListId]
+    );
+    res.json(
+      result.rows.map((row) => ({
+        id: row.id,
+        sceneNumber: row.scene_number,
+        shotNumber: row.shot_number,
+        takeNumber: row.take_number,
+        loggedBy: row.logged_by,
+        createdAt: row.created_at,
+      }))
+    );
+  } catch (error) {
+    console.error("Clapboard log fetch failed:", error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 app.post("/api/crew", requireRole("admin", "production_manager"), crewPhotoUpload.single("photo"), async (req, res) => {
   const { sceneListId, category, characterName, name, role, contactNumber } = req.body;
 

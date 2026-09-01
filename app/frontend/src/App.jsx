@@ -79,6 +79,16 @@ const LABELS = {
     stageBreakdownLabel: 'Script Breakdown',
     stageCrewLabel: 'Crew',
     stageScheduleLabel: 'Shoot Schedule',
+    stageClapboardLabel: 'Clapboard',
+    clapboardSceneLabel: 'Scene',
+    clapboardPickFromSchedule: 'Pick from schedule…',
+    clapboardSceneManualPlaceholder: 'Or type scene number',
+    clapboardShotLabel: 'Shot',
+    clapboardTakeLabel: 'Take',
+    clapboardClapButton: 'CLAP',
+    clapboardLogError: "Couldn't save that clap — check your connection and try again.",
+    clapboardHistoryHeading: 'Clap History',
+    clapboardHistoryEmpty: 'No claps logged yet.',
     crewHeading: 'Crew',
     downloadAllCrewExcelLabel: 'Download All Crew (Excel)',
     artDepartmentHeading: 'Art Department',
@@ -496,6 +506,16 @@ const LABELS = {
     stageBreakdownLabel: 'ସ୍କ୍ରିପ୍ଟ ବ୍ରେକଡାଉନ୍',
     stageCrewLabel: 'କ୍ରୁ',
     stageScheduleLabel: 'ସୁଟିଂ ସିଡ୍ୟୁଲ୍',
+    stageClapboardLabel: 'କ୍ଲାପ୍‌ବୋର୍ଡ',
+    clapboardSceneLabel: 'ଦୃଶ୍ୟ',
+    clapboardPickFromSchedule: 'ସୂଚୀରୁ ବାଛନ୍ତୁ…',
+    clapboardSceneManualPlaceholder: 'କିମ୍ବା ଦୃଶ୍ୟ ସଂଖ୍ୟା ଟାଇପ୍ କରନ୍ତୁ',
+    clapboardShotLabel: 'ସଟ୍',
+    clapboardTakeLabel: 'ଟେକ୍',
+    clapboardClapButton: 'CLAP',
+    clapboardLogError: 'ସେହି କ୍ଲାପ୍ ସେଭ୍ ହୋଇପାରିଲା ନାହିଁ — ଆପଣଙ୍କ ସଂଯୋଗ ଯାଞ୍ଚ କରି ପୁଣି ଚେଷ୍ଟା କରନ୍ତୁ।',
+    clapboardHistoryHeading: 'କ୍ଲାପ୍ ଇତିହାସ',
+    clapboardHistoryEmpty: 'ଏପର୍ଯ୍ୟନ୍ତ କୌଣସି କ୍ଲାପ୍ ଲଗ୍ ହୋଇନାହିଁ।',
     crewHeading: 'କ୍ରୁ',
     downloadAllCrewExcelLabel: 'ସମସ୍ତ କ୍ରୁ ଡାଉନଲୋଡ୍ କରନ୍ତୁ (Excel)',
     artDepartmentHeading: 'ଆର୍ଟ ବିଭାଗ',
@@ -1749,6 +1769,172 @@ function DownloadChoiceButton({ t, label, pdfUrl, excelUrl, className = 'breakdo
           </a>
         </div>
       )}
+    </div>
+  )
+}
+
+// The on-set digital clapboard — a scene/shot/take slate with a big clap
+// button. Tapping it plays a short beep (a real slate's audio "sync
+// mark" — the beep and the visual clap both need to be sharp and instant,
+// which is why this uses the Web Audio API directly rather than an audio
+// file: zero load latency, and no asset to ship). Every clap is logged to
+// the server so it can be reviewed later; the scene field is a hybrid —
+// pick one of today's scheduled scenes from the dropdown, or just type a
+// scene number by hand like a physical slate.
+function ClapboardSection({ t, BACKEND_URL, sceneListId, sceneOptions }) {
+  const [sceneNumber, setSceneNumber] = useState('')
+  const [shotNumber, setShotNumber] = useState('1')
+  const [takeNumber, setTakeNumber] = useState(1)
+  const [isClapping, setIsClapping] = useState(false)
+  const [history, setHistory] = useState([])
+  const [isLoadingHistory, setIsLoadingHistory] = useState(true)
+  const [logError, setLogError] = useState(null)
+  const audioContextRef = useRef(null)
+
+  useEffect(() => {
+    let cancelled = false
+    async function loadHistory() {
+      setIsLoadingHistory(true)
+      try {
+        const res = await fetch(`${BACKEND_URL}/api/clapboard/${sceneListId}/log`, { credentials: 'include' })
+        if (res.ok && !cancelled) setHistory(await res.json())
+      } catch {
+        // Silent — the log is a nice-to-have review list, not core to using the slate.
+      } finally {
+        if (!cancelled) setIsLoadingHistory(false)
+      }
+    }
+    loadHistory()
+    return () => { cancelled = true }
+  }, [BACKEND_URL, sceneListId])
+
+  function playBeep() {
+    try {
+      const AudioCtx = window.AudioContext || window.webkitAudioContext
+      if (!audioContextRef.current) audioContextRef.current = new AudioCtx()
+      const ctx = audioContextRef.current
+      const oscillator = ctx.createOscillator()
+      const gain = ctx.createGain()
+      oscillator.type = 'square'
+      oscillator.frequency.value = 1000
+      gain.gain.setValueAtTime(0.5, ctx.currentTime)
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.18)
+      oscillator.connect(gain)
+      gain.connect(ctx.destination)
+      oscillator.start()
+      oscillator.stop(ctx.currentTime + 0.18)
+    } catch {
+      // Some browsers block audio until a user gesture has happened at all —
+      // the clap itself still logs and animates even if the beep can't play.
+    }
+  }
+
+  async function handleClapClick() {
+    playBeep()
+    setIsClapping(true)
+    setTimeout(() => setIsClapping(false), 220)
+
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/clapboard/${sceneListId}/log`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sceneNumber, shotNumber, takeNumber }),
+      })
+      if (res.ok) {
+        const saved = await res.json()
+        setHistory((h) => [saved, ...h])
+        setTakeNumber((n) => n + 1)
+        setLogError(null)
+      } else {
+        setLogError(t.clapboardLogError)
+      }
+    } catch {
+      setLogError(t.clapboardLogError)
+    }
+  }
+
+  function adjustShot(delta) {
+    setShotNumber((current) => String(Math.max(1, (parseInt(current, 10) || 1) + delta)))
+  }
+  function adjustTake(delta) {
+    setTakeNumber((current) => Math.max(1, current + delta))
+  }
+
+  return (
+    <div className="clapboard-panel">
+      <img src="/clapboard-banner.jpg" alt="" className="clapboard-banner" />
+
+      <div className={isClapping ? 'clapboard-slate clapping' : 'clapboard-slate'}>
+        <div className="clapboard-field">
+          <label>{t.clapboardSceneLabel}</label>
+          <div className="clapboard-scene-row">
+            {sceneOptions.length > 0 && (
+              <select
+                className="clapboard-scene-select"
+                value=""
+                onChange={(e) => { if (e.target.value) setSceneNumber(e.target.value) }}
+              >
+                <option value="">{t.clapboardPickFromSchedule}</option>
+                {sceneOptions.map((opt) => (
+                  <option key={opt} value={opt}>{opt}</option>
+                ))}
+              </select>
+            )}
+            <input
+              type="text"
+              className="clapboard-scene-input"
+              value={sceneNumber}
+              onChange={(e) => setSceneNumber(e.target.value)}
+              placeholder={t.clapboardSceneManualPlaceholder}
+            />
+          </div>
+        </div>
+
+        <div className="clapboard-counters">
+          <div className="clapboard-counter">
+            <label>{t.clapboardShotLabel}</label>
+            <div className="clapboard-counter-row">
+              <button type="button" onClick={() => adjustShot(-1)}>−</button>
+              <input value={shotNumber} onChange={(e) => setShotNumber(e.target.value)} />
+              <button type="button" onClick={() => adjustShot(1)}>+</button>
+            </div>
+          </div>
+          <div className="clapboard-counter">
+            <label>{t.clapboardTakeLabel}</label>
+            <div className="clapboard-counter-row">
+              <button type="button" onClick={() => adjustTake(-1)}>−</button>
+              <input value={takeNumber} onChange={(e) => setTakeNumber(parseInt(e.target.value, 10) || 1)} />
+              <button type="button" onClick={() => adjustTake(1)}>+</button>
+            </div>
+          </div>
+        </div>
+
+        <button type="button" className="clapboard-clap-button" onClick={handleClapClick}>
+          {t.clapboardClapButton}
+        </button>
+        {logError && <p className="clapboard-error">{logError}</p>}
+      </div>
+
+      <div className="clapboard-history">
+        <h4>{t.clapboardHistoryHeading}</h4>
+        {isLoadingHistory ? (
+          <p className="clapboard-history-empty">{t.loadingLabel}</p>
+        ) : history.length === 0 ? (
+          <p className="clapboard-history-empty">{t.clapboardHistoryEmpty}</p>
+        ) : (
+          <ul className="clapboard-history-list">
+            {history.map((entry) => (
+              <li key={entry.id}>
+                <strong>{entry.sceneNumber || '—'}</strong>
+                {' · '}{t.clapboardShotLabel} {entry.shotNumber || '—'}
+                {' · '}{t.clapboardTakeLabel} {entry.takeNumber}
+                <span className="clapboard-history-time">{new Date(entry.createdAt).toLocaleTimeString()}</span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
     </div>
   )
 }
@@ -5748,6 +5934,10 @@ function App() {
                   <span className="production-main-nav-icon">{ICONS.calendar}</span>
                   {t.stageScheduleLabel}
                 </button>
+                <button className="production-main-nav-item stage-upcoming" onClick={() => handleStageClick('stage-clapboard')}>
+                  <span className="production-main-nav-icon">{ICONS.calendar}</span>
+                  {t.stageClapboardLabel}
+                </button>
               </div>
             )}
           </div>
@@ -7468,6 +7658,30 @@ function App() {
               />
             </>
           )}
+        </div>
+      )}
+
+      {activeAgent === 'production' && sceneList && (
+        <div className="three-act-structure" id="stage-clapboard">
+          <h2>{t.stageClapboardLabel}</h2>
+          <ClapboardSection
+            t={t}
+            BACKEND_URL={BACKEND_URL}
+            sceneListId={sceneList.id}
+            sceneOptions={
+              shootSchedule
+                ? [...new Set(
+                    (shootSchedule.scheduleDays ?? []).flatMap((day) =>
+                      (day.sceneRefs ?? []).map((ref) => {
+                        const scene = lookupScene(sceneList, ref)
+                        const label = scene?.sceneNumber || String(ref.sceneIndex + 1)
+                        return sceneList.episodeScenes ? `Ep${ref.episodeIndex + 1} Sc${label}` : `Sc${label}`
+                      })
+                    )
+                  )]
+                : []
+            }
+          />
         </div>
       )}
     </div>

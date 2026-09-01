@@ -3311,3 +3311,164 @@ button, input, textarea, select {
     max-width: 100vw;
   }
 }
+
+.clapboard-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  max-width: 560px;
+}
+
+.clapboard-banner {
+  width: 100%;
+  border-radius: 12px;
+  display: block;
+}
+
+.clapboard-slate {
+  background: var(--bg-surface-raised);
+  border: 1px solid var(--border-subtle);
+  border-radius: 16px;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  transition: transform 0.08s ease, box-shadow 0.08s ease;
+}
+
+.clapboard-slate.clapping {
+  transform: scale(0.98);
+  box-shadow: 0 0 0 3px var(--accent), var(--shadow-soft);
+}
+
+.clapboard-field label,
+.clapboard-counter label {
+  display: block;
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-bottom: 6px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.clapboard-scene-row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.clapboard-scene-select,
+.clapboard-scene-input {
+  flex: 1 1 160px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-input);
+  color: var(--text-primary);
+  font-size: 14px;
+}
+
+.clapboard-counters {
+  display: flex;
+  gap: 20px;
+}
+
+.clapboard-counter {
+  flex: 1;
+}
+
+.clapboard-counter-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.clapboard-counter-row button {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  font-size: 18px;
+  cursor: pointer;
+}
+
+.clapboard-counter-row input {
+  flex: 1;
+  text-align: center;
+  padding: 8px;
+  border-radius: 10px;
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-input);
+  color: var(--text-primary);
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.clapboard-clap-button {
+  padding: 18px;
+  border-radius: 14px;
+  border: none;
+  background: var(--accent-gradient);
+  color: #131314;
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  cursor: pointer;
+  box-shadow: var(--shadow-soft);
+}
+
+.clapboard-clap-button:active {
+  transform: scale(0.97);
+}
+
+.clapboard-error {
+  color: var(--danger);
+  font-size: 13px;
+  margin: 0;
+}
+
+.clapboard-history {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: 14px;
+  padding: 16px;
+}
+
+.clapboard-history h4 {
+  margin: 0 0 10px;
+  color: var(--text-primary);
+}
+
+.clapboard-history-empty {
+  color: var(--text-muted);
+  font-size: 13px;
+  margin: 0;
+}
+
+.clapboard-history-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 240px;
+  overflow-y: auto;
+}
+
+.clapboard-history-list li {
+  font-size: 13px;
+  color: var(--text-secondary);
+  border-bottom: 1px solid var(--border-subtle);
+  padding-bottom: 8px;
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.clapboard-history-time {
+  color: var(--text-muted);
+  white-space: nowrap;
+}

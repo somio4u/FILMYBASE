@@ -182,3 +182,20 @@ CREATE TABLE agent_chat_messages (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX agent_chat_messages_concept_stage_idx ON agent_chat_messages (concept_id, stage_key, created_at);
+
+-- The on-set digital clapboard's clap history — a simple append-only log,
+-- never revised, so a plain table rather than the JSONB revision pattern
+-- used elsewhere. scene_number is free text (it also accepts a value
+-- picked from the current shoot day's schedule, but is stored as whatever
+-- string was on the slate at clap time, since that's what the footage
+-- itself needs to match against later).
+CREATE TABLE clapboard_logs (
+  id SERIAL PRIMARY KEY,
+  scene_list_id INTEGER NOT NULL REFERENCES scene_lists(id) ON DELETE CASCADE,
+  scene_number TEXT,
+  shot_number TEXT,
+  take_number INTEGER NOT NULL,
+  logged_by TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX clapboard_logs_scene_list_idx ON clapboard_logs (scene_list_id, created_at DESC);

@@ -1077,7 +1077,7 @@ app.get("/api/concepts/:id/full", requireLogin, async (req, res) => {
   }
 
   const conceptResult = await db.query(
-    "SELECT id, concept_text, storylines, title, project_type FROM concepts WHERE id = $1",
+    "SELECT id, concept_text, storylines, title, project_type, clapboard_banner_path FROM concepts WHERE id = $1",
     [req.params.id]
   );
 
@@ -1093,6 +1093,7 @@ app.get("/api/concepts/:id/full", requireLogin, async (req, res) => {
     storylines: conceptRow.storylines,
     title: conceptRow.title,
     projectType: conceptRow.project_type,
+    clapboardBannerUrl: photoUrlFor(conceptRow.clapboard_banner_path),
     pitchDeck: null,
     characterSheet: null,
     threeActStructure: null,
@@ -9454,6 +9455,57 @@ app.delete("/api/crew/:id", requireRole("admin", "production_manager"), async (r
     deletePhoto(result.rows[0].photo_path);
   }
   res.json({ ok: true });
+});
+
+// The Digital Clapboard's title-card image is per-project (each show has
+// its own banner) — a plain mutable column on concepts, not JSONB, since
+// there's exactly one current value with no revision history to keep.
+app.post("/api/concept/:conceptId/clapboard-banner", requireRole("admin", "production_manager"), crewPhotoUpload.single("banner"), async (req, res) => {
+  const { conceptId } = req.params;
+
+  if (!requireConceptAccess(req, conceptId)) {
+    res.status(403).json({ error: "You don't have access to this project." });
+    return;
+  }
+  if (!req.file) {
+    res.status(400).json({ error: "An image file is required." });
+    return;
+  }
+
+  const existing = await db.query("SELECT clapboard_banner_path FROM concepts WHERE id = $1", [conceptId]);
+  if (existing.rows.length === 0) {
+    res.status(404).json({ error: "Project not found" });
+    return;
+  }
+
+  const bannerPath = await savePhotoBuffer(req.file.buffer, req.file.originalname);
+  if (existing.rows[0].clapboard_banner_path) {
+    deletePhoto(existing.rows[0].clapboard_banner_path);
+  }
+
+  await db.query("UPDATE concepts SET clapboard_banner_path = $1 WHERE id = $2", [bannerPath, conceptId]);
+  res.json({ clapboardBannerUrl: photoUrlFor(bannerPath) });
+});
+
+app.delete("/api/concept/:conceptId/clapboard-banner", requireRole("admin", "production_manager"), async (req, res) => {
+  const { conceptId } = req.params;
+
+  if (!requireConceptAccess(req, conceptId)) {
+    res.status(403).json({ error: "You don't have access to this project." });
+    return;
+  }
+
+  const existing = await db.query("SELECT clapboard_banner_path FROM concepts WHERE id = $1", [conceptId]);
+  if (existing.rows.length === 0) {
+    res.status(404).json({ error: "Project not found" });
+    return;
+  }
+  if (existing.rows[0].clapboard_banner_path) {
+    deletePhoto(existing.rows[0].clapboard_banner_path);
+  }
+
+  await db.query("UPDATE concepts SET clapboard_banner_path = NULL WHERE id = $1", [conceptId]);
+  res.json({ clapboardBannerUrl: null });
 });
 
 // Keeps an already-confirmed artist/location attached to its character or

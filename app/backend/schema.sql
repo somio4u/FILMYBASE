@@ -11,6 +11,10 @@ CREATE TABLE concepts (
   -- standalone Production Management project started by importing an
   -- already-written screenplay, with no story-agent data at all.
   project_type TEXT NOT NULL DEFAULT 'story',
+  -- Per-project Digital Clapboard title-card image (e.g. each show's own
+  -- production banner) — a plain uploads/ path like crew_members.photo_path,
+  -- not JSONB, since it's a single mutable value with no revision history.
+  clapboard_banner_path TEXT,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 

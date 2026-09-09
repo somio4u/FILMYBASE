@@ -90,6 +90,9 @@ const LABELS = {
     clapboardLogError: "Couldn't save that clap — check your connection and try again.",
     clapboardHistoryHeading: 'Clap History',
     clapboardHistoryEmpty: 'No claps logged yet.',
+    clapboardNoBannerLabel: 'No show banner uploaded yet',
+    clapboardChangeBannerButton: 'Change Banner',
+    clapboardUploadingBannerLabel: 'Uploading…',
     crewHeading: 'Crew',
     downloadAllCrewExcelLabel: 'Download All Crew (Excel)',
     artDepartmentHeading: 'Art Department',
@@ -531,6 +534,9 @@ const LABELS = {
     clapboardLogError: 'ସେହି କ୍ଲାପ୍ ସେଭ୍ ହୋଇପାରିଲା ନାହିଁ — ଆପଣଙ୍କ ସଂଯୋଗ ଯାଞ୍ଚ କରି ପୁଣି ଚେଷ୍ଟା କରନ୍ତୁ।',
     clapboardHistoryHeading: 'କ୍ଲାପ୍ ଇତିହାସ',
     clapboardHistoryEmpty: 'ଏପର୍ଯ୍ୟନ୍ତ କୌଣସି କ୍ଲାପ୍ ଲଗ୍ ହୋଇନାହିଁ।',
+    clapboardNoBannerLabel: 'ଏପର୍ଯ୍ୟନ୍ତ କୌଣସି ସୋ ବ୍ୟାନର୍ ଅପଲୋଡ୍ ହୋଇନାହିଁ',
+    clapboardChangeBannerButton: 'ବ୍ୟାନର୍ ପରିବର୍ତ୍ତନ କରନ୍ତୁ',
+    clapboardUploadingBannerLabel: 'ଅପଲୋଡ୍ ହେଉଛି…',
     crewHeading: 'କ୍ରୁ',
     downloadAllCrewExcelLabel: 'ସମସ୍ତ କ୍ରୁ ଡାଉନଲୋଡ୍ କରନ୍ତୁ (Excel)',
     artDepartmentHeading: 'ଆର୍ଟ ବିଭାଗ',
@@ -1810,7 +1816,31 @@ function DownloadChoiceButton({ t, label, pdfUrl, excelUrl, className = 'breakdo
 // file: zero load latency, and no asset to ship) and logs the clap to the
 // server. The scene field is a hybrid — pick one of today's scheduled
 // scenes from the dropdown, or just type a scene number by hand.
-function ClapboardFullScreen({ t, BACKEND_URL, sceneListId, sceneOptions, onClose }) {
+function ClapboardFullScreen({ t, BACKEND_URL, conceptId, sceneListId, sceneOptions, onClose, bannerUrl, onBannerUpdated, canEditProduction }) {
+  const [isUploadingBanner, setIsUploadingBanner] = useState(false)
+  const bannerFileInputRef = useRef(null)
+
+  async function handleBannerFileChange(e) {
+    const file = e.target.files?.[0]
+    e.target.value = ''
+    if (!file) return
+
+    setIsUploadingBanner(true)
+    try {
+      const formData = new FormData()
+      formData.append('banner', file)
+      const response = await fetch(`${BACKEND_URL}/api/concept/${conceptId}/clapboard-banner`, {
+        method: 'POST',
+        body: formData,
+      })
+      const data = await response.json()
+      if (response.ok) onBannerUpdated?.(data.clapboardBannerUrl)
+    } catch {
+      // Silently ignored — the banner just stays as it was; the AD can retry.
+    }
+    setIsUploadingBanner(false)
+  }
+
   const [sceneNumber, setSceneNumber] = useState('')
   const [shotNumber, setShotNumber] = useState('1')
   const [takeNumber, setTakeNumber] = useState(1)
@@ -2007,7 +2037,32 @@ function ClapboardFullScreen({ t, BACKEND_URL, sceneListId, sceneOptions, onClos
 
       <div className={isClapping ? 'clapboard-board clapping' : 'clapboard-board'}>
         <div className="clapboard-board-left">
-        <img src="/clapboard-banner.jpg" alt="" className="clapboard-banner" />
+        <div className="clapboard-banner-wrap">
+          {bannerUrl ? (
+            <img src={bannerUrl} alt="" className="clapboard-banner" />
+          ) : (
+            <div className="clapboard-banner-placeholder">{t.clapboardNoBannerLabel}</div>
+          )}
+          {canEditProduction && (
+            <>
+              <button
+                type="button"
+                className="clapboard-banner-edit-button"
+                onClick={() => bannerFileInputRef.current?.click()}
+                disabled={isUploadingBanner}
+              >
+                {isUploadingBanner ? t.clapboardUploadingBannerLabel : t.clapboardChangeBannerButton}
+              </button>
+              <input
+                ref={bannerFileInputRef}
+                type="file"
+                accept="image/*"
+                style={{ display: 'none' }}
+                onChange={handleBannerFileChange}
+              />
+            </>
+          )}
+        </div>
 
         <div className="clapboard-table">
           <div className="clapboard-table-row clapboard-table-header">
@@ -3023,6 +3078,7 @@ function App() {
   const [storylines, setStorylines] = useState(null)
   const [isLoading, setIsLoading] = useState(false)
   const [pitchDeck, setPitchDeck] = useState(null)
+  const [clapboardBannerUrl, setClapboardBannerUrl] = useState(null)
   const [isGeneratingPitchDeck, setIsGeneratingPitchDeck] = useState(false)
 
   const [pendingStoryline, setPendingStoryline] = useState(null)
@@ -3392,6 +3448,7 @@ function App() {
     setErrorMessage(null)
     setProjectType(data.projectType ?? 'story')
     setActiveAgent(data.projectType === 'production' ? 'production' : 'story')
+    setClapboardBannerUrl(data.clapboardBannerUrl ?? null)
 
     setPitchDeck(data.pitchDeck)
     setShowFeedbackForm(false)
@@ -8034,7 +8091,11 @@ function App() {
         <ClapboardFullScreen
           t={t}
           BACKEND_URL={BACKEND_URL}
+          conceptId={conceptId}
           sceneListId={sceneList.id}
+          bannerUrl={clapboardBannerUrl}
+          onBannerUpdated={setClapboardBannerUrl}
+          canEditProduction={canEditProduction}
           sceneOptions={
             shootSchedule
               ? [...new Set(

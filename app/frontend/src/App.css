@@ -1011,6 +1011,16 @@ button, input, textarea, select {
   color: var(--accent-strong);
 }
 
+.pitch-deck-highlights ul {
+  margin: 0;
+  padding-left: 20px;
+  color: var(--text-primary);
+}
+
+.pitch-deck-highlights li {
+  margin-bottom: 6px;
+}
+
 .major-characters {
   margin-top: 16px;
   display: flex;

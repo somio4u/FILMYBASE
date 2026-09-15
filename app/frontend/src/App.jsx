@@ -198,9 +198,11 @@ const LABELS = {
     buildPitchDeck: 'Build Pitch Deck',
     buildingPitchDeck: 'Building pitch deck...',
     cancel: 'Cancel',
-    premise: 'Premise',
+    premise: 'Synopsis',
     toneGenre: 'Tone / Genre',
     targetAudience: 'Target Audience',
+    highlightsHeading: 'Unique Elements',
+    sponsorshipAngleHeading: 'Sponsorship Angle',
     majorCharactersHeading: 'Major Characters',
     emotionalCoreLabel: 'Emotional Core',
     conflictLabel: 'Conflict',
@@ -642,9 +644,11 @@ const LABELS = {
     buildPitchDeck: 'ପିଚ୍ ଡେକ୍ ତିଆରି କରନ୍ତୁ',
     buildingPitchDeck: 'ପିଚ୍ ଡେକ୍ ତିଆରି ହେଉଛି...',
     cancel: 'ବାତିଲ୍',
-    premise: 'ପ୍ରସଙ୍ଗ',
+    premise: 'କାହାଣୀ ସାରାଂଶ',
     toneGenre: 'ଶୈଳୀ / ଧାରା',
     targetAudience: 'ଲକ୍ଷ୍ୟ ଦର୍ଶକ',
+    highlightsHeading: 'ବିଶେଷତ୍ୱ',
+    sponsorshipAngleHeading: 'ପ୍ରାୟୋଜକ ଦୃଷ୍ଟିକୋଣ',
     majorCharactersHeading: 'ମୁଖ୍ୟ ଚରିତ୍ର',
     emotionalCoreLabel: 'ଭାବନାତ୍ମକ ମୂଳ',
     conflictLabel: 'ସଂଘର୍ଷ',
@@ -6600,6 +6604,24 @@ function App() {
 
           <h4>{t.targetAudience}</h4>
           <p>{pitchDeck.targetAudience[language]}</p>
+
+          {pitchDeck.highlights && pitchDeck.highlights.length > 0 && (
+            <div className="pitch-deck-highlights">
+              <h4>{t.highlightsHeading}</h4>
+              <ul>
+                {pitchDeck.highlights.map((highlight, index) => (
+                  <li key={index}>{highlight[language]}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {pitchDeck.sponsorshipAngle && (
+            <>
+              <h4>{t.sponsorshipAngleHeading}</h4>
+              <p>{pitchDeck.sponsorshipAngle[language]}</p>
+            </>
+          )}
 
           {pitchDeck.majorCharacters && pitchDeck.majorCharacters.length > 0 && (
             <div className="major-characters">

@@ -584,9 +584,12 @@ function sanitizeBilingualContent(value) {
 
 const SECTION_LABELS = {
   en: {
-    premise: "Premise",
+    premise: "Synopsis",
+    genre: "Format",
     toneGenre: "Tone / Genre",
     targetAudience: "Target Audience",
+    highlights: "Unique Elements",
+    sponsorshipAngle: "Sponsorship Angle",
     majorCharacters: "Major Characters",
     emotionalCore: "Emotional Core",
     conflict: "Conflict",
@@ -595,9 +598,12 @@ const SECTION_LABELS = {
     tagline: "AN ODIA STORY PRESENTATION",
   },
   or: {
-    premise: "ପ୍ରସଙ୍ଗ",
+    premise: "କାହାଣୀ ସାରାଂଶ",
+    genre: "ଫର୍ମାଟ୍",
     toneGenre: "ଶୈଳୀ / ଧାରା",
     targetAudience: "ଲକ୍ଷ୍ୟ ଦର୍ଶକ",
+    highlights: "ବିଶେଷତ୍ୱ",
+    sponsorshipAngle: "ପ୍ରାୟୋଜକ ଦୃଷ୍ଟିକୋଣ",
     majorCharacters: "ମୁଖ୍ୟ ଚରିତ୍ର",
     emotionalCore: "ଭାବନାତ୍ମକ ମୂଳ",
     conflict: "ସଂଘର୍ଷ",
@@ -636,6 +642,20 @@ function formatLabel(format, lang) {
       : `WEB SERIES · ${count} EPISODES × ${minutes} MIN EACH`;
   }
   return lang === "or" ? "ପୂର୍ଣ୍ଣ ଚଳଚ୍ଚିତ୍ର" : "FEATURE FILM";
+}
+
+// A friendly, sponsor-facing one-liner ("8-episode crime drama" / "crime
+// drama feature film") — distinct from formatLabel()'s more technical badge
+// text, and folding in the short genre label rather than just the runtime.
+function formatWithGenreLabel(format, genre, lang) {
+  const genreText = (genre?.[lang] || genre?.en || "").trim();
+  if (format?.type === "series") {
+    const count = format.episodeCount ?? "?";
+    return lang === "or"
+      ? `${count}-ପର୍ବ ${genreText}`.trim()
+      : `${count}-episode ${genreText}`.trim();
+  }
+  return lang === "or" ? `${genreText} ଚଳଚ୍ଚିତ୍ର`.trim() : `${genreText} feature film`.trim();
 }
 
 // A specific origin (not "*") is required once login uses cookies —
@@ -3199,11 +3219,14 @@ async function generatePitchDeckContent(storyline, format, revision) {
 
   const properties = {
     premise: BILINGUAL_TEXT_SCHEMA,
+    genre: BILINGUAL_TEXT_SCHEMA,
     toneGenre: BILINGUAL_TEXT_SCHEMA,
     targetAudience: BILINGUAL_TEXT_SCHEMA,
+    highlights: { type: Type.ARRAY, items: BILINGUAL_TEXT_SCHEMA },
+    sponsorshipAngle: BILINGUAL_TEXT_SCHEMA,
     majorCharacters: { type: Type.ARRAY, items: CHARACTER_SCHEMA },
   };
-  const required = ["premise", "toneGenre", "targetAudience", "majorCharacters"];
+  const required = ["premise", "genre", "toneGenre", "targetAudience", "highlights", "sponsorshipAngle", "majorCharacters"];
 
   let formatInstruction = "Format: feature film.";
   if (isSeries) {
@@ -3222,7 +3245,7 @@ async function generatePitchDeckContent(storyline, format, revision) {
     required.push("episodes");
   }
 
-  let contents = `Storyline title (English): ${storyline.title.en}\nLogline (English): ${storyline.logline.en}\nSummary (English): ${storyline.summary.en}\n${formatInstruction}\n\nAlso give 3-5 major characters who actually drive this story (name, role, emotional core, central conflict).`;
+  let contents = `Storyline title (English): ${storyline.title.en}\nLogline (English): ${storyline.logline.en}\nSummary (English): ${storyline.summary.en}\n${formatInstruction}\n\nAlso give 3-5 major characters who actually drive this story (name, role, emotional core, central conflict).\n\nAlso give: "genre" — a SHORT genre label, just 2-4 words (e.g. "Crime Drama", "Romantic Comedy", "Family Slice-of-Life"), distinct from the longer "toneGenre" prose description; "targetAudience" — cover the age group, the region/market this is aimed at, and what specifically appeals to that audience (not just an age range alone); "highlights" — exactly 4 short, punchy bullet points (5-15 words each) on what makes this story stand out from similar shows — genuinely distinctive hooks, not generic praise; "sponsorshipAngle" — a short paragraph aimed at a potential brand sponsor: why a brand should back this specific story, and at least one concrete branding/placement idea (e.g. title sponsorship, a natural product-placement moment, a brand-integrated segment) grounded in this story's actual content, not a generic pitch.`;
 
   if (revision) {
     contents += `\n\nThis is a REVISION of a previous draft. The producer reviewed it and requested changes.\nProducer's feedback: "${revision.feedback}"\nPrevious premise (English): ${revision.previous.premise.en}\nPrevious tone/genre (English): ${revision.previous.toneGenre.en}\nRevise the pitch deck to address the producer's feedback directly, while keeping the same title and logline.`;
@@ -3249,8 +3272,11 @@ async function generatePitchDeckContent(storyline, format, revision) {
     title: storyline.title,
     logline: storyline.logline,
     premise: parsed.premise,
+    genre: parsed.genre,
     toneGenre: parsed.toneGenre,
     targetAudience: parsed.targetAudience,
+    highlights: parsed.highlights,
+    sponsorshipAngle: parsed.sponsorshipAngle,
     majorCharacters: parsed.majorCharacters,
     format: format ?? { type: "film" },
     episodes: parsed.episodes ?? null,
@@ -3436,7 +3462,7 @@ app.get("/api/pitch-deck/:id/export", requireLogin, async (req, res) => {
     fillBackground(theme.bg);
     drawCornerLines(margin, margin, 1);
     drawCornerLines(W - margin, H - margin, -1);
-    drawPill(formatLabel(deck.format, lang), margin);
+    drawPill(deck.genre ? formatWithGenreLabel(deck.format, deck.genre, lang) : formatLabel(deck.format, lang), margin);
 
     doc
       .fillColor("#F5F1EA")
@@ -3464,6 +3490,17 @@ app.get("/api/pitch-deck/:id/export", requireLogin, async (req, res) => {
 
     // Slide 4: Target Audience
     sectionSlide(labels.targetAudience, deck.targetAudience[lang]);
+
+    // Slide 5: Unique Elements / highlights — only when the deck actually
+    // has them (older decks generated before this field existed won't).
+    if (deck.highlights && deck.highlights.length > 0) {
+      sectionSlide(labels.highlights, deck.highlights.map((h) => `•  ${h[lang]}`).join("\n\n"));
+    }
+
+    // Slide 6: Sponsorship Angle
+    if (deck.sponsorshipAngle) {
+      sectionSlide(labels.sponsorshipAngle, deck.sponsorshipAngle[lang]);
+    }
 
     // Major Characters slide(s) — one block per character (name, role,
     // emotional core, conflict), paginating onto a fresh dark panel if the
@@ -3619,7 +3656,8 @@ app.get("/api/pitch-deck/:id/export-ppt", requireLogin, async (req, res) => {
     // Cover
     const cover = pptx.addSlide();
     addBackground(cover, theme.bg);
-    cover.addText(formatLabel(deck.format, lang), {
+    const coverFormatLine = deck.genre ? formatWithGenreLabel(deck.format, deck.genre, lang) : formatLabel(deck.format, lang);
+    cover.addText(coverFormatLine.toUpperCase(), {
       x: 0, y: 0.4, w: "100%", h: 0.4, align: "center", fontSize: 12, bold: true, color: hex(theme.accent), charSpacing: 2,
     });
     cover.addText(deck.title[lang], {
@@ -3649,6 +3687,25 @@ app.get("/api/pitch-deck/:id/export-ppt", requireLogin, async (req, res) => {
     sectionSlide(labels.premise, deck.premise[lang]);
     sectionSlide(labels.toneGenre, deck.toneGenre[lang]);
     sectionSlide(labels.targetAudience, deck.targetAudience[lang]);
+
+    // Highlights — a bulleted "what makes this stand out" slide, only when
+    // the deck actually has them (older decks generated before this field
+    // existed won't, and shouldn't get a blank slide).
+    if (deck.highlights && deck.highlights.length > 0) {
+      const slide = pptx.addSlide();
+      addBackground(slide, theme.panel);
+      slide.addText(labels.highlights.toUpperCase(), {
+        x: 0.6, y: 0.5, w: 8.8, h: 0.7, fontSize: 28, bold: true, color: hex(theme.accent),
+      });
+      const bulletItems = deck.highlights.map((h) => ({ text: h[lang], options: { bullet: true, breakLine: true } }));
+      slide.addText(bulletItems, {
+        x: 0.8, y: 1.6, w: 8.4, h: 3.4, fontSize: 16, color: "F0EEE9", valign: "top", lineSpacingMultiple: 1.3,
+      });
+    }
+
+    if (deck.sponsorshipAngle) {
+      sectionSlide(labels.sponsorshipAngle, deck.sponsorshipAngle[lang]);
+    }
 
     // Character slides — one per character, preferring the deep Character
     // Sheet data (archetype/want/need/flaw/arc) when it exists.

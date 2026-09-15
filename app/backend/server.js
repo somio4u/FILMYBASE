@@ -130,10 +130,25 @@ const STORY_AGENT_SYSTEM_PROMPT = `You are the Story & Screenplay Agent, an expe
 When given a raw concept, generate 2-3 distinct storyline directions grounded in authentic Odia cultural context (settings, names, relationships, social themes) unless the concept explicitly asks for something else. For each storyline, write the title, logline, and summary in BOTH English and Odia (Odia script) — natural, native-quality Odia phrasing, not a literal word-for-word translation.`;
 
 const PITCH_DECK_SYSTEM_PROMPT = `You are the Story & Screenplay Agent, specializing in Odia (Odisha) cinema. Once a storyline is chosen, format it into a full, producer-ready pitch deck — detailed enough that a producer could actually evaluate and greenlight it, not just a one-line plot summary. Include:
+- A one-page (or two-page, only if genuinely needed) narrative "story" section — the single most important part of the whole deck, since a real producer will read this closely and skim everything else. See detailed instructions below.
 - A one-paragraph premise, the tone/genre, and the target audience.
 - 3-5 major characters who actually drive the story (not a full cast list). For each: a name (a proper noun, stays the same in both languages), a short role/descriptor (e.g. "the reluctant elder brother"), their emotional core (what they secretly want or fear beneath the surface), and their central conflict (what stands in their way, internally or externally).
 - For a web series, an elaborated synopsis per episode that genuinely establishes the whole episode — what it opens on, the complication that develops through it, and how it turns or ends (ideally on a hook into the next episode) — long enough that someone could actually picture the episode, not just guess its topic from one line.
 Keep it grounded in authentic Odia cultural context. Write everything in BOTH English and Odia (Odia script) — natural, native-quality Odia phrasing, not a literal translation.`;
+
+// The producer explicitly said this is the ONE page that actually gets read
+// closely and decides whether a story gets backed at all — nobody reads a
+// 25-episode breakdown before deciding whether they like a story. So this
+// is deliberately the most carefully-specified instruction in the whole
+// pitch deck prompt: real narrative storytelling prose, not another dry
+// summary restating the premise.
+const PITCH_DECK_STORY_PAGES_INSTRUCTION = `Also give "storyPages" — this is the single most important thing in the entire pitch deck, more important than the premise, the character list, or any episode breakdown, because it is the one piece a producer or investor will actually read closely before deciding whether they like this story at all. Write it as genuine, vivid narrative storytelling — real scenes, real turns, real emotional stakes — never a dry restatement of the premise, never a bullet-style beat list, and never generic marketing language ("an emotional rollercoaster", "a story that will touch hearts"). Open with a hook that immediately pulls the reader in. Across the piece, make sure it clearly delivers:
+- How the story actually FLOWS from beginning to end — the real shape of the journey, not just the setup.
+- The central relationships: who they are to each other, and how that bond is tested, changes, breaks, or deepens.
+- The emotional course of the story: what the characters want, fear, lose, and ultimately gain or fail to gain.
+- The key situations and conflicts they are forced into, and what raises the stakes at each turn.
+- A sense of where it is all heading and how it lands — the reader should finish this feeling the shape of the whole story, not just its opening.
+Return it as an array of 1 or 2 items — each item is one full page of prose, roughly 350-450 words. Only use 2 pages if the story genuinely has enough distinct dramatic movement to need it; a strong 1-page version is preferred over padding to 2. If you do write 2 pages, page 2 must continue directly where page 1 left off — the two pages should read as one continuous piece of writing, never repeating or re-summarizing what page 1 already covered.`;
 
 const THREE_ACT_SYSTEM_PROMPT = `You are the Story & Screenplay Agent, specializing in Odia (Odisha) cinema. After producer approval, break the approved story into a three-act structure — Setup, Confrontation, Resolution — with named key beats in each act.
 
@@ -584,6 +599,7 @@ function sanitizeBilingualContent(value) {
 
 const SECTION_LABELS = {
   en: {
+    story: "Story",
     premise: "Synopsis",
     genre: "Format",
     toneGenre: "Tone / Genre",
@@ -598,6 +614,7 @@ const SECTION_LABELS = {
     tagline: "AN ODIA STORY PRESENTATION",
   },
   or: {
+    story: "କାହାଣୀ",
     premise: "କାହାଣୀ ସାରାଂଶ",
     genre: "ଫର୍ମାଟ୍",
     toneGenre: "ଶୈଳୀ / ଧାରା",
@@ -931,9 +948,14 @@ app.post("/api/generate-storylines", requireRole("admin"), async (req, res) => {
 
     const parsed = sanitizeBilingualContent(JSON.parse(response.text));
 
+    // A real project name from the very first step, not the raw pasted idea
+    // text — the user picks one of these storylines shortly anyway, so its
+    // own title is a real name immediately, not just after a manual rename.
+    const initialTitle = parsed.storylines[0]?.title?.en ?? null;
+
     const insertResult = await db.query(
-      "INSERT INTO concepts (concept_text, storylines) VALUES ($1, $2) RETURNING id",
-      [concept, JSON.stringify(parsed.storylines)]
+      "INSERT INTO concepts (concept_text, storylines, title) VALUES ($1, $2, $3) RETURNING id",
+      [concept, JSON.stringify(parsed.storylines), initialTitle]
     );
 
     res.json({ conceptId: insertResult.rows[0].id, ...parsed });
@@ -2228,6 +2250,7 @@ app.post("/api/concepts/import", requireRole("admin"), async (req, res) => {
         ]
       );
       pitchDeckId = r.rows[0].id;
+      await setConceptTitleIfMissing(conceptId, project.pitchDeck.title);
     }
 
     if (pitchDeckId && project.characterSheet) {
@@ -2418,6 +2441,7 @@ app.post("/api/skip-to-synopsis", requireRole("admin"), async (req, res) => {
       conceptId,
       JSON.stringify(pitchDeckContent),
     ]);
+    await setConceptTitleIfMissing(conceptId, pitchDeckContent.title);
 
     res.json({ conceptId });
   } catch (error) {
@@ -2511,6 +2535,7 @@ app.post("/api/skip-to-bitsheet", requireRole("admin"), async (req, res) => {
       [conceptId, JSON.stringify(pitchDeckContent)]
     );
     const pitchDeckId = pitchDeckResult.rows[0].id;
+    await setConceptTitleIfMissing(conceptId, pitchDeckContent.title);
 
     await db.query(
       "INSERT INTO character_sheets (pitch_deck_id, content, status) VALUES ($1, $2, 'approved')",
@@ -2629,6 +2654,7 @@ app.post("/api/skip-to-scenelist", requireRole("admin"), async (req, res) => {
       [conceptId, JSON.stringify(pitchDeckContent)]
     );
     const pitchDeckId = pitchDeckResult.rows[0].id;
+    await setConceptTitleIfMissing(conceptId, pitchDeckContent.title);
 
     await db.query(
       "INSERT INTO character_sheets (pitch_deck_id, content, status) VALUES ($1, $2, 'approved')",
@@ -3211,6 +3237,19 @@ app.post(
   }
 );
 
+// A 'story' type concept's own title stays NULL until the user manually
+// renames it — the pasted idea text (e.g. "i need a gen z drama in
+// bhubaneswar...") was showing up as the project name everywhere (All
+// Projects cards, History list, the project picker) even after a real name
+// existed on the chosen storyline/pitch deck. Auto-fill it the moment a
+// pitch deck exists, from that storyline's own title, so a real project
+// name appears from the start instead of only after a manual rename.
+// Guarded on IS NULL so it never overwrites a name the user set on purpose.
+async function setConceptTitleIfMissing(conceptId, title) {
+  if (!conceptId || !title?.en) return;
+  await db.query("UPDATE concepts SET title = $1 WHERE id = $2 AND title IS NULL", [title.en, conceptId]);
+}
+
 // Builds the bilingual pitch-deck content via Gemini. When `revision` is
 // given, the prompt asks for a rewrite that addresses the producer's
 // feedback instead of a first draft.
@@ -3219,6 +3258,7 @@ async function generatePitchDeckContent(storyline, format, revision) {
 
   const properties = {
     premise: BILINGUAL_TEXT_SCHEMA,
+    storyPages: { type: Type.ARRAY, items: BILINGUAL_TEXT_SCHEMA },
     genre: BILINGUAL_TEXT_SCHEMA,
     toneGenre: BILINGUAL_TEXT_SCHEMA,
     targetAudience: BILINGUAL_TEXT_SCHEMA,
@@ -3226,7 +3266,7 @@ async function generatePitchDeckContent(storyline, format, revision) {
     sponsorshipAngle: BILINGUAL_TEXT_SCHEMA,
     majorCharacters: { type: Type.ARRAY, items: CHARACTER_SCHEMA },
   };
-  const required = ["premise", "genre", "toneGenre", "targetAudience", "highlights", "sponsorshipAngle", "majorCharacters"];
+  const required = ["premise", "storyPages", "genre", "toneGenre", "targetAudience", "highlights", "sponsorshipAngle", "majorCharacters"];
 
   let formatInstruction = "Format: feature film.";
   if (isSeries) {
@@ -3245,7 +3285,7 @@ async function generatePitchDeckContent(storyline, format, revision) {
     required.push("episodes");
   }
 
-  let contents = `Storyline title (English): ${storyline.title.en}\nLogline (English): ${storyline.logline.en}\nSummary (English): ${storyline.summary.en}\n${formatInstruction}\n\nAlso give 3-5 major characters who actually drive this story (name, role, emotional core, central conflict).\n\nAlso give: "genre" — a SHORT genre label, just 2-4 words (e.g. "Crime Drama", "Romantic Comedy", "Family Slice-of-Life"), distinct from the longer "toneGenre" prose description; "targetAudience" — cover the age group, the region/market this is aimed at, and what specifically appeals to that audience (not just an age range alone); "highlights" — exactly 4 short, punchy bullet points (5-15 words each) on what makes this story stand out from similar shows — genuinely distinctive hooks, not generic praise; "sponsorshipAngle" — a short paragraph aimed at a potential brand sponsor: why a brand should back this specific story, and at least one concrete branding/placement idea (e.g. title sponsorship, a natural product-placement moment, a brand-integrated segment) grounded in this story's actual content, not a generic pitch.`;
+  let contents = `Storyline title (English): ${storyline.title.en}\nLogline (English): ${storyline.logline.en}\nSummary (English): ${storyline.summary.en}\n${formatInstruction}\n\nAlso give 3-5 major characters who actually drive this story (name, role, emotional core, central conflict).\n\nAlso give: "genre" — a SHORT genre label, just 2-4 words (e.g. "Crime Drama", "Romantic Comedy", "Family Slice-of-Life"), distinct from the longer "toneGenre" prose description; "targetAudience" — cover the age group, the region/market this is aimed at, and what specifically appeals to that audience (not just an age range alone); "highlights" — exactly 4 short, punchy bullet points (5-15 words each) on what makes this story stand out from similar shows — genuinely distinctive hooks, not generic praise; "sponsorshipAngle" — a short paragraph aimed at a potential brand sponsor: why a brand should back this specific story, and at least one concrete branding/placement idea (e.g. title sponsorship, a natural product-placement moment, a brand-integrated segment) grounded in this story's actual content, not a generic pitch.\n\n${PITCH_DECK_STORY_PAGES_INSTRUCTION}`;
 
   if (revision) {
     contents += `\n\nThis is a REVISION of a previous draft. The producer reviewed it and requested changes.\nProducer's feedback: "${revision.feedback}"\nPrevious premise (English): ${revision.previous.premise.en}\nPrevious tone/genre (English): ${revision.previous.toneGenre.en}\nRevise the pitch deck to address the producer's feedback directly, while keeping the same title and logline.`;
@@ -3257,7 +3297,12 @@ async function generatePitchDeckContent(storyline, format, revision) {
     config: {
       systemInstruction: PITCH_DECK_SYSTEM_PROMPT,
       responseMimeType: "application/json",
-      maxOutputTokens: isSeries ? 12288 : 3072,
+      // A long-running series (e.g. 25 episodes) needs a real bilingual
+      // synopsis PER episode plus the new storyPages/highlights/etc — this
+      // hit the previous ceiling mid-generation (a truncated JSON string,
+      // not a content problem) once storyPages was added, so it's sized
+      // generously rather than just bumped to cover today's cases.
+      maxOutputTokens: isSeries ? 32768 : 5120,
       responseSchema: {
         type: Type.OBJECT,
         properties,
@@ -3272,6 +3317,7 @@ async function generatePitchDeckContent(storyline, format, revision) {
     title: storyline.title,
     logline: storyline.logline,
     premise: parsed.premise,
+    storyPages: parsed.storyPages,
     genre: parsed.genre,
     toneGenre: parsed.toneGenre,
     targetAudience: parsed.targetAudience,
@@ -3293,6 +3339,7 @@ app.post("/api/pitch-deck", requireRole("admin"), async (req, res) => {
       "INSERT INTO pitch_decks (concept_id, content) VALUES ($1, $2) RETURNING id, status, feedback",
       [conceptId ?? null, JSON.stringify(content)]
     );
+    await setConceptTitleIfMissing(conceptId, content.title);
 
     res.json({ ...insertResult.rows[0], ...content });
   } catch (error) {
@@ -3360,6 +3407,7 @@ app.post("/api/pitch-deck/:id/request-changes", requireRole("admin"), async (req
       "INSERT INTO pitch_decks (concept_id, content) VALUES ($1, $2) RETURNING id, status, feedback",
       [conceptId, JSON.stringify(revisedContent)]
     );
+    await setConceptTitleIfMissing(conceptId, revisedContent.title);
 
     res.json({ ...insertResult.rows[0], ...revisedContent, previousFeedback: feedback });
   } catch (error) {
@@ -3458,6 +3506,23 @@ app.get("/api/pitch-deck/:id/export", requireLogin, async (req, res) => {
       doc.text(bodyText, margin, bandHeight + 45, { width: W - margin * 2, lineGap: 6 });
     }
 
+    // The Story page(s) — the single most important page in the whole
+    // deck (see PITCH_DECK_STORY_PAGES_INSTRUCTION), so it gets its own
+    // full-bleed, text-forward layout rather than the lighter "band" style
+    // used for the shorter supporting sections below.
+    function storyPageSlide(index, total, bodyText) {
+      doc.addPage();
+      fillBackground(theme.bg);
+      doc.rect(0, 0, W, 6).fill(theme.accent);
+
+      doc.fillColor(theme.accent).font(headerFont).fontSize(30);
+      const heading = total > 1 ? `${labels.story.toUpperCase()} (${index + 1}/${total})` : labels.story.toUpperCase();
+      doc.text(heading, margin, margin, { width: W - margin * 2 });
+
+      doc.fillColor("#F0EEE9").font(bodyFont).fontSize(13.5);
+      doc.text(bodyText, margin, margin + 55, { width: W - margin * 2, lineGap: 5 });
+    }
+
     // Slide 1: Cover
     fillBackground(theme.bg);
     drawCornerLines(margin, margin, 1);
@@ -3481,6 +3546,11 @@ app.get("/api/pitch-deck/:id/export", requireLogin, async (req, res) => {
       .fontSize(10)
       .text(labels.tagline, margin, H - margin - 10, { width: W - margin * 2, align: "center" });
     doc.opacity(1);
+
+    // Story page(s) — right after the cover, ahead of everything else.
+    if (deck.storyPages && deck.storyPages.length > 0) {
+      deck.storyPages.forEach((page, i, arr) => storyPageSlide(i, arr.length, page[lang]));
+    }
 
     // Slide 2: Premise
     sectionSlide(labels.premise, deck.premise[lang]);
@@ -3681,6 +3751,25 @@ app.get("/api/pitch-deck/:id/export-ppt", requireLogin, async (req, res) => {
       });
       slide.addText(body, {
         x: 0.6, y: 2.3, w: 8.8, h: 3.0, fontSize: 15, color: "F0EEE9", valign: "top",
+      });
+    }
+
+    // The Story page(s) — the single most important part of the deck (see
+    // PITCH_DECK_STORY_PAGES_INSTRUCTION) — full-bleed, text-forward, right
+    // after the cover and ahead of every supporting section.
+    if (deck.storyPages && deck.storyPages.length > 0) {
+      const total = deck.storyPages.length;
+      deck.storyPages.forEach((page, i) => {
+        const slide = pptx.addSlide();
+        addBackground(slide, theme.bg);
+        slide.addShape("rect", { x: 0, y: 0, w: "100%", h: 0.06, fill: { color: hex(theme.accent) } });
+        const heading = total > 1 ? `${labels.story.toUpperCase()} (${i + 1}/${total})` : labels.story.toUpperCase();
+        slide.addText(heading, {
+          x: 0.6, y: 0.35, w: 8.8, h: 0.6, fontSize: 22, bold: true, color: hex(theme.accent),
+        });
+        slide.addText(page[lang], {
+          x: 0.6, y: 1.1, w: 8.8, h: 4.3, fontSize: 13, color: "F0EEE9", valign: "top", lineSpacingMultiple: 1.2,
+        });
       });
     }
 

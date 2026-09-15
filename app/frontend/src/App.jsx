@@ -198,6 +198,7 @@ const LABELS = {
     buildPitchDeck: 'Build Pitch Deck',
     buildingPitchDeck: 'Building pitch deck...',
     cancel: 'Cancel',
+    storyHeading: 'Story',
     premise: 'Synopsis',
     toneGenre: 'Tone / Genre',
     targetAudience: 'Target Audience',
@@ -644,6 +645,7 @@ const LABELS = {
     buildPitchDeck: 'ପିଚ୍ ଡେକ୍ ତିଆରି କରନ୍ତୁ',
     buildingPitchDeck: 'ପିଚ୍ ଡେକ୍ ତିଆରି ହେଉଛି...',
     cancel: 'ବାତିଲ୍',
+    storyHeading: 'କାହାଣୀ',
     premise: 'କାହାଣୀ ସାରାଂଶ',
     toneGenre: 'ଶୈଳୀ / ଧାରା',
     targetAudience: 'ଲକ୍ଷ୍ୟ ଦର୍ଶକ',
@@ -6595,6 +6597,15 @@ function App() {
           <span className="format-badge">{formatBadgeText(pitchDeck.format, t)}</span>
           <h2>{pitchDeck.title[language]}</h2>
           <p className="pitch-deck-logline"><em>{pitchDeck.logline[language]}</em></p>
+
+          {pitchDeck.storyPages && pitchDeck.storyPages.length > 0 && (
+            <div className="pitch-deck-story">
+              <h4>{t.storyHeading}</h4>
+              {pitchDeck.storyPages.map((page, index) => (
+                <p key={index}>{page[language]}</p>
+              ))}
+            </div>
+          )}
 
           <h4>{t.premise}</h4>
           <p>{pitchDeck.premise[language]}</p>

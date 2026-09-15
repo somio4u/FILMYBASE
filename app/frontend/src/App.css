@@ -1011,6 +1011,27 @@ button, input, textarea, select {
   color: var(--accent-strong);
 }
 
+.pitch-deck-story {
+  margin: 12px 0 4px;
+  padding: 16px 18px;
+  border: 1px solid var(--accent-strong);
+  border-radius: 10px;
+  background: var(--bg-surface);
+}
+
+.pitch-deck-story h4 {
+  margin-top: 0;
+  font-size: 1.15em;
+}
+
+.pitch-deck-story p {
+  line-height: 1.6;
+}
+
+.pitch-deck-story p + p {
+  margin-top: 12px;
+}
+
 .pitch-deck-highlights ul {
   margin: 0;
   padding-left: 20px;

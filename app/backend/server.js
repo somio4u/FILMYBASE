@@ -28,7 +28,28 @@ const PORT = process.env.PORT || 4000;
 // URI. Defaults to local dev; set to the deployed Render URL in production.
 const BACKEND_URL = process.env.BACKEND_URL || `http://localhost:${PORT}`;
 
-const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+// Two supported ways to authenticate to Gemini: a plain AI Studio API key
+// (GEMINI_API_KEY), or a Google Cloud service-account key for Vertex AI
+// (GOOGLE_SERVICE_ACCOUNT_JSON — the full JSON key file's contents, as a
+// single-line env var). Vertex AI billing is separate from AI Studio's
+// prepaid-credit system, which is why this exists — switch to it if AI
+// Studio credits run out. The service account's own project_id is used
+// directly, so no separate project env var is needed.
+const googleServiceAccountJson = process.env.GOOGLE_SERVICE_ACCOUNT_JSON;
+const googleServiceAccount = googleServiceAccountJson ? JSON.parse(googleServiceAccountJson) : null;
+const ai = googleServiceAccount
+  ? new GoogleGenAI({
+      vertexai: true,
+      project: googleServiceAccount.project_id,
+      location: process.env.GOOGLE_CLOUD_LOCATION || "us-central1",
+      googleAuthOptions: { credentials: googleServiceAccount },
+    })
+  : new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+
+// The AI Studio "-latest" alias doesn't resolve on Vertex AI, so every call
+// in this file uses this constant (a real, explicit model id valid on both
+// AI Studio and Vertex AI) instead of a literal model name.
+const GEMINI_MODEL_NAME = "gemini-2.5-flash-lite";
 // DATABASE_URL (a full Postgres connection string, e.g. from Supabase) is
 // used when set; otherwise falls back to the local "filmmaking_app" dev
 // database. Supabase's pooled connection requires SSL but uses a
@@ -1047,7 +1068,7 @@ async function generateStorylinesContent(concept, format) {
         : `Format: feature film, target runtime ${format?.runtimeMinutes ?? "~90"} minutes.`;
 
   const response = await ai.models.generateContent({
-    model: "gemini-flash-lite-latest",
+    model: GEMINI_MODEL_NAME,
     contents: `Movie concept: ${concept}\n${formatInstruction}`,
     config: {
       systemInstruction: STORY_AGENT_SYSTEM_PROMPT,
@@ -1772,7 +1793,7 @@ async function generateAgentChatReply(stageKey, stateSummaryText, history, userM
   ];
 
   const response = await generateContentWithRetry({
-    model: "gemini-flash-lite-latest",
+    model: GEMINI_MODEL_NAME,
     contents,
     config: {
       systemInstruction: systemPrompt,
@@ -2505,7 +2526,7 @@ const SKIP_AHEAD_INSTRUCTION =
 
 async function generateSkipToSynopsis(pastedText, runtimeMinutes) {
   const response = await ai.models.generateContent({
-    model: "gemini-flash-lite-latest",
+    model: GEMINI_MODEL_NAME,
     contents: `${SKIP_AHEAD_INSTRUCTION}\n\nThis is a feature film, target runtime ${runtimeMinutes} minutes.\n\nThe user's pasted synopsis/pitch text:\n${pastedText}\n\nProvide: a short one-to-two sentence English-only "concept" summarizing the core idea (internal reference only, not shown to the user); a matching storyline title/logline/summary (bilingual); the pasted text restructured into premise/toneGenre/targetAudience (bilingual); and 3-5 major characters (name, role, emotional core, central conflict) consistent with it.`,
     config: {
       systemInstruction: STORY_AGENT_SYSTEM_PROMPT,
@@ -2586,7 +2607,7 @@ app.post("/api/skip-to-synopsis", requireRole("admin"), async (req, res) => {
 
 async function generateSkipToBitSheet(pastedText, runtimeMinutes) {
   const response = await ai.models.generateContent({
-    model: "gemini-flash-lite-latest",
+    model: GEMINI_MODEL_NAME,
     contents: `${SKIP_AHEAD_INSTRUCTION}\n\nThis is a feature film, target runtime ${runtimeMinutes} minutes.\n\nThe user's pasted Bit Sheet (plot points) text:\n${pastedText}\n\nProvide: a short English-only "concept" (internal only); a matching storyline title/logline/summary (bilingual); a pitch deck premise/toneGenre/targetAudience (bilingual) consistent with the bit sheet; 3-5 major characters as full character sheets (name, archetype, archetypeNote, role, want, need, flaw, virtues, innerConflict, outerConflict, arc, introductionBeat, and heroLogline for whichever one plays the shadow/antagonist); a three-act controllingIdea/setup/confrontation/resolution (bilingual) consistent with it; and "bits" — the pasted content itself, restructured into an ordered array where each bit has actNumber, beatType (from the given enum), and a bilingual title/description. Assign act numbers and beat types based on where each bit logically falls in your three-act structure above.`,
     config: {
       systemInstruction: BIT_SHEET_SYSTEM_PROMPT,
@@ -2703,7 +2724,7 @@ app.post("/api/skip-to-bitsheet", requireRole("admin"), async (req, res) => {
 
 async function generateSkipToSceneList(pastedText, runtimeMinutes) {
   const response = await ai.models.generateContent({
-    model: "gemini-flash-lite-latest",
+    model: GEMINI_MODEL_NAME,
     contents: `${SKIP_AHEAD_INSTRUCTION}\n\nThis is a feature film, target runtime ${runtimeMinutes} minutes.\n\nThe user's pasted scene-by-scene one-liner text:\n${pastedText}\n\nProvide: a short English-only "concept" (internal only); a matching storyline title/logline/summary (bilingual); a pitch deck premise/toneGenre/targetAudience (bilingual); 3-5 major characters as full character sheets (name, archetype, archetypeNote, role, want, need, flaw, virtues, innerConflict, outerConflict, arc, introductionBeat, and heroLogline for whichever one plays the shadow/antagonist); a three-act controllingIdea/setup/confrontation/resolution (bilingual); a bit sheet "bits" array (beat-by-beat plot points, from the given beatType enum) — all consistent with the scenes below; and "scenes" — the pasted content itself, restructured into an ordered array where each scene has actNumber, intExt (INT/EXT), a bilingual location, timeOfDay (DAY/NIGHT), a bilingual oneLiner, and an estimatedMinutes number (infer a reasonable one if not stated).`,
     config: {
       systemInstruction: SCENE_SYSTEM_PROMPT,
@@ -2887,7 +2908,7 @@ function splitScreenplayIntoEpisodes(text) {
 // even for a long multi-episode script.
 async function generateScreenplayMetadataForProduction(fullText) {
   const response = await generateContentWithRetry({
-    model: "gemini-flash-lite-latest",
+    model: GEMINI_MODEL_NAME,
     contents: `The user pasted an already-written screenplay below — treat it as authoritative, this is a transcription/structuring task, not a creative rewrite. Extract: a short English-only project title (a few words, internal reference only); and a list of the major character names who appear across the ENTIRE script (plain proper nouns, no descriptions).\n\nThe pasted screenplay:\n${fullText}`,
     config: {
       systemInstruction: SCENE_SYSTEM_PROMPT,
@@ -2920,7 +2941,7 @@ async function generateEpisodeScenesForProduction(episodeText, episodeNumber, ep
     : "";
 
   const response = await generateContentWithRetry({
-    model: "gemini-flash-lite-latest",
+    model: GEMINI_MODEL_NAME,
     contents: `The user pasted an already-written screenplay below — treat it as authoritative, this is a transcription/structuring task, not a creative rewrite. ${episodeLine}Extract a faithful scene-by-scene breakdown of the ENTIRE material given — for each scene give sceneNumber (the scene's OWN literal number/label exactly as written in the source — e.g. "5A", "36", or whatever this script actually uses; copy it verbatim, including any letter suffix; NEVER assume it restarts at 1 per episode or renumber it sequentially yourself — if the source keeps counting up across episodes, or starts a scene list mid-sequence, or uses "5A"/"5B" for scenes inserted between 5 and 6, preserve that exactly, since this is what every department on set actually references), actNumber (estimate 1/2/3 from its position within this material), intExt (INT/EXT), a bilingual location (just the place name), timeOfDay (DAY/NIGHT), a bilingual oneLiner summarizing what happens — and it must name EVERY character physically present in the scene, not just whoever is speaking or central to it (someone silently dropping something off, a background figure the script names, etc. — never omit a named person from the one-liner just because their part is brief), an estimatedMinutes number (infer from the scene's length/content), a purpose ("plot_advancing" or "character_revealing"), and a bilingual turn (its value-shift).${targetLine} Odia must be real Odia (Oriya) script, never Romanized. Do not skip any scene, however short.\n\nThe pasted screenplay material:\n${episodeText}`,
     config: {
       systemInstruction: SCENE_SYSTEM_PROMPT,
@@ -3432,7 +3453,7 @@ async function generatePitchDeckEpisodeBatch(
       };
 
   const parsed = await generateJsonContent({
-    model: "gemini-flash-lite-latest",
+    model: GEMINI_MODEL_NAME,
     contents,
     config: {
       systemInstruction: PITCH_DECK_SYSTEM_PROMPT,
@@ -3484,7 +3505,7 @@ BUDGET-FRIENDLY PRODUCTION CONSTRAINT — this is a low-budget format meant to s
 
   const core = sanitizeBilingualContent(
     await generateJsonContent({
-      model: "gemini-flash-lite-latest",
+      model: GEMINI_MODEL_NAME,
       contents,
       config: {
         systemInstruction: PITCH_DECK_SYSTEM_PROMPT,
@@ -4133,7 +4154,7 @@ async function generateCharacterSheetContent(deck, revision) {
   }
 
   const response = await ai.models.generateContent({
-    model: "gemini-flash-lite-latest",
+    model: GEMINI_MODEL_NAME,
     contents,
     config: {
       systemInstruction: CHARACTER_SHEET_SYSTEM_PROMPT,
@@ -4304,7 +4325,7 @@ async function generateThreeActEpisodeBatch(deck, episodesChunk, startIndex, ove
   }
 
   const parsed = await generateJsonContent({
-    model: "gemini-flash-lite-latest",
+    model: GEMINI_MODEL_NAME,
     contents,
     config: {
       systemInstruction: THREE_ACT_SYSTEM_PROMPT,
@@ -4373,7 +4394,7 @@ async function generateThreeActContent(deck, characterSheet, revision) {
 
   const overall = sanitizeBilingualContent(
     await generateJsonContent({
-      model: "gemini-flash-lite-latest",
+      model: GEMINI_MODEL_NAME,
       contents,
       config: {
         systemInstruction: THREE_ACT_SYSTEM_PROMPT,
@@ -4609,7 +4630,7 @@ async function generateBitSheetEpisodeBatch(episodesChunk, structuresChunk, star
   }
 
   const parsed = await generateJsonContent({
-    model: "gemini-flash-lite-latest",
+    model: GEMINI_MODEL_NAME,
     contents,
     config: {
       systemInstruction: BIT_SHEET_SYSTEM_PROMPT,
@@ -4674,7 +4695,7 @@ async function generateBitSheetContent(threeAct, deck, revision) {
   }
 
   const response = await ai.models.generateContent({
-    model: "gemini-flash-lite-latest",
+    model: GEMINI_MODEL_NAME,
     contents,
     config: {
       systemInstruction: BIT_SHEET_SYSTEM_PROMPT,
@@ -4905,7 +4926,7 @@ async function callSceneListGemini(contents, isSeries, totalTargetMinutes) {
   const required = isSeries ? ["episodeScenes"] : ["scenes"];
 
   const parsed = await generateJsonContent({
-    model: "gemini-flash-lite-latest",
+    model: GEMINI_MODEL_NAME,
     contents,
     config: {
       systemInstruction: SCENE_SYSTEM_PROMPT,
@@ -5393,7 +5414,7 @@ async function generateScreenplaySceneContent(deck, allScenes, sceneIndex, previ
 
   async function callGemini(promptContents) {
     const parsed = await generateJsonContent({
-      model: "gemini-flash-lite-latest",
+      model: GEMINI_MODEL_NAME,
       contents: promptContents,
       config: {
         systemInstruction: buildScreenplaySystemPrompt(dialogueLanguage),
@@ -5657,7 +5678,7 @@ async function generateScriptBreakdownContent(sourceText, revision) {
   }
 
   const response = await generateContentWithRetry({
-    model: "gemini-flash-lite-latest",
+    model: GEMINI_MODEL_NAME,
     contents,
     config: {
       systemInstruction: SCRIPT_BREAKDOWN_SYSTEM_PROMPT,
@@ -5736,7 +5757,7 @@ async function generateBreakdownCategoryContent(sourceText, category, existingIt
   const contents = `The script material:\n${sourceText}\n\nThe current "${category}" list from a previous pass (it may have missed things):\n${JSON.stringify(existingItems ?? [])}\n\nRe-read the ENTIRE script carefully and produce a fresh, COMPLETE "${category}" list — ${BREAKDOWN_CATEGORY_DESCRIPTIONS[category]}. Specifically double-check for anything subtle or easy to miss on a first pass (brief appearances, background mentions, minor characters/props/locations mentioned only once) that the previous list may have left out. Don't just repeat the previous list unchanged — verify each entry against the script and correct or extend it.`;
 
   const response = await generateContentWithRetry({
-    model: "gemini-flash-lite-latest",
+    model: GEMINI_MODEL_NAME,
     contents,
     config: {
       systemInstruction: SCRIPT_BREAKDOWN_SYSTEM_PROMPT,
@@ -5762,7 +5783,7 @@ async function findMissingCharactersInChunk(chunkText, knownLabels) {
   const contents = `The script material (one part of a larger script — the character list below spans the WHOLE script, not just this part):\n${chunkText}\n\nAlready-known characters (do NOT report any of these again, even if they appear here): ${knownLabels.join(", ") || "(none yet)"}\n\nThoroughly re-read this material and identify every character with ANY screen presence who is NOT already in the known list above — including characters who never speak, appear only briefly, or are simply named while physically present in a scene (someone silently dropping something off, a background figure the script gives a real name to, etc.). Do not skip anyone just because their part is small. Exclude only generic, unnamed background people or crowds ("a few guests", "kids playing football", "wedding crowd") — never exclude someone the script actually names. For each character found, give: a short bilingual note on their overall involvement, matching the style of an existing character-list entry; their approximate age (an age or age range as stated or reasonably inferable, e.g. "60s", "Late 20s", "Child, around 8" — "Unspecified" only if genuinely not inferable); and their gender (Male, Female, or Unspecified), inferred confidently from name/pronouns/context rather than defaulted. If none are missing from this material, return an empty array.`;
 
   const response = await generateContentWithRetry({
-    model: "gemini-flash-lite-latest",
+    model: GEMINI_MODEL_NAME,
     contents,
     config: {
       systemInstruction: SCRIPT_BREAKDOWN_SYSTEM_PROMPT,
@@ -5832,7 +5853,7 @@ async function classifyCastCategoriesInChunk(chunkText, knownLabels) {
   const contents = `The script material (one part of the full script):\n${chunkText}\n\nKnown characters to check (exact names): ${knownLabels.join(", ")}\n\nFor EACH of these characters who appears ANYWHERE in this material (skip anyone who doesn't appear at all here), report two things based strictly on this material:\n- "hasDialogueHere": true if they have any actual spoken line here — this includes a voice-over, a phone-call voice, a radio/PA announcement, or any other line attributed to them even when they aren't physically in the scene.\n- "physicallyPresentHere": true if they are physically present and visible in a scene here — performing an action, standing, moving, silently reacting — even if they never speak. False if their only appearance here is as a disembodied voice (V.O., O.S., over the phone/radio, etc.) with no physical presence in the scene.\nA character can have both true (present and speaking), only physicallyPresentHere true (present but silent), or only hasDialogueHere true (heard but never physically there). Only include characters that actually appear in this material in some form — omit anyone absent from it entirely.`;
 
   const response = await generateContentWithRetry({
-    model: "gemini-flash-lite-latest",
+    model: GEMINI_MODEL_NAME,
     contents,
     config: {
       systemInstruction: SCRIPT_BREAKDOWN_SYSTEM_PROMPT,
@@ -6077,7 +6098,7 @@ async function parseHandwrittenScheduleNote(imageBuffer, mimeType, sceneList, sc
   ];
 
   const response = await generateContentWithRetry({
-    model: "gemini-flash-lite-latest",
+    model: GEMINI_MODEL_NAME,
     contents,
     config: {
       systemInstruction: SCRIPT_BREAKDOWN_SYSTEM_PROMPT,
@@ -6123,7 +6144,7 @@ async function generateAdSheetDetailsForBatch(batchEntries, batchStartIndex, bre
   const contents = `The full script material (the authoritative source — use this to check exactly who and what is in each of the scenes below, not just their one-liners, which are compressed summaries that can omit incidental details):\n${sourceText}\n\nThese ${batchEntries.length} scenes are the ones to report back on this time, numbered by their true position in the full scene list:\n${numberedScenes}\n\nEstablished full cast list: ${knownCharacters}\n\nEstablished property list: ${knownProps || "(none yet)"}\n\nEstablished costume notes: ${knownCostumes || "(none yet)"}\n\nFor EACH of these ${batchEntries.length} scenes, in the same order given, re-read the corresponding part of the full script material carefully and determine:\n- mainCharacters: EVERY named individual who is physically part of that scene's action — whether or not they speak, and however brief their presence (someone dropping something off, a silent bystander who is nonetheless a named character, a baby being handed over, etc.). Do not default to just the scene's two lead characters — actively check for every name the script mentions in that scene. Prefer exact names from the established full cast list above when they match, but if the script clearly names someone not on that list, include them anyway using the name the script gives them — never silently drop a named person.\n- extras: unnamed/generic background people only (a crowd, "a few guests", "kids playing football") — never someone the script gives an actual name to; leave empty if none.\n- property: objects handled or referenced in that scene, preferring the established property list when relevant; leave empty if none.\n- costumeRemarks: a costume-specific note for that scene if the costume notes above say anything relevant; leave empty if nothing applies.\nReturn exactly ${batchEntries.length} rows in the same order as these scenes — do not skip, merge, or add extra rows.`;
 
   const response = await generateContentWithRetry({
-    model: "gemini-flash-lite-latest",
+    model: GEMINI_MODEL_NAME,
     contents,
     config: {
       systemInstruction: SCRIPT_BREAKDOWN_SYSTEM_PROMPT,
@@ -6450,7 +6471,7 @@ async function generateCostumeRecommendationsForBatch(characterBriefs) {
   const prompt = `You are a costume department head planning how many physical costume sets to prepare for each character in this production, based on how many scenes they're in and what kind of scenes those are (office, home/night, outdoor/casual, festive, etc.).\n\nCRITICAL — ground every recommendation strictly in the actual scene list given below for each character. Read through their specific scenes (location, time of day, one-liner) before deciding on categories — do not guess generic categories that aren't actually supported by what happens in their listed scenes, and do not copy a pattern from one character onto another. If a character's scene list says "(no AD sheet scenes found for this character)", don't invent scene context — just recommend a single minimal set and say so plainly in the reason. Each "reason" must cite something concrete from that character's own scene list (an approximate count of matching scenes, a location, or a time-of-day pattern you actually observed) — a vague reason with no reference to their real scenes is not acceptable.\n\nFor EACH character below, infer the distinct costume categories they'd realistically need from the scenes they actually appear in — name each category in plain terms that genuinely fit THIS character (e.g. "Hospital Uniform" for a doctor, "School Uniform" for a student) rather than forcing a generic fixed list — and recommend a realistic QUANTITY of each. Continuity means the same physical outfit is usually reused across scenes set at the same "look", but production still needs spares of frequently-worn categories for laundry, damage, or reshoots, so quantity should reflect that, not just "1 per look". A character in very few scenes (a day player, a one-scene role) should get a single set, quantity 1, with a short reason — don't invent an elaborate breakdown for them. A lead appearing across dozens of varied scenes should get a fuller breakdown across several categories. Write each "reason" as a short bilingual note (English, and Odia if you can — leave "or" empty if not confident) explaining the recommendation, e.g. "Worn across 18 office scenes — 2 sets recommended for continuity while one is being laundered."\n\nCharacters:\n\n${characterBriefs.join("\n\n")}`;
 
   const response = await generateContentWithRetry({
-    model: "gemini-flash-lite-latest",
+    model: GEMINI_MODEL_NAME,
     contents: prompt,
     config: {
       responseMimeType: "application/json",
@@ -7381,7 +7402,7 @@ async function generateCharacterScriptForChunk(chunkText, characterLabel) {
   const contents = `The script material (one part of the full script):\n${chunkText}\n\nYou are building a MASTER SCRIPT PACKET for the actor playing "${characterLabel}" — find EVERY scene in this material where "${characterLabel}" has any screen presence at all (speaking, or silently doing something), in the order the scenes occur here. Do not skip any scene they appear in, however brief, and do not include scenes where they are absent entirely.\n\nMatch the name EXACTLY: "${characterLabel}" only. Scripts often have several similar minor characters (e.g. more than one unnamed or similarly-described child, or two characters with close roles) — never attribute another character's dialogue or presence to "${characterLabel}" just because they seem similar. If you are genuinely unsure whether a specific line or scene belongs to this exact character, leave it out rather than guessing.\n\nFor each scene "${characterLabel}" is actually in: give its real scene heading (e.g. "INT. LIVING ROOM - DAY") and its real number/label exactly as written in the script (e.g. "Scene 4", "12A") — copy it verbatim, never invent or renumber it. If "${characterLabel}" has ANY dialogue in that scene, set hasDialogue true, leave actionDescription empty, and extract the COMPLETE dialogue exchange for that scene VERBATIM exactly as written — every line, from every character who speaks in it (the actor needs their cues too) — copied word for word, never paraphrased, summarized, translated, or invented, marking "isTargetCharacter": true only on "${characterLabel}"'s own lines. If "${characterLabel}" has NO dialogue in that scene but is present or doing something, set hasDialogue false, leave lines empty, and instead write a factual one-to-two-sentence actionDescription (in English) of what they actually do in that scene, grounded strictly in the script's own action lines — never invented.`;
 
   const response = await generateContentWithRetry({
-    model: "gemini-flash-lite-latest",
+    model: GEMINI_MODEL_NAME,
     contents,
     config: {
       systemInstruction: SCRIPT_BREAKDOWN_SYSTEM_PROMPT,
@@ -7775,7 +7796,7 @@ function missingScheduleIdentities(scheduleDays, sceneList, isSeries, alreadyCov
 
 async function callShootScheduleGemini(contents, isSeries) {
   const response = await generateContentWithRetry({
-    model: "gemini-flash-lite-latest",
+    model: GEMINI_MODEL_NAME,
     contents,
     config: {
       systemInstruction: PRODUCTION_SYSTEM_PROMPT,
@@ -8100,7 +8121,7 @@ async function parseCompletedScenesFromReport(sceneList, plannedSceneRefs, repor
   const contents = `Today's planned shoot list, numbered:\n${listText}\n\nThe Assistant Director's report on what actually happened today:\n"${reportText}"\n\nFor EACH numbered item above, determine whether the AD's report says it was completed today or not. Match by the scene number and episode mentioned in the report — the AD refers to scenes by their real script scene numbers, exactly as listed above — do not guess from position alone. If the report doesn't mention an item at all, assume it was NOT completed (safer default — an unmentioned scene should roll forward rather than be silently marked done). Return "completedIndexes" (0-indexed positions from the list above that the report confirms were completed) and "notCompletedIndexes" (everything else). Every index from 0 to ${plannedSceneRefs.length - 1} must appear in exactly one of the two arrays.`;
 
   const response = await generateContentWithRetry({
-    model: "gemini-flash-lite-latest",
+    model: GEMINI_MODEL_NAME,
     contents,
     config: {
       systemInstruction: PRODUCTION_SYSTEM_PROMPT,
@@ -8146,7 +8167,7 @@ async function parseExtraScenesFromReport(sceneList, candidateDays, reportText) 
   const contents = `Scenes currently scheduled on OTHER, not-yet-shot days, numbered:\n${listText}\n\nThe Assistant Director says they ALSO shot some extra scenes today, ahead of their originally scheduled day:\n"${reportText}"\n\nMatch by the real script scene number and episode mentioned — the AD refers to scenes by their real script scene numbers exactly as listed above, never guess from position alone. Only include an index if the report clearly says that scene was shot today. Return "matchedIndexes" (0-indexed positions from the list above).`;
 
   const response = await generateContentWithRetry({
-    model: "gemini-flash-lite-latest",
+    model: GEMINI_MODEL_NAME,
     contents,
     config: {
       systemInstruction: PRODUCTION_SYSTEM_PROMPT,
@@ -10567,7 +10588,7 @@ async function reviewPitchDeckHooks(deck) {
     .join("\n\n");
 
   const response = await ai.models.generateContent({
-    model: "gemini-flash-lite-latest",
+    model: GEMINI_MODEL_NAME,
     contents: `You are reviewing a vertical micro-drama's episode hooks for quality, as a strict story editor. Here are all ${deck.episodes.length} episodes:\n\n${episodesText}\n\nFlag any episode whose hook is VAGUE or GENERIC (e.g. "things get complicated", "a shocking twist is revealed", or anything that doesn't state a concrete, specific moment) rather than a real, concrete beat — a hook can be a line of dialogue or a silent action beat, either is fine, but it must be SPECIFIC. Also flag if hooks feel repetitive across episodes (the same kind of twist reused too many times in a row). Cite the episode number for each real problem found. If everything is genuinely concrete and varied, return no issues.`,
     config: {
       systemInstruction: "You are a meticulous story editor reviewing episode hooks for a vertical micro-drama. Be strict but fair — only flag genuine problems, not stylistic preferences.",
@@ -10615,7 +10636,7 @@ async function reviewDialogueAuthenticity(elements, dialogueLanguage) {
 
   const languageLabel = dialogueLanguage === "or" ? "Odia" : dialogueLanguage === "hi" ? "Hindi" : "English";
   const response = await ai.models.generateContent({
-    model: "gemini-flash-lite-latest",
+    model: GEMINI_MODEL_NAME,
     contents: `You are reviewing dialogue from a screenplay scene for natural, authentic ${languageLabel} speech. Here are the dialogue lines:\n\n${dialogueLines}\n\nFlag it if the dialogue sounds stiff, overly formal/literary, like a textbook translation, or if every character sounds the same regardless of who they are. Also flag it if it's EXPOSITORY — a character or narrator (V.O.) stating an emotion, motivation, or plot point outright ("I feel so betrayed", "She must not find out about the merger") instead of revealing it through what's said, withheld, or done; real people rarely announce their own feelings that plainly. Real spoken dialogue is casual, has natural rhythm, shows feeling through behavior and subtext rather than announcing it, and different characters sound different from each other. If it genuinely reads as natural, authentic, and shown rather than told, return no issues.`,
     config: {
       systemInstruction: "You are a meticulous script supervisor reviewing dialogue authenticity. Be strict but fair.",
@@ -10647,7 +10668,7 @@ async function scorePipelineStage(stageLabel, contentSummary, reviewerIssues) {
   const issuesText = reviewerIssues.length > 0 ? reviewerIssues.join(" ") : "No specific issues were flagged by the specialist reviewer.";
 
   const response = await ai.models.generateContent({
-    model: "gemini-flash-lite-latest",
+    model: GEMINI_MODEL_NAME,
     contents: `You are the final judge for the "${stageLabel}" stage of a screenplay pipeline. Here is a summary of the current draft:\n\n${contentSummary}\n\nA specialist reviewer already flagged: ${issuesText}\n\nRate this draft's quality on a strict scale from 1 to 10 (10 = genuinely excellent and ready to ship; 8 = solid and usable; anything below 8 needs real work before it's acceptable). Be a tough, honest judge — do not hand out 8+ scores generously, and don't just repeat the specialist reviewer's words, form your own independent judgment. Give your verdict as a short, direct sentence, in this exact style: if below 8, "This is not up to the mark. This is only a(n) X-pointer because <specific, concrete reasons>." — if 8 or above, "This is a strong X-pointer — <what's genuinely working>."`,
     config: {
       systemInstruction: "You are the final quality judge in a multi-agent screenplay pipeline — blunt, specific, and consistent. Never inflate scores just to move things along.",

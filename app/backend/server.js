@@ -3427,7 +3427,7 @@ BUDGET-FRIENDLY PRODUCTION CONSTRAINT — this is a low-budget format meant to s
   let contents = `Storyline title (English): ${storyline.title.en}\nLogline (English): ${storyline.logline.en}\nSummary (English): ${storyline.summary.en}\n${formatInstruction}\n\nAlso give 3-5 major characters who actually drive this story (name, role, emotional core, central conflict).\n\nAlso give: "genre" — a SHORT genre label, just 2-4 words (e.g. "Crime Drama", "Romantic Comedy", "Family Slice-of-Life"), distinct from the longer "toneGenre" prose description; "targetAudience" — cover the age group, the region/market this is aimed at, and what specifically appeals to that audience (not just an age range alone); "highlights" — exactly 4 short, punchy bullet points (5-15 words each) on what makes this story stand out from similar shows — genuinely distinctive hooks, not generic praise; "sponsorshipAngle" — a short paragraph aimed at a potential brand sponsor: why a brand should back this specific story, and at least one concrete branding/placement idea (e.g. title sponsorship, a natural product-placement moment, a brand-integrated segment) grounded in this story's actual content, not a generic pitch.\n\nEvery one of those fields — premise, genre, toneGenre, targetAudience, highlights, sponsorshipAngle — must ALSO be in plain, simple, everyday English, exactly like storyPages below: no literary or "impressive" words (nothing like "prodigy", "despises", "backdrop", "backlash", "navigate a turbulent landscape"), just the plain way a person would actually say it out loud. This is a hard requirement across every field, not only the story pages.\n\n${PITCH_DECK_STORY_PAGES_INSTRUCTION}`;
 
   if (revision) {
-    contents += `\n\nThis is a REVISION of a previous draft. The producer reviewed it and requested changes.\nProducer's feedback: "${revision.feedback}"\nPrevious premise (English): ${revision.previous.premise.en}\nPrevious tone/genre (English): ${revision.previous.toneGenre.en}\nRevise the pitch deck to address the producer's feedback directly, while keeping the same title and logline.`;
+    contents += `\n\nThis is a REVISION of a previous draft. The producer reviewed it and requested changes.\nProducer's feedback: "${revision.feedback}"\nPrevious premise (English): ${revision.previous.premise.en}\nPrevious tone/genre (English): ${revision.previous.toneGenre.en}\nRevise the pitch deck to address the producer's feedback directly, while keeping the same title and logline.${isSeries ? ` The episode count is NOT negotiable and does not change between drafts — this revision must still have EXACTLY ${format.episodeCount} episodes, matching the original requirement exactly, even while addressing the feedback above.` : ""}`;
   }
 
   const parsed = sanitizeBilingualContent(
@@ -10474,6 +10474,33 @@ async function scorePipelineStage(stageLabel, contentSummary, reviewerIssues) {
 // best attempt was rather than burning unbounded time/API quota on one stage.
 const MAX_AUTO_PIPELINE_REVISION_ROUNDS = 3;
 
+// Real bug found in testing: Gemini can silently return a different episode
+// count than requested on a pitch-deck REVISION call (60 requested -> 66,
+// then 30, then 33 across successive rounds in one real run) — nothing
+// enforces "exactly N items" in a Gemini array schema, it's purely a text
+// instruction, and a revision call can drift from it even though the
+// original call got it right. Returns a loud correction message when wrong,
+// null when the count is fine (or there's no fixed count to check).
+function pitchDeckEpisodeCountIssue(deck, format) {
+  if (!format?.episodeCount || !Array.isArray(deck.episodes)) return null;
+  if (deck.episodes.length === format.episodeCount) return null;
+  return `CRITICAL: exactly ${format.episodeCount} episodes were required, but this draft has ${deck.episodes.length} — the episode COUNT itself is wrong, not just a quality issue. Regenerate with EXACTLY ${format.episodeCount} episodes, no more and no fewer, keeping every other requirement too.`;
+}
+
+// Same idea, for the batched stages downstream of the pitch deck: each
+// batch is small enough that the model reliably returns exactly what a
+// batch asks for, but this verifies the ASSEMBLED total still matches
+// deck.episodes.length rather than trusting that silently — a shortfall in
+// even one batch would otherwise produce a scene list, bit sheet, etc. with
+// fewer episodes than the deck itself, with nothing catching the mismatch.
+function assertEpisodeCount(actualLength, expectedLength, stageName) {
+  if (actualLength !== expectedLength) {
+    throw new Error(
+      `${stageName} produced ${actualLength} episodes but the pitch deck has ${expectedLength} — a batch came back short. Try starting a new run.`
+    );
+  }
+}
+
 const AUTO_PIPELINE_JSONB_FIELDS = new Set(["format", "review_notes"]);
 
 async function updateAutoPipelineRun(runId, fields) {
@@ -10519,15 +10546,31 @@ async function runAutoPipeline(runId, conceptText, format, dialogueLanguage) {
     await updateAutoPipelineRun(runId, { progress_stage: "pitch-deck" });
     let deck = await generatePitchDeckContent(storyline, format);
     for (let round = 0; round < MAX_AUTO_PIPELINE_REVISION_ROUNDS; round++) {
+      // A REAL failure caught in testing: on a revision round, Gemini can
+      // silently return a DIFFERENT episode count than requested (seen: 60
+      // requested, got 66, then 30, then 33 across successive rounds) — the
+      // judge only grades quality, so this drifted through undetected and
+      // every downstream stage just inherited the wrong count. This is
+      // checked and force-corrected every round, independent of the judge's
+      // score, and fails the whole run loudly rather than completing with
+      // silently-wrong data if it's still off after all rounds.
+      const countIssue = pitchDeckEpisodeCountIssue(deck, format);
       const hookReview = await reviewPitchDeckHooks(deck);
       const summary = deck.episodes
         ? `${deck.episodes.length} episodes. Sample hooks: ${deck.episodes.slice(0, 3).map((ep) => ep.hook?.en).filter(Boolean).join(" | ")}`
         : `Premise: ${deck.premise.en}`;
       const judged = await scorePipelineStage("Pitch Deck", summary, hookReview.issues);
       await appendAutoPipelineNote(runId, "pitch-deck", `Judge score: ${judged.score}/10 — ${judged.verdict}`);
-      if (judged.score >= 8 || round === MAX_AUTO_PIPELINE_REVISION_ROUNDS - 1) break;
-      const feedback = [...hookReview.issues, judged.verdict].filter(Boolean).join(" ");
+      if (countIssue) await appendAutoPipelineNote(runId, "pitch-deck", countIssue);
+      if ((judged.score >= 8 && !countIssue) || round === MAX_AUTO_PIPELINE_REVISION_ROUNDS - 1) break;
+      const feedback = [countIssue, ...hookReview.issues, judged.verdict].filter(Boolean).join(" ");
       deck = await generatePitchDeckContent(storyline, format, { feedback, previous: deck });
+    }
+    const finalCountIssue = pitchDeckEpisodeCountIssue(deck, format);
+    if (finalCountIssue) {
+      throw new Error(
+        `Pitch deck episode count is still wrong after ${MAX_AUTO_PIPELINE_REVISION_ROUNDS} attempts: requested ${format.episodeCount}, got ${deck.episodes?.length ?? 0}. Try starting a new run.`
+      );
     }
     const pitchDeckResult = await db.query(
       "INSERT INTO pitch_decks (concept_id, content, status) VALUES ($1, $2, 'approved') RETURNING id",
@@ -10544,6 +10587,9 @@ async function runAutoPipeline(runId, conceptText, format, dialogueLanguage) {
 
     await updateAutoPipelineRun(runId, { progress_stage: "three-act" });
     const threeAct = await generateThreeActContent(deck, characterSheet);
+    if (Array.isArray(deck.episodes)) {
+      assertEpisodeCount(threeAct.episodeStructures?.length ?? 0, deck.episodes.length, "Three-act structure");
+    }
     const threeActResult = await db.query(
       "INSERT INTO three_act_structures (pitch_deck_id, content, status) VALUES ($1, $2, 'locked') RETURNING id",
       [pitchDeckId, JSON.stringify(threeAct)]
@@ -10552,6 +10598,9 @@ async function runAutoPipeline(runId, conceptText, format, dialogueLanguage) {
 
     await updateAutoPipelineRun(runId, { progress_stage: "bit-sheet" });
     const bitSheet = await generateBitSheetContent(threeAct, deck);
+    if (Array.isArray(deck.episodes)) {
+      assertEpisodeCount(bitSheet.episodeBits?.length ?? 0, deck.episodes.length, "Bit sheet");
+    }
     const bitSheetResult = await db.query(
       "INSERT INTO bit_sheets (three_act_structure_id, content, status) VALUES ($1, $2, 'approved') RETURNING id",
       [threeActId, JSON.stringify(bitSheet)]
@@ -10571,6 +10620,9 @@ async function runAutoPipeline(runId, conceptText, format, dialogueLanguage) {
       if (judged.score >= 8 || round === MAX_AUTO_PIPELINE_REVISION_ROUNDS - 1) break;
       const feedback = [...budgetReview.issues, judged.verdict].filter(Boolean).join(" ");
       sceneList = await generateSceneListContent(bitSheet, deck, { feedback, previous: sceneList });
+    }
+    if (Array.isArray(deck.episodes)) {
+      assertEpisodeCount(sceneList.episodeScenes?.length ?? 0, deck.episodes.length, "Scene list");
     }
     const sceneListResult = await db.query(
       "INSERT INTO scene_lists (bit_sheet_id, content, status) VALUES ($1, $2, 'approved') RETURNING id",

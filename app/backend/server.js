@@ -3510,7 +3510,13 @@ BUDGET-FRIENDLY PRODUCTION CONSTRAINT — this is a low-budget format meant to s
       config: {
         systemInstruction: PITCH_DECK_SYSTEM_PROMPT,
         responseMimeType: "application/json",
-        maxOutputTokens: 5120,
+        // Every bilingual field here is now trilingual (en/or/hi) — premise,
+        // 1-2 pages of storyPages prose, 3-5 full character sheets,
+        // highlights, and sponsorshipAngle all in three languages easily
+        // exceeds the old 5120 budget, truncating the JSON mid-string (looks
+        // like a parse bug, isn't — see generateJsonContent's retry, which
+        // can't fix a genuinely too-small budget).
+        maxOutputTokens: 16384,
         responseSchema: {
           type: Type.OBJECT,
           properties,
@@ -4153,13 +4159,17 @@ async function generateCharacterSheetContent(deck, revision) {
     contents += `\n\nThis is a REVISION of a previous character sheet. The Story Writer reviewed it and requested changes.\nFeedback: "${revision.feedback}"\nRevise the character sheet to address the feedback directly.`;
   }
 
-  const response = await ai.models.generateContent({
+  // 11 trilingual (en/or/hi) fields per character, up to 5 characters —
+  // easily exceeds a modest budget and truncates mid-JSON (same failure
+  // mode as the pitch deck's core-content call). generateJsonContent also
+  // adds a retry-on-parse-failure safety net this call didn't have before.
+  const parsed = await generateJsonContent({
     model: GEMINI_MODEL_NAME,
     contents,
     config: {
       systemInstruction: CHARACTER_SHEET_SYSTEM_PROMPT,
       responseMimeType: "application/json",
-      maxOutputTokens: 8192,
+      maxOutputTokens: 16384,
       responseSchema: {
         type: Type.OBJECT,
         properties: { characters: { type: Type.ARRAY, items: CHARACTER_SHEET_ENTRY_SCHEMA } },
@@ -4168,7 +4178,7 @@ async function generateCharacterSheetContent(deck, revision) {
     },
   });
 
-  return sanitizeBilingualContent(JSON.parse(response.text));
+  return sanitizeBilingualContent(parsed);
 }
 
 app.post("/api/character-sheet", requireRole("admin"), async (req, res) => {

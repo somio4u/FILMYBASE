@@ -7,6 +7,7 @@ import { Pool } from "pg";
 import PDFDocument from "pdfkit";
 import ExcelJS from "exceljs";
 import PptxGenJS from "pptxgenjs";
+import { Document, Packer, Paragraph, TextRun, AlignmentType, HeadingLevel } from "docx";
 import path from "path";
 import fs from "fs";
 import fsPromises from "fs/promises";
@@ -3374,6 +3375,68 @@ async function setConceptTitleIfMissing(conceptId, title) {
 // Builds the bilingual pitch-deck content via Gemini. When `revision` is
 // given, the prompt asks for a rewrite that addresses the producer's
 // feedback instead of a first draft.
+// A single call asking for "exactly N episodes" has no hard enforcement —
+// a Gemini array schema can't constrain length, it's a text instruction
+// only, and testing found it drifting badly on larger counts, ESPECIALLY on
+// a revision call (a real run: 60 requested -> 66, then 30, then 33 across
+// 3 revision rounds). Episodes are generated in small batches instead (same
+// fix already applied to three-act/bit-sheet/scene-list) — a batch of 10 is
+// small enough that Gemini reliably returns exactly that many, so the
+// ASSEMBLED total is correct by construction, not by hoping a huge one-shot
+// count instruction was followed.
+const PITCH_DECK_EPISODE_BATCH_SIZE = 10;
+
+async function generatePitchDeckEpisodeBatch(
+  storyline, format, isVerticalDrama, batchStart, batchCount, totalCount, priorEpisodesSummary, revision
+) {
+  const positionNote =
+    batchStart === 0
+      ? `These are the FIRST ${batchCount} episodes (1-${batchCount} of ${totalCount} total) — establish the setup and hook the audience immediately.`
+      : batchStart + batchCount >= totalCount
+        ? `These are the FINAL ${batchCount} episodes (${batchStart + 1}-${totalCount} of ${totalCount} total) — this batch must bring the whole ${totalCount}-episode arc to a satisfying resolution.`
+        : `These are episodes ${batchStart + 1}-${batchStart + batchCount} of ${totalCount} total — continue building the arc from what's already happened, developing it further toward the eventual resolution (don't resolve everything yet).`;
+
+  let contents = `Storyline title (English): ${storyline.title.en}\nLogline (English): ${storyline.logline.en}\nSummary (English): ${storyline.summary.en}\n\n${priorEpisodesSummary ? `Episodes already established so far (for continuity — do not repeat or contradict them):\n${priorEpisodesSummary}\n\n` : ""}${positionNote}\n\nWrite EXACTLY ${batchCount} episodes for THIS BATCH ONLY (not the whole series — the rest are handled separately).`;
+
+  contents += isVerticalDrama
+    ? ` Each episode is only ${format.episodeMinutes} minutes — extremely short, fast-paced (ReelShort/short-drama app style), NOT a scaled-down web-series episode. For each episode give a short punchy title (2-5 words, do NOT include the word "Episode" or a number in the title itself), a tight 3-4 sentence synopsis that gets straight to the point — establish the situation fast, land one sharp turn, no wasted setup or padding — and a separate "hook" field: the EXACT, SPECIFIC beat the episode ends on, stated concretely — it can be a line of dialogue OR a silent action/visual beat, whichever genuinely suits that episode better; never a vague placeholder like "things get complicated". Every episode in this batch, including the last one if this is the final batch, must end on a real hook of this kind.`
+    : ` Each episode is ${format.episodeMinutes} minutes. For each episode give a short punchy title (2-5 words, do NOT include the word "Episode" or a number in the title itself) and an elaborated 5-7 sentence synopsis that genuinely establishes the whole episode: what it opens on, the conflict/complication that develops through it, and how it turns or ends.`;
+
+  if (revision) {
+    const previousChunk = (revision.previous.episodes ?? []).slice(batchStart, batchStart + batchCount);
+    contents += `\n\nThis is a REVISION. The producer reviewed the whole pitch deck and requested changes.\nFeedback: "${revision.feedback}"\nPrevious draft for JUST this batch of episodes:\n${JSON.stringify(previousChunk)}\nRevise this batch to address the feedback directly, while keeping exactly ${batchCount} episodes in this batch.`;
+  }
+
+  const episodeItemSchema = isVerticalDrama
+    ? {
+        type: Type.OBJECT,
+        properties: { title: BILINGUAL_TEXT_SCHEMA, synopsis: BILINGUAL_TEXT_SCHEMA, hook: BILINGUAL_TEXT_SCHEMA },
+        required: ["title", "synopsis", "hook"],
+      }
+    : {
+        type: Type.OBJECT,
+        properties: { title: BILINGUAL_TEXT_SCHEMA, synopsis: BILINGUAL_TEXT_SCHEMA },
+        required: ["title", "synopsis"],
+      };
+
+  const parsed = await generateJsonContent({
+    model: "gemini-flash-lite-latest",
+    contents,
+    config: {
+      systemInstruction: PITCH_DECK_SYSTEM_PROMPT,
+      responseMimeType: "application/json",
+      maxOutputTokens: 16384,
+      responseSchema: {
+        type: Type.OBJECT,
+        properties: { episodes: { type: Type.ARRAY, items: episodeItemSchema } },
+        required: ["episodes"],
+      },
+    },
+  });
+
+  return sanitizeBilingualContent(parsed).episodes;
+}
+
 async function generatePitchDeckContent(storyline, format, revision) {
   const isSeries = format?.type === "series" || format?.type === "vertical";
   const isVerticalDrama = format?.type === "vertical";
@@ -3390,61 +3453,31 @@ async function generatePitchDeckContent(storyline, format, revision) {
   };
   const required = ["premise", "storyPages", "genre", "toneGenre", "targetAudience", "highlights", "sponsorshipAngle", "majorCharacters"];
 
-  let formatInstruction = "Format: feature film.";
-  if (isVerticalDrama) {
-    formatInstruction = `Format: vertical micro-drama, exactly ${format.episodeCount} episodes of only ${format.episodeMinutes} minutes each — these are extremely short, fast-paced episodes (think ReelShort/short-drama app style), NOT scaled-down web-series episodes. Break the story into exactly ${format.episodeCount} episodes forming one coherent arc from setup to finale. For each episode give a short punchy title (2-5 words, do NOT include the word "Episode" or a number in the title itself — that is added separately by the app), a tight 3-4 sentence synopsis that gets straight to the point — establish the situation fast, land one sharp turn, no wasted setup or padding since there's no time for it — and a separate "hook" field: the EXACT, SPECIFIC beat the episode ends on, stated concretely — it can be a line of dialogue (e.g. a character says something that changes everything) OR a silent action/visual beat (e.g. "She opens the envelope and finds her own wedding photo — with his face scratched out"), whichever genuinely suits that episode better; never a vague placeholder like "things get complicated" or "a shocking twist is revealed". Every single episode, including the very last one, must end on a real hook of this kind.
+  // Episodes are no longer requested here at all — generated separately, in
+  // batches, below. This call only produces the story/pitch materials every
+  // episode will be grounded in.
+  const formatInstruction = isVerticalDrama
+    ? `Format: vertical micro-drama, exactly ${format.episodeCount} episodes of only ${format.episodeMinutes} minutes each — these are extremely short, fast-paced episodes (think ReelShort/short-drama app style), NOT scaled-down web-series episodes.
 
-BUDGET-FRIENDLY PRODUCTION CONSTRAINT — this is a low-budget format meant to shoot in just 2-3 days total, so the story itself must be conceived to need very little: around 5 main characters (plus a little background crowd at most, never a large cast), and a small, contained setting — a single family home (its rooms — kitchen, bedroom, drawing room, dining room — count as one location) plus at most one more interior (like a shop or restaurant) and a couple of simple free exterior spots. Never invent a plot that requires many locations, a big cast, or spectacle — the drama must come from dialogue, relationships, and what happens between these few people in this one small world.`;
-    properties.episodes = {
-      type: Type.ARRAY,
-      items: {
-        type: Type.OBJECT,
-        properties: {
-          title: BILINGUAL_TEXT_SCHEMA,
-          synopsis: BILINGUAL_TEXT_SCHEMA,
-          hook: BILINGUAL_TEXT_SCHEMA,
-        },
-        required: ["title", "synopsis", "hook"],
-      },
-    };
-    required.push("episodes");
-  } else if (isSeries) {
-    formatInstruction = `Format: web series, exactly ${format.episodeCount} episodes of ${format.episodeMinutes} minutes each. Also break the story into exactly ${format.episodeCount} episodes forming one coherent arc from setup to finale. For each episode give a short punchy title (2-5 words, do NOT include the word "Episode" or a number in the title itself — that is added separately by the app) and an elaborated 5-7 sentence synopsis that genuinely establishes the whole episode: what it opens on, the conflict/complication that develops through it, and how it turns or ends — not just a one-line plot beat.`;
-    properties.episodes = {
-      type: Type.ARRAY,
-      items: {
-        type: Type.OBJECT,
-        properties: {
-          title: BILINGUAL_TEXT_SCHEMA,
-          synopsis: BILINGUAL_TEXT_SCHEMA,
-        },
-        required: ["title", "synopsis"],
-      },
-    };
-    required.push("episodes");
-  }
+BUDGET-FRIENDLY PRODUCTION CONSTRAINT — this is a low-budget format meant to shoot in just 2-3 days total, so the story itself must be conceived to need very little: around 5 main characters (plus a little background crowd at most, never a large cast), and a small, contained setting — a single family home (its rooms — kitchen, bedroom, drawing room, dining room — count as one location) plus at most one more interior (like a shop or restaurant) and a couple of simple free exterior spots. Never invent a plot that requires many locations, a big cast, or spectacle — the drama must come from dialogue, relationships, and what happens between these few people in this one small world.`
+    : isSeries
+      ? `Format: web series, exactly ${format.episodeCount} episodes of ${format.episodeMinutes} minutes each.`
+      : "Format: feature film.";
 
   let contents = `Storyline title (English): ${storyline.title.en}\nLogline (English): ${storyline.logline.en}\nSummary (English): ${storyline.summary.en}\n${formatInstruction}\n\nAlso give 3-5 major characters who actually drive this story (name, role, emotional core, central conflict).\n\nAlso give: "genre" — a SHORT genre label, just 2-4 words (e.g. "Crime Drama", "Romantic Comedy", "Family Slice-of-Life"), distinct from the longer "toneGenre" prose description; "targetAudience" — cover the age group, the region/market this is aimed at, and what specifically appeals to that audience (not just an age range alone); "highlights" — exactly 4 short, punchy bullet points (5-15 words each) on what makes this story stand out from similar shows — genuinely distinctive hooks, not generic praise; "sponsorshipAngle" — a short paragraph aimed at a potential brand sponsor: why a brand should back this specific story, and at least one concrete branding/placement idea (e.g. title sponsorship, a natural product-placement moment, a brand-integrated segment) grounded in this story's actual content, not a generic pitch.\n\nEvery one of those fields — premise, genre, toneGenre, targetAudience, highlights, sponsorshipAngle — must ALSO be in plain, simple, everyday English, exactly like storyPages below: no literary or "impressive" words (nothing like "prodigy", "despises", "backdrop", "backlash", "navigate a turbulent landscape"), just the plain way a person would actually say it out loud. This is a hard requirement across every field, not only the story pages.\n\n${PITCH_DECK_STORY_PAGES_INSTRUCTION}`;
 
   if (revision) {
-    contents += `\n\nThis is a REVISION of a previous draft. The producer reviewed it and requested changes.\nProducer's feedback: "${revision.feedback}"\nPrevious premise (English): ${revision.previous.premise.en}\nPrevious tone/genre (English): ${revision.previous.toneGenre.en}\nRevise the pitch deck to address the producer's feedback directly, while keeping the same title and logline.${isSeries ? ` The episode count is NOT negotiable and does not change between drafts — this revision must still have EXACTLY ${format.episodeCount} episodes, matching the original requirement exactly, even while addressing the feedback above.` : ""}`;
+    contents += `\n\nThis is a REVISION of a previous draft. The producer reviewed it and requested changes.\nProducer's feedback: "${revision.feedback}"\nPrevious premise (English): ${revision.previous.premise.en}\nPrevious tone/genre (English): ${revision.previous.toneGenre.en}\nRevise the pitch deck to address the producer's feedback directly, while keeping the same title and logline.`;
   }
 
-  const parsed = sanitizeBilingualContent(
+  const core = sanitizeBilingualContent(
     await generateJsonContent({
       model: "gemini-flash-lite-latest",
       contents,
       config: {
         systemInstruction: PITCH_DECK_SYSTEM_PROMPT,
         responseMimeType: "application/json",
-        // A long-running series (e.g. 25 episodes) needs a real bilingual
-        // synopsis PER episode plus the new storyPages/highlights/etc — this
-        // hit the previous ceiling mid-generation (a truncated JSON string,
-        // not a content problem) once storyPages was added, so it's sized
-        // generously rather than just bumped to cover today's cases. Vertical
-        // drama can run up to 60 trilingual episodes (title+synopsis+hook each
-        // now in 3 languages), so it needs an even bigger ceiling than series.
-        maxOutputTokens: isVerticalDrama ? 65536 : isSeries ? 32768 : 5120,
+        maxOutputTokens: 5120,
         responseSchema: {
           type: Type.OBJECT,
           properties,
@@ -3454,20 +3487,55 @@ BUDGET-FRIENDLY PRODUCTION CONSTRAINT — this is a low-budget format meant to s
     })
   );
 
-  return {
+  const result = {
     title: storyline.title,
     logline: storyline.logline,
-    premise: parsed.premise,
-    storyPages: parsed.storyPages,
-    genre: parsed.genre,
-    toneGenre: parsed.toneGenre,
-    targetAudience: parsed.targetAudience,
-    highlights: parsed.highlights,
-    sponsorshipAngle: parsed.sponsorshipAngle,
-    majorCharacters: parsed.majorCharacters,
+    premise: core.premise,
+    storyPages: core.storyPages,
+    genre: core.genre,
+    toneGenre: core.toneGenre,
+    targetAudience: core.targetAudience,
+    highlights: core.highlights,
+    sponsorshipAngle: core.sponsorshipAngle,
+    majorCharacters: core.majorCharacters,
     format: format ?? { type: "film" },
-    episodes: parsed.episodes ?? null,
+    episodes: null,
   };
+
+  if (!isSeries) return result;
+
+  const totalCount = format.episodeCount;
+  const chunkStarts = [];
+  for (let i = 0; i < totalCount; i += PITCH_DECK_EPISODE_BATCH_SIZE) chunkStarts.push(i);
+
+  if (revision) {
+    // Each batch has the OLD version of just its own chunk as continuity
+    // grounding (same pattern as three-act/bit-sheet/scene-list revisions),
+    // so batches are independent and can run concurrently.
+    const chunkResults = await mapWithConcurrency(chunkStarts, 3, (start) => {
+      const batchCount = Math.min(PITCH_DECK_EPISODE_BATCH_SIZE, totalCount - start);
+      return generatePitchDeckEpisodeBatch(storyline, format, isVerticalDrama, start, batchCount, totalCount, null, revision);
+    });
+    result.episodes = chunkResults.flat();
+  } else {
+    // No prior episodes exist yet on a first pass — each batch needs to see
+    // every earlier batch's episodes to keep the arc coherent, so these run
+    // strictly in order, not concurrently.
+    let allEpisodes = [];
+    for (const start of chunkStarts) {
+      const batchCount = Math.min(PITCH_DECK_EPISODE_BATCH_SIZE, totalCount - start);
+      const priorSummary = allEpisodes.length
+        ? allEpisodes.map((ep, i) => `${i + 1}. ${ep.title.en}: ${ep.synopsis.en}`).join("\n")
+        : null;
+      const batch = await generatePitchDeckEpisodeBatch(
+        storyline, format, isVerticalDrama, start, batchCount, totalCount, priorSummary, null
+      );
+      allEpisodes = allEpisodes.concat(batch);
+    }
+    result.episodes = allEpisodes;
+  }
+
+  return result;
 }
 
 app.post("/api/pitch-deck", requireRole("admin"), async (req, res) => {
@@ -10759,6 +10827,15 @@ app.get("/api/auto-pipeline/:id/status", requireLogin, async (req, res) => {
   });
 });
 
+// character isn't in SCREENPLAY_ELEMENT_SCHEMA's required list (only type
+// and text are) — a real 60-episode run surfaced a dialogue element Gemini
+// generated without one, which crashed both full-screenplay exports on
+// `.toUpperCase()`. Used everywhere a heading-style field gets uppercased,
+// rather than trusting every such field is always present.
+function safeUpper(value, fallback) {
+  return (value && String(value).trim()) || fallback;
+}
+
 // Renders every episode's every scene, in order, as one continuous
 // screenplay document — scene heading, action, character/dialogue,
 // parenthetical, transition — using standard screenplay column positions.
@@ -10803,35 +10880,36 @@ function renderFullScreenplayPdf(res, deck, sceneList, scenesByEpisode) {
     doc
       .font("Courier-Bold")
       .fontSize(12)
-      .text(`${sceneIndex + 1}. ${scene.intExt}. ${scene.location.en.toUpperCase()} — ${scene.timeOfDay}`, margin, doc.y, {
+      .text(`${sceneIndex + 1}. ${scene.intExt}. ${safeUpper(scene.location?.en, "LOCATION")} — ${scene.timeOfDay}`, margin, doc.y, {
         width: actionWidth,
       });
     doc.moveDown(0.8);
 
     elements.forEach((element) => {
+      const text = element.text ?? "";
       if (element.type === "dialogue") {
         const modifier = element.characterModifier && element.characterModifier !== "none" ? ` (${element.characterModifier})` : "";
-        doc.font("Courier-Bold").fontSize(11).text(`${element.character.toUpperCase()}${modifier}`, characterIndent, doc.y, {
+        doc.font("Courier-Bold").fontSize(11).text(`${safeUpper(element.character, "CHARACTER")}${modifier}`, characterIndent, doc.y, {
           width: dialogueWidth,
         });
         if (element.parenthetical) {
           doc.font(fonts.body).fontSize(10).text(`(${element.parenthetical})`, dialogueIndent, doc.y, { width: dialogueWidth });
         }
-        doc.font(fonts.body).fontSize(11).text(element.text, dialogueIndent, doc.y, { width: dialogueWidth });
+        doc.font(fonts.body).fontSize(11).text(text, dialogueIndent, doc.y, { width: dialogueWidth });
         doc.moveDown(0.7);
       } else if (element.type === "transition") {
-        doc.font("Courier-Bold").fontSize(11).text(element.text, margin, doc.y, { width: actionWidth, align: "right" });
+        doc.font("Courier-Bold").fontSize(11).text(text, margin, doc.y, { width: actionWidth, align: "right" });
         doc.moveDown(0.7);
       } else if (element.type === "flashback") {
         doc
           .font("Courier-Bold")
           .fontSize(11)
-          .text(`FLASH - ${element.character}'S POV:`, margin, doc.y, { width: actionWidth, continued: true })
+          .text(`FLASH - ${safeUpper(element.character, "CHARACTER")}'S POV:`, margin, doc.y, { width: actionWidth, continued: true })
           .font("Courier")
-          .text(` ${element.text}`, { width: actionWidth });
+          .text(` ${text}`, { width: actionWidth });
         doc.moveDown(0.7);
       } else {
-        doc.font("Courier").fontSize(11).text(element.text, margin, doc.y, { width: actionWidth });
+        doc.font("Courier").fontSize(11).text(text, margin, doc.y, { width: actionWidth });
         doc.moveDown(0.7);
       }
     });
@@ -10840,7 +10918,7 @@ function renderFullScreenplayPdf(res, deck, sceneList, scenesByEpisode) {
   if (isSeries) {
     deck.episodes.forEach((episode, episodeIndex) => {
       doc.addPage();
-      doc.font("Courier-Bold").fontSize(18).text(`EPISODE ${episodeIndex + 1}: ${episode.title.en.toUpperCase()}`, { align: "center" });
+      doc.font("Courier-Bold").fontSize(18).text(`EPISODE ${episodeIndex + 1}: ${safeUpper(episode.title?.en, "UNTITLED")}`, { align: "center" });
       const scenes = sceneList.episodeScenes[episodeIndex]?.scenes ?? [];
       const episodeScenes = scenesByEpisode.get(episodeIndex) ?? [];
       scenes.forEach((scene, sceneIndex) => {
@@ -10861,16 +10939,18 @@ function renderFullScreenplayPdf(res, deck, sceneList, scenesByEpisode) {
   doc.end();
 }
 
-app.get("/api/auto-pipeline/:id/screenplay-pdf", requireLogin, async (req, res) => {
-  const runResult = await db.query("SELECT scene_list_id, status FROM auto_pipeline_runs WHERE id = $1", [req.params.id]);
+// Shared by both the PDF and Word full-screenplay exports — fetches the
+// completed run's scene list/deck and every screenplay scene actually
+// written (latest revision per position), or returns an { error, status }
+// pair for the route to relay directly.
+async function fetchAutoPipelineScreenplayData(runId) {
+  const runResult = await db.query("SELECT scene_list_id, status FROM auto_pipeline_runs WHERE id = $1", [runId]);
   if (runResult.rows.length === 0) {
-    res.status(404).json({ error: "Run not found" });
-    return;
+    return { error: "Run not found", status: 404 };
   }
   const { scene_list_id: sceneListId, status } = runResult.rows[0];
   if (status !== "completed" || !sceneListId) {
-    res.status(400).json({ error: "This run hasn't finished yet." });
-    return;
+    return { error: "This run hasn't finished yet.", status: 400 };
   }
 
   const sceneListResult = await db.query(
@@ -10883,8 +10963,7 @@ app.get("/api/auto-pipeline/:id/screenplay-pdf", requireLogin, async (req, res) 
     [sceneListId]
   );
   if (sceneListResult.rows.length === 0) {
-    res.status(404).json({ error: "Scene list not found" });
-    return;
+    return { error: "Scene list not found", status: 404 };
   }
   const { scene_list_content: sceneList, pitch_deck_content: deck } = sceneListResult.rows[0];
 
@@ -10902,10 +10981,159 @@ app.get("/api/auto-pipeline/:id/screenplay-pdf", requireLogin, async (req, res) 
     scenesByEpisode.get(key).push(row);
   });
 
+  return { deck, sceneList, scenesByEpisode };
+}
+
+app.get("/api/auto-pipeline/:id/screenplay-pdf", requireLogin, async (req, res) => {
+  const data = await fetchAutoPipelineScreenplayData(req.params.id);
+  if (data.error) {
+    res.status(data.status).json({ error: data.error });
+    return;
+  }
+
   try {
-    renderFullScreenplayPdf(res, deck, sceneList, scenesByEpisode);
+    renderFullScreenplayPdf(res, data.deck, data.sceneList, data.scenesByEpisode);
   } catch (error) {
     console.error("Full screenplay PDF export failed:", error.message);
+    if (!res.headersSent) {
+      res.status(500).json({ error: error.message });
+    } else {
+      res.end();
+    }
+  }
+});
+
+// Same content and scene-by-scene structure as the PDF export, laid out as
+// a Word document instead — plain paragraphs styled to read like a
+// screenplay (centered/bold character names, an indented dialogue column,
+// right-aligned transitions) since Word has no page-layout primitives like
+// PDFKit's explicit x/y positioning.
+function buildFullScreenplayDocxParagraphs(deck, sceneList, scenesByEpisode) {
+  const isSeries = Array.isArray(sceneList.episodeScenes);
+  const paragraphs = [];
+
+  paragraphs.push(
+    new Paragraph({
+      text: deck.title?.en ?? "Untitled",
+      heading: HeadingLevel.TITLE,
+      alignment: AlignmentType.CENTER,
+    }),
+    new Paragraph({
+      children: [new TextRun({ text: deck.logline?.en ?? "", italics: true })],
+      alignment: AlignmentType.CENTER,
+      spacing: { after: 400 },
+    })
+  );
+
+  const writeScene = (scene, sceneIndex, elements) => {
+    paragraphs.push(
+      new Paragraph({
+        children: [
+          new TextRun({
+            text: `${sceneIndex + 1}. ${scene.intExt}. ${safeUpper(scene.location?.en, "LOCATION")} — ${scene.timeOfDay}`,
+            bold: true,
+          }),
+        ],
+        spacing: { before: 300, after: 200 },
+      })
+    );
+
+    elements.forEach((element) => {
+      const text = element.text ?? "";
+      if (element.type === "dialogue") {
+        const modifier = element.characterModifier && element.characterModifier !== "none" ? ` (${element.characterModifier})` : "";
+        paragraphs.push(
+          new Paragraph({
+            children: [new TextRun({ text: `${safeUpper(element.character, "CHARACTER")}${modifier}`, bold: true })],
+            alignment: AlignmentType.CENTER,
+            spacing: { before: 200 },
+          })
+        );
+        if (element.parenthetical) {
+          paragraphs.push(
+            new Paragraph({
+              children: [new TextRun({ text: `(${element.parenthetical})`, italics: true })],
+              alignment: AlignmentType.CENTER,
+              indent: { left: 1440, right: 1440 },
+            })
+          );
+        }
+        paragraphs.push(
+          new Paragraph({
+            children: [new TextRun({ text })],
+            indent: { left: 1440, right: 1440 },
+          })
+        );
+      } else if (element.type === "transition") {
+        paragraphs.push(
+          new Paragraph({
+            children: [new TextRun({ text, bold: true })],
+            alignment: AlignmentType.RIGHT,
+            spacing: { before: 200 },
+          })
+        );
+      } else if (element.type === "flashback") {
+        paragraphs.push(
+          new Paragraph({
+            children: [new TextRun({ text: `FLASH - ${safeUpper(element.character, "CHARACTER")}'S POV: `, bold: true }), new TextRun({ text })],
+          })
+        );
+      } else {
+        paragraphs.push(new Paragraph({ children: [new TextRun({ text })], spacing: { after: 120 } }));
+      }
+    });
+  };
+
+  if (isSeries) {
+    deck.episodes.forEach((episode, episodeIndex) => {
+      paragraphs.push(
+        new Paragraph({
+          text: `EPISODE ${episodeIndex + 1}: ${safeUpper(episode.title?.en, "UNTITLED")}`,
+          heading: HeadingLevel.HEADING_1,
+          alignment: AlignmentType.CENTER,
+          pageBreakBefore: true,
+        })
+      );
+      const scenes = sceneList.episodeScenes[episodeIndex]?.scenes ?? [];
+      const episodeScenes = scenesByEpisode.get(episodeIndex) ?? [];
+      scenes.forEach((scene, sceneIndex) => {
+        const row = episodeScenes.find((r) => r.scene_index === sceneIndex);
+        if (!row) return;
+        writeScene(scene, sceneIndex, row.content.elements);
+      });
+    });
+  } else {
+    const filmScenes = scenesByEpisode.get(null) ?? [];
+    sceneList.scenes.forEach((scene, sceneIndex) => {
+      const row = filmScenes.find((r) => r.scene_index === sceneIndex);
+      if (!row) return;
+      writeScene(scene, sceneIndex, row.content.elements);
+    });
+  }
+
+  return paragraphs;
+}
+
+app.get("/api/auto-pipeline/:id/screenplay-docx", requireLogin, async (req, res) => {
+  const data = await fetchAutoPipelineScreenplayData(req.params.id);
+  if (data.error) {
+    res.status(data.status).json({ error: data.error });
+    return;
+  }
+
+  try {
+    const paragraphs = buildFullScreenplayDocxParagraphs(data.deck, data.sceneList, data.scenesByEpisode);
+    const document = new Document({ sections: [{ children: paragraphs }] });
+    const buffer = await Packer.toBuffer(document);
+
+    res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.wordprocessingml.document");
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename="${(data.deck.title?.en ?? "screenplay").replace(/[^a-z0-9]+/gi, "-")}-full-screenplay-${formatExportTimestamp()}.docx"`
+    );
+    res.send(buffer);
+  } catch (error) {
+    console.error("Full screenplay Word export failed:", error.message);
     if (!res.headersSent) {
       res.status(500).json({ error: error.message });
     } else {

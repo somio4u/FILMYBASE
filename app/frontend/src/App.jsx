@@ -304,7 +304,9 @@ const LABELS = {
     floatingAgentStarting: 'Starting...',
     floatingAgentStageLabel: 'Stage',
     floatingAgentDoneLabel: 'Your screenplay is ready.',
-    floatingAgentDownloadButton: 'Download Screenplay PDF',
+    floatingAgentDownloadButton: 'Download Screenplay',
+    floatingAgentFormatPdf: 'PDF',
+    floatingAgentFormatWord: 'Word (.docx)',
     floatingAgentNewRunButton: 'Start a New Run',
     screenplayFeedbackPlaceholder: 'What would you like changed about this scene? e.g. "Make the dialogue sharper" or "Add a beat of hesitation before he answers"',
     screenplayCompleteBanner: '🎬 Full screenplay draft complete! This locked structure and final screenplay are ready to hand off to the next stage.',
@@ -765,7 +767,9 @@ const LABELS = {
     floatingAgentStarting: 'ଆରମ୍ଭ ହେଉଛି...',
     floatingAgentStageLabel: 'ପର୍ଯ୍ୟାୟ',
     floatingAgentDoneLabel: 'ଆପଣଙ୍କର ସ୍କ୍ରିନପ୍ଲେ ପ୍ରସ୍ତୁତ।',
-    floatingAgentDownloadButton: 'ସ୍କ୍ରିନପ୍ଲେ PDF ଡାଉନଲୋଡ୍ କରନ୍ତୁ',
+    floatingAgentDownloadButton: 'ସ୍କ୍ରିନପ୍ଲେ ଡାଉନଲୋଡ୍ କରନ୍ତୁ',
+    floatingAgentFormatPdf: 'PDF',
+    floatingAgentFormatWord: 'ୱାର୍ଡ (.docx)',
     floatingAgentNewRunButton: 'ନୂଆ ରନ୍ ଆରମ୍ଭ କରନ୍ତୁ',
     screenplayFeedbackPlaceholder: 'ଆପଣ ଏହି ଦୃଶ୍ୟରେ କଣ ପରିବର୍ତ୍ତନ ଚାହୁଁଛନ୍ତି?',
     screenplayCompleteBanner: '🎬 ସମ୍ପୂର୍ଣ୍ଣ ସ୍କ୍ରିନପ୍ଲେ ତିଆରି ହୋଇଗଲା! ଏହି ଲକ୍ ହୋଇଥିବା ସଂରଚନା ଏବଂ ଅନ୍ତିମ ସ୍କ୍ରିନପ୍ଲେ ପରବର୍ତ୍ତୀ ପର୍ଯ୍ୟାୟକୁ ହସ୍ତାନ୍ତର ପାଇଁ ପ୍ରସ୍ତୁତ।',
@@ -1455,6 +1459,7 @@ function FloatingAgentWidget({ currentUser, t, onRunCompleted }) {
   const [episodeCount, setEpisodeCount] = useState(60)
   const [episodeMinutes, setEpisodeMinutes] = useState(1.5)
   const [dialogueLanguage, setDialogueLanguage] = useState('en')
+  const [downloadFormat, setDownloadFormat] = useState('pdf')
 
   const [runId, setRunId] = useState(() => {
     try {
@@ -1679,9 +1684,13 @@ function FloatingAgentWidget({ currentUser, t, onRunCompleted }) {
           {runId && status?.status === 'completed' && (
             <div className="floating-agent-progress">
               <p>{t.floatingAgentDoneLabel}</p>
+              <select value={downloadFormat} onChange={(e) => setDownloadFormat(e.target.value)}>
+                <option value="pdf">{t.floatingAgentFormatPdf}</option>
+                <option value="docx">{t.floatingAgentFormatWord}</option>
+              </select>
               <a
                 className="choose-button floating-agent-download"
-                href={`${BACKEND_URL}/api/auto-pipeline/${runId}/screenplay-pdf`}
+                href={`${BACKEND_URL}/api/auto-pipeline/${runId}/screenplay-${downloadFormat}`}
                 target="_blank"
                 rel="noreferrer"
               >

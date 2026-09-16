@@ -303,6 +303,18 @@ const LABELS = {
     floatingAgentStartButton: 'Start',
     floatingAgentStarting: 'Starting...',
     floatingAgentStageLabel: 'Stage',
+    floatingAgentStageNames: {
+      starting: 'Getting started',
+      storylines: 'Coming up with storylines',
+      'pitch-deck': 'Writing the pitch deck',
+      'character-sheet': 'Building the characters',
+      'three-act': 'Structuring the story',
+      'bit-sheet': 'Breaking it into beats',
+      'scene-list': 'Writing the scene list',
+      screenplay: 'Writing the screenplay',
+      done: 'Done',
+    },
+    floatingAgentSecondsSuffix: 's',
     floatingAgentDoneLabel: 'Your screenplay is ready.',
     floatingAgentDownloadButton: 'Download Screenplay',
     floatingAgentFormatPdf: 'PDF',
@@ -766,6 +778,18 @@ const LABELS = {
     floatingAgentStartButton: 'ଆରମ୍ଭ କରନ୍ତୁ',
     floatingAgentStarting: 'ଆରମ୍ଭ ହେଉଛି...',
     floatingAgentStageLabel: 'ପର୍ଯ୍ୟାୟ',
+    floatingAgentStageNames: {
+      starting: 'ଆରମ୍ଭ ହେଉଛି',
+      storylines: 'କାହାଣୀ ଧାରା ତିଆରି ହେଉଛି',
+      'pitch-deck': 'ପିଚ୍ ଡେକ୍ ଲେଖାଯାଉଛି',
+      'character-sheet': 'ଚରିତ୍ର ତିଆରି ହେଉଛି',
+      'three-act': 'କାହାଣୀ ଗଠନ ହେଉଛି',
+      'bit-sheet': 'ବିଟ୍ ସିଟ୍ ତିଆରି ହେଉଛି',
+      'scene-list': 'ଦୃଶ୍ୟ ତାଲିକା ଲେଖାଯାଉଛି',
+      screenplay: 'ସ୍କ୍ରିନପ୍ଲେ ଲେଖାଯାଉଛି',
+      done: 'ସମାପ୍ତ',
+    },
+    floatingAgentSecondsSuffix: 'ସେ',
     floatingAgentDoneLabel: 'ଆପଣଙ୍କର ସ୍କ୍ରିନପ୍ଲେ ପ୍ରସ୍ତୁତ।',
     floatingAgentDownloadButton: 'ସ୍କ୍ରିନପ୍ଲେ ଡାଉନଲୋଡ୍ କରନ୍ତୁ',
     floatingAgentFormatPdf: 'PDF',
@@ -1433,6 +1457,35 @@ function ScreenplayBlock({ episodeIndex, sceneIndex, t, language, screenplay }) 
 const AUTO_PIPELINE_RUN_ID_STORAGE_KEY = 'filmmaking-app:floatingAgentRunId'
 const FLOATING_AGENT_POSITION_STORAGE_KEY = 'filmmaking-app:floatingAgentPosition'
 
+// Different cutout poses for different moments — waving/pointing while
+// idle, thinking-with-a-clipboard while a run is actually working, and
+// celebrating once it's done — cycled on a timer per set (not a CSS sprite
+// grid, since the source frames aren't uniform width). Genuinely swapping
+// both POSE and frame is what reads as "alive and reacting", not just a
+// single static image gently bobbing.
+const FLOATING_AGENT_FRAME_SETS = {
+  idle: [1, 2, 3, 4, 5, 6, 7, 8].map((n) => `/agent/idle/${n}.png`),
+  working: [1, 2, 3, 4].map((n) => `/agent/working/${n}.png`),
+  done: [1, 2, 3, 4].map((n) => `/agent/done/${n}.png`),
+  failed: [1, 2, 3, 4].map((n) => `/agent/working/${n}.png`),
+}
+
+function floatingAgentFramesFor(runStatus) {
+  return FLOATING_AGENT_FRAME_SETS[runStatus] ?? FLOATING_AGENT_FRAME_SETS.idle
+}
+
+// Coarse but real progress: each stage the backend reports maps to a step
+// in this fixed sequence, so the panel can show an actual filling progress
+// bar (not just a spinner) even though we don't have finer-grained percent
+// data from the server.
+const AUTO_PIPELINE_STAGE_ORDER = ['starting', 'storylines', 'pitch-deck', 'character-sheet', 'three-act', 'bit-sheet', 'scene-list', 'screenplay', 'done']
+
+function autoPipelineProgressPercent(stage) {
+  const index = AUTO_PIPELINE_STAGE_ORDER.indexOf(stage)
+  if (index < 0) return 5
+  return Math.max(5, Math.round((index / (AUTO_PIPELINE_STAGE_ORDER.length - 1)) * 100))
+}
+
 // The floating, draggable "auto-pipeline" agent — lets an admin describe a
 // concept and get a fully-generated project (through every screenplay scene)
 // back as one downloadable PDF, without clicking through each stage
@@ -1446,7 +1499,7 @@ function FloatingAgentWidget({ currentUser, t, onRunCompleted }) {
     } catch {
       // ignore — fall through to default
     }
-    return { x: 24, y: 24 }
+    return { x: 16, y: 90 }
   })
   const [isOpen, setIsOpen] = useState(false)
   const [isDragging, setIsDragging] = useState(false)
@@ -1471,8 +1524,41 @@ function FloatingAgentWidget({ currentUser, t, onRunCompleted }) {
   const [status, setStatus] = useState(null)
   const [isStarting, setIsStarting] = useState(false)
   const [errorMessage, setErrorMessage] = useState(null)
+  const [nowTick, setNowTick] = useState(() => Date.now())
+  const [frameIndex, setFrameIndex] = useState(0)
   const statusRef = useRef(null)
   const notifiedRef = useRef(false)
+  const runStartedAtRef = useRef(null)
+
+  const poseState =
+    status?.status === 'running' ? 'working' : status?.status === 'completed' ? 'done' : status?.status === 'failed' ? 'failed' : 'idle'
+  const currentFrames = floatingAgentFramesFor(poseState)
+
+  // Cycles the character frames continuously — faster while a run is
+  // actively working, slower (a lazy idle sway) otherwise, so the button
+  // always visibly reads as "alive", never a frozen picture. Resets to
+  // frame 0 whenever the pose set itself changes, so it doesn't start
+  // mid-way through a different pose's frame count.
+  useEffect(() => {
+    setFrameIndex(0)
+  }, [poseState])
+
+  useEffect(() => {
+    const speed = poseState === 'working' ? 260 : poseState === 'done' ? 350 : 900
+    const frameCount = currentFrames.length
+    const interval = setInterval(() => setFrameIndex((i) => (i + 1) % frameCount), speed)
+    return () => clearInterval(interval)
+  }, [poseState])
+
+  // A visible, always-moving elapsed-time counter — independent of the
+  // 4s status poll — so the panel never looks frozen even during a long
+  // single Gemini call between polls (a judge-loop round can run a minute
+  // or more with no progressStage change at all).
+  useEffect(() => {
+    if (status?.status !== 'running') return undefined
+    const interval = setInterval(() => setNowTick(Date.now()), 1000)
+    return () => clearInterval(interval)
+  }, [status?.status])
 
   useEffect(() => {
     if (!runId) return undefined
@@ -1489,6 +1575,9 @@ function FloatingAgentWidget({ currentUser, t, onRunCompleted }) {
         }
         setStatus(data)
         statusRef.current = data.status
+        if (!runStartedAtRef.current && data.createdAt) {
+          runStartedAtRef.current = new Date(data.createdAt).getTime()
+        }
         if (data.status === 'completed' && !notifiedRef.current) {
           notifiedRef.current = true
           onRunCompleted?.(data)
@@ -1575,6 +1664,7 @@ function FloatingAgentWidget({ currentUser, t, onRunCompleted }) {
         return
       }
       notifiedRef.current = false
+      runStartedAtRef.current = Date.now()
       setStatus(null)
       setRunId(String(data.runId))
       try {
@@ -1593,6 +1683,7 @@ function FloatingAgentWidget({ currentUser, t, onRunCompleted }) {
     setStatus(null)
     setErrorMessage(null)
     setConcept('')
+    runStartedAtRef.current = null
     try {
       localStorage.removeItem(AUTO_PIPELINE_RUN_ID_STORAGE_KEY)
     } catch {
@@ -1606,13 +1697,13 @@ function FloatingAgentWidget({ currentUser, t, onRunCompleted }) {
     <>
       <button
         type="button"
-        className="floating-agent-button"
+        className={`floating-agent-button floating-agent-button-${poseState}`}
         style={{ left: position.x, top: position.y }}
         onPointerDown={handlePointerDown}
         onClick={handleButtonClick}
         title={t.floatingAgentTitle}
       >
-        {ICONS.lightbulb}
+        <img src={currentFrames[frameIndex] ?? currentFrames[0]} alt="" className="floating-agent-image" draggable="false" />
       </button>
 
       {isOpen && (
@@ -1670,7 +1761,21 @@ function FloatingAgentWidget({ currentUser, t, onRunCompleted }) {
 
           {runId && status?.status === 'running' && (
             <div className="floating-agent-progress">
-              <p>{t.floatingAgentStageLabel}: {status.progressStage}</p>
+              <div className="floating-agent-progress-bar">
+                <div
+                  className="floating-agent-progress-fill"
+                  style={{ width: `${autoPipelineProgressPercent(status.progressStage)}%` }}
+                />
+              </div>
+              <p className="floating-agent-stage-line">
+                <span className="floating-agent-spinner" aria-hidden="true" />
+                {t.floatingAgentStageLabel}: {t.floatingAgentStageNames[status.progressStage] ?? status.progressStage}
+                {runStartedAtRef.current && (
+                  <span className="floating-agent-elapsed">
+                    {' '}· {Math.max(0, Math.floor((nowTick - runStartedAtRef.current) / 1000))}{t.floatingAgentSecondsSuffix}
+                  </span>
+                )}
+              </p>
               {status.reviewNotes?.length > 0 && (
                 <ul className="floating-agent-notes">
                   {status.reviewNotes.slice(-5).map((note, i) => (

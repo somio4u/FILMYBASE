@@ -322,6 +322,8 @@ const LABELS = {
     floatingAgentFormatPdf: 'PDF',
     floatingAgentFormatWord: 'Word (.docx)',
     floatingAgentNewRunButton: 'Start a New Run',
+    floatingAgentResumeButton: 'Resume from Where It Failed',
+    floatingAgentResuming: 'Resuming...',
     screenplayFeedbackPlaceholder: 'What would you like changed about this scene? e.g. "Make the dialogue sharper" or "Add a beat of hesitation before he answers"',
     screenplayCompleteBanner: '🎬 Full screenplay draft complete! This locked structure and final screenplay are ready to hand off to the next stage.',
     screenplayProgressLabel: (drafted, total) => `Screenplay progress: ${drafted} / ${total} scenes written`,
@@ -799,6 +801,8 @@ const LABELS = {
     floatingAgentFormatPdf: 'PDF',
     floatingAgentFormatWord: 'ୱାର୍ଡ (.docx)',
     floatingAgentNewRunButton: 'ନୂଆ ରନ୍ ଆରମ୍ଭ କରନ୍ତୁ',
+    floatingAgentResumeButton: 'ଯେଉଁଠି ବିଫଳ ହେଲା ସେଠାରୁ ପୁନଃ ଆରମ୍ଭ କରନ୍ତୁ',
+    floatingAgentResuming: 'ପୁନଃ ଆରମ୍ଭ ହେଉଛି...',
     screenplayFeedbackPlaceholder: 'ଆପଣ ଏହି ଦୃଶ୍ୟରେ କଣ ପରିବର୍ତ୍ତନ ଚାହୁଁଛନ୍ତି?',
     screenplayCompleteBanner: '🎬 ସମ୍ପୂର୍ଣ୍ଣ ସ୍କ୍ରିନପ୍ଲେ ତିଆରି ହୋଇଗଲା! ଏହି ଲକ୍ ହୋଇଥିବା ସଂରଚନା ଏବଂ ଅନ୍ତିମ ସ୍କ୍ରିନପ୍ଲେ ପରବର୍ତ୍ତୀ ପର୍ଯ୍ୟାୟକୁ ହସ୍ତାନ୍ତର ପାଇଁ ପ୍ରସ୍ତୁତ।',
     screenplayProgressLabel: (drafted, total) => `ସ୍କ୍ରିନପ୍ଲେ ପ୍ରଗତି: ${drafted} / ${total} ଦୃଶ୍ୟ ଲେଖାଯାଇଛି`,
@@ -1530,6 +1534,7 @@ function FloatingAgentWidget({ currentUser, t, onRunCompleted }) {
   })
   const [status, setStatus] = useState(null)
   const [isStarting, setIsStarting] = useState(false)
+  const [isResuming, setIsResuming] = useState(false)
   const [errorMessage, setErrorMessage] = useState(null)
   const [nowTick, setNowTick] = useState(() => Date.now())
   const [frameIndex, setFrameIndex] = useState(0)
@@ -1685,6 +1690,26 @@ function FloatingAgentWidget({ currentUser, t, onRunCompleted }) {
     setIsStarting(false)
   }
 
+  async function handleResume() {
+    if (!runId) return
+    setIsResuming(true)
+    setErrorMessage(null)
+    try {
+      const response = await fetch(`${BACKEND_URL}/api/auto-pipeline/${runId}/resume`, { method: 'POST' })
+      const data = await response.json()
+      if (!response.ok) {
+        setErrorMessage(data.error || t.genericError)
+        setIsResuming(false)
+        return
+      }
+      notifiedRef.current = false
+      setStatus(null)
+    } catch {
+      setErrorMessage(t.genericError)
+    }
+    setIsResuming(false)
+  }
+
   function handleStartNew() {
     setRunId(null)
     setStatus(null)
@@ -1835,6 +1860,11 @@ function FloatingAgentWidget({ currentUser, t, onRunCompleted }) {
                 draggable="false"
               />
               <p className="feedback-note">{status.error}</p>
+              {status.conceptId && (
+                <button type="button" className="choose-button" onClick={handleResume} disabled={isResuming}>
+                  {isResuming ? t.floatingAgentResuming : t.floatingAgentResumeButton}
+                </button>
+              )}
               <button type="button" className="cancel-button" onClick={handleStartNew}>
                 {t.floatingAgentNewRunButton}
               </button>

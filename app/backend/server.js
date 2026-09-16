@@ -10761,108 +10761,203 @@ const AUTO_PIPELINE_SCREENPLAY_CONCURRENCY = 4;
 // every scene's screenplay, updating the row's progress as it goes. Never
 // awaited by its caller (the /start route responds immediately) — a
 // 60-episode vertical drama's screenplay stage alone can take many minutes.
-async function runAutoPipeline(runId, conceptText, format, dialogueLanguage) {
+async function runAutoPipeline(runId, conceptText, format, dialogueLanguage, resumeFromConceptId) {
   try {
-    await updateAutoPipelineRun(runId, { progress_stage: "storylines" });
-    const { storylines } = await generateStorylinesContent(conceptText, format);
-    const storyline = storylines[0];
+    let conceptId = null;
+    let storyline = null;
+    let deck = null;
+    let pitchDeckId = null;
+    let characterSheet = null;
+    let threeAct = null;
+    let threeActId = null;
+    let bitSheet = null;
+    let bitSheetId = null;
+    let sceneList = null;
+    let sceneListId = null;
 
-    const conceptResult = await db.query(
-      "INSERT INTO concepts (concept_text, storylines, title) VALUES ($1, $2, $3) RETURNING id",
-      [conceptText, JSON.stringify(storylines), storyline?.title?.en ?? null]
-    );
-    const conceptId = conceptResult.rows[0].id;
-    await updateAutoPipelineRun(runId, { concept_id: conceptId });
+    if (resumeFromConceptId) {
+      // Walk the same FK chain every stage below already writes to. A row
+      // existing there IS the checkpoint — no separate progress-tracking
+      // scheme to keep in sync with the actual generation code.
+      conceptId = resumeFromConceptId;
+      const conceptRow = await db.query("SELECT storylines FROM concepts WHERE id = $1", [conceptId]);
+      storyline = conceptRow.rows[0]?.storylines?.[0] ?? null;
 
-    await updateAutoPipelineRun(runId, { progress_stage: "pitch-deck" });
-    let deck = await generatePitchDeckContent(storyline, format);
-    for (let round = 0; round < MAX_AUTO_PIPELINE_REVISION_ROUNDS; round++) {
-      // A REAL failure caught in testing: on a revision round, Gemini can
-      // silently return a DIFFERENT episode count than requested (seen: 60
-      // requested, got 66, then 30, then 33 across successive rounds) — the
-      // judge only grades quality, so this drifted through undetected and
-      // every downstream stage just inherited the wrong count. This is
-      // checked and force-corrected every round, independent of the judge's
-      // score, and fails the whole run loudly rather than completing with
-      // silently-wrong data if it's still off after all rounds.
-      const countIssue = pitchDeckEpisodeCountIssue(deck, format);
-      const hookReview = await reviewPitchDeckHooks(deck);
-      const summary = deck.episodes
-        ? `${deck.episodes.length} episodes. Sample hooks: ${deck.episodes.slice(0, 3).map((ep) => ep.hook?.en).filter(Boolean).join(" | ")}`
-        : `Premise: ${deck.premise.en}`;
-      const judged = await scorePipelineStage("Pitch Deck", summary, hookReview.issues);
-      await appendAutoPipelineNote(runId, "pitch-deck", `Judge score: ${judged.score}/10 — ${judged.verdict}`);
-      if (countIssue) await appendAutoPipelineNote(runId, "pitch-deck", countIssue);
-      if ((judged.score >= 8 && !countIssue) || round === MAX_AUTO_PIPELINE_REVISION_ROUNDS - 1) break;
-      const feedback = [countIssue, ...hookReview.issues, judged.verdict].filter(Boolean).join(" ");
-      deck = await generatePitchDeckContent(storyline, format, { feedback, previous: deck });
-    }
-    const finalCountIssue = pitchDeckEpisodeCountIssue(deck, format);
-    if (finalCountIssue) {
-      throw new Error(
-        `Pitch deck episode count is still wrong after ${MAX_AUTO_PIPELINE_REVISION_ROUNDS} attempts: requested ${format.episodeCount}, got ${deck.episodes?.length ?? 0}. Try starting a new run.`
+      const pdRow = await db.query(
+        "SELECT id, content FROM pitch_decks WHERE concept_id = $1 ORDER BY created_at DESC LIMIT 1",
+        [conceptId]
       );
-    }
-    const pitchDeckResult = await db.query(
-      "INSERT INTO pitch_decks (concept_id, content, status) VALUES ($1, $2, 'approved') RETURNING id",
-      [conceptId, JSON.stringify(deck)]
-    );
-    const pitchDeckId = pitchDeckResult.rows[0].id;
+      if (pdRow.rows[0]) {
+        pitchDeckId = pdRow.rows[0].id;
+        deck = pdRow.rows[0].content;
+      }
 
-    await updateAutoPipelineRun(runId, { progress_stage: "character-sheet" });
-    const characterSheet = await generateCharacterSheetContent(deck);
-    await db.query("INSERT INTO character_sheets (pitch_deck_id, content, status) VALUES ($1, $2, 'approved')", [
-      pitchDeckId,
-      JSON.stringify(characterSheet),
-    ]);
+      if (pitchDeckId) {
+        const csRow = await db.query(
+          "SELECT content FROM character_sheets WHERE pitch_deck_id = $1 ORDER BY created_at DESC LIMIT 1",
+          [pitchDeckId]
+        );
+        characterSheet = csRow.rows[0]?.content ?? null;
 
-    await updateAutoPipelineRun(runId, { progress_stage: "three-act" });
-    const threeAct = await generateThreeActContent(deck, characterSheet);
-    if (Array.isArray(deck.episodes)) {
-      assertEpisodeCount(threeAct.episodeStructures?.length ?? 0, deck.episodes.length, "Three-act structure");
-    }
-    const threeActResult = await db.query(
-      "INSERT INTO three_act_structures (pitch_deck_id, content, status) VALUES ($1, $2, 'locked') RETURNING id",
-      [pitchDeckId, JSON.stringify(threeAct)]
-    );
-    const threeActId = threeActResult.rows[0].id;
+        const taRow = await db.query(
+          "SELECT id, content FROM three_act_structures WHERE pitch_deck_id = $1 ORDER BY created_at DESC LIMIT 1",
+          [pitchDeckId]
+        );
+        if (taRow.rows[0]) {
+          threeActId = taRow.rows[0].id;
+          threeAct = taRow.rows[0].content;
+        }
+      }
 
-    await updateAutoPipelineRun(runId, { progress_stage: "bit-sheet" });
-    const bitSheet = await generateBitSheetContent(threeAct, deck);
-    if (Array.isArray(deck.episodes)) {
-      assertEpisodeCount(bitSheet.episodeBits?.length ?? 0, deck.episodes.length, "Bit sheet");
-    }
-    const bitSheetResult = await db.query(
-      "INSERT INTO bit_sheets (three_act_structure_id, content, status) VALUES ($1, $2, 'approved') RETURNING id",
-      [threeActId, JSON.stringify(bitSheet)]
-    );
-    const bitSheetId = bitSheetResult.rows[0].id;
+      if (threeActId) {
+        const bsRow = await db.query(
+          "SELECT id, content FROM bit_sheets WHERE three_act_structure_id = $1 ORDER BY created_at DESC LIMIT 1",
+          [threeActId]
+        );
+        if (bsRow.rows[0]) {
+          bitSheetId = bsRow.rows[0].id;
+          bitSheet = bsRow.rows[0].content;
+        }
+      }
 
-    await updateAutoPipelineRun(runId, { progress_stage: "scene-list" });
-    let sceneList = await generateSceneListContent(bitSheet, deck);
-    for (let round = 0; round < MAX_AUTO_PIPELINE_REVISION_ROUNDS; round++) {
-      const budgetReview = reviewSceneListBudget(deck, sceneList);
-      const locationCount = new Set(
-        (sceneList.episodeScenes ?? [{ scenes: sceneList.scenes }]).flatMap((es) => es.scenes.map((s) => s.location.en))
-      ).size;
-      const summary = `${locationCount} distinct locations used across the series; ${deck.majorCharacters?.length ?? 0} major characters.`;
-      const judged = await scorePipelineStage("Scene List (budget feasibility)", summary, budgetReview.issues);
-      await appendAutoPipelineNote(runId, "scene-list", `Judge score: ${judged.score}/10 — ${judged.verdict}`);
-      if (judged.score >= 8 || round === MAX_AUTO_PIPELINE_REVISION_ROUNDS - 1) break;
-      const feedback = [...budgetReview.issues, judged.verdict].filter(Boolean).join(" ");
-      sceneList = await generateSceneListContent(bitSheet, deck, { feedback, previous: sceneList });
+      if (bitSheetId) {
+        const slRow = await db.query(
+          "SELECT id, content FROM scene_lists WHERE bit_sheet_id = $1 ORDER BY created_at DESC LIMIT 1",
+          [bitSheetId]
+        );
+        if (slRow.rows[0]) {
+          sceneListId = slRow.rows[0].id;
+          sceneList = slRow.rows[0].content;
+        }
+      }
+
+      await appendAutoPipelineNote(
+        runId,
+        "resume",
+        `Resuming: reusing ${[deck && "pitch deck", characterSheet && "character sheet", threeAct && "three-act structure", bitSheet && "bit sheet", sceneList && "scene list"].filter(Boolean).join(", ") || "nothing yet — starting from the pitch deck"}.`
+      );
+    } else {
+      await updateAutoPipelineRun(runId, { progress_stage: "storylines" });
+      const { storylines } = await generateStorylinesContent(conceptText, format);
+      storyline = storylines[0];
+
+      const conceptResult = await db.query(
+        "INSERT INTO concepts (concept_text, storylines, title) VALUES ($1, $2, $3) RETURNING id",
+        [conceptText, JSON.stringify(storylines), storyline?.title?.en ?? null]
+      );
+      conceptId = conceptResult.rows[0].id;
+      await updateAutoPipelineRun(runId, { concept_id: conceptId });
     }
-    if (Array.isArray(deck.episodes)) {
-      assertEpisodeCount(sceneList.episodeScenes?.length ?? 0, deck.episodes.length, "Scene list");
+
+    if (!deck) {
+      await updateAutoPipelineRun(runId, { progress_stage: "pitch-deck" });
+      deck = await generatePitchDeckContent(storyline, format);
+      for (let round = 0; round < MAX_AUTO_PIPELINE_REVISION_ROUNDS; round++) {
+        // A REAL failure caught in testing: on a revision round, Gemini can
+        // silently return a DIFFERENT episode count than requested (seen: 60
+        // requested, got 66, then 30, then 33 across successive rounds) — the
+        // judge only grades quality, so this drifted through undetected and
+        // every downstream stage just inherited the wrong count. This is
+        // checked and force-corrected every round, independent of the judge's
+        // score, and fails the whole run loudly rather than completing with
+        // silently-wrong data if it's still off after all rounds.
+        const countIssue = pitchDeckEpisodeCountIssue(deck, format);
+        const hookReview = await reviewPitchDeckHooks(deck);
+        const summary = deck.episodes
+          ? `${deck.episodes.length} episodes. Sample hooks: ${deck.episodes.slice(0, 3).map((ep) => ep.hook?.en).filter(Boolean).join(" | ")}`
+          : `Premise: ${deck.premise.en}`;
+        const judged = await scorePipelineStage("Pitch Deck", summary, hookReview.issues);
+        await appendAutoPipelineNote(runId, "pitch-deck", `Judge score: ${judged.score}/10 — ${judged.verdict}`);
+        if (countIssue) await appendAutoPipelineNote(runId, "pitch-deck", countIssue);
+        if ((judged.score >= 8 && !countIssue) || round === MAX_AUTO_PIPELINE_REVISION_ROUNDS - 1) break;
+        const feedback = [countIssue, ...hookReview.issues, judged.verdict].filter(Boolean).join(" ");
+        deck = await generatePitchDeckContent(storyline, format, { feedback, previous: deck });
+      }
+      const finalCountIssue = pitchDeckEpisodeCountIssue(deck, format);
+      if (finalCountIssue) {
+        throw new Error(
+          `Pitch deck episode count is still wrong after ${MAX_AUTO_PIPELINE_REVISION_ROUNDS} attempts: requested ${format.episodeCount}, got ${deck.episodes?.length ?? 0}. Try starting a new run.`
+        );
+      }
+      const pitchDeckResult = await db.query(
+        "INSERT INTO pitch_decks (concept_id, content, status) VALUES ($1, $2, 'approved') RETURNING id",
+        [conceptId, JSON.stringify(deck)]
+      );
+      pitchDeckId = pitchDeckResult.rows[0].id;
     }
-    const sceneListResult = await db.query(
-      "INSERT INTO scene_lists (bit_sheet_id, content, status) VALUES ($1, $2, 'approved') RETURNING id",
-      [bitSheetId, JSON.stringify(sceneList)]
-    );
-    const sceneListId = sceneListResult.rows[0].id;
-    await updateAutoPipelineRun(runId, { scene_list_id: sceneListId });
+
+    if (!characterSheet) {
+      await updateAutoPipelineRun(runId, { progress_stage: "character-sheet" });
+      characterSheet = await generateCharacterSheetContent(deck);
+      await db.query("INSERT INTO character_sheets (pitch_deck_id, content, status) VALUES ($1, $2, 'approved')", [
+        pitchDeckId,
+        JSON.stringify(characterSheet),
+      ]);
+    }
+
+    if (!threeAct) {
+      await updateAutoPipelineRun(runId, { progress_stage: "three-act" });
+      threeAct = await generateThreeActContent(deck, characterSheet);
+      if (Array.isArray(deck.episodes)) {
+        assertEpisodeCount(threeAct.episodeStructures?.length ?? 0, deck.episodes.length, "Three-act structure");
+      }
+      const threeActResult = await db.query(
+        "INSERT INTO three_act_structures (pitch_deck_id, content, status) VALUES ($1, $2, 'locked') RETURNING id",
+        [pitchDeckId, JSON.stringify(threeAct)]
+      );
+      threeActId = threeActResult.rows[0].id;
+    }
+
+    if (!bitSheet) {
+      await updateAutoPipelineRun(runId, { progress_stage: "bit-sheet" });
+      bitSheet = await generateBitSheetContent(threeAct, deck);
+      if (Array.isArray(deck.episodes)) {
+        assertEpisodeCount(bitSheet.episodeBits?.length ?? 0, deck.episodes.length, "Bit sheet");
+      }
+      const bitSheetResult = await db.query(
+        "INSERT INTO bit_sheets (three_act_structure_id, content, status) VALUES ($1, $2, 'approved') RETURNING id",
+        [threeActId, JSON.stringify(bitSheet)]
+      );
+      bitSheetId = bitSheetResult.rows[0].id;
+    }
+
+    if (!sceneList) {
+      await updateAutoPipelineRun(runId, { progress_stage: "scene-list" });
+      sceneList = await generateSceneListContent(bitSheet, deck);
+      for (let round = 0; round < MAX_AUTO_PIPELINE_REVISION_ROUNDS; round++) {
+        const budgetReview = reviewSceneListBudget(deck, sceneList);
+        const locationCount = new Set(
+          (sceneList.episodeScenes ?? [{ scenes: sceneList.scenes }]).flatMap((es) => es.scenes.map((s) => s.location.en))
+        ).size;
+        const summary = `${locationCount} distinct locations used across the series; ${deck.majorCharacters?.length ?? 0} major characters.`;
+        const judged = await scorePipelineStage("Scene List (budget feasibility)", summary, budgetReview.issues);
+        await appendAutoPipelineNote(runId, "scene-list", `Judge score: ${judged.score}/10 — ${judged.verdict}`);
+        if (judged.score >= 8 || round === MAX_AUTO_PIPELINE_REVISION_ROUNDS - 1) break;
+        const feedback = [...budgetReview.issues, judged.verdict].filter(Boolean).join(" ");
+        sceneList = await generateSceneListContent(bitSheet, deck, { feedback, previous: sceneList });
+      }
+      if (Array.isArray(deck.episodes)) {
+        assertEpisodeCount(sceneList.episodeScenes?.length ?? 0, deck.episodes.length, "Scene list");
+      }
+      const sceneListResult = await db.query(
+        "INSERT INTO scene_lists (bit_sheet_id, content, status) VALUES ($1, $2, 'approved') RETURNING id",
+        [bitSheetId, JSON.stringify(sceneList)]
+      );
+      sceneListId = sceneListResult.rows[0].id;
+      await updateAutoPipelineRun(runId, { scene_list_id: sceneListId });
+    }
 
     await updateAutoPipelineRun(runId, { progress_stage: "screenplay" });
+
+    // Resuming mid-screenplay: scenes already written for this scene list
+    // are skipped rather than regenerated (see writeEpisodeScenes below).
+    const alreadyWrittenResult = await db.query(
+      "SELECT DISTINCT ON (episode_index, scene_index) episode_index, scene_index, content FROM screenplay_scenes WHERE scene_list_id = $1 ORDER BY episode_index, scene_index, created_at DESC",
+      [sceneListId]
+    );
+    const alreadyWritten = new Map(
+      alreadyWrittenResult.rows.map((row) => [`${row.episode_index}:${row.scene_index}`, row.content])
+    );
 
     // Shared across every scene/episode of this one run (episodes write
     // concurrently, but JS's single-threaded event loop means plain
@@ -10870,10 +10965,16 @@ async function runAutoPipeline(runId, conceptText, format, dialogueLanguage) {
     // avoid-list is all this needs to be useful) so later scenes get warned
     // off phrases already leaned on earlier in the same script.
     const phraseTracker = createPhraseTracker();
+    for (const content of alreadyWritten.values()) phraseTracker.recordElements(content.elements);
 
     async function writeEpisodeScenes(scenes, episodeIndex) {
       let previousElements = null;
       for (let sceneIndex = 0; sceneIndex < scenes.length; sceneIndex++) {
+        const existing = alreadyWritten.get(`${episodeIndex}:${sceneIndex}`);
+        if (existing) {
+          previousElements = existing.elements;
+          continue;
+        }
         const avoidPhrases = phraseTracker.topOverused();
         let content = await generateScreenplaySceneContent(
           deck, scenes, sceneIndex, previousElements, sceneList.controllingIdea, undefined, dialogueLanguage, avoidPhrases
@@ -10988,8 +11089,8 @@ app.post("/api/auto-pipeline/start", requireRole("admin"), async (req, res) => {
 
   try {
     const insertResult = await db.query(
-      "INSERT INTO auto_pipeline_runs (concept_text, format, status, progress_stage, created_by) VALUES ($1, $2, 'running', 'starting', $3) RETURNING id",
-      [concept, JSON.stringify(format), req.user.id]
+      "INSERT INTO auto_pipeline_runs (concept_text, format, status, progress_stage, created_by, dialogue_language) VALUES ($1, $2, 'running', 'starting', $3, $4) RETURNING id",
+      [concept, JSON.stringify(format), req.user.id, dialogueLanguage]
     );
     const runId = insertResult.rows[0].id;
 
@@ -11001,6 +11102,36 @@ app.post("/api/auto-pipeline/start", requireRole("admin"), async (req, res) => {
     console.error("Failed to start auto-pipeline run:", error.message);
     res.status(500).json({ error: error.message });
   }
+});
+
+// Picks a failed run back up from the last stage that actually finished,
+// instead of regenerating everything from scratch — each stage's own DB
+// row only ever gets inserted once that stage fully succeeds, so "does this
+// row exist yet" is already an exact, free checkpoint marker; no separate
+// progress-tracking scheme needed.
+app.post("/api/auto-pipeline/:id/resume", requireRole("admin"), async (req, res) => {
+  const runResult = await db.query("SELECT * FROM auto_pipeline_runs WHERE id = $1", [req.params.id]);
+  const run = runResult.rows[0];
+
+  if (!run) {
+    res.status(404).json({ error: "Run not found." });
+    return;
+  }
+  if (run.status !== "failed") {
+    res.status(400).json({ error: "Only a failed run can be resumed." });
+    return;
+  }
+  if (!run.concept_id) {
+    res.status(400).json({ error: "This run failed before any progress was saved — start a new run instead." });
+    return;
+  }
+
+  await db.query("UPDATE auto_pipeline_runs SET status = 'running', error = NULL WHERE id = $1", [run.id]);
+
+  // Deliberately not awaited — see runAutoPipeline's own comment.
+  runAutoPipeline(run.id, run.concept_text, run.format, run.dialogue_language, run.concept_id);
+
+  res.json({ runId: run.id });
 });
 
 app.get("/api/auto-pipeline/runs", requireLogin, async (req, res) => {

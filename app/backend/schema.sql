@@ -222,6 +222,9 @@ CREATE TABLE auto_pipeline_runs (
   review_notes JSONB NOT NULL DEFAULT '[]',
   concept_id INTEGER REFERENCES concepts(id) ON DELETE SET NULL,
   scene_list_id INTEGER REFERENCES scene_lists(id) ON DELETE SET NULL,
+  -- Persisted (not just passed in-memory) so a failed run can be resumed
+  -- later without the caller having to remember/resupply it.
+  dialogue_language TEXT NOT NULL DEFAULT 'en',
   error TEXT,
   created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),

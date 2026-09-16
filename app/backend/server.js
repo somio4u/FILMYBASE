@@ -100,7 +100,7 @@ async function generateContentWithRetry(params, { retries = 4, fallbackDelayMs =
 // This retries the WHOLE generation call (a fresh attempt usually doesn't
 // repeat the same glitch) whenever JSON.parse itself fails, on top of that
 // existing transient-error retry.
-async function generateJsonContent(params, { jsonRetries = 2 } = {}) {
+async function generateJsonContent(params, { jsonRetries = 3 } = {}) {
   let lastError;
   for (let attempt = 0; attempt <= jsonRetries; attempt++) {
     const response = await generateContentWithRetry(params);
@@ -108,7 +108,16 @@ async function generateJsonContent(params, { jsonRetries = 2 } = {}) {
       return JSON.parse(response.text);
     } catch (error) {
       lastError = error;
-      console.error(`JSON parse failed (attempt ${attempt + 1}/${jsonRetries + 1}): ${error.message}`);
+      // Log a bounded snippet of the actual broken text (not just the parse
+      // error) — the error alone only ever says "unterminated string at
+      // position N", which isn't enough on its own to tell a genuine
+      // truncation (budget too low) apart from a malformed escape mid-string
+      // (a content glitch), and diagnosing this blind wastes a full pipeline
+      // run each time it recurs.
+      const snippetStart = Math.max(0, (error.message.match(/position (\d+)/)?.[1] ?? 0) - 120);
+      console.error(
+        `JSON parse failed (attempt ${attempt + 1}/${jsonRetries + 1}): ${error.message}\nNear-failure snippet: ${response.text?.slice(snippetStart, snippetStart + 240)}\nResponse length: ${response.text?.length}`
+      );
     }
   }
   throw lastError;

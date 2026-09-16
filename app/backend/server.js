@@ -5076,12 +5076,33 @@ function sanitizeScreenplayElements(elements, dialogueLanguage) {
 // scene. When `revision` is given, the prompt asks for a rewrite instead.
 // `dialogueLanguage` ("en"/"or"/"hi") is a per-scene choice made when the
 // Director clicks "Write This Scene" — action lines stay English regardless.
+// Standard screenplay format: 1 page ≈ 1 minute of screen time, at roughly
+// 200-250 words per page (a natural mix of action description and dialogue,
+// in standard Courier 12pt formatting). The previous "aim for N elements"
+// heuristic (elements = estimatedMinutes * 5) didn't map to this convention
+// at all and reliably under-shot real page length — a 3-minute scene needs
+// ~3-4 pages / ~700-800 words of actual content, not just a handful of short
+// lines. wordsPerElementText only counts "text" fields (the actual page
+// content), never the "character" name field.
+function suggestScreenplayWordCount(estimatedMinutes) {
+  const pages = Math.max(0.5, estimatedMinutes);
+  return Math.round(pages * 225);
+}
+
+function countScreenplayWords(elements) {
+  return elements.reduce((total, element) => {
+    const text = typeof element.text === "string" ? element.text : "";
+    const parenthetical = typeof element.parenthetical === "string" ? element.parenthetical : "";
+    return total + `${text} ${parenthetical}`.trim().split(/\s+/).filter(Boolean).length;
+  }, 0);
+}
+
 async function generateScreenplaySceneContent(deck, allScenes, sceneIndex, previousElements, controllingIdea, revision, dialogueLanguage) {
   const targetScene = allScenes[sceneIndex];
   const outlineText = allScenes.map((scene, index) => sceneOutlineLine(scene, index)).join("\n");
-  const suggestedElementCount = Math.max(3, Math.round(targetScene.estimatedMinutes * 5));
+  const suggestedWords = suggestScreenplayWordCount(targetScene.estimatedMinutes);
 
-  let contents = `Story title: ${deck.title.en}\nLogline: ${deck.logline.en}\nTone/Genre: ${deck.toneGenre.en}\n\nFull scene outline for context (already established elsewhere — do not rewrite these, just stay consistent with them):\n${outlineText}\n\nNow write the FULL screenplay content — action lines and dialogue — for ONLY this one scene:\n${sceneOutlineLine(targetScene, sceneIndex)}\n\nThis scene is estimated at ${targetScene.estimatedMinutes} minute(s) of screen time — aim for roughly ${suggestedElementCount} elements (a natural mix of action lines and dialogue exchanges), but let the actual scene content decide.`;
+  let contents = `Story title: ${deck.title.en}\nLogline: ${deck.logline.en}\nTone/Genre: ${deck.toneGenre.en}\n\nFull scene outline for context (already established elsewhere — do not rewrite these, just stay consistent with them):\n${outlineText}\n\nNow write the FULL screenplay content — action lines and dialogue — for ONLY this one scene:\n${sceneOutlineLine(targetScene, sceneIndex)}\n\nThis scene is estimated at ${targetScene.estimatedMinutes} minute(s) of screen time. STANDARD SCREENPLAY FORMAT RULE: one page equals roughly one minute of screen time, at roughly 200-250 words of combined action and dialogue per page — so this scene needs to read as approximately ${targetScene.estimatedMinutes} page(s), meaning roughly ${suggestedWords} words total across all its action lines and dialogue combined. This is a hard length target, not a rough suggestion: write enough real action description and full dialogue exchanges — including natural back-and-forth, reactions, and beats — to genuinely fill that length. Never compress a multi-minute scene into just a couple of short lines regardless of how simple the one-liner sounds.`;
 
   if (controllingIdea) {
     contents += `\n\nThe story's Controlling Idea (theme) is: "${controllingIdea.en}" — let the dialogue and action reflect it where natural, without stating it outright.`;
@@ -5095,23 +5116,37 @@ async function generateScreenplaySceneContent(deck, allScenes, sceneIndex, previ
     contents += `\n\nThis is a REVISION of a previous draft of this scene. The Screenplay Writer reviewed it and requested changes.\nPrevious draft:\n${elementsToPlainText(revision.previous.elements)}\nFeedback: "${revision.feedback}"\nRevise the scene to address the feedback directly.`;
   }
 
-  const response = await ai.models.generateContent({
-    model: "gemini-flash-lite-latest",
-    contents,
-    config: {
-      systemInstruction: buildScreenplaySystemPrompt(dialogueLanguage),
-      responseMimeType: "application/json",
-      maxOutputTokens: 4096,
-      responseSchema: {
-        type: Type.OBJECT,
-        properties: { elements: { type: Type.ARRAY, items: SCREENPLAY_ELEMENT_SCHEMA } },
-        required: ["elements"],
+  async function callGemini(promptContents) {
+    const response = await ai.models.generateContent({
+      model: "gemini-flash-lite-latest",
+      contents: promptContents,
+      config: {
+        systemInstruction: buildScreenplaySystemPrompt(dialogueLanguage),
+        responseMimeType: "application/json",
+        maxOutputTokens: Math.min(16384, Math.max(4096, suggestedWords * 4)),
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: { elements: { type: Type.ARRAY, items: SCREENPLAY_ELEMENT_SCHEMA } },
+          required: ["elements"],
+        },
       },
-    },
-  });
+    });
+    const parsed = JSON.parse(response.text);
+    return sanitizeScreenplayElements(parsed.elements, dialogueLanguage);
+  }
 
-  const parsed = JSON.parse(response.text);
-  return { elements: sanitizeScreenplayElements(parsed.elements, dialogueLanguage), dialogueLanguage };
+  let elements = await callGemini(contents);
+
+  // If the model under-shot the page-length target badly, give it one
+  // chance to expand — capped at a single retry, same discipline as the
+  // scene list's runtime-correction retry.
+  const actualWords = countScreenplayWords(elements);
+  if (actualWords < suggestedWords * 0.7) {
+    const correctionNote = `\n\nIMPORTANT CORRECTION NEEDED: your draft only came to about ${actualWords} words, but a ${targetScene.estimatedMinutes}-minute scene needs roughly ${suggestedWords} words to fill its standard-format page length (1 page ≈ 1 minute). Rewrite the scene with substantially more action description and fuller dialogue exchanges — more back-and-forth, more beats — to genuinely reach that length, not just pad existing lines.`;
+    elements = await callGemini(contents + correctionNote);
+  }
+
+  return { elements, dialogueLanguage };
 }
 
 async function fetchLatestScreenplayScene(sceneListId, episodeIndex, sceneIndex) {

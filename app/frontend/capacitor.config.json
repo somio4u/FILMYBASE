@@ -1,0 +1,12 @@
+{
+  "appId": "app.filmybase.mobile",
+  "appName": "FilmyBase",
+  "webDir": "dist",
+  "server": {
+    "url": "https://filmybase.vercel.app",
+    "cleartext": false
+  },
+  "android": {
+    "allowMixedContent": false
+  }
+}

@@ -5,3 +5,4 @@ app/backend/uploads/
 db-backup/
 .DS_Store
 *.log
+app/frontend/dist/

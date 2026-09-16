@@ -71,6 +71,27 @@ async function generateContentWithRetry(params, { retries = 4, fallbackDelayMs =
   }
 }
 
+// Gemini occasionally emits a malformed escape sequence inside an otherwise
+// well-formed JSON response (seen in testing: "Bad Unicode escape" on a
+// large 20-episode scene-list batch) — a content glitch, not a transient
+// HTTP error, so generateContentWithRetry's 429/503 retry doesn't cover it.
+// This retries the WHOLE generation call (a fresh attempt usually doesn't
+// repeat the same glitch) whenever JSON.parse itself fails, on top of that
+// existing transient-error retry.
+async function generateJsonContent(params, { jsonRetries = 2 } = {}) {
+  let lastError;
+  for (let attempt = 0; attempt <= jsonRetries; attempt++) {
+    const response = await generateContentWithRetry(params);
+    try {
+      return JSON.parse(response.text);
+    } catch (error) {
+      lastError = error;
+      console.error(`JSON parse failed (attempt ${attempt + 1}/${jsonRetries + 1}): ${error.message}`);
+    }
+  }
+  throw lastError;
+}
+
 // Runs async work over `items` with at most `limit` in flight at once —
 // used wherever we'd otherwise Promise.all a whole batch of Gemini calls
 // (script breakdown's 5 category re-checks, an N-episode import). Spreads
@@ -3409,29 +3430,29 @@ BUDGET-FRIENDLY PRODUCTION CONSTRAINT — this is a low-budget format meant to s
     contents += `\n\nThis is a REVISION of a previous draft. The producer reviewed it and requested changes.\nProducer's feedback: "${revision.feedback}"\nPrevious premise (English): ${revision.previous.premise.en}\nPrevious tone/genre (English): ${revision.previous.toneGenre.en}\nRevise the pitch deck to address the producer's feedback directly, while keeping the same title and logline.`;
   }
 
-  const response = await ai.models.generateContent({
-    model: "gemini-flash-lite-latest",
-    contents,
-    config: {
-      systemInstruction: PITCH_DECK_SYSTEM_PROMPT,
-      responseMimeType: "application/json",
-      // A long-running series (e.g. 25 episodes) needs a real bilingual
-      // synopsis PER episode plus the new storyPages/highlights/etc — this
-      // hit the previous ceiling mid-generation (a truncated JSON string,
-      // not a content problem) once storyPages was added, so it's sized
-      // generously rather than just bumped to cover today's cases. Vertical
-      // drama can run up to 60 trilingual episodes (title+synopsis+hook each
-      // now in 3 languages), so it needs an even bigger ceiling than series.
-      maxOutputTokens: isVerticalDrama ? 65536 : isSeries ? 32768 : 5120,
-      responseSchema: {
-        type: Type.OBJECT,
-        properties,
-        required,
+  const parsed = sanitizeBilingualContent(
+    await generateJsonContent({
+      model: "gemini-flash-lite-latest",
+      contents,
+      config: {
+        systemInstruction: PITCH_DECK_SYSTEM_PROMPT,
+        responseMimeType: "application/json",
+        // A long-running series (e.g. 25 episodes) needs a real bilingual
+        // synopsis PER episode plus the new storyPages/highlights/etc — this
+        // hit the previous ceiling mid-generation (a truncated JSON string,
+        // not a content problem) once storyPages was added, so it's sized
+        // generously rather than just bumped to cover today's cases. Vertical
+        // drama can run up to 60 trilingual episodes (title+synopsis+hook each
+        // now in 3 languages), so it needs an even bigger ceiling than series.
+        maxOutputTokens: isVerticalDrama ? 65536 : isSeries ? 32768 : 5120,
+        responseSchema: {
+          type: Type.OBJECT,
+          properties,
+          required,
+        },
       },
-    },
-  });
-
-  const parsed = sanitizeBilingualContent(JSON.parse(response.text));
+    })
+  );
 
   return {
     title: storyline.title,
@@ -4177,6 +4198,58 @@ function episodePacingGuidance(minutes) {
   return "each episode's own three-act mini-structure can have around 3-4 beats per act, reflecting a fuller episode";
 }
 
+// Same chunking rationale as BIT_SHEET_EPISODE_BATCH_SIZE — the per-episode
+// "episodeStructures" array used to be generated in the SAME single call as
+// the overall series arc, with only a 16384-token budget for the whole
+// thing. That's the exact failure mode already found (and fixed) for the
+// bit sheet at just 8 episodes; a 60-episode vertical drama would very
+// likely truncate here too. Now the overall arc is one small call, and
+// per-episode structures are generated in batches referencing it.
+const THREE_ACT_EPISODE_BATCH_SIZE = 5;
+
+async function generateThreeActEpisodeBatch(deck, episodesChunk, startIndex, overallContext, revision) {
+  const episodeList = episodesChunk
+    .map((episode, i) => `Episode ${startIndex + i + 1}: ${episode.title.en} — ${episode.synopsis.en}`)
+    .join("\n");
+  const episodeMinutes = deck.format.episodeMinutes ?? null;
+  const perEpisodePacingLine = episodeMinutes
+    ? ` Each individual episode runs ${episodeMinutes} minutes — ${episodePacingGuidance(episodeMinutes)}.`
+    : "";
+
+  let contents = `${overallContext}\n\nHere is ONE BATCH of ${episodesChunk.length} episodes (out of ${deck.episodes.length} total):\n${episodeList}\n\nFor EACH episode in this batch, provide its OWN compact three-act mini-structure ("setup"/"confrontation"/"resolution") — what happens within just that single episode, consistent with its synopsis above and with the overall series structure already given.${perEpisodePacingLine} Return "episodeStructures": an array of exactly ${episodesChunk.length} objects, in the same order as the episodes given above (this batch only, not the whole series).`;
+
+  if (revision) {
+    const previousChunk = (revision.previous.episodeStructures ?? []).slice(startIndex, startIndex + episodesChunk.length);
+    contents += `\n\nThis is a REVISION of a previous three-act structure. The Story Writer reviewed it and requested changes.\nFeedback: "${revision.feedback}"\nPrevious draft for JUST this batch of episodes:\n${JSON.stringify(previousChunk)}\nRevise this batch to address the feedback directly.`;
+  }
+
+  const parsed = await generateJsonContent({
+    model: "gemini-flash-lite-latest",
+    contents,
+    config: {
+      systemInstruction: THREE_ACT_SYSTEM_PROMPT,
+      responseMimeType: "application/json",
+      maxOutputTokens: 16384,
+      responseSchema: {
+        type: Type.OBJECT,
+        properties: {
+          episodeStructures: {
+            type: Type.ARRAY,
+            items: {
+              type: Type.OBJECT,
+              properties: { setup: ACT_SCHEMA, confrontation: ACT_SCHEMA, resolution: ACT_SCHEMA },
+              required: ["setup", "confrontation", "resolution"],
+            },
+          },
+        },
+        required: ["episodeStructures"],
+      },
+    },
+  });
+
+  return sanitizeBilingualContent(parsed).episodeStructures;
+}
+
 async function generateThreeActContent(deck, characterSheet, revision) {
   const isSeries =
     (deck.format?.type === "series" || deck.format?.type === "vertical") && Array.isArray(deck.episodes);
@@ -4199,36 +4272,17 @@ async function generateThreeActContent(deck, characterSheet, revision) {
   const required = ["controllingIdea", "setup", "confrontation", "resolution"];
 
   if (isSeries) {
-    const episodeList = deck.episodes
-      .map((episode, index) => `Episode ${index + 1}: ${episode.title.en} — ${episode.synopsis.en}`)
-      .join("\n");
-
+    const episodeTitles = deck.episodes.map((episode, index) => `${index + 1}. ${episode.title.en}`).join("; ");
     const episodeMinutes = deck.format.episodeMinutes ?? null;
     const totalMinutes =
       deck.format.episodeCount && episodeMinutes ? deck.format.episodeCount * episodeMinutes : null;
-
     const overallPacingLine = totalMinutes
       ? ` The series runs ${deck.format.episodeCount} episodes × ${episodeMinutes} minutes (${totalMinutes} minutes total) — for the OVERALL structure, ${pacingGuidance(totalMinutes).charAt(0).toLowerCase()}${pacingGuidance(totalMinutes).slice(1)}`
       : "";
-    const perEpisodePacingLine = episodeMinutes
-      ? ` Each individual episode runs ${episodeMinutes} minutes — ${episodePacingGuidance(episodeMinutes)}.`
-      : "";
 
-    contents += `\n\nThis is a web series with exactly ${deck.episodes.length} episodes:\n${episodeList}\n\nProvide "setup", "confrontation", "resolution" as a three-act structure for the ENTIRE series arc (the overall bird's-eye story spanning all episodes).${overallPacingLine} ALSO provide "episodeStructures": an array of exactly ${deck.episodes.length} objects, in episode order, each with its OWN "setup", "confrontation", "resolution" — a compact three-act mini-structure for what happens within just that single episode, consistent with its synopsis above.${perEpisodePacingLine}`;
-
-    properties.episodeStructures = {
-      type: Type.ARRAY,
-      items: {
-        type: Type.OBJECT,
-        properties: {
-          setup: ACT_SCHEMA,
-          confrontation: ACT_SCHEMA,
-          resolution: ACT_SCHEMA,
-        },
-        required: ["setup", "confrontation", "resolution"],
-      },
-    };
-    required.push("episodeStructures");
+    // Per-episode structures are generated separately, in batches, below —
+    // this call only produces the bird's-eye overall arc.
+    contents += `\n\nThis is a web series with exactly ${deck.episodes.length} episodes: ${episodeTitles}.\n\nProvide "setup", "confrontation", "resolution" as a three-act structure for the ENTIRE series arc (the overall bird's-eye story spanning all episodes) — do NOT provide per-episode detail here, that is handled separately.${overallPacingLine}`;
   } else if (deck.format?.runtimeMinutes) {
     contents += `\n\nThis is a feature film with a target runtime of ${deck.format.runtimeMinutes} minutes. ${pacingGuidance(deck.format.runtimeMinutes)}`;
   }
@@ -4237,22 +4291,40 @@ async function generateThreeActContent(deck, characterSheet, revision) {
     contents += `\n\nThis is a REVISION of a previous three-act structure. The Story Writer reviewed it and requested changes.\nStory Writer's feedback: "${revision.feedback}"\nPrevious setup summary (English): ${revision.previous.setup.summary.en}\nPrevious confrontation summary (English): ${revision.previous.confrontation.summary.en}\nPrevious resolution summary (English): ${revision.previous.resolution.summary.en}\nRevise the three-act structure to address the feedback directly.`;
   }
 
-  const response = await ai.models.generateContent({
-    model: "gemini-flash-lite-latest",
-    contents,
-    config: {
-      systemInstruction: THREE_ACT_SYSTEM_PROMPT,
-      responseMimeType: "application/json",
-      maxOutputTokens: isSeries ? 16384 : 4096,
-      responseSchema: {
-        type: Type.OBJECT,
-        properties,
-        required,
+  const overall = sanitizeBilingualContent(
+    await generateJsonContent({
+      model: "gemini-flash-lite-latest",
+      contents,
+      config: {
+        systemInstruction: THREE_ACT_SYSTEM_PROMPT,
+        responseMimeType: "application/json",
+        maxOutputTokens: 4096,
+        responseSchema: {
+          type: Type.OBJECT,
+          properties,
+          required,
+        },
       },
-    },
-  });
+    })
+  );
+  if (!isSeries) return overall;
 
-  return sanitizeBilingualContent(JSON.parse(response.text));
+  const overallContext = `Story title: ${deck.title.en}\nOverall series three-act structure already locked:\nSetup: ${overall.setup.summary.en}\nConfrontation: ${overall.confrontation.summary.en}\nResolution: ${overall.resolution.summary.en}\nControlling idea (theme): ${overall.controllingIdea.en}`;
+
+  const chunkStarts = [];
+  for (let i = 0; i < deck.episodes.length; i += THREE_ACT_EPISODE_BATCH_SIZE) chunkStarts.push(i);
+
+  const chunkResults = await mapWithConcurrency(chunkStarts, 3, (start) =>
+    generateThreeActEpisodeBatch(
+      deck,
+      deck.episodes.slice(start, start + THREE_ACT_EPISODE_BATCH_SIZE),
+      start,
+      overallContext,
+      revision
+    )
+  );
+
+  return { ...overall, episodeStructures: chunkResults.flat() };
 }
 
 app.post("/api/three-act-structure", requireRole("admin"), async (req, res) => {
@@ -4456,7 +4528,7 @@ async function generateBitSheetEpisodeBatch(episodesChunk, structuresChunk, star
     contents += `\n\nThis is a REVISION of a previous Bit Sheet. The Story Writer reviewed the whole thing and requested changes.\nFeedback: "${revision.feedback}"\nPrevious draft for JUST this batch of episodes:\n${JSON.stringify(previousChunk)}\nRevise this batch to address the feedback directly.`;
   }
 
-  const response = await ai.models.generateContent({
+  const parsed = await generateJsonContent({
     model: "gemini-flash-lite-latest",
     contents,
     config: {
@@ -4480,7 +4552,7 @@ async function generateBitSheetEpisodeBatch(episodesChunk, structuresChunk, star
     },
   });
 
-  return sanitizeBilingualContent(JSON.parse(response.text)).episodeBits;
+  return sanitizeBilingualContent(parsed).episodeBits;
 }
 
 async function generateBitSheetContent(threeAct, deck, revision) {
@@ -4752,7 +4824,7 @@ async function callSceneListGemini(contents, isSeries, totalTargetMinutes) {
     : { scenes: { type: Type.ARRAY, items: SCENE_SCHEMA } };
   const required = isSeries ? ["episodeScenes"] : ["scenes"];
 
-  const response = await ai.models.generateContent({
+  const parsed = await generateJsonContent({
     model: "gemini-flash-lite-latest",
     contents,
     config: {
@@ -4767,7 +4839,7 @@ async function callSceneListGemini(contents, isSeries, totalTargetMinutes) {
     },
   });
 
-  return sanitizeBilingualContent(JSON.parse(response.text));
+  return sanitizeBilingualContent(parsed);
 }
 
 // Same chunking rationale as BIT_SHEET_EPISODE_BATCH_SIZE — a scene list call
@@ -5135,7 +5207,7 @@ async function generateScreenplaySceneContent(deck, allScenes, sceneIndex, previ
   }
 
   async function callGemini(promptContents) {
-    const response = await ai.models.generateContent({
+    const parsed = await generateJsonContent({
       model: "gemini-flash-lite-latest",
       contents: promptContents,
       config: {
@@ -5149,7 +5221,6 @@ async function generateScreenplaySceneContent(deck, allScenes, sceneIndex, previ
         },
       },
     });
-    const parsed = JSON.parse(response.text);
     return sanitizeScreenplayElements(parsed.elements, dialogueLanguage);
   }
 

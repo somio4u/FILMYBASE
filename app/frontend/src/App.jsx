@@ -1697,7 +1697,7 @@ function FloatingAgentWidget({ currentUser, t, onRunCompleted }) {
     <>
       <button
         type="button"
-        className={`floating-agent-button floating-agent-button-${poseState}`}
+        className={`floating-agent-button floating-agent-pose-${poseState}`}
         style={{ left: position.x, top: position.y }}
         onPointerDown={handlePointerDown}
         onClick={handleButtonClick}
@@ -1761,6 +1761,12 @@ function FloatingAgentWidget({ currentUser, t, onRunCompleted }) {
 
           {runId && status?.status === 'running' && (
             <div className="floating-agent-progress">
+              <img
+                src={currentFrames[frameIndex] ?? currentFrames[0]}
+                alt=""
+                className={`floating-agent-panel-character floating-agent-pose-${poseState}`}
+                draggable="false"
+              />
               <div className="floating-agent-progress-bar">
                 <div
                   className="floating-agent-progress-fill"
@@ -1788,6 +1794,12 @@ function FloatingAgentWidget({ currentUser, t, onRunCompleted }) {
 
           {runId && status?.status === 'completed' && (
             <div className="floating-agent-progress">
+              <img
+                src={currentFrames[frameIndex] ?? currentFrames[0]}
+                alt=""
+                className={`floating-agent-panel-character floating-agent-pose-${poseState}`}
+                draggable="false"
+              />
               <p>{t.floatingAgentDoneLabel}</p>
               <select value={downloadFormat} onChange={(e) => setDownloadFormat(e.target.value)}>
                 <option value="pdf">{t.floatingAgentFormatPdf}</option>
@@ -1809,6 +1821,12 @@ function FloatingAgentWidget({ currentUser, t, onRunCompleted }) {
 
           {runId && status?.status === 'failed' && (
             <div className="floating-agent-progress">
+              <img
+                src={currentFrames[frameIndex] ?? currentFrames[0]}
+                alt=""
+                className={`floating-agent-panel-character floating-agent-pose-${poseState}`}
+                draggable="false"
+              />
               <p className="feedback-note">{status.error}</p>
               <button type="button" className="cancel-button" onClick={handleStartNew}>
                 {t.floatingAgentNewRunButton}
@@ -3877,6 +3895,12 @@ function App() {
   async function loadProjectList() {
     const response = await fetch(`${BACKEND_URL}/api/concepts`)
     const data = await response.json()
+    // A 401/403 response body is {error: "..."} — not an array. Setting
+    // that directly into projectHistory crashed the whole app the next
+    // time anything did projectHistory.filter(...), with no error boundary
+    // to catch it. A session that expired mid-use (or any other auth hiccup)
+    // should just leave the existing list showing, not blank the app.
+    if (!response.ok || !Array.isArray(data)) return
     setProjectHistory(data)
   }
 

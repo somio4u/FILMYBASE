@@ -3888,19 +3888,23 @@ button, input, textarea, select {
   50% { transform: translateY(-14px) scale(1.05); }
 }
 
-.floating-agent-button-idle .floating-agent-image {
+.floating-agent-pose-idle .floating-agent-image,
+.floating-agent-panel-character.floating-agent-pose-idle {
   animation: floatingAgentIdleBob 2.4s ease-in-out infinite;
 }
 
-.floating-agent-button-working .floating-agent-image {
+.floating-agent-pose-working .floating-agent-image,
+.floating-agent-panel-character.floating-agent-pose-working {
   animation: floatingAgentWorkingShake 0.6s ease-in-out infinite;
 }
 
-.floating-agent-button-done .floating-agent-image {
+.floating-agent-pose-done .floating-agent-image,
+.floating-agent-panel-character.floating-agent-pose-done {
   animation: floatingAgentCelebrate 0.8s ease-in-out infinite;
 }
 
-.floating-agent-button-failed .floating-agent-image {
+.floating-agent-pose-failed .floating-agent-image,
+.floating-agent-panel-character.floating-agent-pose-failed {
   animation: floatingAgentIdleBob 2.4s ease-in-out infinite;
 }
 
@@ -3959,6 +3963,15 @@ button, input, textarea, select {
   display: flex;
   flex-direction: column;
   gap: 8px;
+}
+
+.floating-agent-panel-character {
+  display: block;
+  height: 90px;
+  width: auto;
+  margin: 0 auto 4px;
+  object-fit: contain;
+  filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.3));
 }
 
 .floating-agent-progress-bar {

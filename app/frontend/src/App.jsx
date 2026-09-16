@@ -1542,6 +1542,38 @@ function FloatingAgentWidget({ currentUser, t, onRunCompleted }) {
   const notifiedRef = useRef(false)
   const runStartedAtRef = useRef(null)
 
+  // localStorage's runId is per-BROWSER, so opening the app on a different
+  // device (or a different browser) under the same login used to show a
+  // blank "start a new one" form even while a run was actively in progress
+  // elsewhere. On mount, ask the backend which run this same logged-in user
+  // most recently started and adopt it — same account, same progress,
+  // whichever device it's opened on.
+  useEffect(() => {
+    if (!currentUser) return undefined
+    let cancelled = false
+    async function syncActiveRun() {
+      try {
+        const response = await fetch(`${BACKEND_URL}/api/auto-pipeline/runs`)
+        if (!response.ok || cancelled) return
+        const runs = await response.json()
+        if (!Array.isArray(runs) || runs.length === 0) return
+        const latestId = String(runs[0].id)
+        setRunId((current) => (current === latestId ? current : latestId))
+        try {
+          localStorage.setItem(AUTO_PIPELINE_RUN_ID_STORAGE_KEY, latestId)
+        } catch {
+          // per-viewer convenience only
+        }
+      } catch {
+        // network hiccup — keep whatever this device already had
+      }
+    }
+    syncActiveRun()
+    return () => {
+      cancelled = true
+    }
+  }, [currentUser?.username])
+
   const poseState =
     status?.status === 'running' ? 'working' : status?.status === 'completed' ? 'done' : status?.status === 'failed' ? 'failed' : 'idle'
   const currentFrames = floatingAgentFramesFor(poseState)

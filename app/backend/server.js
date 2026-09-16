@@ -11135,8 +11135,13 @@ app.post("/api/auto-pipeline/:id/resume", requireRole("admin"), async (req, res)
 });
 
 app.get("/api/auto-pipeline/runs", requireLogin, async (req, res) => {
+  // Scoped to the logged-in user (not every admin's runs) — the frontend
+  // uses this to sync "my currently active run" across devices/browsers
+  // under the same login, and a different admin's in-progress run showing
+  // up here would be adopted just the same way, which isn't what's wanted.
   const result = await db.query(
-    "SELECT id, concept_text, status, progress_stage, concept_id, created_at FROM auto_pipeline_runs ORDER BY created_at DESC LIMIT 20"
+    "SELECT id, concept_text, status, progress_stage, concept_id, created_at FROM auto_pipeline_runs WHERE created_by = $1 ORDER BY created_at DESC LIMIT 20",
+    [req.user.id]
   );
   res.json(
     result.rows.map((row) => ({

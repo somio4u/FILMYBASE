@@ -10751,6 +10751,42 @@ async function appendAutoPipelineNote(runId, stage, note) {
   );
 }
 
+// A pure heartbeat (no field changes) — called from inside long per-item
+// loops (writing/rewriting one screenplay scene at a time) so updated_at
+// reflects real, ongoing progress between the sparser stage/judge-note
+// updates. This is what the stale-run reaper below relies on to tell a
+// merely-slow run from a genuinely dead one.
+async function touchAutoPipelineRun(runId) {
+  await db.query("UPDATE auto_pipeline_runs SET updated_at = now() WHERE id = $1", [runId]);
+}
+
+// A run is a fire-and-forget async function tied to this one process — if
+// the host restarts or spins down mid-run (seen in practice: a free/hobby
+// tier host going idle once nothing has polled it in a while), that async
+// work is just gone, and the row sits at status 'running' forever with no
+// error and nothing left to finish it. Rather than requiring someone to
+// notice and fix the row by hand, anything left "running" with no update
+// in a while is presumed dead and failed out (with a clear reason) so the
+// existing Resume feature can pick it back up.
+const STALE_AUTO_PIPELINE_RUN_MINUTES = 10;
+
+async function reapStaleAutoPipelineRuns() {
+  try {
+    const result = await db.query(
+      `UPDATE auto_pipeline_runs
+       SET status = 'failed',
+           error = 'This run stopped receiving updates for over ${STALE_AUTO_PIPELINE_RUN_MINUTES} minutes (most likely the backend restarted or went idle mid-run) — nothing is still running for it. Use Resume to continue from the last completed stage.'
+       WHERE status = 'running' AND updated_at < now() - interval '${STALE_AUTO_PIPELINE_RUN_MINUTES} minutes'
+       RETURNING id`
+    );
+    if (result.rows.length > 0) {
+      console.log("Reaped stale auto-pipeline run(s):", result.rows.map((row) => row.id).join(", "));
+    }
+  } catch (error) {
+    console.error("Failed to reap stale auto-pipeline runs:", error.message);
+  }
+}
+
 // How many episodes' screenplay scenes get written concurrently — matches
 // the concurrency limit already used elsewhere (mapWithConcurrency) for
 // per-item Gemini batches, balancing wall-clock time against the free-tier
@@ -11007,6 +11043,11 @@ async function runAutoPipeline(runId, conceptText, format, dialogueLanguage, res
           "INSERT INTO screenplay_scenes (scene_list_id, episode_index, scene_index, content) VALUES ($1, $2, $3, $4)",
           [sceneListId, episodeIndex, sceneIndex, JSON.stringify(content)]
         );
+        // Judge notes only land every 5th episode, so without this a long
+        // screenplay phase could go many minutes between any row update —
+        // exactly what the stale-run reaper (below) would otherwise
+        // mistake for a dead run and fail out from under a healthy one.
+        await touchAutoPipelineRun(runId);
         previousElements = content.elements;
       }
     }
@@ -11061,6 +11102,7 @@ async function runAutoPipeline(runId, conceptText, format, dialogueLanguage, res
           "INSERT INTO screenplay_scenes (scene_list_id, episode_index, scene_index, content) VALUES ($1, $2, $3, $4)",
           [sceneListId, row.episode_index, row.scene_index, JSON.stringify(revised)]
         );
+        await touchAutoPipelineRun(runId);
       }
     }
 
@@ -11529,3 +11571,9 @@ process.on("uncaughtException", (err) => console.error("Uncaught exception:", er
 app.listen(PORT, () => {
   console.log(`Backend server running at http://localhost:${PORT}`);
 });
+
+// Runs once on every process start (catches anything left stale from a
+// previous process lifetime — e.g. right after a host restart) and then
+// on a regular interval for the rest of this process's own lifetime.
+reapStaleAutoPipelineRuns();
+setInterval(reapStaleAutoPipelineRuns, 5 * 60 * 1000);

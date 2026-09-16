@@ -1004,9 +1004,7 @@ app.get("/api/health", (req, res) => {
   res.json({ status: "ok", message: "Backend is alive" });
 });
 
-app.post("/api/generate-storylines", requireRole("admin"), async (req, res) => {
-  const { concept, format } = req.body;
-
+async function generateStorylinesContent(concept, format) {
   const formatInstruction =
     format?.type === "vertical"
       ? `Format: vertical micro-drama, ${format.episodeCount ?? "many"} episodes of only ${format.episodeMinutes ?? "~1-2"} minutes each — shape each storyline direction so it can sustain a long run of very short, hook-driven episodes (ReelShort/short-drama app style), not a single continuous film arc. This is a LOW-BUDGET format meant to shoot in just 2-3 days: every storyline direction must be one that naturally plays out with around 5 main characters (plus a little background crowd at most) and within a small, contained setting — think a family home and its immediate surroundings, or one workplace — driven by dialogue and personal drama, NOT a story that needs many locations, a large cast, or spectacle to work.`
@@ -1014,35 +1012,41 @@ app.post("/api/generate-storylines", requireRole("admin"), async (req, res) => {
         ? `Format: web series, ${format.episodeCount ?? "several"} episodes of ${format.episodeMinutes ?? "~25"} minutes each — shape each storyline direction so it can sustain a multi-episode arc, not just a single-sitting story.`
         : `Format: feature film, target runtime ${format?.runtimeMinutes ?? "~90"} minutes.`;
 
-  try {
-    const response = await ai.models.generateContent({
-      model: "gemini-flash-lite-latest",
-      contents: `Movie concept: ${concept}\n${formatInstruction}`,
-      config: {
-        systemInstruction: STORY_AGENT_SYSTEM_PROMPT,
-        responseMimeType: "application/json",
-        responseSchema: {
-          type: Type.OBJECT,
-          properties: {
-            storylines: {
-              type: Type.ARRAY,
-              items: {
-                type: Type.OBJECT,
-                properties: {
-                  title: BILINGUAL_TEXT_SCHEMA,
-                  logline: BILINGUAL_TEXT_SCHEMA,
-                  summary: BILINGUAL_TEXT_SCHEMA,
-                },
-                required: ["title", "logline", "summary"],
+  const response = await ai.models.generateContent({
+    model: "gemini-flash-lite-latest",
+    contents: `Movie concept: ${concept}\n${formatInstruction}`,
+    config: {
+      systemInstruction: STORY_AGENT_SYSTEM_PROMPT,
+      responseMimeType: "application/json",
+      responseSchema: {
+        type: Type.OBJECT,
+        properties: {
+          storylines: {
+            type: Type.ARRAY,
+            items: {
+              type: Type.OBJECT,
+              properties: {
+                title: BILINGUAL_TEXT_SCHEMA,
+                logline: BILINGUAL_TEXT_SCHEMA,
+                summary: BILINGUAL_TEXT_SCHEMA,
               },
+              required: ["title", "logline", "summary"],
             },
           },
-          required: ["storylines"],
         },
+        required: ["storylines"],
       },
-    });
+    },
+  });
 
-    const parsed = sanitizeBilingualContent(JSON.parse(response.text));
+  return sanitizeBilingualContent(JSON.parse(response.text));
+}
+
+app.post("/api/generate-storylines", requireRole("admin"), async (req, res) => {
+  const { concept, format } = req.body;
+
+  try {
+    const parsed = await generateStorylinesContent(concept, format);
 
     // A real project name from the very first step, not the raw pasted idea
     // text — the user picks one of these storylines shortly anyway, so its
@@ -10246,6 +10250,469 @@ app.get("/api/google/contacts", requireRole("admin", "production_manager"), asyn
   } catch (error) {
     console.error("Google Contacts fetch failed:", error.message);
     res.status(502).json({ error: error.message });
+  }
+});
+
+// ============================================================================
+// Floating auto-pipeline agent — runs the whole Story & Screenplay chain
+// (storylines -> pitch deck -> characters -> three-act -> bit sheet -> scene
+// list -> every scene's screenplay) end to end from a single concept, with a
+// handful of specialist reviewer passes checking the draft at key stages and
+// triggering one regeneration when they flag a real problem. Each stage still
+// writes into the SAME tables the manual click-through flow uses, so a run
+// stays fully inspectable in the normal UI afterward — this is automation of
+// the existing pipeline, not a separate parallel system.
+// ============================================================================
+
+const AUTO_PIPELINE_REVIEW_SCHEMA = {
+  type: Type.OBJECT,
+  properties: {
+    needsRevision: { type: Type.BOOLEAN },
+    issues: { type: Type.ARRAY, items: { type: Type.STRING } },
+  },
+  required: ["needsRevision", "issues"],
+};
+
+// Reviewer 1 (AI): only meaningful for a vertical drama, whose episodes have
+// a mandatory hook — flags vague/generic hooks or repetitive twists across
+// episodes, the two failure modes actually worth an AI's judgment here
+// (unlike location/character counts below, "is this hook actually specific"
+// isn't something code can check).
+async function reviewPitchDeckHooks(deck) {
+  if (!Array.isArray(deck.episodes) || !deck.episodes[0]?.hook) {
+    return { needsRevision: false, issues: [] };
+  }
+
+  const episodesText = deck.episodes
+    .map((ep, i) => `Episode ${i + 1}: ${ep.title.en}\nSynopsis: ${ep.synopsis.en}\nHook: ${ep.hook.en}`)
+    .join("\n\n");
+
+  const response = await ai.models.generateContent({
+    model: "gemini-flash-lite-latest",
+    contents: `You are reviewing a vertical micro-drama's episode hooks for quality, as a strict story editor. Here are all ${deck.episodes.length} episodes:\n\n${episodesText}\n\nFlag any episode whose hook is VAGUE or GENERIC (e.g. "things get complicated", "a shocking twist is revealed", or anything that doesn't state a concrete, specific moment) rather than a real, concrete beat — a hook can be a line of dialogue or a silent action beat, either is fine, but it must be SPECIFIC. Also flag if hooks feel repetitive across episodes (the same kind of twist reused too many times in a row). Cite the episode number for each real problem found. If everything is genuinely concrete and varied, return no issues.`,
+    config: {
+      systemInstruction: "You are a meticulous story editor reviewing episode hooks for a vertical micro-drama. Be strict but fair — only flag genuine problems, not stylistic preferences.",
+      responseMimeType: "application/json",
+      maxOutputTokens: 2048,
+      responseSchema: AUTO_PIPELINE_REVIEW_SCHEMA,
+    },
+  });
+
+  return JSON.parse(response.text);
+}
+
+// Reviewer 2 (deterministic, not AI): the "budget-friendly" location/cast
+// count constraint is an exact, countable fact, not a judgment call — a code
+// check is both free and more reliable here than spending a Gemini call to
+// ask an LLM to count things.
+function reviewSceneListBudget(deck, sceneList) {
+  if (deck.format?.type !== "vertical") return { needsRevision: false, issues: [] };
+
+  const issues = [];
+  const locations = new Set();
+  (sceneList.episodeScenes ?? []).forEach((episodeScene) =>
+    episodeScene.scenes.forEach((scene) => locations.add(scene.location.en))
+  );
+  if (locations.size > 5) {
+    issues.push(
+      `The scene list uses ${locations.size} distinct locations (${[...locations].join(", ")}), above the 4-5 location budget for a 2-3 day shoot.`
+    );
+  }
+  if ((deck.majorCharacters?.length ?? 0) > 6) {
+    issues.push(`The pitch deck has ${deck.majorCharacters.length} major characters, above the ~5 character budget.`);
+  }
+  return { needsRevision: issues.length > 0, issues };
+}
+
+// Reviewer 3 (AI): dialogue authenticity — only sampled on a subset of scenes
+// during the screenplay stage (see runAutoPipeline) to keep this cheap on a
+// high-episode-count vertical drama, rather than reviewing every scene.
+async function reviewDialogueAuthenticity(elements, dialogueLanguage) {
+  const dialogueLines = elements
+    .filter((el) => el.type === "dialogue")
+    .map((el) => `${el.character}: ${el.text}`)
+    .join("\n");
+  if (!dialogueLines) return { needsRevision: false, issues: [] };
+
+  const languageLabel = dialogueLanguage === "or" ? "Odia" : dialogueLanguage === "hi" ? "Hindi" : "English";
+  const response = await ai.models.generateContent({
+    model: "gemini-flash-lite-latest",
+    contents: `You are reviewing dialogue from a screenplay scene for natural, authentic ${languageLabel} speech. Here are the dialogue lines:\n\n${dialogueLines}\n\nFlag it if the dialogue sounds stiff, overly formal/literary, like a textbook translation, or if every character sounds the same regardless of who they are. Real spoken dialogue is casual, has natural rhythm, and different characters sound different from each other. If it genuinely reads as natural and authentic, return no issues.`,
+    config: {
+      systemInstruction: "You are a meticulous script supervisor reviewing dialogue authenticity. Be strict but fair.",
+      responseMimeType: "application/json",
+      maxOutputTokens: 2048,
+      responseSchema: AUTO_PIPELINE_REVIEW_SCHEMA,
+    },
+  });
+
+  return JSON.parse(response.text);
+}
+
+const AUTO_PIPELINE_JSONB_FIELDS = new Set(["format", "review_notes"]);
+
+async function updateAutoPipelineRun(runId, fields) {
+  const keys = Object.keys(fields);
+  if (keys.length === 0) return;
+  const setClauses = keys.map((key, i) => `${key} = $${i + 2}`).join(", ");
+  const values = keys.map((key) => (AUTO_PIPELINE_JSONB_FIELDS.has(key) ? JSON.stringify(fields[key]) : fields[key]));
+  await db.query(`UPDATE auto_pipeline_runs SET ${setClauses}, updated_at = now() WHERE id = $1`, [runId, ...values]);
+}
+
+// Atomic append (not read-modify-write) since the screenplay stage runs
+// several episodes concurrently, any of which might append a note at once.
+async function appendAutoPipelineNote(runId, stage, note) {
+  await db.query(
+    "UPDATE auto_pipeline_runs SET review_notes = review_notes || $2::jsonb, updated_at = now() WHERE id = $1",
+    [runId, JSON.stringify([{ stage, note, at: new Date().toISOString() }])]
+  );
+}
+
+// How many episodes' screenplay scenes get written concurrently — matches
+// the concurrency limit already used elsewhere (mapWithConcurrency) for
+// per-item Gemini batches, balancing wall-clock time against the free-tier
+// requests/minute cap.
+const AUTO_PIPELINE_SCREENPLAY_CONCURRENCY = 4;
+
+// Runs the full pipeline for one auto-pipeline-run row, from concept to
+// every scene's screenplay, updating the row's progress as it goes. Never
+// awaited by its caller (the /start route responds immediately) — a
+// 60-episode vertical drama's screenplay stage alone can take many minutes.
+async function runAutoPipeline(runId, conceptText, format, dialogueLanguage) {
+  try {
+    await updateAutoPipelineRun(runId, { progress_stage: "storylines" });
+    const { storylines } = await generateStorylinesContent(conceptText, format);
+    const storyline = storylines[0];
+
+    const conceptResult = await db.query(
+      "INSERT INTO concepts (concept_text, storylines, title) VALUES ($1, $2, $3) RETURNING id",
+      [conceptText, JSON.stringify(storylines), storyline?.title?.en ?? null]
+    );
+    const conceptId = conceptResult.rows[0].id;
+    await updateAutoPipelineRun(runId, { concept_id: conceptId });
+
+    await updateAutoPipelineRun(runId, { progress_stage: "pitch-deck" });
+    let deck = await generatePitchDeckContent(storyline, format);
+    const hookReview = await reviewPitchDeckHooks(deck);
+    if (hookReview.needsRevision) {
+      await appendAutoPipelineNote(runId, "pitch-deck", `Hook reviewer flagged: ${hookReview.issues.join(" ")} — regenerating.`);
+      deck = await generatePitchDeckContent(storyline, format, { feedback: hookReview.issues.join("; "), previous: deck });
+    }
+    const pitchDeckResult = await db.query(
+      "INSERT INTO pitch_decks (concept_id, content, status) VALUES ($1, $2, 'approved') RETURNING id",
+      [conceptId, JSON.stringify(deck)]
+    );
+    const pitchDeckId = pitchDeckResult.rows[0].id;
+
+    await updateAutoPipelineRun(runId, { progress_stage: "character-sheet" });
+    const characterSheet = await generateCharacterSheetContent(deck);
+    await db.query("INSERT INTO character_sheets (pitch_deck_id, content, status) VALUES ($1, $2, 'approved')", [
+      pitchDeckId,
+      JSON.stringify(characterSheet),
+    ]);
+
+    await updateAutoPipelineRun(runId, { progress_stage: "three-act" });
+    const threeAct = await generateThreeActContent(deck, characterSheet);
+    const threeActResult = await db.query(
+      "INSERT INTO three_act_structures (pitch_deck_id, content, status) VALUES ($1, $2, 'locked') RETURNING id",
+      [pitchDeckId, JSON.stringify(threeAct)]
+    );
+    const threeActId = threeActResult.rows[0].id;
+
+    await updateAutoPipelineRun(runId, { progress_stage: "bit-sheet" });
+    const bitSheet = await generateBitSheetContent(threeAct, deck);
+    const bitSheetResult = await db.query(
+      "INSERT INTO bit_sheets (three_act_structure_id, content, status) VALUES ($1, $2, 'approved') RETURNING id",
+      [threeActId, JSON.stringify(bitSheet)]
+    );
+    const bitSheetId = bitSheetResult.rows[0].id;
+
+    await updateAutoPipelineRun(runId, { progress_stage: "scene-list" });
+    let sceneList = await generateSceneListContent(bitSheet, deck);
+    const budgetReview = reviewSceneListBudget(deck, sceneList);
+    if (budgetReview.needsRevision) {
+      await appendAutoPipelineNote(runId, "scene-list", `Budget reviewer flagged: ${budgetReview.issues.join(" ")} — regenerating.`);
+      sceneList = await generateSceneListContent(bitSheet, deck, { feedback: budgetReview.issues.join("; "), previous: sceneList });
+    }
+    const sceneListResult = await db.query(
+      "INSERT INTO scene_lists (bit_sheet_id, content, status) VALUES ($1, $2, 'approved') RETURNING id",
+      [bitSheetId, JSON.stringify(sceneList)]
+    );
+    const sceneListId = sceneListResult.rows[0].id;
+    await updateAutoPipelineRun(runId, { scene_list_id: sceneListId });
+
+    await updateAutoPipelineRun(runId, { progress_stage: "screenplay" });
+
+    async function writeEpisodeScenes(scenes, episodeIndex) {
+      let previousElements = null;
+      for (let sceneIndex = 0; sceneIndex < scenes.length; sceneIndex++) {
+        let content = await generateScreenplaySceneContent(
+          deck, scenes, sceneIndex, previousElements, sceneList.controllingIdea, undefined, dialogueLanguage
+        );
+        // Spot-check dialogue authenticity on just the first scene of every
+        // 5th episode (or every 5th scene for a film) — enough to catch a
+        // systemic problem without a per-scene AI review cost.
+        if (sceneIndex === 0 && episodeIndex % 5 === 0) {
+          const dialogueReview = await reviewDialogueAuthenticity(content.elements, dialogueLanguage);
+          if (dialogueReview.needsRevision) {
+            const stageLabel = episodeIndex === null ? "screenplay" : `screenplay-ep${episodeIndex + 1}`;
+            await appendAutoPipelineNote(runId, stageLabel, `Dialogue reviewer flagged: ${dialogueReview.issues.join(" ")} — regenerating this scene.`);
+            content = await generateScreenplaySceneContent(
+              deck, scenes, sceneIndex, previousElements, sceneList.controllingIdea,
+              { feedback: dialogueReview.issues.join("; "), previous: content }, dialogueLanguage
+            );
+          }
+        }
+        await db.query(
+          "INSERT INTO screenplay_scenes (scene_list_id, episode_index, scene_index, content) VALUES ($1, $2, $3, $4)",
+          [sceneListId, episodeIndex, sceneIndex, JSON.stringify(content)]
+        );
+        previousElements = content.elements;
+      }
+    }
+
+    if (Array.isArray(sceneList.episodeScenes)) {
+      const episodeIndexes = deck.episodes.map((_, i) => i);
+      await mapWithConcurrency(episodeIndexes, AUTO_PIPELINE_SCREENPLAY_CONCURRENCY, (episodeIndex) =>
+        writeEpisodeScenes(sceneList.episodeScenes[episodeIndex].scenes, episodeIndex)
+      );
+    } else {
+      await writeEpisodeScenes(sceneList.scenes, null);
+    }
+
+    await updateAutoPipelineRun(runId, { status: "completed", progress_stage: "done" });
+  } catch (error) {
+    console.error("Auto-pipeline run failed:", runId, error);
+    await updateAutoPipelineRun(runId, { status: "failed", error: error.message }).catch(() => {});
+  }
+}
+
+app.post("/api/auto-pipeline/start", requireRole("admin"), async (req, res) => {
+  const { concept, format: rawFormat, dialogueLanguage: rawDialogueLanguage } = req.body;
+
+  if (!concept?.trim()) {
+    res.status(400).json({ error: "A concept is required." });
+    return;
+  }
+
+  const format =
+    rawFormat?.type === "vertical"
+      ? { type: "vertical", episodeCount: Number(rawFormat.episodeCount) || 60, episodeMinutes: Number(rawFormat.episodeMinutes) || 1.5 }
+      : rawFormat?.type === "series"
+        ? { type: "series", episodeCount: Number(rawFormat.episodeCount) || 10, episodeMinutes: Number(rawFormat.episodeMinutes) || 10 }
+        : { type: "film", runtimeMinutes: Number(rawFormat?.runtimeMinutes) || 120 };
+  const dialogueLanguage = ["or", "hi"].includes(rawDialogueLanguage) ? rawDialogueLanguage : "en";
+
+  try {
+    const insertResult = await db.query(
+      "INSERT INTO auto_pipeline_runs (concept_text, format, status, progress_stage, created_by) VALUES ($1, $2, 'running', 'starting', $3) RETURNING id",
+      [concept, JSON.stringify(format), req.user.id]
+    );
+    const runId = insertResult.rows[0].id;
+
+    // Deliberately not awaited — see runAutoPipeline's own comment.
+    runAutoPipeline(runId, concept, format, dialogueLanguage);
+
+    res.json({ runId });
+  } catch (error) {
+    console.error("Failed to start auto-pipeline run:", error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get("/api/auto-pipeline/runs", requireLogin, async (req, res) => {
+  const result = await db.query(
+    "SELECT id, concept_text, status, progress_stage, concept_id, created_at FROM auto_pipeline_runs ORDER BY created_at DESC LIMIT 20"
+  );
+  res.json(
+    result.rows.map((row) => ({
+      id: row.id,
+      conceptText: row.concept_text,
+      status: row.status,
+      progressStage: row.progress_stage,
+      conceptId: row.concept_id,
+      createdAt: row.created_at,
+    }))
+  );
+});
+
+app.get("/api/auto-pipeline/:id/status", requireLogin, async (req, res) => {
+  const result = await db.query(
+    "SELECT id, concept_text, format, status, progress_stage, review_notes, concept_id, scene_list_id, error, created_at, updated_at FROM auto_pipeline_runs WHERE id = $1",
+    [req.params.id]
+  );
+  if (result.rows.length === 0) {
+    res.status(404).json({ error: "Run not found" });
+    return;
+  }
+  const row = result.rows[0];
+  res.json({
+    id: row.id,
+    conceptText: row.concept_text,
+    format: row.format,
+    status: row.status,
+    progressStage: row.progress_stage,
+    reviewNotes: row.review_notes,
+    conceptId: row.concept_id,
+    sceneListId: row.scene_list_id,
+    error: row.error,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  });
+});
+
+// Renders every episode's every scene, in order, as one continuous
+// screenplay document — scene heading, action, character/dialogue,
+// parenthetical, transition — using standard screenplay column positions.
+// Unlike the per-character "Character Script" export, this is the FULL
+// script, meant to be read start to finish, not filtered to one actor.
+function renderFullScreenplayPdf(res, deck, sceneList, scenesByEpisode) {
+  const isSeries = Array.isArray(sceneList.episodeScenes);
+  const margin = 72; // 1 inch, standard screenplay margin
+  const doc = new PDFDocument({ size: "LETTER", margin });
+  doc.registerFont("odiaRegular", FONTS.odiaRegular);
+  doc.registerFont("odiaBold", FONTS.odiaBold);
+  doc.registerFont("hindiRegular", FONTS.hindiRegular);
+  doc.registerFont("hindiBold", FONTS.hindiBold);
+
+  res.setHeader("Content-Type", "application/pdf");
+  res.setHeader(
+    "Content-Disposition",
+    `attachment; filename="${(deck.title?.en ?? "screenplay").replace(/[^a-z0-9]+/gi, "-")}-full-screenplay-${formatExportTimestamp()}.pdf"`
+  );
+  doc.pipe(res);
+
+  const fontFor = (dialogueLanguage) =>
+    dialogueLanguage === "or"
+      ? { body: "odiaRegular", bold: "odiaBold" }
+      : dialogueLanguage === "hi"
+        ? { body: "hindiRegular", bold: "hindiBold" }
+        : { body: "Courier", bold: "Courier-Bold" };
+
+  // Title page
+  doc.font("Courier-Bold").fontSize(28).text(deck.title?.en ?? "Untitled", { align: "center" });
+  doc.moveDown(1);
+  doc.font("Courier").fontSize(13).text(deck.logline?.en ?? "", { align: "center" });
+
+  const actionWidth = doc.page.width - margin * 2;
+  const dialogueIndent = margin + 108; // ~1.5in in from the action margin
+  const dialogueWidth = 260;
+  const characterIndent = margin + 155;
+
+  const writeScene = (scene, sceneIndex, elements, dialogueLanguage) => {
+    const fonts = fontFor(dialogueLanguage);
+    doc.addPage();
+    doc
+      .font("Courier-Bold")
+      .fontSize(12)
+      .text(`${sceneIndex + 1}. ${scene.intExt}. ${scene.location.en.toUpperCase()} — ${scene.timeOfDay}`, margin, doc.y, {
+        width: actionWidth,
+      });
+    doc.moveDown(0.8);
+
+    elements.forEach((element) => {
+      if (element.type === "dialogue") {
+        const modifier = element.characterModifier && element.characterModifier !== "none" ? ` (${element.characterModifier})` : "";
+        doc.font("Courier-Bold").fontSize(11).text(`${element.character.toUpperCase()}${modifier}`, characterIndent, doc.y, {
+          width: dialogueWidth,
+        });
+        if (element.parenthetical) {
+          doc.font(fonts.body).fontSize(10).text(`(${element.parenthetical})`, dialogueIndent, doc.y, { width: dialogueWidth });
+        }
+        doc.font(fonts.body).fontSize(11).text(element.text, dialogueIndent, doc.y, { width: dialogueWidth });
+        doc.moveDown(0.7);
+      } else if (element.type === "transition") {
+        doc.font("Courier-Bold").fontSize(11).text(element.text, margin, doc.y, { width: actionWidth, align: "right" });
+        doc.moveDown(0.7);
+      } else if (element.type === "flashback") {
+        doc
+          .font("Courier-Bold")
+          .fontSize(11)
+          .text(`FLASH - ${element.character}'S POV:`, margin, doc.y, { width: actionWidth, continued: true })
+          .font("Courier")
+          .text(` ${element.text}`, { width: actionWidth });
+        doc.moveDown(0.7);
+      } else {
+        doc.font("Courier").fontSize(11).text(element.text, margin, doc.y, { width: actionWidth });
+        doc.moveDown(0.7);
+      }
+    });
+  };
+
+  if (isSeries) {
+    deck.episodes.forEach((episode, episodeIndex) => {
+      doc.addPage();
+      doc.font("Courier-Bold").fontSize(18).text(`EPISODE ${episodeIndex + 1}: ${episode.title.en.toUpperCase()}`, { align: "center" });
+      const scenes = sceneList.episodeScenes[episodeIndex]?.scenes ?? [];
+      const episodeScenes = scenesByEpisode.get(episodeIndex) ?? [];
+      scenes.forEach((scene, sceneIndex) => {
+        const row = episodeScenes.find((r) => r.scene_index === sceneIndex);
+        if (!row) return;
+        writeScene(scene, sceneIndex, row.content.elements, row.content.dialogueLanguage);
+      });
+    });
+  } else {
+    const filmScenes = scenesByEpisode.get(null) ?? [];
+    sceneList.scenes.forEach((scene, sceneIndex) => {
+      const row = filmScenes.find((r) => r.scene_index === sceneIndex);
+      if (!row) return;
+      writeScene(scene, sceneIndex, row.content.elements, row.content.dialogueLanguage);
+    });
+  }
+
+  doc.end();
+}
+
+app.get("/api/auto-pipeline/:id/screenplay-pdf", requireLogin, async (req, res) => {
+  const runResult = await db.query("SELECT scene_list_id, status FROM auto_pipeline_runs WHERE id = $1", [req.params.id]);
+  if (runResult.rows.length === 0) {
+    res.status(404).json({ error: "Run not found" });
+    return;
+  }
+  const { scene_list_id: sceneListId, status } = runResult.rows[0];
+  if (status !== "completed" || !sceneListId) {
+    res.status(400).json({ error: "This run hasn't finished yet." });
+    return;
+  }
+
+  const sceneListResult = await db.query(
+    `SELECT sl.content AS scene_list_content, pd.content AS pitch_deck_content
+     FROM scene_lists sl
+     JOIN bit_sheets bs ON bs.id = sl.bit_sheet_id
+     JOIN three_act_structures tas ON tas.id = bs.three_act_structure_id
+     JOIN pitch_decks pd ON pd.id = tas.pitch_deck_id
+     WHERE sl.id = $1`,
+    [sceneListId]
+  );
+  if (sceneListResult.rows.length === 0) {
+    res.status(404).json({ error: "Scene list not found" });
+    return;
+  }
+  const { scene_list_content: sceneList, pitch_deck_content: deck } = sceneListResult.rows[0];
+
+  const scenesResult = await db.query(
+    `SELECT DISTINCT ON (episode_index, scene_index) episode_index, scene_index, content, created_at
+     FROM screenplay_scenes
+     WHERE scene_list_id = $1
+     ORDER BY episode_index, scene_index, created_at DESC`,
+    [sceneListId]
+  );
+  const scenesByEpisode = new Map();
+  scenesResult.rows.forEach((row) => {
+    const key = row.episode_index;
+    if (!scenesByEpisode.has(key)) scenesByEpisode.set(key, []);
+    scenesByEpisode.get(key).push(row);
+  });
+
+  try {
+    renderFullScreenplayPdf(res, deck, sceneList, scenesByEpisode);
+  } catch (error) {
+    console.error("Full screenplay PDF export failed:", error.message);
+    if (!res.headersSent) {
+      res.status(500).json({ error: error.message });
+    } else {
+      res.end();
+    }
   }
 });
 

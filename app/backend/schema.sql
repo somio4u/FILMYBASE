@@ -205,3 +205,25 @@ CREATE TABLE clapboard_logs (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX clapboard_logs_scene_list_idx ON clapboard_logs (scene_list_id, created_at DESC);
+
+-- The floating agent's end-to-end auto-pipeline: one row per run, updated in
+-- place as it progresses through the same stages the manual click-through
+-- flow uses (storylines -> pitch deck -> ... -> screenplay), so the frontend
+-- can poll status/progress_stage instead of holding one giant HTTP request
+-- open for what can be a many-minute job. concept_id/scene_list_id are filled
+-- in as those rows get created, so a run remains inspectable through the
+-- normal UI at every stage, not just via this table.
+CREATE TABLE auto_pipeline_runs (
+  id SERIAL PRIMARY KEY,
+  concept_text TEXT NOT NULL,
+  format JSONB NOT NULL,
+  status TEXT NOT NULL DEFAULT 'running', -- 'running' | 'completed' | 'failed'
+  progress_stage TEXT,
+  review_notes JSONB NOT NULL DEFAULT '[]',
+  concept_id INTEGER REFERENCES concepts(id) ON DELETE SET NULL,
+  scene_list_id INTEGER REFERENCES scene_lists(id) ON DELETE SET NULL,
+  error TEXT,
+  created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);

@@ -298,6 +298,14 @@ const LABELS = {
     dialogueLanguageEnglish: 'Dialogue: English',
     dialogueLanguageOdia: 'Dialogue: Odia',
     dialogueLanguageHindi: 'Dialogue: Hindi',
+    floatingAgentTitle: 'Auto Screenplay Agent',
+    floatingAgentConceptPlaceholder: 'Describe your concept — e.g. "A daughter-in-law and her mother-in-law are forced to run the household together after the son goes abroad for work."',
+    floatingAgentStartButton: 'Start',
+    floatingAgentStarting: 'Starting...',
+    floatingAgentStageLabel: 'Stage',
+    floatingAgentDoneLabel: 'Your screenplay is ready.',
+    floatingAgentDownloadButton: 'Download Screenplay PDF',
+    floatingAgentNewRunButton: 'Start a New Run',
     screenplayFeedbackPlaceholder: 'What would you like changed about this scene? e.g. "Make the dialogue sharper" or "Add a beat of hesitation before he answers"',
     screenplayCompleteBanner: '🎬 Full screenplay draft complete! This locked structure and final screenplay are ready to hand off to the next stage.',
     screenplayProgressLabel: (drafted, total) => `Screenplay progress: ${drafted} / ${total} scenes written`,
@@ -751,6 +759,14 @@ const LABELS = {
     dialogueLanguageEnglish: 'ସଂଳାପ: ଇଂରାଜୀ',
     dialogueLanguageOdia: 'ସଂଳାପ: ଓଡ଼ିଆ',
     dialogueLanguageHindi: 'ସଂଳାପ: ହିନ୍ଦୀ',
+    floatingAgentTitle: 'ଅଟୋ ସ୍କ୍ରିନପ୍ଲେ ଏଜେଣ୍ଟ',
+    floatingAgentConceptPlaceholder: 'ଆପଣଙ୍କର କାହାଣୀ ଧାରଣା ବର୍ଣ୍ଣନା କରନ୍ତୁ...',
+    floatingAgentStartButton: 'ଆରମ୍ଭ କରନ୍ତୁ',
+    floatingAgentStarting: 'ଆରମ୍ଭ ହେଉଛି...',
+    floatingAgentStageLabel: 'ପର୍ଯ୍ୟାୟ',
+    floatingAgentDoneLabel: 'ଆପଣଙ୍କର ସ୍କ୍ରିନପ୍ଲେ ପ୍ରସ୍ତୁତ।',
+    floatingAgentDownloadButton: 'ସ୍କ୍ରିନପ୍ଲେ PDF ଡାଉନଲୋଡ୍ କରନ୍ତୁ',
+    floatingAgentNewRunButton: 'ନୂଆ ରନ୍ ଆରମ୍ଭ କରନ୍ତୁ',
     screenplayFeedbackPlaceholder: 'ଆପଣ ଏହି ଦୃଶ୍ୟରେ କଣ ପରିବର୍ତ୍ତନ ଚାହୁଁଛନ୍ତି?',
     screenplayCompleteBanner: '🎬 ସମ୍ପୂର୍ଣ୍ଣ ସ୍କ୍ରିନପ୍ଲେ ତିଆରି ହୋଇଗଲା! ଏହି ଲକ୍ ହୋଇଥିବା ସଂରଚନା ଏବଂ ଅନ୍ତିମ ସ୍କ୍ରିନପ୍ଲେ ପରବର୍ତ୍ତୀ ପର୍ଯ୍ୟାୟକୁ ହସ୍ତାନ୍ତର ପାଇଁ ପ୍ରସ୍ତୁତ।',
     screenplayProgressLabel: (drafted, total) => `ସ୍କ୍ରିନପ୍ଲେ ପ୍ରଗତି: ${drafted} / ${total} ଦୃଶ୍ୟ ଲେଖାଯାଇଛି`,
@@ -1393,6 +1409,289 @@ function ScreenplayBlock({ episodeIndex, sceneIndex, t, screenplay }) {
         </div>
       )}
     </div>
+  )
+}
+
+const AUTO_PIPELINE_RUN_ID_STORAGE_KEY = 'filmmaking-app:floatingAgentRunId'
+const FLOATING_AGENT_POSITION_STORAGE_KEY = 'filmmaking-app:floatingAgentPosition'
+
+// The floating, draggable "auto-pipeline" agent — lets an admin describe a
+// concept and get a fully-generated project (through every screenplay scene)
+// back as one downloadable PDF, without clicking through each stage
+// manually. Position is a per-viewer convenience (localStorage only); the
+// run itself lives server-side so a page refresh doesn't lose progress.
+function FloatingAgentWidget({ currentUser, t, onRunCompleted }) {
+  const [position, setPosition] = useState(() => {
+    try {
+      const saved = localStorage.getItem(FLOATING_AGENT_POSITION_STORAGE_KEY)
+      if (saved) return JSON.parse(saved)
+    } catch {
+      // ignore — fall through to default
+    }
+    return { x: 24, y: 24 }
+  })
+  const [isOpen, setIsOpen] = useState(false)
+  const [isDragging, setIsDragging] = useState(false)
+  const dragOffset = useRef({ x: 0, y: 0 })
+  const dragStart = useRef({ x: 0, y: 0 })
+  const hasDraggedRef = useRef(false)
+
+  const [concept, setConcept] = useState('')
+  const [formatType, setFormatType] = useState('vertical')
+  const [episodeCount, setEpisodeCount] = useState(60)
+  const [episodeMinutes, setEpisodeMinutes] = useState(1.5)
+  const [dialogueLanguage, setDialogueLanguage] = useState('en')
+
+  const [runId, setRunId] = useState(() => {
+    try {
+      return localStorage.getItem(AUTO_PIPELINE_RUN_ID_STORAGE_KEY) || null
+    } catch {
+      return null
+    }
+  })
+  const [status, setStatus] = useState(null)
+  const [isStarting, setIsStarting] = useState(false)
+  const [errorMessage, setErrorMessage] = useState(null)
+  const statusRef = useRef(null)
+  const notifiedRef = useRef(false)
+
+  useEffect(() => {
+    if (!runId) return undefined
+    let cancelled = false
+
+    async function poll() {
+      try {
+        const response = await fetch(`${BACKEND_URL}/api/auto-pipeline/${runId}/status`)
+        const data = await response.json()
+        if (cancelled) return
+        if (!response.ok) {
+          setErrorMessage(data.error || t.genericError)
+          return
+        }
+        setStatus(data)
+        statusRef.current = data.status
+        if (data.status === 'completed' && !notifiedRef.current) {
+          notifiedRef.current = true
+          onRunCompleted?.(data)
+        }
+      } catch {
+        if (!cancelled) setErrorMessage(t.genericError)
+      }
+    }
+
+    poll()
+    const interval = setInterval(() => {
+      if (statusRef.current === 'completed' || statusRef.current === 'failed') {
+        clearInterval(interval)
+        return
+      }
+      poll()
+    }, 4000)
+
+    return () => {
+      cancelled = true
+      clearInterval(interval)
+    }
+  }, [runId, t.genericError, onRunCompleted])
+
+  function handlePointerDown(e) {
+    setIsDragging(true)
+    hasDraggedRef.current = false
+    dragStart.current = { x: e.clientX, y: e.clientY }
+    dragOffset.current = { x: e.clientX - position.x, y: e.clientY - position.y }
+  }
+
+  useEffect(() => {
+    if (!isDragging) return undefined
+
+    function handleMove(e) {
+      if (Math.abs(e.clientX - dragStart.current.x) > 5 || Math.abs(e.clientY - dragStart.current.y) > 5) {
+        hasDraggedRef.current = true
+      }
+      setPosition({ x: e.clientX - dragOffset.current.x, y: e.clientY - dragOffset.current.y })
+    }
+    function handleUp() {
+      setIsDragging(false)
+      setPosition((current) => {
+        try {
+          localStorage.setItem(FLOATING_AGENT_POSITION_STORAGE_KEY, JSON.stringify(current))
+        } catch {
+          // per-viewer convenience only — fine if it can't persist
+        }
+        return current
+      })
+    }
+    window.addEventListener('pointermove', handleMove)
+    window.addEventListener('pointerup', handleUp)
+    return () => {
+      window.removeEventListener('pointermove', handleMove)
+      window.removeEventListener('pointerup', handleUp)
+    }
+  }, [isDragging])
+
+  function handleButtonClick() {
+    if (hasDraggedRef.current) return
+    setIsOpen((v) => !v)
+  }
+
+  async function handleStart() {
+    if (!concept.trim()) return
+    setIsStarting(true)
+    setErrorMessage(null)
+    try {
+      const format =
+        formatType === 'film'
+          ? { type: 'film', runtimeMinutes: 120 }
+          : { type: formatType, episodeCount: Number(episodeCount), episodeMinutes: Number(episodeMinutes) }
+
+      const response = await fetch(`${BACKEND_URL}/api/auto-pipeline/start`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ concept, format, dialogueLanguage }),
+      })
+      const data = await response.json()
+      if (!response.ok) {
+        setErrorMessage(data.error || t.genericError)
+        setIsStarting(false)
+        return
+      }
+      notifiedRef.current = false
+      setStatus(null)
+      setRunId(String(data.runId))
+      try {
+        localStorage.setItem(AUTO_PIPELINE_RUN_ID_STORAGE_KEY, String(data.runId))
+      } catch {
+        // per-viewer convenience only
+      }
+    } catch {
+      setErrorMessage(t.genericError)
+    }
+    setIsStarting(false)
+  }
+
+  function handleStartNew() {
+    setRunId(null)
+    setStatus(null)
+    setErrorMessage(null)
+    setConcept('')
+    try {
+      localStorage.removeItem(AUTO_PIPELINE_RUN_ID_STORAGE_KEY)
+    } catch {
+      // per-viewer convenience only
+    }
+  }
+
+  if (currentUser?.role !== 'admin') return null
+
+  return (
+    <>
+      <button
+        type="button"
+        className="floating-agent-button"
+        style={{ left: position.x, top: position.y }}
+        onPointerDown={handlePointerDown}
+        onClick={handleButtonClick}
+        title={t.floatingAgentTitle}
+      >
+        {ICONS.lightbulb}
+      </button>
+
+      {isOpen && (
+        <div
+          className="floating-agent-panel"
+          style={{ left: Math.min(position.x, Math.max(16, window.innerWidth - 340)), top: Math.max(16, position.y - 440) }}
+        >
+          <div className="floating-agent-header">
+            <strong>{t.floatingAgentTitle}</strong>
+            <button type="button" className="floating-agent-close" onClick={() => setIsOpen(false)}>×</button>
+          </div>
+
+          {!runId && (
+            <div className="floating-agent-form">
+              <textarea
+                placeholder={t.floatingAgentConceptPlaceholder}
+                value={concept}
+                onChange={(e) => setConcept(e.target.value)}
+              />
+              <select value={formatType} onChange={(e) => setFormatType(e.target.value)}>
+                <option value="vertical">{t.verticalDramaOption}</option>
+                <option value="series">{t.seriesOption}</option>
+                <option value="film">{t.filmOption}</option>
+              </select>
+              {formatType !== 'film' && (
+                <div className="floating-agent-row">
+                  <input
+                    type="number"
+                    min="1"
+                    value={episodeCount}
+                    onChange={(e) => setEpisodeCount(e.target.value)}
+                    placeholder={t.episodeCountLabel}
+                  />
+                  <input
+                    type="number"
+                    min="0.1"
+                    step="0.1"
+                    value={episodeMinutes}
+                    onChange={(e) => setEpisodeMinutes(e.target.value)}
+                    placeholder={t.episodeMinutesLabel}
+                  />
+                </div>
+              )}
+              <select value={dialogueLanguage} onChange={(e) => setDialogueLanguage(e.target.value)}>
+                <option value="en">{t.dialogueLanguageEnglish}</option>
+                <option value="or">{t.dialogueLanguageOdia}</option>
+                <option value="hi">{t.dialogueLanguageHindi}</option>
+              </select>
+              {errorMessage && <p className="feedback-note">{errorMessage}</p>}
+              <button type="button" className="choose-button" onClick={handleStart} disabled={isStarting || !concept.trim()}>
+                {isStarting ? t.floatingAgentStarting : t.floatingAgentStartButton}
+              </button>
+            </div>
+          )}
+
+          {runId && status?.status === 'running' && (
+            <div className="floating-agent-progress">
+              <p>{t.floatingAgentStageLabel}: {status.progressStage}</p>
+              {status.reviewNotes?.length > 0 && (
+                <ul className="floating-agent-notes">
+                  {status.reviewNotes.slice(-5).map((note, i) => (
+                    <li key={i}>{note.note}</li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          )}
+
+          {runId && status?.status === 'completed' && (
+            <div className="floating-agent-progress">
+              <p>{t.floatingAgentDoneLabel}</p>
+              <a
+                className="choose-button floating-agent-download"
+                href={`${BACKEND_URL}/api/auto-pipeline/${runId}/screenplay-pdf`}
+                target="_blank"
+                rel="noreferrer"
+              >
+                {t.floatingAgentDownloadButton}
+              </a>
+              <button type="button" className="cancel-button" onClick={handleStartNew}>
+                {t.floatingAgentNewRunButton}
+              </button>
+            </div>
+          )}
+
+          {runId && status?.status === 'failed' && (
+            <div className="floating-agent-progress">
+              <p className="feedback-note">{status.error}</p>
+              <button type="button" className="cancel-button" onClick={handleStartNew}>
+                {t.floatingAgentNewRunButton}
+              </button>
+            </div>
+          )}
+
+          {runId && !status && !errorMessage && <p className="sidebar-section-note">{t.loadingLabel}</p>}
+        </div>
+      )}
+    </>
   )
 }
 
@@ -6186,6 +6485,7 @@ function App() {
 
   return (
     <div className="app-shell">
+      <FloatingAgentWidget currentUser={currentUser} t={t} onRunCompleted={() => loadProjectList()} />
       <div className="mobile-topbar">
         <button className="mobile-menu-button" onClick={() => setIsSidebarOpen(true)} aria-label={t.openMenuLabel}>
           ☰

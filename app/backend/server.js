@@ -530,6 +530,10 @@ const SCREENPLAY_BASE_PROMPT = `You are the Story & Screenplay Agent, specializi
 
 Action lines, scene description, and transitions are ALWAYS written in plain English, no matter what language the dialogue below is in — never translate these into Odia or Hindi. A character's name is a proper noun and always stays in English/Latin script. Action lines should be visual and concise, present tense, no camera angles or editing directions like "ANGLE ON" or "CLOSE ON". Stay consistent with any character names and voice already established in earlier scenes you're shown.
 
+NEVER write the scene heading/slugline (e.g. "INT. KITCHEN - NIGHT") as one of your elements — the app already displays that heading on its own, separately from your content. Your very first element must jump straight into actual action or dialogue, never restate where or when the scene takes place.
+
+AVOID reflexive genre-stock description shorthand — phrases like "eyes narrow", "jaw clenches", "marble floor", "victorious smile", or any other generic gesture reached for on autopilot. Ground each scene's action description in specific, concrete, sensory detail unique to THIS scene's actual location, character, and moment, never an interchangeable stock line that could be pasted into any other scene in the story. If you're shown phrases already overused earlier in this same story below, do not reuse them or close variants — find a fresh, specific way to convey the same beat.
+
 Use "characterModifier" on a dialogue element when it genuinely applies: "CONT'D" if the same character keeps speaking after a brief action beat interrupted them without leaving the scene, "O.S." if they're heard but not seen on screen, "V.O." for narration, an inner thought, or a phone/recording voice, "ECHOING" for a remembered line from a past scene or a character who isn't physically present, replaying in another character's mind (distinct from V.O. — this is specifically a memory echoing back, not present-tense narration). Use "none" otherwise — most dialogue needs no modifier.
 
 You may add a "flashback" element when a brief memory genuinely intrudes on the present scene: give "character" as whose POV/memory it is, and "text" describing what's remembered (rendered as "FLASH - [CHARACTER]'S POV:" followed by the description, always in English). An ECHOING dialogue element often follows a flashback element, giving voice to what's being remembered. You may also add ONE "transition" element (text like "CUT TO:", "CUT FLASH:", "TRANSITION SHOT.", "MATCH CUT TO:", or "DISSOLVE TO:") at the very end of a scene's elements, but only when a specific transition is dramatically meaningful, not as routine punctuation on every scene. Transition text is a technical screenplay marker, always in English, never translated.`;
@@ -5211,12 +5215,20 @@ function elementsToPlainText(elements) {
 // doesn't apply — this strips stray foreign-script characters using the
 // element's OWN language instead: action/transition/flashback text is always
 // English, while dialogue/parenthetical follow the scene's dialogueLanguage.
+// A slugline the model sometimes writes as its own first line (e.g. "INT.
+// KITCHEN - NIGHT") even though the app always renders the scene heading
+// itself — left in, it shows up as a visible duplicate heading (once in the
+// model's own casing, once in the app's own ALL-CAPS render) in the exported
+// script. The base prompt now tells the model not to do this; this is the
+// defensive backstop for whenever it does anyway.
+const SLUGLINE_REGEX = /^\s*(INT|EXT)\b/i;
+
 function sanitizeScreenplayElements(elements, dialogueLanguage) {
   const dialogueRegex =
     dialogueLanguage === "or" ? FOREIGN_SCRIPT_REGEX : dialogueLanguage === "hi" ? HI_FOREIGN_SCRIPT_REGEX : EN_FOREIGN_SCRIPT_REGEX;
   const clean = (text, regex) => (typeof text === "string" ? text.replace(regex, "").replace(/ {2,}/g, " ").trim() : text);
 
-  return (elements ?? []).map((element) => {
+  const cleaned = (elements ?? []).map((element) => {
     const isDialogue = element.type === "dialogue";
     return {
       ...element,
@@ -5224,6 +5236,12 @@ function sanitizeScreenplayElements(elements, dialogueLanguage) {
       parenthetical: element.parenthetical != null ? clean(element.parenthetical, dialogueRegex) : element.parenthetical,
     };
   });
+
+  if (cleaned.length > 0 && cleaned[0].type !== "dialogue" && SLUGLINE_REGEX.test(cleaned[0].text ?? "")) {
+    cleaned.shift();
+  }
+
+  return cleaned;
 }
 
 // Builds the full screenplay content — action lines and dialogue — for ONE
@@ -5255,7 +5273,94 @@ function countScreenplayWords(elements) {
   }, 0);
 }
 
-async function generateScreenplaySceneContent(deck, allScenes, sceneIndex, previousElements, controllingIdea, revision, dialogueLanguage) {
+// Joins just the action/flashback description text of a scene (never
+// dialogue — characters repeating a catchphrase is normal, generic stock
+// gestures reused in every scene's ACTION lines is the actual problem the
+// external reviews flagged, e.g. "marble floor" turning up 46 times).
+function collectActionText(elements) {
+  return (elements ?? [])
+    .filter((element) => element.type === "action" || element.type === "flashback")
+    .map((element) => element.text || "")
+    .join(" ");
+}
+
+// 3- and 4-word phrases, lowercased and stripped of punctuation — coarse but
+// cheap (pure string processing, no AI call) and good enough to catch the
+// kind of reused stock description a full read-through would notice.
+function actionPhraseNgrams(text) {
+  const words = text
+    .toLowerCase()
+    .replace(/[^a-z0-9\s']/g, "")
+    .split(/\s+/)
+    .filter(Boolean);
+  const ngrams = [];
+  for (const n of [3, 4]) {
+    for (let i = 0; i + n <= words.length; i++) {
+      ngrams.push(words.slice(i, i + n).join(" "));
+    }
+  }
+  return ngrams;
+}
+
+// Tracks how often each description phrase has been used so far in one
+// auto-pipeline run, so (a) new scenes can be told which phrases to avoid
+// reusing, and (b) the final quality pass can point at exactly which ones
+// became overused across the finished script.
+function createPhraseTracker() {
+  const counts = new Map();
+  return {
+    counts,
+    recordText(text) {
+      for (const gram of actionPhraseNgrams(text)) {
+        counts.set(gram, (counts.get(gram) ?? 0) + 1);
+      }
+    },
+    recordElements(elements) {
+      this.recordText(collectActionText(elements));
+    },
+    topOverused(limit = 10, minCount = 2) {
+      return [...counts.entries()]
+        .filter(([, count]) => count >= minCount)
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, limit)
+        .map(([phrase]) => phrase);
+    },
+  };
+}
+
+// Reviewer (deterministic, not AI, and — unlike the sampled dialogue-
+// authenticity reviewer below — run once against the ENTIRE finished
+// screenplay rather than a handful of scenes, since cross-episode repetition
+// is exactly the kind of pattern a per-scene sample structurally can't see.
+function reviewScreenplayRepetition(sceneRows) {
+  const tracker = createPhraseTracker();
+  const perScene = sceneRows.map((row) => {
+    const text = collectActionText(row.content?.elements);
+    tracker.recordText(text);
+    return { row, text: text.toLowerCase() };
+  });
+
+  // Scales with script size — a 6-scene short shouldn't need the same
+  // tolerance as a 50-episode series with hundreds of scenes.
+  const threshold = Math.max(4, Math.round(sceneRows.length * 0.08));
+  const overusedPhrases = tracker.topOverused(12, threshold);
+
+  if (overusedPhrases.length === 0) {
+    return { needsRevision: false, issues: [], overusedPhrases: [], offendingScenes: [] };
+  }
+
+  const offendingScenes = perScene
+    .filter(({ text }) => overusedPhrases.some((phrase) => text.includes(phrase)))
+    .map(({ row }) => row);
+
+  const issues = overusedPhrases.map(
+    (phrase) => `The description "${phrase}" is reused ${tracker.counts.get(phrase)} times across the screenplay — too repetitive, needs varied phrasing.`
+  );
+
+  return { needsRevision: true, issues, overusedPhrases, offendingScenes };
+}
+
+async function generateScreenplaySceneContent(deck, allScenes, sceneIndex, previousElements, controllingIdea, revision, dialogueLanguage, avoidPhrases) {
   const targetScene = allScenes[sceneIndex];
   const outlineText = allScenes.map((scene, index) => sceneOutlineLine(scene, index)).join("\n");
   const suggestedWords = suggestScreenplayWordCount(targetScene.estimatedMinutes);
@@ -5272,6 +5377,10 @@ async function generateScreenplaySceneContent(deck, allScenes, sceneIndex, previ
 
   if (revision) {
     contents += `\n\nThis is a REVISION of a previous draft of this scene. The Screenplay Writer reviewed it and requested changes.\nPrevious draft:\n${elementsToPlainText(revision.previous.elements)}\nFeedback: "${revision.feedback}"\nRevise the scene to address the feedback directly.`;
+  }
+
+  if (avoidPhrases?.length > 0) {
+    contents += `\n\nDescriptive phrases already overused earlier in this same story — do NOT reuse these or close variants, find a fresh, specific way to convey the same beat:\n${avoidPhrases.join(", ")}`;
   }
 
   async function callGemini(promptContents) {
@@ -10493,7 +10602,7 @@ async function reviewDialogueAuthenticity(elements, dialogueLanguage) {
   const languageLabel = dialogueLanguage === "or" ? "Odia" : dialogueLanguage === "hi" ? "Hindi" : "English";
   const response = await ai.models.generateContent({
     model: "gemini-flash-lite-latest",
-    contents: `You are reviewing dialogue from a screenplay scene for natural, authentic ${languageLabel} speech. Here are the dialogue lines:\n\n${dialogueLines}\n\nFlag it if the dialogue sounds stiff, overly formal/literary, like a textbook translation, or if every character sounds the same regardless of who they are. Real spoken dialogue is casual, has natural rhythm, and different characters sound different from each other. If it genuinely reads as natural and authentic, return no issues.`,
+    contents: `You are reviewing dialogue from a screenplay scene for natural, authentic ${languageLabel} speech. Here are the dialogue lines:\n\n${dialogueLines}\n\nFlag it if the dialogue sounds stiff, overly formal/literary, like a textbook translation, or if every character sounds the same regardless of who they are. Also flag it if it's EXPOSITORY — a character or narrator (V.O.) stating an emotion, motivation, or plot point outright ("I feel so betrayed", "She must not find out about the merger") instead of revealing it through what's said, withheld, or done; real people rarely announce their own feelings that plainly. Real spoken dialogue is casual, has natural rhythm, shows feeling through behavior and subtext rather than announcing it, and different characters sound different from each other. If it genuinely reads as natural, authentic, and shown rather than told, return no issues.`,
     config: {
       systemInstruction: "You are a meticulous script supervisor reviewing dialogue authenticity. Be strict but fair.",
       responseMimeType: "application/json",
@@ -10701,15 +10810,24 @@ async function runAutoPipeline(runId, conceptText, format, dialogueLanguage) {
 
     await updateAutoPipelineRun(runId, { progress_stage: "screenplay" });
 
+    // Shared across every scene/episode of this one run (episodes write
+    // concurrently, but JS's single-threaded event loop means plain
+    // read-then-append on this Map is safe — an approximate, best-effort
+    // avoid-list is all this needs to be useful) so later scenes get warned
+    // off phrases already leaned on earlier in the same script.
+    const phraseTracker = createPhraseTracker();
+
     async function writeEpisodeScenes(scenes, episodeIndex) {
       let previousElements = null;
       for (let sceneIndex = 0; sceneIndex < scenes.length; sceneIndex++) {
+        const avoidPhrases = phraseTracker.topOverused();
         let content = await generateScreenplaySceneContent(
-          deck, scenes, sceneIndex, previousElements, sceneList.controllingIdea, undefined, dialogueLanguage
+          deck, scenes, sceneIndex, previousElements, sceneList.controllingIdea, undefined, dialogueLanguage, avoidPhrases
         );
         // Spot-check dialogue authenticity on just the first scene of every
         // 5th episode (or every 5th scene for a film) — enough to catch a
-        // systemic problem without a per-scene AI review cost.
+        // systemic problem without a per-scene AI review cost. Whole-script
+        // repetition is caught separately below, after every scene is written.
         if (sceneIndex === 0 && episodeIndex % 5 === 0) {
           const stageLabel = episodeIndex === null ? "screenplay" : `screenplay-ep${episodeIndex + 1}`;
           for (let round = 0; round < MAX_AUTO_PIPELINE_REVISION_ROUNDS; round++) {
@@ -10725,10 +10843,11 @@ async function runAutoPipeline(runId, conceptText, format, dialogueLanguage) {
             const feedback = [...dialogueReview.issues, judged.verdict].filter(Boolean).join(" ");
             content = await generateScreenplaySceneContent(
               deck, scenes, sceneIndex, previousElements, sceneList.controllingIdea,
-              { feedback, previous: content }, dialogueLanguage
+              { feedback, previous: content }, dialogueLanguage, avoidPhrases
             );
           }
         }
+        phraseTracker.recordElements(content.elements);
         await db.query(
           "INSERT INTO screenplay_scenes (scene_list_id, episode_index, scene_index, content) VALUES ($1, $2, $3, $4)",
           [sceneListId, episodeIndex, sceneIndex, JSON.stringify(content)]
@@ -10744,6 +10863,50 @@ async function runAutoPipeline(runId, conceptText, format, dialogueLanguage) {
       );
     } else {
       await writeEpisodeScenes(sceneList.scenes, null);
+    }
+
+    // Final quality gate (Reviewer 4 / judge, reused): every prior review
+    // above only ever looked at a sample of individual scenes, so a stock
+    // phrase reused dozens of times across a 50+ episode script — exactly
+    // what real editorial passes on this pipeline's output flagged — could
+    // never be caught until now. This is the one pass that reads the WHOLE
+    // finished screenplay and can trigger a targeted rewrite of just the
+    // worst-offending scenes rather than a full regeneration.
+    await updateAutoPipelineRun(runId, { progress_stage: "quality-pass" });
+    for (let round = 0; round < MAX_AUTO_PIPELINE_REVISION_ROUNDS; round++) {
+      const allScenesResult = await db.query(
+        `SELECT DISTINCT ON (episode_index, scene_index) id, episode_index, scene_index, content
+         FROM screenplay_scenes WHERE scene_list_id = $1
+         ORDER BY episode_index, scene_index, created_at DESC`,
+        [sceneListId]
+      );
+      const repetitionReview = reviewScreenplayRepetition(allScenesResult.rows);
+      const summary = `${allScenesResult.rows.length} scenes checked across the full finished screenplay for reused stock description.`;
+      const judged = await scorePipelineStage("Screenplay prose variety (full script)", summary, repetitionReview.issues);
+      await appendAutoPipelineNote(runId, "screenplay", `Judge score: ${judged.score}/10 — ${judged.verdict}`);
+      if (judged.score >= 8 || repetitionReview.offendingScenes.length === 0 || round === MAX_AUTO_PIPELINE_REVISION_ROUNDS - 1) break;
+
+      // Cap how many scenes get rewritten in one round — a handful of the
+      // worst offenders is enough to break the pattern without redoing the
+      // whole script every round.
+      const scenesToRewrite = repetitionReview.offendingScenes.slice(0, 15);
+      for (const row of scenesToRewrite) {
+        const scenesForEpisode =
+          row.episode_index === null ? sceneList.scenes : sceneList.episodeScenes[row.episode_index].scenes;
+        const revised = await generateScreenplaySceneContent(
+          deck, scenesForEpisode, row.scene_index, null, sceneList.controllingIdea,
+          {
+            feedback: `This scene reuses generic description already overused elsewhere in the script: ${repetitionReview.overusedPhrases.join(", ")}. Rewrite the action lines with fresh, specific description grounded in this scene's own moment.`,
+            previous: row.content,
+          },
+          dialogueLanguage,
+          repetitionReview.overusedPhrases
+        );
+        await db.query(
+          "INSERT INTO screenplay_scenes (scene_list_id, episode_index, scene_index, content) VALUES ($1, $2, $3, $4)",
+          [sceneListId, row.episode_index, row.scene_index, JSON.stringify(revised)]
+        );
+      }
     }
 
     await updateAutoPipelineRun(runId, { status: "completed", progress_stage: "done" });

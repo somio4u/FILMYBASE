@@ -312,6 +312,7 @@ const LABELS = {
       'bit-sheet': 'Breaking it into beats',
       'scene-list': 'Writing the scene list',
       screenplay: 'Writing the screenplay',
+      'quality-pass': 'Final quality pass — checking for repetition',
       done: 'Done',
     },
     floatingAgentSecondsSuffix: 's',
@@ -787,6 +788,7 @@ const LABELS = {
       'bit-sheet': 'ବିଟ୍ ସିଟ୍ ତିଆରି ହେଉଛି',
       'scene-list': 'ଦୃଶ୍ୟ ତାଲିକା ଲେଖାଯାଉଛି',
       screenplay: 'ସ୍କ୍ରିନପ୍ଲେ ଲେଖାଯାଉଛି',
+      'quality-pass': 'ଚୂଡ଼ାନ୍ତ ଗୁଣବତ୍ତା ଯାଞ୍ଚ — ପୁନରାବୃତ୍ତି ଯାଞ୍ଚ ହେଉଛି',
       done: 'ସମାପ୍ତ',
     },
     floatingAgentSecondsSuffix: 'ସେ',
@@ -1478,7 +1480,7 @@ function floatingAgentFramesFor(runStatus) {
 // in this fixed sequence, so the panel can show an actual filling progress
 // bar (not just a spinner) even though we don't have finer-grained percent
 // data from the server.
-const AUTO_PIPELINE_STAGE_ORDER = ['starting', 'storylines', 'pitch-deck', 'character-sheet', 'three-act', 'bit-sheet', 'scene-list', 'screenplay', 'done']
+const AUTO_PIPELINE_STAGE_ORDER = ['starting', 'storylines', 'pitch-deck', 'character-sheet', 'three-act', 'bit-sheet', 'scene-list', 'screenplay', 'quality-pass', 'done']
 
 function autoPipelineProgressPercent(stage) {
   const index = AUTO_PIPELINE_STAGE_ORDER.indexOf(stage)

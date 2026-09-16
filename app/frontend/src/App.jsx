@@ -1301,39 +1301,53 @@ function defaultTentativeStartDate() {
   return d.toISOString().slice(0, 10)
 }
 
-function ScreenplayElements({ elements }) {
+// Scenes written before dialogue language became a per-scene choice stored
+// text/parenthetical as {en, or, hi} bilingual objects, not plain strings —
+// rendering one of those objects directly as a JSX child crashes React
+// ("Objects are not valid as a React child"), taking down the whole app.
+// This normalizes either shape so older, already-written scenes keep
+// displaying (in the app's current language toggle) alongside new ones.
+function screenplayText(value, language) {
+  if (typeof value === 'string') return value
+  if (value && typeof value === 'object') return value[language] ?? value.en ?? value.or ?? value.hi ?? ''
+  return ''
+}
+
+function ScreenplayElements({ elements, language }) {
   return (
     <div className="screenplay-elements">
       {elements.map((element, index) => {
+        const text = screenplayText(element.text, language)
+        const parenthetical = screenplayText(element.parenthetical, language)
         if (element.type === 'dialogue') {
           const modifier = element.characterModifier && element.characterModifier !== 'none' ? ` (${element.characterModifier})` : ''
           return (
             <div key={index} className="screenplay-dialogue">
               <p className="screenplay-character">{element.character}{modifier}</p>
-              {element.parenthetical && (
-                <p className="screenplay-parenthetical">({element.parenthetical})</p>
+              {parenthetical && (
+                <p className="screenplay-parenthetical">({parenthetical})</p>
               )}
-              <p className="screenplay-dialogue-text">{element.text}</p>
+              <p className="screenplay-dialogue-text">{text}</p>
             </div>
           )
         }
         if (element.type === 'transition') {
           return (
             <p key={index} className="screenplay-transition">
-              {element.text}
+              {text}
             </p>
           )
         }
         if (element.type === 'flashback') {
           return (
             <p key={index} className="screenplay-flashback">
-              <strong>FLASH - {element.character}'S POV:</strong> {element.text}
+              <strong>FLASH - {element.character}'S POV:</strong> {text}
             </p>
           )
         }
         return (
           <p key={index} className="screenplay-action">
-            {element.text}
+            {text}
           </p>
         )
       })}
@@ -1341,7 +1355,7 @@ function ScreenplayElements({ elements }) {
   )
 }
 
-function ScreenplayBlock({ episodeIndex, sceneIndex, t, screenplay }) {
+function ScreenplayBlock({ episodeIndex, sceneIndex, t, language, screenplay }) {
   if (!screenplay) return null
 
   const key = screenplayKey(episodeIndex, sceneIndex)
@@ -1377,7 +1391,7 @@ function ScreenplayBlock({ episodeIndex, sceneIndex, t, screenplay }) {
 
   return (
     <div className="screenplay-block">
-      <ScreenplayElements elements={draft.elements} />
+      <ScreenplayElements elements={draft.elements} language={language} />
 
       {draft.previousFeedback && (
         <p className="feedback-note">
@@ -1719,7 +1733,7 @@ function SceneRows({ scenes, t, language, episodeIndex, screenplay }) {
         )}
         <p>{scene.oneLiner[language]}</p>
         {scene.turn && <p className="scene-turn">{t.sceneTurnLabel}: {scene.turn[language]}</p>}
-        <ScreenplayBlock episodeIndex={episodeIndex} sceneIndex={index} t={t} screenplay={screenplay} />
+        <ScreenplayBlock episodeIndex={episodeIndex} sceneIndex={index} t={t} language={language} screenplay={screenplay} />
       </div>
     )
   })

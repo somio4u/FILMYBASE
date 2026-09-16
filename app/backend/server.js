@@ -5046,9 +5046,23 @@ function sceneOutlineLine(scene, index) {
   return `Scene ${index + 1} (Act ${scene.actNumber}, ${scene.intExt}. ${scene.location.en} - ${scene.timeOfDay}): ${scene.oneLiner.en}`;
 }
 
+// Scenes written before dialogue language became a per-scene choice stored
+// text as a {en, or, hi} bilingual object, not a plain string — reading
+// those old rows as if text were already a string just stringifies the
+// object ("[object Object]") into whatever prompt consumes it. This reads
+// either shape.
+function screenplayElementText(value) {
+  if (typeof value === "string") return value;
+  if (value && typeof value === "object") return value.en ?? value.or ?? value.hi ?? "";
+  return "";
+}
+
 function elementsToPlainText(elements) {
   return elements
-    .map((element) => (element.type === "dialogue" ? `${element.character}: ${element.text}` : element.text))
+    .map((element) => {
+      const text = screenplayElementText(element.text);
+      return element.type === "dialogue" ? `${element.character}: ${text}` : text;
+    })
     .join("\n");
 }
 
@@ -5360,7 +5374,10 @@ async function buildBreakdownSourceText(sceneList, sceneListId) {
       .map((row) => {
         const elements = row.content.elements ?? [];
         const body = elements
-          .map((el) => (el.type === "dialogue" ? `${el.character}: ${el.text}` : el.text))
+          .map((el) => {
+            const text = screenplayElementText(el.text);
+            return el.type === "dialogue" ? `${el.character}: ${text}` : text;
+          })
           .join("\n");
         return `Scene ${row.scene_index + 1}:\n${body}`;
       })

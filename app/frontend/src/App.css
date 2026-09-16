@@ -601,9 +601,20 @@ button, input, textarea, select {
 }
 
 .sidebar-lang-toggle {
-  margin-top: auto;
   display: flex;
   gap: 8px;
+  margin: 12px 0;
+}
+
+.lang-select {
+  width: 100%;
+  padding: 8px 12px;
+  font-size: 13px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  background: var(--bg-surface-raised);
+  color: var(--text-primary);
+  cursor: pointer;
 }
 
 .chat-viewport {
@@ -783,22 +794,6 @@ button, input, textarea, select {
   display: flex;
   gap: 8px;
   margin-bottom: 16px;
-}
-
-.lang-button {
-  padding: 6px 14px;
-  font-size: 13px;
-  border: 1px solid var(--border-subtle);
-  border-radius: 20px;
-  background: transparent;
-  color: var(--text-secondary);
-  cursor: pointer;
-}
-
-.lang-button.active {
-  background: var(--bg-surface-raised);
-  color: var(--text-primary);
-  border-color: var(--border-strong);
 }
 
 .concept-textarea {

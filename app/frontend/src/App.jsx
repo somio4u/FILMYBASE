@@ -189,9 +189,10 @@ const LABELS = {
     storylineSuggestions: 'Storyline suggestions:',
     optionLabel: (n) => `Option ${n}`,
     chooseThisOne: 'Choose this one',
-    formatQuestion: 'Is this a film or a web series?',
+    formatQuestion: 'Is this a film, a web series, or a vertical drama?',
     filmOption: 'Film',
     seriesOption: 'Web Series',
+    verticalDramaOption: 'Vertical Drama',
     episodeCountLabel: 'Number of episodes',
     episodeMinutesLabel: 'Minutes per episode',
     runtimeMinutesLabel: 'Total runtime (minutes)',
@@ -210,8 +211,10 @@ const LABELS = {
     exportAsPdf: 'Download Presentation',
     formatFilm: 'FEATURE FILM',
     formatSeries: (count, minutes) => `WEB SERIES · ${count} EPISODES × ${minutes} MIN EACH`,
+    formatVertical: (count, minutes) => `VERTICAL DRAMA · ${count} EPISODES × ${minutes} MIN EACH`,
     episodeBreakdown: 'Episode Breakdown',
     episodeLabel: 'Episode',
+    hookLabel: 'Hook',
     genericError: 'Something went wrong. Please wait a moment and try again.',
     missingCharacterNamePlaceholder: 'Missed a character? Type their name…',
     addMissingCharacterButton: 'Add Character',
@@ -636,9 +639,10 @@ const LABELS = {
     storylineSuggestions: 'କାହାଣୀ ପ୍ରସ୍ତାବ:',
     optionLabel: (n) => `ବିକଳ୍ପ ${n}`,
     chooseThisOne: 'ଏହାକୁ ବାଛନ୍ତୁ',
-    formatQuestion: 'ଏହା ଏକ ଚଳଚ୍ଚିତ୍ର ଅଥବା ୱେବ ସିରିଜ୍?',
+    formatQuestion: 'ଏହା ଏକ ଚଳଚ୍ଚିତ୍ର, ୱେବ ସିରିଜ୍ କିମ୍ବା ଭର୍ଟିକାଲ୍ ଡ୍ରାମା?',
     filmOption: 'ଚଳଚ୍ଚିତ୍ର',
     seriesOption: 'ୱେବ ସିରିଜ୍',
+    verticalDramaOption: 'ଭର୍ଟିକାଲ୍ ଡ୍ରାମା',
     episodeCountLabel: 'ପର୍ବ ସଂଖ୍ୟା',
     episodeMinutesLabel: 'ପ୍ରତି ପର୍ବ ମିନିଟ୍',
     runtimeMinutesLabel: 'ସମୁଦାୟ ଅବଧି (ମିନିଟ୍)',
@@ -657,8 +661,10 @@ const LABELS = {
     exportAsPdf: 'ପ୍ରେଜେଣ୍ଟେଶନ୍ ଡାଉନଲୋଡ୍ କରନ୍ତୁ',
     formatFilm: 'ପୂର୍ଣ୍ଣ ଚଳଚ୍ଚିତ୍ର',
     formatSeries: (count, minutes) => `ୱେବ ସିରିଜ୍ · ${count} ପର୍ବ × ${minutes} ମିନିଟ୍ ପ୍ରତି`,
+    formatVertical: (count, minutes) => `ଭର୍ଟିକାଲ୍ ଡ୍ରାମା · ${count} ପର୍ବ × ${minutes} ମିନିଟ୍ ପ୍ରତି`,
     episodeBreakdown: 'ପର୍ବ ବିବରଣୀ',
     episodeLabel: 'ପର୍ବ',
+    hookLabel: 'ହୁକ୍',
     genericError: 'କିଛି ଭୁଲ ହେଲା। ଦୟାକରି ଅଳ୍ପ ସମୟ ଅପେକ୍ଷା କରି ପୁନଃ ଚେଷ୍ଟା କରନ୍ତୁ।',
     missingCharacterNamePlaceholder: 'ଏକ ଚରିତ୍ର ଛାଡ଼ିଗଲା କି? ତାହାର ନାମ ଲେଖନ୍ତୁ…',
     addMissingCharacterButton: 'ଚରିତ୍ର ଯୋଡ଼ନ୍ତୁ',
@@ -913,6 +919,9 @@ const LABELS = {
 function formatBadgeText(format, t) {
   if (format?.type === 'series') {
     return t.formatSeries(format.episodeCount, format.episodeMinutes)
+  }
+  if (format?.type === 'vertical') {
+    return t.formatVertical(format.episodeCount, format.episodeMinutes)
   }
   return t.formatFilm
 }
@@ -2885,7 +2894,9 @@ function InlineCastAttachment({
       const message =
         language === 'or'
           ? `ନମସ୍କାର ${member.name}! "${linkKey}"${projectTitle ? ` (${projectTitle})` : ''} ଚରିତ୍ର ପାଇଁ ଆପଣଙ୍କର ଦୃଶ୍ୟଗୁଡ଼ିକ ଏଠାରେ ଅଛି। ଦୟାକରି ଏହାକୁ ଦେଖନ୍ତୁ ଏବଂ ପ୍ରସ୍ତୁତ ହେଲେ ଏକ ସେଲ୍ଫ-ଟେପ୍ ଅଡିସନ୍ ପଠାନ୍ତୁ:\n${data.url}`
-          : `Hi ${member.name}! Here are your scenes as "${linkKey}"${projectTitle ? ` for "${projectTitle}"` : ''}. Please go through them and send a self-tape when you're ready:\n${data.url}`
+          : language === 'hi'
+            ? `नमस्ते ${member.name}! "${linkKey}"${projectTitle ? ` (${projectTitle})` : ''} किरदार के लिए आपके दृश्य यहाँ हैं। कृपया इन्हें देखें और तैयार होने पर एक सेल्फ-टेप ऑडिशन भेजें:\n${data.url}`
+            : `Hi ${member.name}! Here are your scenes as "${linkKey}"${projectTitle ? ` for "${projectTitle}"` : ''}. Please go through them and send a self-tape when you're ready:\n${data.url}`
       window.open(`https://wa.me/${phone}?text=${encodeURIComponent(message)}`, '_blank')
     } catch {
       alert(t.whatsAppShareLinkErrorNotice)
@@ -3316,9 +3327,10 @@ function App() {
   const isScopedToOneProject = currentUser?.role !== 'admin'
 
   function buildFormatObject() {
-    return formatType === 'series'
-      ? { type: 'series', episodeCount: Number(episodeCount), episodeMinutes: Number(episodeMinutes) }
-      : { type: 'film', runtimeMinutes: Number(runtimeMinutes) }
+    if (formatType === 'series' || formatType === 'vertical') {
+      return { type: formatType, episodeCount: Number(episodeCount), episodeMinutes: Number(episodeMinutes) }
+    }
+    return { type: 'film', runtimeMinutes: Number(runtimeMinutes) }
   }
 
   async function loadStructureHistory(pitchDeckId) {
@@ -4555,20 +4567,28 @@ function App() {
 
   function blankBreakdownItem(category) {
     if (category === 'locationList') {
-      return { location: { en: '', or: '' }, intExt: 'INT', sceneCount: 1, notes: { en: '', or: '' } }
+      return { location: { en: '', or: '', hi: '' }, intExt: 'INT', sceneCount: 1, notes: { en: '', or: '', hi: '' } }
     }
     if (category === 'costumes') {
-      return { character: '', description: { en: '', or: '' } }
+      return { character: '', description: { en: '', or: '', hi: '' } }
     }
     if (category === 'artistList') {
-      return { label: '', notes: { en: '', or: '' }, age: 'Unspecified', gender: 'Unspecified' }
+      return { label: '', notes: { en: '', or: '', hi: '' }, age: 'Unspecified', gender: 'Unspecified' }
     }
-    return { label: '', notes: { en: '', or: '' } }
+    return { label: '', notes: { en: '', or: '', hi: '' } }
   }
 
   function handleStartEditCategory(category) {
     setEditingBreakdownCategory(category)
-    setBreakdownCategoryDraft(JSON.parse(JSON.stringify(scriptBreakdown[category] ?? [])))
+    const items = JSON.parse(JSON.stringify(scriptBreakdown[category] ?? []))
+    // Older breakdown items generated before Hindi support may be missing
+    // the `hi` key entirely — backfill it so the edit inputs stay controlled.
+    items.forEach((item) => {
+      if (item.location) item.location.hi = item.location.hi ?? ''
+      if (item.notes) item.notes.hi = item.notes.hi ?? ''
+      if (item.description) item.description.hi = item.description.hi ?? ''
+    })
+    setBreakdownCategoryDraft(items)
   }
 
   function handleCancelEditCategory() {
@@ -5234,6 +5254,17 @@ function App() {
                           }))
                         }
                       />
+                      <input
+                        type="text"
+                        placeholder="स्थान (HI)"
+                        value={item.location.hi}
+                        onChange={(e) =>
+                          handleBreakdownDraftFieldChange(index, (it) => ({
+                            ...it,
+                            location: { ...it.location, hi: e.target.value },
+                          }))
+                        }
+                      />
                     </div>
                     <div className="breakdown-edit-field-pair">
                       <select
@@ -5279,6 +5310,16 @@ function App() {
                           }))
                         }
                       />
+                      <textarea
+                        placeholder="टिप्पणी (HI)"
+                        value={item.notes.hi}
+                        onChange={(e) =>
+                          handleBreakdownDraftFieldChange(index, (it) => ({
+                            ...it,
+                            notes: { ...it.notes, hi: e.target.value },
+                          }))
+                        }
+                      />
                     </div>
                   </>
                 ) : category === 'costumes' ? (
@@ -5309,6 +5350,16 @@ function App() {
                           handleBreakdownDraftFieldChange(index, (it) => ({
                             ...it,
                             description: { ...it.description, or: e.target.value },
+                          }))
+                        }
+                      />
+                      <textarea
+                        placeholder="विवरण (HI)"
+                        value={item.description.hi}
+                        onChange={(e) =>
+                          handleBreakdownDraftFieldChange(index, (it) => ({
+                            ...it,
+                            description: { ...it.description, hi: e.target.value },
                           }))
                         }
                       />
@@ -5365,6 +5416,16 @@ function App() {
                           }))
                         }
                       />
+                      <textarea
+                        placeholder="टिप्पणी (HI)"
+                        value={item.notes.hi}
+                        onChange={(e) =>
+                          handleBreakdownDraftFieldChange(index, (it) => ({
+                            ...it,
+                            notes: { ...it.notes, hi: e.target.value },
+                          }))
+                        }
+                      />
                     </div>
                   </>
                 ) : (
@@ -5395,6 +5456,16 @@ function App() {
                           handleBreakdownDraftFieldChange(index, (it) => ({
                             ...it,
                             notes: { ...it.notes, or: e.target.value },
+                          }))
+                        }
+                      />
+                      <textarea
+                        placeholder="टिप्पणी (HI)"
+                        value={item.notes.hi}
+                        onChange={(e) =>
+                          handleBreakdownDraftFieldChange(index, (it) => ({
+                            ...it,
+                            notes: { ...it.notes, hi: e.target.value },
                           }))
                         }
                       />
@@ -5526,7 +5597,11 @@ function App() {
       ...extraSceneRefs,
     ]
     const notesWithCompletion = shotCompletionNote.trim()
-      ? { en: [day.notes?.en, shotCompletionNote.trim()].filter(Boolean).join(' — '), or: day.notes?.or ?? '' }
+      ? {
+          en: [day.notes?.en, shotCompletionNote.trim()].filter(Boolean).join(' — '),
+          or: day.notes?.or ?? '',
+          hi: day.notes?.hi ?? '',
+        }
       : day.notes
 
     try {
@@ -6210,6 +6285,18 @@ function App() {
           style={{ display: 'none' }}
         />
 
+        <div className="sidebar-lang-toggle">
+          <select
+            className="lang-select"
+            value={language}
+            onChange={(e) => setLanguage(e.target.value)}
+          >
+            <option value="en">English</option>
+            <option value="or">ଓଡ଼ିଆ (Odia)</option>
+            <option value="hi">हिन्दी (Hindi)</option>
+          </select>
+        </div>
+
         <div className="sidebar-section">
           <h4 className="sidebar-section-title">{t.agentsSectionTitle}</h4>
           <div className="agent-list">
@@ -6336,20 +6423,6 @@ function App() {
         </div>
         )}
 
-        <div className="sidebar-lang-toggle">
-          <button
-            className={language === 'en' ? 'lang-button active' : 'lang-button'}
-            onClick={() => setLanguage('en')}
-          >
-            English
-          </button>
-          <button
-            className={language === 'or' ? 'lang-button active' : 'lang-button'}
-            onClick={() => setLanguage('or')}
-          >
-            ଓଡ଼ିଆ (Odia)
-          </button>
-        </div>
       </aside>
 
       <main className="chat-viewport">
@@ -6445,9 +6518,23 @@ function App() {
                   />
                   {t.seriesOption}
                 </label>
+                <label className="format-radio">
+                  <input
+                    type="radio"
+                    name="format"
+                    value="vertical"
+                    checked={formatType === 'vertical'}
+                    onChange={() => {
+                      setFormatType('vertical')
+                      setEpisodeCount(60)
+                      setEpisodeMinutes(1.5)
+                    }}
+                  />
+                  {t.verticalDramaOption}
+                </label>
               </div>
 
-              {formatType === 'series' ? (
+              {formatType === 'series' || formatType === 'vertical' ? (
                 <div className="episode-fields">
                   <label>
                     {t.episodeCountLabel}
@@ -6462,7 +6549,8 @@ function App() {
                     {t.episodeMinutesLabel}
                     <input
                       type="number"
-                      min="1"
+                      min="0.1"
+                      step="0.1"
                       value={episodeMinutes}
                       onChange={(e) => setEpisodeMinutes(e.target.value)}
                     />
@@ -6655,6 +6743,9 @@ function App() {
                 <div key={index} className="episode-card">
                   <strong>{t.episodeLabel} {index + 1}: {episode.title[language]}</strong>
                   <p>{episode.synopsis[language]}</p>
+                  {episode.hook && (
+                    <p className="episode-hook"><strong>{t.hookLabel}:</strong> {episode.hook[language]}</p>
+                  )}
                 </div>
               ))}
             </div>

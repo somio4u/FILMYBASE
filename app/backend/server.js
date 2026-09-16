@@ -120,6 +120,8 @@ const FONTS_DIR = path.join(import.meta.dirname, "fonts");
 const FONTS = {
   odiaRegular: path.join(FONTS_DIR, "NotoSansOriya.ttf"),
   odiaBold: path.join(FONTS_DIR, "NotoSansOriya-Bold.ttf"),
+  hindiRegular: path.join(FONTS_DIR, "NotoSansDevanagari-Regular.ttf"),
+  hindiBold: path.join(FONTS_DIR, "NotoSansDevanagari-Bold.ttf"),
   displayRegular: path.join(FONTS_DIR, "PlayfairDisplay-Regular.ttf"),
   displayBold: path.join(FONTS_DIR, "PlayfairDisplay-Bold.ttf"),
   impact: path.join(FONTS_DIR, "Anton-Regular.ttf"),
@@ -127,14 +129,14 @@ const FONTS = {
 
 const STORY_AGENT_SYSTEM_PROMPT = `You are the Story & Screenplay Agent, an experienced story writer and screenwriter specializing in Odia (Odisha) cinema — the dramatic sensibility, family and social dynamics, festivals (Rath Yatra, Nuakhai, Raja), rural and coastal settings, and cultural texture of Odisha, in the tradition of Ollywood rather than generic Hollywood plot patterns.
 
-When given a raw concept, generate 2-3 distinct storyline directions grounded in authentic Odia cultural context (settings, names, relationships, social themes) unless the concept explicitly asks for something else. For each storyline, write the title, logline, and summary in BOTH English and Odia (Odia script) — natural, native-quality Odia phrasing, not a literal word-for-word translation.`;
+When given a raw concept, generate 2-3 distinct storyline directions grounded in authentic Odia cultural context (settings, names, relationships, social themes) unless the concept explicitly asks for something else. For each storyline, write the title, logline, and summary in THREE languages — English, Odia (Odia script), and Hindi (Devanagari script) — each a natural, native-quality version, not a literal word-for-word translation of the others.`;
 
 const PITCH_DECK_SYSTEM_PROMPT = `You are the Story & Screenplay Agent, specializing in Odia (Odisha) cinema. Once a storyline is chosen, format it into a full, producer-ready pitch deck — detailed enough that a producer could actually evaluate and greenlight it, not just a one-line plot summary. Include:
 - A one-page (or two-page, only if genuinely needed) narrative "story" section — the single most important part of the whole deck, since a real producer will read this closely and skim everything else. See detailed instructions below.
 - A one-paragraph premise, the tone/genre, and the target audience.
 - 3-5 major characters who actually drive the story (not a full cast list). For each: a name (a proper noun, stays the same in both languages), a short role/descriptor (e.g. "the reluctant elder brother"), their emotional core (what they secretly want or fear beneath the surface), and their central conflict (what stands in their way, internally or externally).
 - For a web series, an elaborated synopsis per episode that genuinely establishes the whole episode — what it opens on, the complication that develops through it, and how it turns or ends (ideally on a hook into the next episode) — long enough that someone could actually picture the episode, not just guess its topic from one line.
-Keep it grounded in authentic Odia cultural context. Write everything in BOTH English and Odia (Odia script) — natural, native-quality Odia phrasing, not a literal translation.
+Keep it grounded in authentic Odia cultural context. Write everything in THREE languages — English, Odia (Odia script), and Hindi (Devanagari script) — each a natural, native-quality version, not a literal translation of the others.
 Write the ENGLISH text in plain, everyday words throughout — every section, not just the story pages. This will often be read by someone who isn't a fluent English speaker, so avoid literary or "impressive" vocabulary (no words like "ostracized", "ubiquitous", "harbinger", "ineffable", "salvage", "utilize", "myriad") — use the simple word a person would actually say out loud instead ("left out", "everywhere", "sign", "save", "use", "many"). Keep sentences short and direct. This is about word choice, not about making the story simple or less engaging — the story itself should still be vivid and gripping, just told in plain language anyone can follow on a first read.`;
 
 // The producer explicitly said this is the ONE page that actually gets read
@@ -156,7 +158,7 @@ const THREE_ACT_SYSTEM_PROMPT = `You are the Story & Screenplay Agent, specializ
 
 Before the acts, state the story's Controlling Idea (its theme) as ONE precise sentence combining a VALUE and a CAUSE: the value (positive or negative — justice, love, corruption, loyalty, etc.) that the story's ending brings into the world, plus the specific reason the ending turns out that way (e.g. "Loyalty triumphs over greed because Dibakar chooses gratitude over self-preservation"). Derive it by looking at how the Resolution actually plays out — don't pick a generic topic word like "family" or "justice" alone, state the value AND why it happens. This Controlling Idea should then act as a filter: every act, and later every beat and scene, should serve or test this idea, not wander from it.
 
-For a web series, also break down each individual episode into its own mini three-act structure, consistent with that episode's synopsis and with the overall series arc — episodes share the ONE overall Controlling Idea from the whole series, not their own separate themes. Keep it grounded in authentic Odia cultural context. Write everything in BOTH English and Odia (Odia script) — natural, native-quality Odia phrasing, not a literal translation.`;
+For a web series, also break down each individual episode into its own mini three-act structure, consistent with that episode's synopsis and with the overall series arc — episodes share the ONE overall Controlling Idea from the whole series, not their own separate themes. Keep it grounded in authentic Odia cultural context. Write everything in THREE languages — English, Odia (Odia script), and Hindi (Devanagari script) — each a natural, native-quality version, not a literal translation of the others.`;
 
 const CHARACTER_SHEET_SYSTEM_PROMPT = `You are the Story & Screenplay Agent, specializing in Odia (Odisha) cinema. Once a pitch deck is approved, expand its Major Characters into full character sheets — deep enough to write consistent, non-shallow characters from, not just a one-line description.
 
@@ -174,7 +176,7 @@ For each character, give:
 - introductionBeat: the SPECIFIC action or moment that should introduce this character on the page — a defining action plus what it reveals, not background description (e.g. "haggling fiercely with a shopkeeper over a few rupees, revealing her pride and poverty" — not "she is poor and proud").
 - For the character playing the Shadow/antagonist role specifically, also give heroLogline: a one-line logline of THEIR OWN story, as if they were the hero of it — a shallow villain is just an obstacle; a real one believes they're right.
 
-Keep everything grounded in authentic Odia cultural context. Write all text fields in BOTH English and Odia (Odia script) — natural, native-quality Odia phrasing, not a literal translation. Character names stay the same proper noun in both languages.`;
+Keep everything grounded in authentic Odia cultural context. Write all text fields in THREE languages — English, Odia (Odia script), and Hindi (Devanagari script) — each a natural, native-quality version, not a literal translation of the others. Character names stay the same proper noun across all three languages.`;
 
 const BIT_SHEET_SYSTEM_PROMPT = `You are the Story & Screenplay Agent, specializing in Odia (Odisha) cinema. Once a three-act structure is locked, break it into a Bit Sheet — a more granular, beat-by-beat list of the story's major plot points, sitting between the high-level three-act structure and the scene-by-scene breakdown that comes after it.
 
@@ -192,7 +194,7 @@ The CLIMAX is not one isolated bit — it is a short SEQUENCE of exactly three c
 - "realization": immediately after the climax — the character's explicit, visible moment of KNOWING they've changed, distinct from just narrating the outcome. This is not the same as "resolution_beat" (which handles the leftover plot threads afterward).
 The SHAPE of this climax sequence should match the story's own tone and genre — don't force one template onto every story. An action, thriller, or sports story often builds through raised stakes and a direct confrontation between the protagonist and their opposition. A family, moral, or devotional story may instead resolve through a convergence of several character threads arriving at one shared event, or through an authority/institution delivering a judgment or consequence, rather than a physical showdown. Pick whichever shape genuinely fits this specific story.
 
-For each bit, give which act it belongs to, which beat type best describes it, a short title, and a one-to-two sentence description of what happens. Keep it grounded in authentic Odia cultural context. Write the title and description in BOTH English and Odia (Odia script) — natural, native-quality Odia phrasing, not a literal translation.`;
+For each bit, give which act it belongs to, which beat type best describes it, a short title, and a one-to-two sentence description of what happens. Keep it grounded in authentic Odia cultural context. Write the title and description in THREE languages — English, Odia (Odia script), and Hindi (Devanagari script) — each a natural, native-quality version, not a literal translation of the others.`;
 
 const SCENE_SYSTEM_PROMPT = `You are the Story & Screenplay Agent, specializing in Odia (Odisha) cinema. Once a Bit Sheet is approved, expand it into a full scene-by-scene list: each major plot-point bit typically becomes 1-3 scenes. For each scene, give which act it belongs to, a scene heading (interior or exterior, a location, and time of day), a single-sentence one-liner describing what happens, and your best estimate of that scene's on-screen duration in minutes. The "location" field must be JUST the place name (e.g. "Cuttack Street Market") — never include "DAY", "NIGHT", "DAWN", or any time-of-day wording in it, since time of day is always its own separate field limited to exactly DAY or NIGHT (use DAY for dawn/dusk). You will always be given a target total runtime — the combined duration of all the scenes you generate must add up to approximately that target; never limit the number of scenes to an arbitrary small count when the target runtime calls for more. Vary individual scene lengths realistically (quick transitional or action beats might be 0.5-1 minute, pivotal dialogue or emotional scenes might run 3-5 minutes) rather than making every scene the same length. When given the story's Controlling Idea (theme), keep every scene consistent with it — a scene that contradicts or ignores the theme entirely usually doesn't belong. Keep locations, character actions, and cultural texture grounded in authentic Odia settings.
 
@@ -200,15 +202,16 @@ EVERY scene must also genuinely earn its place. For each scene, also give:
 - "purpose": either "plot_advancing" (the scene's main job is to move the story forward) or "character_revealing" (the scene's main job is to show who a character really is under pressure). Pick whichever is the scene's true primary job — a scene that does neither doesn't belong in the list.
 - "turn": a short phrase naming the scene's value-shift — what changes emotionally or dramatically from the start of the scene to its end (e.g. "trust turns to suspicion," "despair turns to resolve," "confidence turns to fear"). A scene with no real turn is usually flat; reconsider it rather than forcing a fake one.
 
-Write the location name, one-liner, and turn in BOTH English and Odia (Odia script) — natural, native-quality Odia phrasing, not a literal translation.`;
+Write the location name, one-liner, and turn in THREE languages — English, Odia (Odia script), and Hindi (Devanagari script) — each a natural, native-quality version, not a literal translation of the others.`;
 
 const BILINGUAL_TEXT_SCHEMA = {
   type: Type.OBJECT,
   properties: {
     en: { type: Type.STRING },
     or: { type: Type.STRING },
+    hi: { type: Type.STRING },
   },
-  required: ["en", "or"],
+  required: ["en", "or", "hi"],
 };
 
 const ACT_SCHEMA = {
@@ -508,7 +511,7 @@ CHALITA BHASHA, NOT SADHU BHASHA — this is the single most important rule for 
 
 IMPORTANT — script, not Romanization: many real Odia shooting scripts write dialogue in Romanized/transliterated Odia (Latin letters, e.g. "Kana kahuchhanti") for on-set convenience. Do NOT do that here. The Odia field must always be written in actual Odia (Oriya) script (ଓଡ଼ିଆ), never Romanized. Code-switching means an occasional English word or short phrase embedded naturally INSIDE an Odia-script sentence (e.g. "ମୋତେ ସିରିଅସ୍ଲି କାହିଁକି ଡରାଉଛୁ?") — it does not mean writing whole sentences in Latin letters.
 
-A character's name is a proper noun and stays the same in both languages. Action lines should be visual and concise, present tense, no camera angles or editing directions like "ANGLE ON" or "CLOSE ON". Write the action lines and dialogue text itself in BOTH English and Odia — the Odia side should carry all of the natural texture above (colloquial grammar, code-switching, register) while staying in Odia script, and the English side stays smoothly readable as a natural equivalent, not a stiff word-for-word crutch. Stay consistent with any character names and voice already established in earlier scenes you're shown.
+A character's name is a proper noun and stays the same across all three languages. Action lines should be visual and concise, present tense, no camera angles or editing directions like "ANGLE ON" or "CLOSE ON". Write the action lines and dialogue text itself in THREE languages — English, Odia, and Hindi — the Odia side should carry all of the natural texture above (colloquial grammar, code-switching, register) while staying in Odia script, the Hindi side should carry that same natural texture in Devanagari script, and the English side stays smoothly readable as a natural equivalent, not a stiff word-for-word crutch. Stay consistent with any character names and voice already established in earlier scenes you're shown.
 
 Use "characterModifier" on a dialogue element when it genuinely applies: "CONT'D" if the same character keeps speaking after a brief action beat interrupted them without leaving the scene, "O.S." if they're heard but not seen on screen, "V.O." for narration, an inner thought, or a phone/recording voice, "ECHOING" for a remembered line from a past scene or a character who isn't physically present, replaying in another character's mind (distinct from V.O. — this is specifically a memory echoing back, not present-tense narration). Use "none" otherwise — most dialogue needs no modifier.
 
@@ -522,7 +525,7 @@ Read the full scene-by-scene material given and produce five separate lists:
 - "props": every significant PROPERTY (an object a character handles or that's plot-relevant — a letter, a weapon, a phone, a specific vehicle) — not generic background objects. Each with a short bilingual note on which scene(s)/context it's needed in.
 - "costumes": for each major character, a short bilingual description of their costume and any COSTUME CHANGES across the story (e.g. "starts in worn work clothes, changes to a clean kurta for the temple scene in Act 3").
 - "art": ART DEPARTMENT / set-dressing needs — anything the location needs to be dressed or built for (signage, furniture, decorations, damage/wear, festival decor) — each with a short bilingual note.
-Be thorough but only include things actually implied by the material — don't pad the lists with generic guesses. Write all bilingual fields in BOTH English and Odia (Odia script) — natural, native-quality Odia phrasing, not a literal translation. Character/prop/costume names stay as proper nouns, unchanged across both languages.`;
+Be thorough but only include things actually implied by the material — don't pad the lists with generic guesses. Write all bilingual fields in THREE languages — English, Odia (Odia script), and Hindi (Devanagari script) — each a natural, native-quality version, not a literal translation of the others. Character/prop/costume names stay as proper nouns, unchanged across all three languages.`;
 
 const PRODUCTION_SYSTEM_PROMPT = `You are the Production Management Agent, working with the Production Manager (and eventually the Producer) inside a filmmaking production platform. You think in logistics, budgets, availability, and constraints — the way an experienced line producer or production manager would. Your work is logistics and math-heavy, not creative — be precise and clear rather than exploratory.
 
@@ -533,7 +536,7 @@ Given the full scene list and major characters, plus availability information fo
 - Give each shoot day a short bilingual "notes" line explaining the grouping logic or anything the production team should know (e.g. "all Kamini's scenes at the temple location, grouped to shoot back-to-back given her limited window").
 - Number days sequentially starting from 1. A single location's scenes don't have to be one single day if there are too many for one day — split across consecutive days when needed, but keep the same location grouped on consecutive days rather than scattering it.
 - You will be given a TARGET number of shoot days the Production Manager wants to fit within. Try genuinely to fit the schedule into that many days by grouping efficiently — but if it's truly not feasible given the amount of material, say so PLAINLY in the "conflicts" list (e.g. "this needs at least 9 days at a realistic pace; compressing to 6 would require cutting scenes or very long days") rather than silently padding or rushing the schedule to hit the number.
-Write bilingual fields (location names, notes, conflicts) in BOTH English and Odia (Odia script) — natural, native-quality Odia phrasing, not a literal translation.`;
+Write bilingual fields (location names, notes, conflicts) in THREE languages — English, Odia (Odia script), and Hindi (Devanagari script) — each a natural, native-quality version, not a literal translation of the others.`;
 
 const SCREENPLAY_ELEMENT_SCHEMA = {
   type: Type.OBJECT,
@@ -612,6 +615,7 @@ const SECTION_LABELS = {
     emotionalCore: "Emotional Core",
     conflict: "Conflict",
     episode: "Episode",
+    hook: "Hook",
     thankYou: "Thank You",
     tagline: "AN ODIA STORY PRESENTATION",
   },
@@ -627,8 +631,25 @@ const SECTION_LABELS = {
     emotionalCore: "ଭାବନାତ୍ମକ ମୂଳ",
     conflict: "ସଂଘର୍ଷ",
     episode: "ପର୍ବ",
+    hook: "ହୁକ୍",
     thankYou: "ଧନ୍ୟବାଦ",
     tagline: "ଏକ ଓଡ଼ିଆ କାହାଣୀ ଉପସ୍ଥାପନା",
+  },
+  hi: {
+    story: "कहानी",
+    premise: "सारांश",
+    genre: "फ़ॉर्मेट",
+    toneGenre: "शैली / जॉनर",
+    targetAudience: "लक्षित दर्शक",
+    highlights: "खास बातें",
+    sponsorshipAngle: "प्रायोजक दृष्टिकोण",
+    majorCharacters: "मुख्य किरदार",
+    emotionalCore: "भावनात्मक केंद्र",
+    conflict: "संघर्ष",
+    episode: "एपिसोड",
+    hook: "हुक",
+    thankYou: "धन्यवाद",
+    tagline: "एक ओड़िया कहानी प्रस्तुति",
   },
 };
 
@@ -656,11 +677,20 @@ function formatLabel(format, lang) {
   if (format?.type === "series") {
     const count = format.episodeCount ?? "?";
     const minutes = format.episodeMinutes ?? "?";
-    return lang === "or"
-      ? `ୱେବ ସିରିଜ୍ · ${count} ପର୍ବ × ${minutes} ମିନିଟ୍ ପ୍ରତି`
-      : `WEB SERIES · ${count} EPISODES × ${minutes} MIN EACH`;
+    if (lang === "or") return `ୱେବ ସିରିଜ୍ · ${count} ପର୍ବ × ${minutes} ମିନିଟ୍ ପ୍ରତି`;
+    if (lang === "hi") return `वेब सीरीज़ · ${count} एपिसोड × ${minutes} मिनट प्रति`;
+    return `WEB SERIES · ${count} EPISODES × ${minutes} MIN EACH`;
   }
-  return lang === "or" ? "ପୂର୍ଣ୍ଣ ଚଳଚ୍ଚିତ୍ର" : "FEATURE FILM";
+  if (format?.type === "vertical") {
+    const count = format.episodeCount ?? "?";
+    const minutes = format.episodeMinutes ?? "?";
+    if (lang === "or") return `ଭର୍ଟିକାଲ୍ ଡ୍ରାମା · ${count} ପର୍ବ × ${minutes} ମିନିଟ୍ ପ୍ରତି`;
+    if (lang === "hi") return `वर्टिकल ड्रामा · ${count} एपिसोड × ${minutes} मिनट प्रति`;
+    return `VERTICAL DRAMA · ${count} EPISODES × ${minutes} MIN EACH`;
+  }
+  if (lang === "or") return "ପୂର୍ଣ୍ଣ ଚଳଚ୍ଚିତ୍ର";
+  if (lang === "hi") return "फ़ीचर फ़िल्म";
+  return "FEATURE FILM";
 }
 
 // A friendly, sponsor-facing one-liner ("8-episode crime drama" / "crime
@@ -668,13 +698,15 @@ function formatLabel(format, lang) {
 // text, and folding in the short genre label rather than just the runtime.
 function formatWithGenreLabel(format, genre, lang) {
   const genreText = (genre?.[lang] || genre?.en || "").trim();
-  if (format?.type === "series") {
+  if (format?.type === "series" || format?.type === "vertical") {
     const count = format.episodeCount ?? "?";
-    return lang === "or"
-      ? `${count}-ପର୍ବ ${genreText}`.trim()
-      : `${count}-episode ${genreText}`.trim();
+    if (lang === "or") return `${count}-ପର୍ବ ${genreText}`.trim();
+    if (lang === "hi") return `${count}-एपिसोड ${genreText}`.trim();
+    return `${count}-episode ${genreText}`.trim();
   }
-  return lang === "or" ? `${genreText} ଚଳଚ୍ଚିତ୍ର`.trim() : `${genreText} feature film`.trim();
+  if (lang === "or") return `${genreText} ଚଳଚ୍ଚିତ୍ର`.trim();
+  if (lang === "hi") return `${genreText} फ़ीचर फ़िल्म`.trim();
+  return `${genreText} feature film`.trim();
 }
 
 // A specific origin (not "*") is required once login uses cookies —
@@ -916,9 +948,11 @@ app.post("/api/generate-storylines", requireRole("admin"), async (req, res) => {
   const { concept, format } = req.body;
 
   const formatInstruction =
-    format?.type === "series"
-      ? `Format: web series, ${format.episodeCount ?? "several"} episodes of ${format.episodeMinutes ?? "~25"} minutes each — shape each storyline direction so it can sustain a multi-episode arc, not just a single-sitting story.`
-      : `Format: feature film, target runtime ${format?.runtimeMinutes ?? "~90"} minutes.`;
+    format?.type === "vertical"
+      ? `Format: vertical micro-drama, ${format.episodeCount ?? "many"} episodes of only ${format.episodeMinutes ?? "~1-2"} minutes each — shape each storyline direction so it can sustain a long run of very short, hook-driven episodes (ReelShort/short-drama app style), not a single continuous film arc.`
+      : format?.type === "series"
+        ? `Format: web series, ${format.episodeCount ?? "several"} episodes of ${format.episodeMinutes ?? "~25"} minutes each — shape each storyline direction so it can sustain a multi-episode arc, not just a single-sitting story.`
+        : `Format: feature film, target runtime ${format?.runtimeMinutes ?? "~90"} minutes.`;
 
   try {
     const response = await ai.models.generateContent({
@@ -3256,7 +3290,8 @@ async function setConceptTitleIfMissing(conceptId, title) {
 // given, the prompt asks for a rewrite that addresses the producer's
 // feedback instead of a first draft.
 async function generatePitchDeckContent(storyline, format, revision) {
-  const isSeries = format?.type === "series";
+  const isSeries = format?.type === "series" || format?.type === "vertical";
+  const isVerticalDrama = format?.type === "vertical";
 
   const properties = {
     premise: BILINGUAL_TEXT_SCHEMA,
@@ -3271,7 +3306,22 @@ async function generatePitchDeckContent(storyline, format, revision) {
   const required = ["premise", "storyPages", "genre", "toneGenre", "targetAudience", "highlights", "sponsorshipAngle", "majorCharacters"];
 
   let formatInstruction = "Format: feature film.";
-  if (isSeries) {
+  if (isVerticalDrama) {
+    formatInstruction = `Format: vertical micro-drama, exactly ${format.episodeCount} episodes of only ${format.episodeMinutes} minutes each — these are extremely short, fast-paced episodes (think ReelShort/short-drama app style), NOT scaled-down web-series episodes. Break the story into exactly ${format.episodeCount} episodes forming one coherent arc from setup to finale. For each episode give a short punchy title (2-5 words, do NOT include the word "Episode" or a number in the title itself — that is added separately by the app), a tight 3-4 sentence synopsis that gets straight to the point — establish the situation fast, land one sharp turn, no wasted setup or padding since there's no time for it — and a separate "hook" field: the EXACT, SPECIFIC cliffhanger, twist, or reveal line the episode ends on, stated concretely (e.g. "She opens the envelope and finds her own wedding photo — with his face scratched out" — never a vague placeholder like "things get complicated" or "a shocking twist is revealed"). Every single episode, including the very last one, must end on a real hook of this kind.`;
+    properties.episodes = {
+      type: Type.ARRAY,
+      items: {
+        type: Type.OBJECT,
+        properties: {
+          title: BILINGUAL_TEXT_SCHEMA,
+          synopsis: BILINGUAL_TEXT_SCHEMA,
+          hook: BILINGUAL_TEXT_SCHEMA,
+        },
+        required: ["title", "synopsis", "hook"],
+      },
+    };
+    required.push("episodes");
+  } else if (isSeries) {
     formatInstruction = `Format: web series, exactly ${format.episodeCount} episodes of ${format.episodeMinutes} minutes each. Also break the story into exactly ${format.episodeCount} episodes forming one coherent arc from setup to finale. For each episode give a short punchy title (2-5 words, do NOT include the word "Episode" or a number in the title itself — that is added separately by the app) and an elaborated 5-7 sentence synopsis that genuinely establishes the whole episode: what it opens on, the conflict/complication that develops through it, and how it turns or ends — not just a one-line plot beat.`;
     properties.episodes = {
       type: Type.ARRAY,
@@ -3303,8 +3353,10 @@ async function generatePitchDeckContent(storyline, format, revision) {
       // synopsis PER episode plus the new storyPages/highlights/etc — this
       // hit the previous ceiling mid-generation (a truncated JSON string,
       // not a content problem) once storyPages was added, so it's sized
-      // generously rather than just bumped to cover today's cases.
-      maxOutputTokens: isSeries ? 32768 : 5120,
+      // generously rather than just bumped to cover today's cases. Vertical
+      // drama can run up to 60 trilingual episodes (title+synopsis+hook each
+      // now in 3 languages), so it needs an even bigger ceiling than series.
+      maxOutputTokens: isVerticalDrama ? 65536 : isSeries ? 32768 : 5120,
       responseSchema: {
         type: Type.OBJECT,
         properties,
@@ -3419,7 +3471,7 @@ app.post("/api/pitch-deck/:id/request-changes", requireRole("admin"), async (req
 });
 
 app.get("/api/pitch-deck/:id/export", requireLogin, async (req, res) => {
-  const lang = req.query.lang === "or" ? "or" : "en";
+  const lang = ["or", "hi"].includes(req.query.lang) ? req.query.lang : "en";
 
   try {
     const result = await db.query("SELECT content FROM pitch_decks WHERE id = $1", [
@@ -3437,16 +3489,18 @@ app.get("/api/pitch-deck/:id/export", requireLogin, async (req, res) => {
 
     // coverFont: the elegant main story title. headerFont: punchy all-caps
     // section labels/episode titles. bodyFont: paragraph text.
-    // Odia has no equivalent of the English display fonts, so it reuses its
-    // one bold weight for both display roles.
-    const coverFont = lang === "or" ? "odiaBold" : "displayBold";
-    const headerFont = lang === "or" ? "odiaBold" : "impact";
-    const bodyFont = lang === "or" ? "odiaRegular" : "Helvetica";
+    // Odia and Hindi have no equivalent of the English display fonts, so
+    // each reuses its own one bold weight for both display roles.
+    const coverFont = lang === "or" ? "odiaBold" : lang === "hi" ? "hindiBold" : "displayBold";
+    const headerFont = lang === "or" ? "odiaBold" : lang === "hi" ? "hindiBold" : "impact";
+    const bodyFont = lang === "or" ? "odiaRegular" : lang === "hi" ? "hindiRegular" : "Helvetica";
 
     const doc = new PDFDocument({ size: "A4", layout: "landscape", margin: 0 });
 
     doc.registerFont("odiaRegular", FONTS.odiaRegular);
     doc.registerFont("odiaBold", FONTS.odiaBold);
+    doc.registerFont("hindiRegular", FONTS.hindiRegular);
+    doc.registerFont("hindiBold", FONTS.hindiBold);
     doc.registerFont("displayBold", FONTS.displayBold);
     doc.registerFont("impact", FONTS.impact);
 
@@ -3646,6 +3700,20 @@ app.get("/api/pitch-deck/:id/export", requireLogin, async (req, res) => {
           .font(bodyFont)
           .fontSize(14)
           .text(episode.synopsis[lang], textX, 150, { width: textWidth, lineGap: 5 });
+        if (episode.hook) {
+          const synopsisHeight = doc.heightOfString(episode.synopsis[lang], { width: textWidth, lineGap: 5 });
+          const hookY = 150 + synopsisHeight + 16;
+          doc
+            .fillColor(theme.accent)
+            .font(headerFont)
+            .fontSize(12)
+            .text(labels.hook.toUpperCase(), textX, hookY, { width: textWidth });
+          doc
+            .fillColor("#F0EEE9")
+            .font(bodyFont)
+            .fontSize(14)
+            .text(episode.hook[lang], textX, doc.y + 2, { width: textWidth, lineGap: 5 });
+        }
       });
     }
 
@@ -3689,7 +3757,7 @@ app.get("/api/pitch-deck/:id/export", requireLogin, async (req, res) => {
 // content worth putting in front of a producer, so the character slides
 // below always prefer it over the deck's own thin character blurbs.
 app.get("/api/pitch-deck/:id/export-ppt", requireLogin, async (req, res) => {
-  const lang = req.query.lang === "or" ? "or" : "en";
+  const lang = ["or", "hi"].includes(req.query.lang) ? req.query.lang : "en";
 
   try {
     const result = await db.query("SELECT content FROM pitch_decks WHERE id = $1", [req.params.id]);
@@ -3711,11 +3779,15 @@ app.get("/api/pitch-deck/:id/export-ppt", requireLogin, async (req, res) => {
     const archetypeLabels =
       lang === "or"
         ? { hero: "ନାୟକ", mentor: "ଗୁରୁ", threshold_guardian: "ପ୍ରହରୀ", herald: "ଦୂତ", shapeshifter: "ରୂପ ପରିବର୍ତ୍ତନକାରୀ", shadow: "ଛାୟା", ally: "ସହଯୋଗୀ", trickster: "ଚତୁର" }
-        : { hero: "Hero", mentor: "Mentor", threshold_guardian: "Threshold Guardian", herald: "Herald", shapeshifter: "Shapeshifter", shadow: "Shadow", ally: "Ally", trickster: "Trickster" };
+        : lang === "hi"
+          ? { hero: "नायक", mentor: "गुरु", threshold_guardian: "प्रहरी", herald: "दूत", shapeshifter: "रूप बदलने वाला", shadow: "छाया", ally: "सहयोगी", trickster: "चालाक" }
+          : { hero: "Hero", mentor: "Mentor", threshold_guardian: "Threshold Guardian", herald: "Herald", shapeshifter: "Shapeshifter", shadow: "Shadow", ally: "Ally", trickster: "Trickster" };
     const fieldLabels =
       lang === "or"
         ? { want: "ଚାହିଦା", need: "ଆବଶ୍ୟକତା", flaw: "ତ୍ରୁଟି", arc: "ଚରିତ୍ର ଯାତ୍ରା", introductionBeat: "ପରିଚୟ" }
-        : { want: "Want", need: "Need", flaw: "Flaw", arc: "Arc", introductionBeat: "Introduction" };
+        : lang === "hi"
+          ? { want: "चाहत", need: "ज़रूरत", flaw: "कमी", arc: "किरदार का सफ़र", introductionBeat: "परिचय" }
+          : { want: "Want", need: "Need", flaw: "Flaw", arc: "Arc", introductionBeat: "Introduction" };
 
     const pptx = new PptxGenJS();
     pptx.defineLayout({ name: "WIDE", width: 10, height: 5.63 });
@@ -3841,7 +3913,13 @@ app.get("/api/pitch-deck/:id/export-ppt", requireLogin, async (req, res) => {
         });
         slide.addText(`${labels.episode.toUpperCase()} ${index + 1}`, { x: 3.3, y: 0.5, w: 6.1, h: 0.4, fontSize: 12, bold: true, color: hex(theme.accent) });
         slide.addText(episode.title[lang], { x: 3.3, y: 0.9, w: 6.1, h: 0.7, fontSize: 22, bold: true, color: "F5F1EA" });
-        slide.addText(episode.synopsis[lang], { x: 3.3, y: 1.7, w: 6.1, h: 3.5, fontSize: 13, color: "F0EEE9", valign: "top" });
+        if (episode.hook) {
+          slide.addText(episode.synopsis[lang], { x: 3.3, y: 1.7, w: 6.1, h: 2.4, fontSize: 13, color: "F0EEE9", valign: "top" });
+          slide.addText(`${labels.hook.toUpperCase()}`, { x: 3.3, y: 4.2, w: 6.1, h: 0.35, fontSize: 12, bold: true, color: hex(theme.accent) });
+          slide.addText(episode.hook[lang], { x: 3.3, y: 4.55, w: 6.1, h: 1.0, fontSize: 13, color: "F0EEE9", valign: "top" });
+        } else {
+          slide.addText(episode.synopsis[lang], { x: 3.3, y: 1.7, w: 6.1, h: 3.5, fontSize: 13, color: "F0EEE9", valign: "top" });
+        }
       });
     }
 
@@ -3874,7 +3952,8 @@ app.get("/api/pitch-deck/:id/export-ppt", requireLogin, async (req, res) => {
 // thin Major Characters into archetype/want/need/flaw/virtues/arc etc. When
 // `revision` is given, the prompt asks for a rewrite addressing feedback.
 async function generateCharacterSheetContent(deck, revision) {
-  const isSeries = deck.format?.type === "series" && Array.isArray(deck.episodes);
+  const isSeries =
+    (deck.format?.type === "series" || deck.format?.type === "vertical") && Array.isArray(deck.episodes);
 
   const seedCharacters = (deck.majorCharacters ?? [])
     .map((c) => `${c.name} — ${c.role.en}. Emotional core: ${c.emotionalCore.en}. Conflict: ${c.conflict.en}.`)
@@ -4033,7 +4112,8 @@ function episodePacingGuidance(minutes) {
 }
 
 async function generateThreeActContent(deck, characterSheet, revision) {
-  const isSeries = deck.format?.type === "series" && Array.isArray(deck.episodes);
+  const isSeries =
+    (deck.format?.type === "series" || deck.format?.type === "vertical") && Array.isArray(deck.episodes);
 
   let contents = `Title (English): ${deck.title.en}\nLogline (English): ${deck.logline.en}\nPremise (English): ${deck.premise.en}\nTone/Genre (English): ${deck.toneGenre.en}`;
 
@@ -4278,8 +4358,9 @@ function suggestBitCount(minutes) {
 // covering the whole three-act structure. When `revision` is given, the
 // prompt asks for a rewrite that addresses feedback instead of a first draft.
 async function generateBitSheetContent(threeAct, deck, revision) {
+  const isVerticalDrama = deck.format?.type === "vertical";
   const isSeries =
-    deck.format?.type === "series" &&
+    (deck.format?.type === "series" || isVerticalDrama) &&
     Array.isArray(deck.episodes) &&
     Array.isArray(threeAct.episodeStructures);
 
@@ -4292,11 +4373,14 @@ async function generateBitSheetContent(threeAct, deck, revision) {
       .map((episode, index) => {
         const structure = threeAct.episodeStructures[index];
         const suggested = suggestBitCount(deck.format.episodeMinutes);
-        return `Episode ${index + 1}: ${episode.title.en} (aim for roughly ${suggested} bits)\nSetup: ${actText(structure.setup)}\nConfrontation: ${actText(structure.confrontation)}\nResolution: ${actText(structure.resolution)}`;
+        const hookLine = isVerticalDrama && episode.hook ? `\nHook this episode must end on: ${episode.hook.en}` : "";
+        return `Episode ${index + 1}: ${episode.title.en} (aim for roughly ${suggested} bits)\nSetup: ${actText(structure.setup)}\nConfrontation: ${actText(structure.confrontation)}\nResolution: ${actText(structure.resolution)}${hookLine}`;
       })
       .join("\n\n");
 
-    contents = `This is a web series with ${deck.episodes.length} episodes. Here is each episode's own three-act mini-structure:\n\n${episodesText}\n\nFor EACH episode, break its three acts into its OWN complete Bit Sheet — an ordered list of its major plot-point beats. Each episode is a self-contained mini-story, so each episode's Bit Sheet must include its own opening_image, theme_stated, plot_point_1, all_is_lost, plot_point_2, and final_image anchors positioned within that episode, not just once for the whole series. Return "episodeBits": an array of exactly ${deck.episodes.length} objects, in episode order, each with a "bits" array covering just that episode.`;
+    contents = isVerticalDrama
+      ? `This is a vertical micro-drama with ${deck.episodes.length} short episodes. Here is each episode's own three-act mini-structure, plus the specific hook it must end on:\n\n${episodesText}\n\nFor EACH episode, break its three acts into its OWN complete Bit Sheet — an ordered list of its major plot-point beats. Each episode is a self-contained mini-story, so each episode's Bit Sheet must include its own opening_image, theme_stated, plot_point_1, all_is_lost, plot_point_2, and final_image anchors positioned within that episode, not just once for the whole series. Since these episodes are extremely short, keep each episode's bit list lean — the final bit (final_image) MUST be the concrete moment that delivers that episode's hook, exactly as given above, not a softer or different beat. Return "episodeBits": an array of exactly ${deck.episodes.length} objects, in episode order, each with a "bits" array covering just that episode.`
+      : `This is a web series with ${deck.episodes.length} episodes. Here is each episode's own three-act mini-structure:\n\n${episodesText}\n\nFor EACH episode, break its three acts into its OWN complete Bit Sheet — an ordered list of its major plot-point beats. Each episode is a self-contained mini-story, so each episode's Bit Sheet must include its own opening_image, theme_stated, plot_point_1, all_is_lost, plot_point_2, and final_image anchors positioned within that episode, not just once for the whole series. Return "episodeBits": an array of exactly ${deck.episodes.length} objects, in episode order, each with a "bits" array covering just that episode.`;
 
     properties.episodeBits = {
       type: Type.ARRAY,
@@ -4589,7 +4673,7 @@ async function callSceneListGemini(contents, isSeries, totalTargetMinutes) {
 
 async function generateSceneListContent(bitSheet, deck, revision) {
   const isSeries =
-    deck.format?.type === "series" &&
+    (deck.format?.type === "series" || deck.format?.type === "vertical") &&
     Array.isArray(deck.episodes) &&
     Array.isArray(bitSheet.episodeBits);
 
@@ -6275,7 +6359,7 @@ app.post("/api/script-breakdown/:id/request-changes", requireRole("admin", "dire
 // styling as the pitch-deck export, just a simple title + list layout since
 // this is a working document for the crew, not a pitch presentation.
 app.get("/api/script-breakdown/:id/export", requireLogin, async (req, res) => {
-  const lang = req.query.lang === "or" ? "or" : "en";
+  const lang = ["or", "hi"].includes(req.query.lang) ? req.query.lang : "en";
   const category = req.query.category;
 
   // "propsAndArt" is a display-only pseudo-category — properties and art
@@ -6320,8 +6404,8 @@ app.get("/api/script-breakdown/:id/export", requireLogin, async (req, res) => {
       art: { en: "Art Department Notes", or: "ଆର୍ଟ ବିଭାଗ ନୋଟ୍" },
       propsAndArt: { en: "Properties & Art Department Notes", or: "ସାମଗ୍ରୀ ଓ କଳା ବିଭାଗ ମନ୍ତବ୍ୟ" },
     };
-    const bodyFont = lang === "or" ? "odiaRegular" : "Helvetica";
-    const headerFont = lang === "or" ? "odiaBold" : "Helvetica-Bold";
+    const bodyFont = lang === "or" ? "odiaRegular" : lang === "hi" ? "hindiRegular" : "Helvetica";
+    const headerFont = lang === "or" ? "odiaBold" : lang === "hi" ? "hindiBold" : "Helvetica-Bold";
 
     // Real-world casting info lives in crew_members, not the AI-analyzed
     // breakdown content — join it in here so the exported list reflects
@@ -6334,7 +6418,12 @@ app.get("/api/script-breakdown/:id/export", requireLogin, async (req, res) => {
       );
       castByCharacter = new Map(castResult.rows.map((row) => [row.character_name, row]));
     }
-    const notCastLabel = lang === "or" ? "ଏପର୍ଯ୍ୟନ୍ତ କାଷ୍ଟ ହୋଇନାହିଁ — ଦୟାକରି ଅପଡେଟ୍ କରନ୍ତୁ" : "Not yet cast — please update";
+    const notCastLabel =
+      lang === "or"
+        ? "ଏପର୍ଯ୍ୟନ୍ତ କାଷ୍ଟ ହୋଇନାହିଁ — ଦୟାକରି ଅପଡେଟ୍ କରନ୍ତୁ"
+        : lang === "hi"
+          ? "अभी तक कास्ट नहीं हुआ — कृपया अपडेट करें"
+          : "Not yet cast — please update";
     const recommendationsByCharacter = new Map(
       (breakdown.costumeRecommendations ?? []).map((rec) => [rec.character.toLowerCase(), rec])
     );
@@ -6342,6 +6431,8 @@ app.get("/api/script-breakdown/:id/export", requireLogin, async (req, res) => {
     const doc = new PDFDocument({ size: "A4", margin: 50 });
     doc.registerFont("odiaRegular", FONTS.odiaRegular);
     doc.registerFont("odiaBold", FONTS.odiaBold);
+    doc.registerFont("hindiRegular", FONTS.hindiRegular);
+    doc.registerFont("hindiBold", FONTS.hindiBold);
     doc.font(bodyFont);
     doc.font(headerFont);
 
@@ -6353,7 +6444,9 @@ app.get("/api/script-breakdown/:id/export", requireLogin, async (req, res) => {
     doc.moveDown(1);
 
     if (items.length === 0) {
-      doc.font(bodyFont).fontSize(12).text(lang === "or" ? "କିଛି ମିଳିଲା ନାହିଁ।" : "Nothing found for this category.");
+      doc.font(bodyFont).fontSize(12).text(
+        lang === "or" ? "କିଛି ମିଳିଲା ନାହିଁ।" : lang === "hi" ? "इस श्रेणी में कुछ नहीं मिला।" : "Nothing found for this category."
+      );
     }
 
     items.forEach((item) => {
@@ -6374,16 +6467,16 @@ app.get("/api/script-breakdown/:id/export", requireLogin, async (req, res) => {
       doc.font(bodyFont).fontSize(11).text(noteField[lang], { indent: 10 });
       if (category === "artistList") {
         const cast = castByCharacter.get(item.label);
-        const playedByLine = lang === "or"
-          ? `କଳାକାର: ${cast ? cast.name : notCastLabel}${cast?.contact_number ? ` — ${cast.contact_number}` : ""}`
-          : `Played by: ${cast ? cast.name : notCastLabel}${cast?.contact_number ? ` — ${cast.contact_number}` : ""}`;
+        const playedByPrefix = lang === "or" ? "କଳାକାର" : lang === "hi" ? "अभिनेता" : "Played by";
+        const playedByLine = `${playedByPrefix}: ${cast ? cast.name : notCastLabel}${cast?.contact_number ? ` — ${cast.contact_number}` : ""}`;
         doc.font(bodyFont).fontSize(11).text(playedByLine, { indent: 10 });
       }
       if (category === "costumes") {
         const rec = recommendationsByCharacter.get(item.character.toLowerCase());
         if (rec) {
-          const recommendedLabel = lang === "or" ? "ପ୍ରସ୍ତାବିତ ପରିମାଣ" : "Recommended quantities";
-          doc.font(headerFont).fontSize(10).text(`${recommendedLabel} (${rec.totalScenes} ${lang === "or" ? "ଦୃଶ୍ୟ" : "scenes"}):`, { indent: 10 });
+          const recommendedLabel = lang === "or" ? "ପ୍ରସ୍ତାବିତ ପରିମାଣ" : lang === "hi" ? "अनुशंसित मात्रा" : "Recommended quantities";
+          const scenesWord = lang === "or" ? "ଦୃଶ୍ୟ" : lang === "hi" ? "दृश्य" : "scenes";
+          doc.font(headerFont).fontSize(10).text(`${recommendedLabel} (${rec.totalScenes} ${scenesWord}):`, { indent: 10 });
           rec.sets.forEach((set) => {
             const reasonText = set.reason?.[lang] ? ` — ${set.reason[lang]}` : "";
             doc.font(bodyFont).fontSize(10).text(`${set.quantity}× ${set.category}${reasonText}`, { indent: 20 });
@@ -6410,7 +6503,7 @@ app.get("/api/script-breakdown/:id/export", requireLogin, async (req, res) => {
 // dropdown "Status" column (Pending/Done) and a blank "Remarks" column for
 // their own notes, instead of just a static list.
 app.get("/api/script-breakdown/:id/export-excel", requireLogin, async (req, res) => {
-  const lang = req.query.lang === "or" ? "or" : "en";
+  const lang = ["or", "hi"].includes(req.query.lang) ? req.query.lang : "en";
   const category = req.query.category;
 
   if (category !== "propsAndArt" && !BREAKDOWN_CATEGORY_KEYS.includes(category)) {
@@ -6447,12 +6540,20 @@ app.get("/api/script-breakdown/:id/export-excel", requireLogin, async (req, res)
       art: { en: "Art Department Notes", or: "ଆର୍ଟ ବିଭାଗ ନୋଟ୍" },
       propsAndArt: { en: "Properties & Art Department Notes", or: "ସାମଗ୍ରୀ ଓ କଳା ବିଭାଗ ମନ୍ତବ୍ୟ" },
     };
-    const statusLabels = lang === "or" ? ["ବାକି ଅଛି", "ହୋଇଗଲା"] : ["Pending", "Done"];
+    const statusLabels =
+      lang === "or" ? ["ବାକି ଅଛି", "ହୋଇଗଲା"] : lang === "hi" ? ["बाकी", "पूरा"] : ["Pending", "Done"];
     const columnLabels =
       lang === "or"
         ? { name: "ନାମ", location: "ସ୍ଥାନ", intExt: "INT/EXT", sceneCount: "ଦୃଶ୍ୟ ସଂଖ୍ୟା", character: "ଚରିତ୍ର", notes: "ନୋଟ୍", status: "ସ୍ଥିତି", remarks: "ମନ୍ତବ୍ୟ", playedBy: "କଳାକାର", contactNumber: "ଯୋଗାଯୋଗ ନମ୍ବର", age: "ବୟସ", gender: "ଲିଙ୍ଗ", recommendedQuantities: "ପ୍ରସ୍ତାବିତ ପରିମାଣ" }
-        : { name: "Name", location: "Location", intExt: "INT/EXT", sceneCount: "Scene Count", character: "Character", notes: "Notes", status: "Status", remarks: "Remarks", playedBy: "Played By", contactNumber: "Contact Number", age: "Age", gender: "Gender", recommendedQuantities: "Recommended Quantities" };
-    const notCastLabel = lang === "or" ? "ଏପର୍ଯ୍ୟନ୍ତ କାଷ୍ଟ ହୋଇନାହିଁ — ଦୟାକରି ଅପଡେଟ୍ କରନ୍ତୁ" : "Not yet cast — please update";
+        : lang === "hi"
+          ? { name: "नाम", location: "स्थान", intExt: "INT/EXT", sceneCount: "दृश्य संख्या", character: "किरदार", notes: "टिप्पणी", status: "स्थिति", remarks: "टिप्पणी", playedBy: "अभिनेता", contactNumber: "संपर्क नंबर", age: "उम्र", gender: "लिंग", recommendedQuantities: "अनुशंसित मात्रा" }
+          : { name: "Name", location: "Location", intExt: "INT/EXT", sceneCount: "Scene Count", character: "Character", notes: "Notes", status: "Status", remarks: "Remarks", playedBy: "Played By", contactNumber: "Contact Number", age: "Age", gender: "Gender", recommendedQuantities: "Recommended Quantities" };
+    const notCastLabel =
+      lang === "or"
+        ? "ଏପର୍ଯ୍ୟନ୍ତ କାଷ୍ଟ ହୋଇନାହିଁ — ଦୟାକରି ଅପଡେଟ୍ କରନ୍ତୁ"
+        : lang === "hi"
+          ? "अभी तक कास्ट नहीं हुआ — कृपया अपडेट करें"
+          : "Not yet cast — please update";
     const recommendationsByCharacter = new Map(
       (result.rows[0].content.costumeRecommendations ?? []).map((rec) => [rec.character.toLowerCase(), rec])
     );
@@ -6560,7 +6661,7 @@ app.get("/api/script-breakdown/:id/export-excel", requireLogin, async (req, res)
 // category exports (this one has too many short columns for that to read
 // well on paper).
 app.get("/api/script-breakdown/:id/export-ad-sheet", requireLogin, async (req, res) => {
-  const lang = req.query.lang === "or" ? "or" : "en";
+  const lang = ["or", "hi"].includes(req.query.lang) ? req.query.lang : "en";
 
   try {
     const result = await db.query("SELECT content, scene_list_id FROM script_breakdowns WHERE id = $1", [req.params.id]);
@@ -6579,16 +6680,20 @@ app.get("/api/script-breakdown/:id/export-ad-sheet", requireLogin, async (req, r
     const sceneListResult = await db.query("SELECT content FROM scene_lists WHERE id = $1", [sceneListId]);
     const title = await fetchProjectTitleForSceneList(sceneListId, sceneListResult.rows[0].content, lang);
 
-    const bodyFont = lang === "or" ? "odiaRegular" : "Helvetica";
-    const headerFont = lang === "or" ? "odiaBold" : "Helvetica-Bold";
+    const bodyFont = lang === "or" ? "odiaRegular" : lang === "hi" ? "hindiRegular" : "Helvetica";
+    const headerFont = lang === "or" ? "odiaBold" : lang === "hi" ? "hindiBold" : "Helvetica-Bold";
     const labels =
       lang === "or"
         ? { title: "ସ୍କ୍ରିପ୍ଟ ବ୍ରେକଡାଉନ୍ ସିଟ୍", scn: "SCN", description: "ଦୃଶ୍ୟ ବର୍ଣ୍ଣନା", type: "TYPE", dn: "D/N", location: "ମୁଖ୍ୟ ସ୍ଥାନ", characters: "ମୁଖ୍ୟ ଚରିତ୍ର", extras: "ଏକ୍ସଟ୍ରା", property: "ପ୍ରପର୍ଟି", costume: "ପୋଷାକ/ମନ୍ତବ୍ୟ" }
-        : { title: "SCRIPT BREAKDOWN SHEET", scn: "SCN", description: "SCENE DESCRIPTION", type: "TYPE", dn: "D/N", location: "PRIMARY LOCATION", characters: "MAIN CHARACTERS", extras: "EXTRAS", property: "PROPERTY", costume: "COSTUME / REMARKS" };
+        : lang === "hi"
+          ? { title: "स्क्रिप्ट ब्रेकडाउन शीट", scn: "SCN", description: "दृश्य विवरण", type: "TYPE", dn: "D/N", location: "मुख्य स्थान", characters: "मुख्य किरदार", extras: "अतिरिक्त कलाकार", property: "सामग्री", costume: "पोशाक/टिप्पणी" }
+          : { title: "SCRIPT BREAKDOWN SHEET", scn: "SCN", description: "SCENE DESCRIPTION", type: "TYPE", dn: "D/N", location: "PRIMARY LOCATION", characters: "MAIN CHARACTERS", extras: "EXTRAS", property: "PROPERTY", costume: "COSTUME / REMARKS" };
 
     const doc = new PDFDocument({ size: "A4", layout: "landscape", margin: 24 });
     doc.registerFont("odiaRegular", FONTS.odiaRegular);
     doc.registerFont("odiaBold", FONTS.odiaBold);
+    doc.registerFont("hindiRegular", FONTS.hindiRegular);
+    doc.registerFont("hindiBold", FONTS.hindiBold);
 
     res.setHeader("Content-Type", "application/pdf");
     res.setHeader("Content-Disposition", `attachment; filename="ad-breakdown-sheet-${lang}-${formatExportTimestamp()}.pdf"`);
@@ -6682,7 +6787,7 @@ app.get("/api/script-breakdown/:id/export-ad-sheet", requireLogin, async (req, r
 // Same grid as the PDF version above (one row per scene), transcribed
 // straight into an Excel sheet since the data's already rectangular.
 app.get("/api/script-breakdown/:id/export-ad-sheet-excel", requireLogin, async (req, res) => {
-  const lang = req.query.lang === "or" ? "or" : "en";
+  const lang = ["or", "hi"].includes(req.query.lang) ? req.query.lang : "en";
 
   try {
     const result = await db.query("SELECT content, scene_list_id FROM script_breakdowns WHERE id = $1", [req.params.id]);
@@ -6700,7 +6805,9 @@ app.get("/api/script-breakdown/:id/export-ad-sheet-excel", requireLogin, async (
     const labels =
       lang === "or"
         ? { title: "ସ୍କ୍ରିପ୍ଟ ବ୍ରେକଡାଉନ୍ ସିଟ୍", scn: "SCN", description: "ଦୃଶ୍ୟ ବର୍ଣ୍ଣନା", type: "TYPE", dn: "D/N", location: "ମୁଖ୍ୟ ସ୍ଥାନ", characters: "ମୁଖ୍ୟ ଚରିତ୍ର", extras: "ଏକ୍ସଟ୍ରା", property: "ପ୍ରପର୍ଟି", costume: "ପୋଷାକ/ମନ୍ତବ୍ୟ" }
-        : { title: "SCRIPT BREAKDOWN SHEET", scn: "SCN", description: "SCENE DESCRIPTION", type: "TYPE", dn: "D/N", location: "PRIMARY LOCATION", characters: "MAIN CHARACTERS", extras: "EXTRAS", property: "PROPERTY", costume: "COSTUME / REMARKS" };
+        : lang === "hi"
+          ? { title: "स्क्रिप्ट ब्रेकडाउन शीट", scn: "SCN", description: "दृश्य विवरण", type: "TYPE", dn: "D/N", location: "मुख्य स्थान", characters: "मुख्य किरदार", extras: "अतिरिक्त कलाकार", property: "सामग्री", costume: "पोशाक/टिप्पणी" }
+          : { title: "SCRIPT BREAKDOWN SHEET", scn: "SCN", description: "SCENE DESCRIPTION", type: "TYPE", dn: "D/N", location: "PRIMARY LOCATION", characters: "MAIN CHARACTERS", extras: "EXTRAS", property: "PROPERTY", costume: "COSTUME / REMARKS" };
 
     function rowValues(row) {
       return {
@@ -6824,14 +6931,20 @@ app.get("/api/scene-lists/:sceneListId/character-script", requireLogin, async (r
 // route an artist opens from a WhatsApp link — the PDF itself is identical
 // either way, only how the caller is allowed to reach it differs.
 function renderCharacterScriptPdf(res, characterLabel, lang, scenes) {
-  const bodyFont = lang === "or" ? "odiaRegular" : "Helvetica";
-  const headerFont = lang === "or" ? "odiaBold" : "Helvetica-Bold";
+  const bodyFont = lang === "or" ? "odiaRegular" : lang === "hi" ? "hindiRegular" : "Helvetica";
+  const headerFont = lang === "or" ? "odiaBold" : lang === "hi" ? "hindiBold" : "Helvetica-Bold";
   const labels =
-    lang === "or" ? { title: "CHARACTER SCRIPT", action: "କାର୍ଯ୍ୟ" } : { title: "CHARACTER SCRIPT", action: "Action" };
+    lang === "or"
+      ? { title: "CHARACTER SCRIPT", action: "କାର୍ଯ୍ୟ" }
+      : lang === "hi"
+        ? { title: "CHARACTER SCRIPT", action: "क्रिया" }
+        : { title: "CHARACTER SCRIPT", action: "Action" };
 
   const doc = new PDFDocument({ size: "A4", margin: 50 });
   doc.registerFont("odiaRegular", FONTS.odiaRegular);
   doc.registerFont("odiaBold", FONTS.odiaBold);
+  doc.registerFont("hindiRegular", FONTS.hindiRegular);
+  doc.registerFont("hindiBold", FONTS.hindiBold);
 
   res.setHeader("Content-Type", "application/pdf");
   res.setHeader(
@@ -6876,7 +6989,7 @@ function renderCharacterScriptPdf(res, characterLabel, lang, scenes) {
 app.get("/api/scene-lists/:sceneListId/character-script/export", requireLogin, async (req, res) => {
   const { sceneListId } = req.params;
   const characterLabel = req.query.character;
-  const lang = req.query.lang === "or" ? "or" : "en";
+  const lang = ["or", "hi"].includes(req.query.lang) ? req.query.lang : "en";
 
   if (!characterLabel?.trim()) {
     res.status(400).json({ error: "A character name is required." });
@@ -6916,10 +7029,13 @@ async function renderCharacterScriptExcel(res, characterLabel, lang, scenes) {
   const labels =
     lang === "or"
       ? { scene: "ଦୃଶ୍ୟ", heading: "ଦୃଶ୍ୟ ଶୀର୍ଷକ", hasDialogue: "ସଂଳାପ ଅଛି?", content: "ବିଷୟବସ୍ତୁ", yes: "ହଁ", no: "ନାହିଁ" }
-      : { scene: "Scene", heading: "Scene Heading", hasDialogue: "Has Dialogue?", content: "Content", yes: "Yes", no: "No" };
+      : lang === "hi"
+        ? { scene: "दृश्य", heading: "दृश्य शीर्षक", hasDialogue: "संवाद है?", content: "सामग्री", yes: "हाँ", no: "नहीं" }
+        : { scene: "Scene", heading: "Scene Heading", hasDialogue: "Has Dialogue?", content: "Content", yes: "Yes", no: "No" };
 
   const workbook = new ExcelJS.Workbook();
-  const sheet = workbook.addWorksheet((lang === "or" ? "ଚରିତ୍ର ସ୍କ୍ରିପ୍ଟ" : "Character Script").slice(0, 31));
+  const sheetTitle = lang === "or" ? "ଚରିତ୍ର ସ୍କ୍ରିପ୍ଟ" : lang === "hi" ? "किरदार स्क्रिप्ट" : "Character Script";
+  const sheet = workbook.addWorksheet(sheetTitle.slice(0, 31));
   sheet.columns = [
     { header: labels.scene, key: "scene", width: 16 },
     { header: labels.heading, key: "heading", width: 34 },
@@ -6954,7 +7070,7 @@ async function renderCharacterScriptExcel(res, characterLabel, lang, scenes) {
 app.get("/api/scene-lists/:sceneListId/character-script/export-excel", requireLogin, async (req, res) => {
   const { sceneListId } = req.params;
   const characterLabel = req.query.character;
-  const lang = req.query.lang === "or" ? "or" : "en";
+  const lang = ["or", "hi"].includes(req.query.lang) ? req.query.lang : "en";
 
   if (!characterLabel?.trim()) {
     res.status(400).json({ error: "A character name is required." });
@@ -7011,7 +7127,7 @@ function verifyPublicCharacterScriptLink(sceneListId, characterLabel, token) {
 app.get("/api/scene-lists/:sceneListId/character-script/share-link", requireLogin, async (req, res) => {
   const { sceneListId } = req.params;
   const characterLabel = req.query.character;
-  const lang = req.query.lang === "or" ? "or" : "en";
+  const lang = ["or", "hi"].includes(req.query.lang) ? req.query.lang : "en";
 
   if (!characterLabel?.trim()) {
     res.status(400).json({ error: "A character name is required." });
@@ -7033,7 +7149,7 @@ app.get("/api/scene-lists/:sceneListId/character-script/share-link", requireLogi
 // without first having had legitimate access to mint that link.
 app.get("/api/public/character-script", async (req, res) => {
   const { sceneListId, character, token } = req.query;
-  const lang = req.query.lang === "or" ? "or" : "en";
+  const lang = ["or", "hi"].includes(req.query.lang) ? req.query.lang : "en";
 
   if (!sceneListId || !character?.trim() || !verifyPublicCharacterScriptLink(sceneListId, character, token)) {
     res.status(403).send("This link is invalid or has expired. Please ask for a new one.");
@@ -8023,7 +8139,7 @@ function groupSceneRefsForPdf(sceneRefs, sceneList, lang) {
 // many days and which ones — so it can be forwarded as-is to artists and
 // the director instead of them reading the app itself.
 app.get("/api/shoot-schedule/:id/export", requireLogin, async (req, res) => {
-  const lang = req.query.lang === "or" ? "or" : "en";
+  const lang = ["or", "hi"].includes(req.query.lang) ? req.query.lang : "en";
   // Optional — scopes this exact same grid-table sheet to one day instead
   // of the whole schedule, reusing all the same per-scene grid-drawing
   // logic rather than a separate PDF layout for a day's "master breakdown".
@@ -8058,8 +8174,8 @@ app.get("/api/shoot-schedule/:id/export", requireLogin, async (req, res) => {
     const isSeries = Boolean(sceneList.episodeScenes);
     const title = await fetchProjectTitleForSceneList(sceneListId, sceneList, lang);
 
-    const bodyFont = lang === "or" ? "odiaRegular" : "Helvetica";
-    const headerFont = lang === "or" ? "odiaBold" : "Helvetica-Bold";
+    const bodyFont = lang === "or" ? "odiaRegular" : lang === "hi" ? "hindiRegular" : "Helvetica";
+    const headerFont = lang === "or" ? "odiaBold" : lang === "hi" ? "hindiBold" : "Helvetica-Bold";
     const labels =
       lang === "or"
         ? {
@@ -8067,11 +8183,17 @@ app.get("/api/shoot-schedule/:id/export", requireLogin, async (req, res) => {
             wrapped: "ସମାପ୍ତ", pending: "ବାକି", inProgress: "ଚାଲୁଛି", episode: "ଏପିସୋଡ୍", scenes: "ଦୃଶ୍ୟ", unspecified: "ଅନିର୍ଦ୍ଦିଷ୍ଟ",
             serialNo: "କ୍ର.ନଂ", description: "ଦୃଶ୍ୟ ବର୍ଣ୍ଣନା", dayNight: "D/N", juniorArtists: "ଜୁନିଅର୍ ଆର୍ଟିଷ୍ଟ",
           }
-        : {
-            schedule: "Shoot Schedule", day: "Day", location: "Location", cast: "Cast Called", notes: "Notes", artistSummary: "Artist-Wise Summary", totalDays: "Total Days", days: "Days", completed: "COMPLETED", costume: "Costume", properties: "Properties", adRemark: "AD Remark",
-            wrapped: "WRAPPED", pending: "PENDING", inProgress: "IN PROGRESS", episode: "Episode", scenes: "scenes", unspecified: "Unspecified",
-            serialNo: "S.No", description: "Scene Description", dayNight: "D/N", juniorArtists: "Junior Artists",
-          };
+        : lang === "hi"
+          ? {
+              schedule: "शूटिंग शेड्यूल", day: "दिन", location: "स्थान", cast: "कलाकार", notes: "टिप्पणी", artistSummary: "कलाकार-अनुसार सारांश", totalDays: "कुल दिन", days: "दिन", completed: "पूरा हुआ", costume: "पोशाक", properties: "सामग्री", adRemark: "AD टिप्पणी",
+              wrapped: "पूरा", pending: "बाकी", inProgress: "जारी", episode: "एपिसोड", scenes: "दृश्य", unspecified: "अनिर्दिष्ट",
+              serialNo: "क्र.सं", description: "दृश्य विवरण", dayNight: "D/N", juniorArtists: "जूनियर आर्टिस्ट",
+            }
+          : {
+              schedule: "Shoot Schedule", day: "Day", location: "Location", cast: "Cast Called", notes: "Notes", artistSummary: "Artist-Wise Summary", totalDays: "Total Days", days: "Days", completed: "COMPLETED", costume: "Costume", properties: "Properties", adRemark: "AD Remark",
+              wrapped: "WRAPPED", pending: "PENDING", inProgress: "IN PROGRESS", episode: "Episode", scenes: "scenes", unspecified: "Unspecified",
+              serialNo: "S.No", description: "Scene Description", dayNight: "D/N", juniorArtists: "Junior Artists",
+            };
 
     // Per-scene cast (who's actually IN that scene, not the whole day's
     // call list) comes from the AD Scene Breakdown Sheet, if one's been
@@ -8108,6 +8230,8 @@ app.get("/api/shoot-schedule/:id/export", requireLogin, async (req, res) => {
     const doc = new PDFDocument({ size: "A4", layout: "landscape", margin: 24 });
     doc.registerFont("odiaRegular", FONTS.odiaRegular);
     doc.registerFont("odiaBold", FONTS.odiaBold);
+    doc.registerFont("hindiRegular", FONTS.hindiRegular);
+    doc.registerFont("hindiBold", FONTS.hindiBold);
 
     res.setHeader("Content-Type", "application/pdf");
     res.setHeader(
@@ -8324,7 +8448,7 @@ app.get("/api/shoot-schedule/:id/export", requireLogin, async (req, res) => {
 // ahead of that group's scenes), plus an Artist-Wise Summary sheet when
 // this isn't scoped to a single day.
 app.get("/api/shoot-schedule/:id/export-excel", requireLogin, async (req, res) => {
-  const lang = req.query.lang === "or" ? "or" : "en";
+  const lang = ["or", "hi"].includes(req.query.lang) ? req.query.lang : "en";
   const dayFilter = req.query.day ? Number(req.query.day) : null;
 
   try {
@@ -8354,11 +8478,17 @@ app.get("/api/shoot-schedule/:id/export-excel", requireLogin, async (req, res) =
             wrapped: "ସମାପ୍ତ", pending: "ବାକି", inProgress: "ଚାଲୁଛି", episode: "ଏପିସୋଡ୍", scenes: "ଦୃଶ୍ୟ", unspecified: "ଅନିର୍ଦ୍ଦିଷ୍ଟ", character: "ଚରିତ୍ର", status: "ସ୍ଥିତି",
             serialNo: "କ୍ର.ନଂ", description: "ଦୃଶ୍ୟ ବର୍ଣ୍ଣନା", dayNight: "D/N", juniorArtists: "ଜୁନିଅର୍ ଆର୍ଟିଷ୍ଟ",
           }
-        : {
-            day: "Day", location: "Location", cast: "Cast Called", notes: "Notes", artistSummary: "Artist-Wise Summary", totalDays: "Total Days", days: "Days", completed: "COMPLETED", costume: "Costume", properties: "Properties", adRemark: "AD Remark",
-            wrapped: "WRAPPED", pending: "PENDING", inProgress: "IN PROGRESS", episode: "Episode", scenes: "scenes", unspecified: "Unspecified", character: "Character", status: "Status",
-            serialNo: "S.No", description: "Scene Description", dayNight: "D/N", juniorArtists: "Junior Artists",
-          };
+        : lang === "hi"
+          ? {
+              day: "दिन", location: "स्थान", cast: "कलाकार", notes: "टिप्पणी", artistSummary: "कलाकार-अनुसार सारांश", totalDays: "कुल दिन", days: "दिन", completed: "पूरा हुआ", costume: "पोशाक", properties: "सामग्री", adRemark: "AD टिप्पणी",
+              wrapped: "पूरा", pending: "बाकी", inProgress: "जारी", episode: "एपिसोड", scenes: "दृश्य", unspecified: "अनिर्दिष्ट", character: "किरदार", status: "स्थिति",
+              serialNo: "क्र.सं", description: "दृश्य विवरण", dayNight: "D/N", juniorArtists: "जूनियर आर्टिस्ट",
+            }
+          : {
+              day: "Day", location: "Location", cast: "Cast Called", notes: "Notes", artistSummary: "Artist-Wise Summary", totalDays: "Total Days", days: "Days", completed: "COMPLETED", costume: "Costume", properties: "Properties", adRemark: "AD Remark",
+              wrapped: "WRAPPED", pending: "PENDING", inProgress: "IN PROGRESS", episode: "Episode", scenes: "scenes", unspecified: "Unspecified", character: "Character", status: "Status",
+              serialNo: "S.No", description: "Scene Description", dayNight: "D/N", juniorArtists: "Junior Artists",
+            };
 
     const breakdownResult = await db.query(
       "SELECT content FROM script_breakdowns WHERE scene_list_id = $1 ORDER BY created_at DESC LIMIT 1",
@@ -8538,7 +8668,7 @@ app.get("/api/shoot-schedule/:id/export-excel", requireLogin, async (req, res) =
 // costume/properties note per scene) rather than filtering the whole
 // project's catalogs, since a day's breakdown is naturally scene-scoped.
 app.get("/api/shoot-schedule/:id/export-day", requireLogin, async (req, res) => {
-  const lang = req.query.lang === "or" ? "or" : "en";
+  const lang = ["or", "hi"].includes(req.query.lang) ? req.query.lang : "en";
   const dayNumber = Number(req.query.day);
   const category = req.query.category;
   const DAY_EXPORT_CATEGORIES = ["artists", "locations", "costumes", "properties"];
@@ -8575,22 +8705,29 @@ app.get("/api/shoot-schedule/:id/export-day", requireLogin, async (req, res) => 
     const isSeries = Boolean(sceneList.episodeScenes);
     const title = await fetchProjectTitleForSceneList(sceneListId, sceneList, lang);
 
-    const bodyFont = lang === "or" ? "odiaRegular" : "Helvetica";
-    const headerFont = lang === "or" ? "odiaBold" : "Helvetica-Bold";
+    const bodyFont = lang === "or" ? "odiaRegular" : lang === "hi" ? "hindiRegular" : "Helvetica";
+    const headerFont = lang === "or" ? "odiaBold" : lang === "hi" ? "hindiBold" : "Helvetica-Bold";
     const labels =
       lang === "or"
         ? {
             artists: "କଳାକାର ବିଭାଜନ", locations: "ସ୍ଥାନ ବିଭାଜନ", costumes: "ପୋଷାକ ବିଭାଜନ", properties: "ସାମଗ୍ରୀ ବିଭାଜନ",
             day: "ଦିନ", episode: "ଏପିସୋଡ୍", scene: "ଦୃଶ୍ୟ", scenes: "ଦୃଶ୍ୟ", notCast: "ଏପର୍ଯ୍ୟନ୍ତ କାଷ୍ଟ ହୋଇନାହିଁ", none: "କିଛି ମିଳିଲା ନାହିଁ।",
           }
-        : {
-            artists: "Artist Breakdown", locations: "Location Breakdown", costumes: "Costume Breakdown", properties: "Property Breakdown",
-            day: "Day", episode: "Episode", scene: "Scene", scenes: "scenes", notCast: "Not yet cast", none: "Nothing found for this day.",
-          };
+        : lang === "hi"
+          ? {
+              artists: "कलाकार विवरण", locations: "स्थान विवरण", costumes: "पोशाक विवरण", properties: "सामग्री विवरण",
+              day: "दिन", episode: "एपिसोड", scene: "दृश्य", scenes: "दृश्य", notCast: "अभी तक कास्ट नहीं हुआ", none: "इस दिन के लिए कुछ नहीं मिला।",
+            }
+          : {
+              artists: "Artist Breakdown", locations: "Location Breakdown", costumes: "Costume Breakdown", properties: "Property Breakdown",
+              day: "Day", episode: "Episode", scene: "Scene", scenes: "scenes", notCast: "Not yet cast", none: "Nothing found for this day.",
+            };
 
     const doc = new PDFDocument({ size: "A4", margin: 50 });
     doc.registerFont("odiaRegular", FONTS.odiaRegular);
     doc.registerFont("odiaBold", FONTS.odiaBold);
+    doc.registerFont("hindiRegular", FONTS.hindiRegular);
+    doc.registerFont("hindiBold", FONTS.hindiBold);
 
     res.setHeader("Content-Type", "application/pdf");
     res.setHeader("Content-Disposition", `attachment; filename="day-${dayNumber}-${category}-${lang}-${formatExportTimestamp()}.pdf"`);
@@ -8664,7 +8801,7 @@ app.get("/api/shoot-schedule/:id/export-day", requireLogin, async (req, res) => 
 // Excel counterpart of the single-day category breakdown above — same
 // per-category data, one row per entry instead of a flowing list.
 app.get("/api/shoot-schedule/:id/export-day-excel", requireLogin, async (req, res) => {
-  const lang = req.query.lang === "or" ? "or" : "en";
+  const lang = ["or", "hi"].includes(req.query.lang) ? req.query.lang : "en";
   const dayNumber = Number(req.query.day);
   const category = req.query.category;
   const DAY_EXPORT_CATEGORIES = ["artists", "locations", "costumes", "properties"];
@@ -8706,11 +8843,17 @@ app.get("/api/shoot-schedule/:id/export-day-excel", requireLogin, async (req, re
             character: "ଚରିତ୍ର", playedBy: "କଳାକାର", contactNumber: "ଯୋଗାଯୋଗ ନମ୍ବର", notCast: "ଏପର୍ଯ୍ୟନ୍ତ କାଷ୍ଟ ହୋଇନାହିଁ",
             location: "ସ୍ଥାନ", intExt: "INT/EXT", sceneCount: "ଦୃଶ୍ୟ ସଂଖ୍ୟା", scene: "ଦୃଶ୍ୟ", notes: "ଟିପ୍ପଣୀ",
           }
-        : {
-            artists: "Artist Breakdown", locations: "Location Breakdown", costumes: "Costume Breakdown", properties: "Property Breakdown",
-            character: "Character", playedBy: "Played By", contactNumber: "Contact Number", notCast: "Not yet cast",
-            location: "Location", intExt: "INT/EXT", sceneCount: "Scene Count", scene: "Scene", notes: "Notes",
-          };
+        : lang === "hi"
+          ? {
+              artists: "कलाकार विवरण", locations: "स्थान विवरण", costumes: "पोशाक विवरण", properties: "सामग्री विवरण",
+              character: "किरदार", playedBy: "अभिनेता", contactNumber: "संपर्क नंबर", notCast: "अभी तक कास्ट नहीं हुआ",
+              location: "स्थान", intExt: "INT/EXT", sceneCount: "दृश्य संख्या", scene: "दृश्य", notes: "टिप्पणी",
+            }
+          : {
+              artists: "Artist Breakdown", locations: "Location Breakdown", costumes: "Costume Breakdown", properties: "Property Breakdown",
+              character: "Character", playedBy: "Played By", contactNumber: "Contact Number", notCast: "Not yet cast",
+              location: "Location", intExt: "INT/EXT", sceneCount: "Scene Count", scene: "Scene", notes: "Notes",
+            };
 
     const workbook = new ExcelJS.Workbook();
     const sheet = workbook.addWorksheet(labels[category].slice(0, 31));
@@ -8961,7 +9104,7 @@ async function loadCallSheetInputs(req, res) {
 
   const sceneListResult = await db.query("SELECT content FROM scene_lists WHERE id = $1", [sceneListId]);
   const sceneList = sceneListResult.rows[0]?.content ?? {};
-  const title = await fetchProjectTitleForSceneList(sceneListId, sceneList, req.query.lang === "or" ? "or" : "en");
+  const title = await fetchProjectTitleForSceneList(sceneListId, sceneList, ["or", "hi"].includes(req.query.lang) ? req.query.lang : "en");
   const breakdownResult = await db.query(
     "SELECT content FROM script_breakdowns WHERE scene_list_id = $1 ORDER BY created_at DESC LIMIT 1",
     [sceneListId]
@@ -8972,7 +9115,7 @@ async function loadCallSheetInputs(req, res) {
 }
 
 app.get("/api/shoot-schedule/:id/call-sheet", requireLogin, async (req, res) => {
-  const lang = req.query.lang === "or" ? "or" : "en";
+  const lang = ["or", "hi"].includes(req.query.lang) ? req.query.lang : "en";
 
   try {
     const inputs = await loadCallSheetInputs(req, res);
@@ -8981,12 +9124,14 @@ app.get("/api/shoot-schedule/:id/call-sheet", requireLogin, async (req, res) => 
     const data = await buildCallSheetData(sceneListId, schedule, sceneList, adSheet, dayNumber, lang);
     const { day, nextDay, sceneRows, advanceRows, castRows, config, activeDepartments, departmentRoster } = data;
 
-    const bodyFont = lang === "or" ? "odiaRegular" : "Helvetica";
-    const headerFont = lang === "or" ? "odiaBold" : "Helvetica-Bold";
+    const bodyFont = lang === "or" ? "odiaRegular" : lang === "hi" ? "hindiRegular" : "Helvetica";
+    const headerFont = lang === "or" ? "odiaBold" : lang === "hi" ? "hindiBold" : "Helvetica-Bold";
 
     const doc = new PDFDocument({ size: "A4", margin: 24 });
     doc.registerFont("odiaRegular", FONTS.odiaRegular);
     doc.registerFont("odiaBold", FONTS.odiaBold);
+    doc.registerFont("hindiRegular", FONTS.hindiRegular);
+    doc.registerFont("hindiBold", FONTS.hindiBold);
 
     res.setHeader("Content-Type", "application/pdf");
     res.setHeader("Content-Disposition", `attachment; filename="call-sheet-day-${dayNumber}-${lang}-${formatExportTimestamp()}.pdf"`);
@@ -9115,7 +9260,7 @@ app.get("/api/shoot-schedule/:id/call-sheet", requireLogin, async (req, res) => 
 });
 
 app.get("/api/shoot-schedule/:id/call-sheet-excel", requireLogin, async (req, res) => {
-  const lang = req.query.lang === "or" ? "or" : "en";
+  const lang = ["or", "hi"].includes(req.query.lang) ? req.query.lang : "en";
 
   try {
     const inputs = await loadCallSheetInputs(req, res);
@@ -9406,7 +9551,7 @@ app.get("/api/crew", requireLogin, async (req, res) => {
 // department, general crew) — a department head or the director wants a
 // single phone-book-style list, not five separate category exports.
 app.get("/api/crew/export-excel", requireLogin, async (req, res) => {
-  const lang = req.query.lang === "or" ? "or" : "en";
+  const lang = ["or", "hi"].includes(req.query.lang) ? req.query.lang : "en";
 
   if (!(await userOwnsSceneList(req.user, req.query.sceneListId))) {
     res.status(403).json({ error: "You don't have access to this project." });
@@ -9415,10 +9560,14 @@ app.get("/api/crew/export-excel", requireLogin, async (req, res) => {
 
   const categoryLabels = lang === "or"
     ? { artist: "କଳାକାର", location: "ସ୍ଥାନ", art_department: "ଆର୍ଟ ବିଭାଗ", costume_department: "ପୋଷାକ ବିଭାଗ", direction_team: "ନିର୍ଦ୍ଦେଶନା ଦଳ", production_team: "ପ୍ରଡକ୍ସନ୍ ଦଳ", crew: "ଅନ୍ୟାନ୍ୟ କ୍ରୁ" }
-    : { artist: "Artist", location: "Location", art_department: "Art Department", costume_department: "Costume Department", direction_team: "Direction Team", production_team: "Production Team", crew: "Other / Additional Crew" };
+    : lang === "hi"
+      ? { artist: "कलाकार", location: "स्थान", art_department: "आर्ट विभाग", costume_department: "पोशाक विभाग", direction_team: "निर्देशन टीम", production_team: "प्रोडक्शन टीम", crew: "अन्य क्रू" }
+      : { artist: "Artist", location: "Location", art_department: "Art Department", costume_department: "Costume Department", direction_team: "Direction Team", production_team: "Production Team", crew: "Other / Additional Crew" };
   const columnLabels = lang === "or"
     ? { category: "ବିଭାଗ", linkedTo: "ଚରିତ୍ର/ସ୍ଥାନ", name: "ନାମ", role: "ପଦବୀ", contactNumber: "ଯୋଗାଯୋଗ ନମ୍ବର" }
-    : { category: "Category", linkedTo: "Character / Location", name: "Name", role: "Role", contactNumber: "Contact Number" };
+    : lang === "hi"
+      ? { category: "श्रेणी", linkedTo: "किरदार/स्थान", name: "नाम", role: "पद", contactNumber: "संपर्क नंबर" }
+      : { category: "Category", linkedTo: "Character / Location", name: "Name", role: "Role", contactNumber: "Contact Number" };
 
   try {
     // Cast is excluded — it's already shown against each character in the
@@ -9430,7 +9579,7 @@ app.get("/api/crew/export-excel", requireLogin, async (req, res) => {
     );
 
     const workbook = new ExcelJS.Workbook();
-    const sheet = workbook.addWorksheet(lang === "or" ? "କ୍ରୁ ଓ କାଷ୍ଟ" : "Cast & Crew");
+    const sheet = workbook.addWorksheet(lang === "or" ? "କ୍ରୁ ଓ କାଷ୍ଟ" : lang === "hi" ? "क्रू और कास्ट" : "Cast & Crew");
     sheet.columns = [
       { header: columnLabels.category, key: "category", width: 20 },
       { header: columnLabels.linkedTo, key: "linkedTo", width: 28 },

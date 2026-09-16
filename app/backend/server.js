@@ -532,6 +532,8 @@ Action lines, scene description, and transitions are ALWAYS written in plain Eng
 
 NEVER write the scene heading/slugline (e.g. "INT. KITCHEN - NIGHT") as one of your elements — the app already displays that heading on its own, separately from your content. Your very first element must jump straight into actual action or dialogue, never restate where or when the scene takes place.
 
+Alongside "elements", also return "charactersPresent": every character who is physically in the scene, not just whoever speaks — a real Odia shooting script always lists this under the scene heading as "Characters: X, Y, Z" (matching how the app renders it), so someone who's silently there (or briefly glimpsed, or present but not part of the dialogue) still belongs in this list.
+
 AVOID reflexive genre-stock description shorthand — phrases like "eyes narrow", "jaw clenches", "marble floor", "victorious smile", or any other generic gesture reached for on autopilot. Ground each scene's action description in specific, concrete, sensory detail unique to THIS scene's actual location, character, and moment, never an interchangeable stock line that could be pasted into any other scene in the story. If you're shown phrases already overused earlier in this same story below, do not reuse them or close variants — find a fresh, specific way to convey the same beat.
 
 Use "characterModifier" on a dialogue element when it genuinely applies: "CONT'D" if the same character keeps speaking after a brief action beat interrupted them without leaving the scene, "O.S." if they're heard but not seen on screen, "V.O." for narration, an inner thought, or a phone/recording voice, "ECHOING" for a remembered line from a past scene or a character who isn't physically present, replaying in another character's mind (distinct from V.O. — this is specifically a memory echoing back, not present-tense narration). Use "none" otherwise — most dialogue needs no modifier.
@@ -543,7 +545,9 @@ const SCREENPLAY_DIALOGUE_CRAFT = {
 - EVERY LINE MUST CARRY EMOTION, NOT JUST INFORMATION. Never write dialogue as flat, cut-to-cut information-passing (character A states a fact, character B states the next fact). Real people hesitate, deflect, repeat themselves, ask questions instead of answering, or say something adjacent to what they mean when they're upset, scared, or holding something back. Preserve every beat of drama already established in the scene's one-liner and turn — do not summarize or compress it into fewer, flatter lines.
 - Sentences are often short, broken, and imperfect — trailing off, repeating a word for emphasis, talking over each other — the way people actually speak, not complete grammatical sentences.
 - Speech register must match the character: a security guard, a strict grandmother, a nagging in-law, joking office colleagues, and a frightened teenager should all sound distinctly different from each other in vocabulary, formality, and rhythm — never one uniform "polite" voice for everyone.
-- Tense or emotional dialogue tends to get clipped and urgent rather than eloquent.`,
+- Tense or emotional dialogue tends to get clipped and urgent rather than eloquent.
+- Real dialogue lines are often shorter than you'd guess — many effective lines are just 2-8 words ("Kothay jete hobe?", "Pouchhe gechhi.", "Sorry sorry sorry Mummy") rather than a full sentence. Don't pad a line into a complete grammatical thought when a fragment lands harder.
+- If a minor/secondary character's background clearly establishes a different mother tongue than this story's main characters (an outsider from another state, a migrant worker, someone explicitly marked as non-native), let THEM speak in their own natural language/register instead of forcing every character into one shared dialogue language — a Kolkata auto driver talking to an Odia stranger would naturally speak Bengali or Hindi, not Odia.`,
 
   or: `DIALOGUE LANGUAGE FOR THIS SCENE: Odia. You are an expert Odia dialogue writer and script supervisor ("Script Doctor") whose job is to make every line sound like real spoken Odia, never a textbook.
 
@@ -556,6 +560,8 @@ CHALITA BHASHA, NOT SADHU BHASHA — this is the single most important rule. Wri
 - Speech register must match the character: a security guard, a strict grandmother, a nagging in-law, joking office colleagues, and a frightened teenager should all sound distinctly different from each other in vocabulary, formality, and rhythm — never one uniform "polite Odia" voice for everyone.
 - Family and social relationship terms (Ma, Bapa, Bhai, Kaka, Mausi, Thakuma, or their Odia equivalents) get used constantly in address, more often than actual names.
 - Tense or emotional dialogue tends to get clipped and urgent rather than eloquent.
+- Real dialogue lines are often shorter than you'd guess — many effective lines are just a handful of words rather than a full sentence. Don't pad a line into a complete grammatical thought when a short, clipped fragment lands harder.
+- If a minor/secondary character's background clearly establishes a different mother tongue (an outsider from another state, a migrant worker, someone explicitly non-Odia), let THEM speak in their own natural language instead of forcing every character to speak Odia — e.g. a Bengali or Hindi-speaking outsider talking to an Odia character would naturally use their own language, not Odia.
 
 IMPORTANT — script, not Romanization: many real Odia shooting scripts write dialogue in Romanized/transliterated Odia (Latin letters, e.g. "Kana kahuchhanti") for on-set convenience. Do NOT do that here. Dialogue must always be written in actual Odia (Oriya) script (ଓଡ଼ିଆ), never Romanized. Code-switching means an occasional English word or short phrase embedded naturally INSIDE an Odia-script sentence (e.g. "ମୋତେ ସିରିଅସ୍ଲି କାହିଁକି ଡରାଉଛୁ?") — it does not mean writing whole sentences in Latin letters.`,
 
@@ -570,6 +576,8 @@ BOLCHAAL KI HINDI, NOT SHUDDH/SANSKRITIZED HINDI — this is the single most imp
 - Speech register must match the character: a security guard, a strict grandmother, a nagging in-law, joking office colleagues, and a frightened teenager should all sound distinctly different from each other in vocabulary, formality, and rhythm — never one uniform "polite Hindi" voice for everyone.
 - Family and social relationship terms (Maa, Papa, Bhaiya, Chacha, Mausi, Dadi, or their regional equivalents) get used constantly in address, more often than actual names.
 - Tense or emotional dialogue tends to get clipped and urgent rather than eloquent.
+- Real dialogue lines are often shorter than you'd guess — many effective lines are just a handful of words rather than a full sentence. Don't pad a line into a complete grammatical thought when a short, clipped fragment lands harder.
+- If a minor/secondary character's background clearly establishes a different mother tongue (an outsider from another state or region, someone explicitly non-native), let THEM speak in their own natural language instead of forcing every character to speak Hindi.
 
 IMPORTANT — script, not Romanization: dialogue must always be written in actual Hindi (Devanagari) script, never Romanized/transliterated Hindi (Latin letters, e.g. "Kya kar rahe ho"). Code-switching means an occasional English word or short phrase embedded naturally INSIDE a Devanagari sentence — it does not mean writing whole sentences in Latin letters.`,
 };
@@ -5393,15 +5401,21 @@ async function generateScreenplaySceneContent(deck, allScenes, sceneIndex, previ
         maxOutputTokens: Math.min(16384, Math.max(4096, suggestedWords * 4)),
         responseSchema: {
           type: Type.OBJECT,
-          properties: { elements: { type: Type.ARRAY, items: SCREENPLAY_ELEMENT_SCHEMA } },
-          required: ["elements"],
+          properties: {
+            elements: { type: Type.ARRAY, items: SCREENPLAY_ELEMENT_SCHEMA },
+            charactersPresent: { type: Type.ARRAY, items: { type: Type.STRING } },
+          },
+          required: ["elements", "charactersPresent"],
         },
       },
     });
-    return sanitizeScreenplayElements(parsed.elements, dialogueLanguage);
+    return {
+      elements: sanitizeScreenplayElements(parsed.elements, dialogueLanguage),
+      charactersPresent: Array.isArray(parsed.charactersPresent) ? parsed.charactersPresent : [],
+    };
   }
 
-  let elements = await callGemini(contents);
+  let { elements, charactersPresent } = await callGemini(contents);
 
   // If the model under-shot the page-length target badly, give it one
   // chance to expand — capped at a single retry, same discipline as the
@@ -5409,10 +5423,10 @@ async function generateScreenplaySceneContent(deck, allScenes, sceneIndex, previ
   const actualWords = countScreenplayWords(elements);
   if (actualWords < suggestedWords * 0.7) {
     const correctionNote = `\n\nIMPORTANT CORRECTION NEEDED: your draft only came to about ${actualWords} words, but a ${targetScene.estimatedMinutes}-minute scene needs roughly ${suggestedWords} words to fill its standard-format page length (1 page ≈ 1 minute). Rewrite the scene with substantially more action description and fuller dialogue exchanges — more back-and-forth, more beats — to genuinely reach that length, not just pad existing lines.`;
-    elements = await callGemini(contents + correctionNote);
+    ({ elements, charactersPresent } = await callGemini(contents + correctionNote));
   }
 
-  return { elements, dialogueLanguage };
+  return { elements, charactersPresent, dialogueLanguage };
 }
 
 async function fetchLatestScreenplayScene(sceneListId, episodeIndex, sceneIndex) {
@@ -11037,7 +11051,7 @@ function renderFullScreenplayPdf(res, deck, sceneList, scenesByEpisode) {
   const dialogueWidth = 260;
   const characterIndent = margin + 155;
 
-  const writeScene = (scene, sceneIndex, elements, dialogueLanguage) => {
+  const writeScene = (scene, sceneIndex, elements, dialogueLanguage, charactersPresent) => {
     const fonts = fontFor(dialogueLanguage);
     doc.addPage();
     doc
@@ -11046,7 +11060,12 @@ function renderFullScreenplayPdf(res, deck, sceneList, scenesByEpisode) {
       .text(`${sceneIndex + 1}. ${scene.intExt}. ${safeUpper(scene.location?.en, "LOCATION")} — ${scene.timeOfDay}`, margin, doc.y, {
         width: actionWidth,
       });
-    doc.moveDown(0.8);
+    doc.moveDown(0.4);
+    if (charactersPresent?.length > 0) {
+      doc.font("Courier").fontSize(9).text(`Characters: ${charactersPresent.join(", ")}`, margin, doc.y, { width: actionWidth });
+      doc.moveDown(0.4);
+    }
+    doc.moveDown(0.4);
 
     elements.forEach((element) => {
       const text = element.text ?? "";
@@ -11087,7 +11106,7 @@ function renderFullScreenplayPdf(res, deck, sceneList, scenesByEpisode) {
       scenes.forEach((scene, sceneIndex) => {
         const row = episodeScenes.find((r) => r.scene_index === sceneIndex);
         if (!row) return;
-        writeScene(scene, sceneIndex, row.content.elements, row.content.dialogueLanguage);
+        writeScene(scene, sceneIndex, row.content.elements, row.content.dialogueLanguage, row.content.charactersPresent);
       });
     });
   } else {
@@ -11095,7 +11114,7 @@ function renderFullScreenplayPdf(res, deck, sceneList, scenesByEpisode) {
     sceneList.scenes.forEach((scene, sceneIndex) => {
       const row = filmScenes.find((r) => r.scene_index === sceneIndex);
       if (!row) return;
-      writeScene(scene, sceneIndex, row.content.elements, row.content.dialogueLanguage);
+      writeScene(scene, sceneIndex, row.content.elements, row.content.dialogueLanguage, row.content.charactersPresent);
     });
   }
 
@@ -11188,7 +11207,7 @@ function buildFullScreenplayDocxParagraphs(deck, sceneList, scenesByEpisode) {
     })
   );
 
-  const writeScene = (scene, sceneIndex, elements) => {
+  const writeScene = (scene, sceneIndex, elements, charactersPresent) => {
     paragraphs.push(
       new Paragraph({
         children: [
@@ -11197,9 +11216,18 @@ function buildFullScreenplayDocxParagraphs(deck, sceneList, scenesByEpisode) {
             bold: true,
           }),
         ],
-        spacing: { before: 300, after: 200 },
+        spacing: { before: 300, after: charactersPresent?.length > 0 ? 50 : 200 },
       })
     );
+
+    if (charactersPresent?.length > 0) {
+      paragraphs.push(
+        new Paragraph({
+          children: [new TextRun({ text: `Characters: ${charactersPresent.join(", ")}`, italics: true, size: 18 })],
+          spacing: { after: 200 },
+        })
+      );
+    }
 
     elements.forEach((element) => {
       const text = element.text ?? "";
@@ -11262,7 +11290,7 @@ function buildFullScreenplayDocxParagraphs(deck, sceneList, scenesByEpisode) {
       scenes.forEach((scene, sceneIndex) => {
         const row = episodeScenes.find((r) => r.scene_index === sceneIndex);
         if (!row) return;
-        writeScene(scene, sceneIndex, row.content.elements);
+        writeScene(scene, sceneIndex, row.content.elements, row.content.charactersPresent);
       });
     });
   } else {
@@ -11270,7 +11298,7 @@ function buildFullScreenplayDocxParagraphs(deck, sceneList, scenesByEpisode) {
     sceneList.scenes.forEach((scene, sceneIndex) => {
       const row = filmScenes.find((r) => r.scene_index === sceneIndex);
       if (!row) return;
-      writeScene(scene, sceneIndex, row.content.elements);
+      writeScene(scene, sceneIndex, row.content.elements, row.content.charactersPresent);
     });
   }
 

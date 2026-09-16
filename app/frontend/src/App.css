@@ -1528,6 +1528,13 @@ button, input, textarea, select {
   color: var(--text-primary);
 }
 
+.screenplay-characters-line {
+  margin: 0 0 10px;
+  font-size: 12px;
+  font-style: italic;
+  color: var(--text-secondary);
+}
+
 .screenplay-action {
   margin: 8px 0;
   color: var(--text-secondary);

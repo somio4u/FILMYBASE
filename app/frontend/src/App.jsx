@@ -295,6 +295,7 @@ const LABELS = {
     runtimeMismatchNote: 'This is off from the target runtime — use "Request Changes" below to ask for more or fewer scenes.',
     writeSceneButton: 'Write This Scene',
     generatingScreenplayScene: 'Writing scene...',
+    screenplayCharactersLabel: 'Characters',
     dialogueLanguageEnglish: 'Dialogue: English',
     dialogueLanguageOdia: 'Dialogue: Odia',
     dialogueLanguageHindi: 'Dialogue: Hindi',
@@ -771,6 +772,7 @@ const LABELS = {
     runtimeMismatchNote: 'ଏହା ଲକ୍ଷ୍ୟ ଅବଧିଠାରୁ ଭିନ୍ନ ଅଛି — ତଳେ "ପରିବର୍ତ୍ତନ ପାଇଁ ଅନୁରୋଧ" ବ୍ୟବହାର କରନ୍ତୁ।',
     writeSceneButton: 'ଏହି ଦୃଶ୍ୟ ଲେଖନ୍ତୁ',
     generatingScreenplayScene: 'ଦୃଶ୍ୟ ଲେଖାଯାଉଛି...',
+    screenplayCharactersLabel: 'ଚରିତ୍ର',
     dialogueLanguageEnglish: 'ସଂଳାପ: ଇଂରାଜୀ',
     dialogueLanguageOdia: 'ସଂଳାପ: ଓଡ଼ିଆ',
     dialogueLanguageHindi: 'ସଂଳାପ: ହିନ୍ଦୀ',
@@ -1421,6 +1423,9 @@ function ScreenplayBlock({ episodeIndex, sceneIndex, t, language, screenplay }) 
 
   return (
     <div className="screenplay-block">
+      {draft.charactersPresent?.length > 0 && (
+        <p className="screenplay-characters-line">{t.screenplayCharactersLabel}: {draft.charactersPresent.join(', ')}</p>
+      )}
       <ScreenplayElements elements={draft.elements} language={language} />
 
       {draft.previousFeedback && (

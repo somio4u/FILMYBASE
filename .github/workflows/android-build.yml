@@ -31,8 +31,12 @@ jobs:
           distribution: temurin
           java-version: "17"
 
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
+      # No separate Android SDK setup step: ubuntu-latest runners already
+      # ship a preinstalled SDK (ANDROID_HOME set), and the Gradle build
+      # below pulls whatever platform/build-tools it needs on its own.
+      # android-actions/setup-android@v3 was here before but is broken as
+      # of late 2026 — it unconditionally runs `sdkmanager tools`, a legacy
+      # package Google has fully removed from its SDK repository.
 
       # Capacitor's own .gitignore excludes android/app/src/main/assets/public
       # (the copied web bundle) — it's meant to be regenerated from a fresh

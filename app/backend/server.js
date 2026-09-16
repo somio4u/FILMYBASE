@@ -10349,6 +10349,43 @@ async function reviewDialogueAuthenticity(elements, dialogueLanguage) {
   return JSON.parse(response.text);
 }
 
+const AUTO_PIPELINE_SCORE_SCHEMA = {
+  type: Type.OBJECT,
+  properties: {
+    score: { type: Type.INTEGER },
+    verdict: { type: Type.STRING },
+  },
+  required: ["score", "verdict"],
+};
+
+// Reviewer 4 (AI) — the judge. Every stage that has a specialist reviewer
+// above also gets scored 1-10 by this one after that reviewer's pass. Below
+// 8 triggers another regeneration round (see runAutoPipeline's revision
+// loop), feeding the judge's own verdict back in alongside the specialist's
+// issues, not just the specialist's issues alone — the judge is a second,
+// independent opinion, not a rubber stamp on the first reviewer's word.
+async function scorePipelineStage(stageLabel, contentSummary, reviewerIssues) {
+  const issuesText = reviewerIssues.length > 0 ? reviewerIssues.join(" ") : "No specific issues were flagged by the specialist reviewer.";
+
+  const response = await ai.models.generateContent({
+    model: "gemini-flash-lite-latest",
+    contents: `You are the final judge for the "${stageLabel}" stage of a screenplay pipeline. Here is a summary of the current draft:\n\n${contentSummary}\n\nA specialist reviewer already flagged: ${issuesText}\n\nRate this draft's quality on a strict scale from 1 to 10 (10 = genuinely excellent and ready to ship; 8 = solid and usable; anything below 8 needs real work before it's acceptable). Be a tough, honest judge — do not hand out 8+ scores generously, and don't just repeat the specialist reviewer's words, form your own independent judgment. Give your verdict as a short, direct sentence, in this exact style: if below 8, "This is not up to the mark. This is only a(n) X-pointer because <specific, concrete reasons>." — if 8 or above, "This is a strong X-pointer — <what's genuinely working>."`,
+    config: {
+      systemInstruction: "You are the final quality judge in a multi-agent screenplay pipeline — blunt, specific, and consistent. Never inflate scores just to move things along.",
+      responseMimeType: "application/json",
+      maxOutputTokens: 512,
+      responseSchema: AUTO_PIPELINE_SCORE_SCHEMA,
+    },
+  });
+
+  return JSON.parse(response.text);
+}
+
+// Caps the reviewer-judge revision loop so a stubbornly low score can't spin
+// forever — after this many rounds, the pipeline proceeds with whatever the
+// best attempt was rather than burning unbounded time/API quota on one stage.
+const MAX_AUTO_PIPELINE_REVISION_ROUNDS = 3;
+
 const AUTO_PIPELINE_JSONB_FIELDS = new Set(["format", "review_notes"]);
 
 async function updateAutoPipelineRun(runId, fields) {
@@ -10393,10 +10430,16 @@ async function runAutoPipeline(runId, conceptText, format, dialogueLanguage) {
 
     await updateAutoPipelineRun(runId, { progress_stage: "pitch-deck" });
     let deck = await generatePitchDeckContent(storyline, format);
-    const hookReview = await reviewPitchDeckHooks(deck);
-    if (hookReview.needsRevision) {
-      await appendAutoPipelineNote(runId, "pitch-deck", `Hook reviewer flagged: ${hookReview.issues.join(" ")} — regenerating.`);
-      deck = await generatePitchDeckContent(storyline, format, { feedback: hookReview.issues.join("; "), previous: deck });
+    for (let round = 0; round < MAX_AUTO_PIPELINE_REVISION_ROUNDS; round++) {
+      const hookReview = await reviewPitchDeckHooks(deck);
+      const summary = deck.episodes
+        ? `${deck.episodes.length} episodes. Sample hooks: ${deck.episodes.slice(0, 3).map((ep) => ep.hook?.en).filter(Boolean).join(" | ")}`
+        : `Premise: ${deck.premise.en}`;
+      const judged = await scorePipelineStage("Pitch Deck", summary, hookReview.issues);
+      await appendAutoPipelineNote(runId, "pitch-deck", `Judge score: ${judged.score}/10 — ${judged.verdict}`);
+      if (judged.score >= 8 || round === MAX_AUTO_PIPELINE_REVISION_ROUNDS - 1) break;
+      const feedback = [...hookReview.issues, judged.verdict].filter(Boolean).join(" ");
+      deck = await generatePitchDeckContent(storyline, format, { feedback, previous: deck });
     }
     const pitchDeckResult = await db.query(
       "INSERT INTO pitch_decks (concept_id, content, status) VALUES ($1, $2, 'approved') RETURNING id",
@@ -10429,10 +10472,17 @@ async function runAutoPipeline(runId, conceptText, format, dialogueLanguage) {
 
     await updateAutoPipelineRun(runId, { progress_stage: "scene-list" });
     let sceneList = await generateSceneListContent(bitSheet, deck);
-    const budgetReview = reviewSceneListBudget(deck, sceneList);
-    if (budgetReview.needsRevision) {
-      await appendAutoPipelineNote(runId, "scene-list", `Budget reviewer flagged: ${budgetReview.issues.join(" ")} — regenerating.`);
-      sceneList = await generateSceneListContent(bitSheet, deck, { feedback: budgetReview.issues.join("; "), previous: sceneList });
+    for (let round = 0; round < MAX_AUTO_PIPELINE_REVISION_ROUNDS; round++) {
+      const budgetReview = reviewSceneListBudget(deck, sceneList);
+      const locationCount = new Set(
+        (sceneList.episodeScenes ?? [{ scenes: sceneList.scenes }]).flatMap((es) => es.scenes.map((s) => s.location.en))
+      ).size;
+      const summary = `${locationCount} distinct locations used across the series; ${deck.majorCharacters?.length ?? 0} major characters.`;
+      const judged = await scorePipelineStage("Scene List (budget feasibility)", summary, budgetReview.issues);
+      await appendAutoPipelineNote(runId, "scene-list", `Judge score: ${judged.score}/10 — ${judged.verdict}`);
+      if (judged.score >= 8 || round === MAX_AUTO_PIPELINE_REVISION_ROUNDS - 1) break;
+      const feedback = [...budgetReview.issues, judged.verdict].filter(Boolean).join(" ");
+      sceneList = await generateSceneListContent(bitSheet, deck, { feedback, previous: sceneList });
     }
     const sceneListResult = await db.query(
       "INSERT INTO scene_lists (bit_sheet_id, content, status) VALUES ($1, $2, 'approved') RETURNING id",
@@ -10453,13 +10503,21 @@ async function runAutoPipeline(runId, conceptText, format, dialogueLanguage) {
         // 5th episode (or every 5th scene for a film) — enough to catch a
         // systemic problem without a per-scene AI review cost.
         if (sceneIndex === 0 && episodeIndex % 5 === 0) {
-          const dialogueReview = await reviewDialogueAuthenticity(content.elements, dialogueLanguage);
-          if (dialogueReview.needsRevision) {
-            const stageLabel = episodeIndex === null ? "screenplay" : `screenplay-ep${episodeIndex + 1}`;
-            await appendAutoPipelineNote(runId, stageLabel, `Dialogue reviewer flagged: ${dialogueReview.issues.join(" ")} — regenerating this scene.`);
+          const stageLabel = episodeIndex === null ? "screenplay" : `screenplay-ep${episodeIndex + 1}`;
+          for (let round = 0; round < MAX_AUTO_PIPELINE_REVISION_ROUNDS; round++) {
+            const dialogueReview = await reviewDialogueAuthenticity(content.elements, dialogueLanguage);
+            const sampleLines = content.elements
+              .filter((el) => el.type === "dialogue")
+              .slice(0, 4)
+              .map((el) => `${el.character}: ${el.text}`)
+              .join(" / ");
+            const judged = await scorePipelineStage("Screenplay dialogue", sampleLines || "(no dialogue in this scene)", dialogueReview.issues);
+            await appendAutoPipelineNote(runId, stageLabel, `Judge score: ${judged.score}/10 — ${judged.verdict}`);
+            if (judged.score >= 8 || round === MAX_AUTO_PIPELINE_REVISION_ROUNDS - 1) break;
+            const feedback = [...dialogueReview.issues, judged.verdict].filter(Boolean).join(" ");
             content = await generateScreenplaySceneContent(
               deck, scenes, sceneIndex, previousElements, sceneList.controllingIdea,
-              { feedback: dialogueReview.issues.join("; "), previous: content }, dialogueLanguage
+              { feedback, previous: content }, dialogueLanguage
             );
           }
         }

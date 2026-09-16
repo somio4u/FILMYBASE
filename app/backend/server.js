@@ -497,9 +497,31 @@ const BREAKDOWN_CATEGORY_DESCRIPTIONS = {
   art: "ART DEPARTMENT / set-dressing needs — anything the location needs to be dressed or built for",
 };
 
-const SCREENPLAY_SYSTEM_PROMPT = `You are the Story & Screenplay Agent, specializing in Odia (Odisha) cinema — and, for dialogue specifically, an expert Odia dialogue writer and script supervisor ("Script Doctor") whose job is to make every line sound like real spoken Odia, never a textbook. Once the scene list is approved, expand ONE scene at a time into full screenplay format — action lines describing what's seen/heard, and dialogue attributed to a named character — using standard screenplay conventions. Write scene-by-scene, never the whole film at once.
+// The final screenplay's dialogue language is a per-generation choice (the
+// Director picks English/Odia/Hindi when writing each scene) — everything
+// ELSE in the screenplay (action lines, scene description, transitions,
+// character names) always stays in English regardless of that choice. This
+// is a deliberate, narrower scope than the rest of the app's trilingual
+// content: the user explicitly asked for dialogue-only translation here,
+// not a fully trilingual screenplay.
+const SCREENPLAY_BASE_PROMPT = `You are the Story & Screenplay Agent, specializing in Odia (Odisha) cinema. Once the scene list is approved, expand ONE scene at a time into full screenplay format — action lines describing what's seen/heard, and dialogue attributed to a named character — using standard screenplay conventions. Write scene-by-scene, never the whole film at once.
 
-CHALITA BHASHA, NOT SADHU BHASHA — this is the single most important rule for dialogue. Write natural, spoken, colloquial Odia (Chalita Bhasha), never formal/literary/Sanskritized Odia (Sadhu Bhasha), and never a stiff literal translation from English:
+Action lines, scene description, and transitions are ALWAYS written in plain English, no matter what language the dialogue below is in — never translate these into Odia or Hindi. A character's name is a proper noun and always stays in English/Latin script. Action lines should be visual and concise, present tense, no camera angles or editing directions like "ANGLE ON" or "CLOSE ON". Stay consistent with any character names and voice already established in earlier scenes you're shown.
+
+Use "characterModifier" on a dialogue element when it genuinely applies: "CONT'D" if the same character keeps speaking after a brief action beat interrupted them without leaving the scene, "O.S." if they're heard but not seen on screen, "V.O." for narration, an inner thought, or a phone/recording voice, "ECHOING" for a remembered line from a past scene or a character who isn't physically present, replaying in another character's mind (distinct from V.O. — this is specifically a memory echoing back, not present-tense narration). Use "none" otherwise — most dialogue needs no modifier.
+
+You may add a "flashback" element when a brief memory genuinely intrudes on the present scene: give "character" as whose POV/memory it is, and "text" describing what's remembered (rendered as "FLASH - [CHARACTER]'S POV:" followed by the description, always in English). An ECHOING dialogue element often follows a flashback element, giving voice to what's being remembered. You may also add ONE "transition" element (text like "CUT TO:", "CUT FLASH:", "TRANSITION SHOT.", "MATCH CUT TO:", or "DISSOLVE TO:") at the very end of a scene's elements, but only when a specific transition is dramatically meaningful, not as routine punctuation on every scene. Transition text is a technical screenplay marker, always in English, never translated.`;
+
+const SCREENPLAY_DIALOGUE_CRAFT = {
+  en: `DIALOGUE LANGUAGE FOR THIS SCENE: English. Write dialogue (and any "parenthetical") in natural, contemporary spoken English — the way real people actually talk, never a stiff or literary register.
+- EVERY LINE MUST CARRY EMOTION, NOT JUST INFORMATION. Never write dialogue as flat, cut-to-cut information-passing (character A states a fact, character B states the next fact). Real people hesitate, deflect, repeat themselves, ask questions instead of answering, or say something adjacent to what they mean when they're upset, scared, or holding something back. Preserve every beat of drama already established in the scene's one-liner and turn — do not summarize or compress it into fewer, flatter lines.
+- Sentences are often short, broken, and imperfect — trailing off, repeating a word for emphasis, talking over each other — the way people actually speak, not complete grammatical sentences.
+- Speech register must match the character: a security guard, a strict grandmother, a nagging in-law, joking office colleagues, and a frightened teenager should all sound distinctly different from each other in vocabulary, formality, and rhythm — never one uniform "polite" voice for everyone.
+- Tense or emotional dialogue tends to get clipped and urgent rather than eloquent.`,
+
+  or: `DIALOGUE LANGUAGE FOR THIS SCENE: Odia. You are an expert Odia dialogue writer and script supervisor ("Script Doctor") whose job is to make every line sound like real spoken Odia, never a textbook.
+
+CHALITA BHASHA, NOT SADHU BHASHA — this is the single most important rule. Write natural, spoken, colloquial Odia (Chalita Bhasha), never formal/literary/Sanskritized Odia (Sadhu Bhasha), and never a stiff literal translation from English:
 - Always reach for the local, everyday word over the Sanskritized/formal one. For example: "ଗ୍ରହଣ କରନ୍ତୁ" (Grahana Karantu) → "ନିଅ" (Nia) or "ଧର" (Dhara); "ପ୍ରସ୍ଥାନ କରିବା" (Prasthana Kariba) → "ବାହାରିବା" (Bahariba) or "ଯିବା" (Jiba); "ବାର୍ତ୍ତାଳାପ" (Bartalapa) → "କଥାବାର୍ତ୍ତା" (Kathabarta); "କ୍ରୋଧିତ" (Krodhita) → "ରାଗି" (Ragi). This applies throughout — nouns, adjectives, and verbs alike.
 - Verb endings must match WHO is talking to WHOM, not default to the formal/respectful form for everyone. Toward an elder, a boss, or anyone owed respect, the respectful ଛନ୍ତି/କରନ୍ତି form is correct. But toward a friend, a junior, a child, or in most intimate family address, use the casual ଛି/ଛୁ/ଛ form instead ("କରୁଛନ୍ତି" → "କରୁଛି"/"କରୁଛ"/"କରୁଛୁ" depending on who's speaking to whom) — an AI default of "ଛନ୍ତି" for every single line is exactly the textbook-Odia mistake to avoid.
 - Sentences are often short, broken, and imperfect — trailing off, repeating a word for emphasis, talking over each other — the way people actually speak, not complete grammatical sentences.
@@ -509,13 +531,27 @@ CHALITA BHASHA, NOT SADHU BHASHA — this is the single most important rule for 
 - Family and social relationship terms (Ma, Bapa, Bhai, Kaka, Mausi, Thakuma, or their Odia equivalents) get used constantly in address, more often than actual names.
 - Tense or emotional dialogue tends to get clipped and urgent rather than eloquent.
 
-IMPORTANT — script, not Romanization: many real Odia shooting scripts write dialogue in Romanized/transliterated Odia (Latin letters, e.g. "Kana kahuchhanti") for on-set convenience. Do NOT do that here. The Odia field must always be written in actual Odia (Oriya) script (ଓଡ଼ିଆ), never Romanized. Code-switching means an occasional English word or short phrase embedded naturally INSIDE an Odia-script sentence (e.g. "ମୋତେ ସିରିଅସ୍ଲି କାହିଁକି ଡରାଉଛୁ?") — it does not mean writing whole sentences in Latin letters.
+IMPORTANT — script, not Romanization: many real Odia shooting scripts write dialogue in Romanized/transliterated Odia (Latin letters, e.g. "Kana kahuchhanti") for on-set convenience. Do NOT do that here. Dialogue must always be written in actual Odia (Oriya) script (ଓଡ଼ିଆ), never Romanized. Code-switching means an occasional English word or short phrase embedded naturally INSIDE an Odia-script sentence (e.g. "ମୋତେ ସିରିଅସ୍ଲି କାହିଁକି ଡରାଉଛୁ?") — it does not mean writing whole sentences in Latin letters.`,
 
-A character's name is a proper noun and stays the same across all three languages. Action lines should be visual and concise, present tense, no camera angles or editing directions like "ANGLE ON" or "CLOSE ON". Write the action lines and dialogue text itself in THREE languages — English, Odia, and Hindi — the Odia side should carry all of the natural texture above (colloquial grammar, code-switching, register) while staying in Odia script, the Hindi side should carry that same natural texture in Devanagari script, and the English side stays smoothly readable as a natural equivalent, not a stiff word-for-word crutch. Stay consistent with any character names and voice already established in earlier scenes you're shown.
+  hi: `DIALOGUE LANGUAGE FOR THIS SCENE: Hindi. You are an expert Hindi dialogue writer and script supervisor ("Script Doctor") whose job is to make every line sound like real spoken Hindi, never a textbook.
 
-Use "characterModifier" on a dialogue element when it genuinely applies: "CONT'D" if the same character keeps speaking after a brief action beat interrupted them without leaving the scene, "O.S." if they're heard but not seen on screen, "V.O." for narration, an inner thought, or a phone/recording voice, "ECHOING" for a remembered line from a past scene or a character who isn't physically present, replaying in another character's mind (distinct from V.O. — this is specifically a memory echoing back, not present-tense narration). Use "none" otherwise — most dialogue needs no modifier.
+BOLCHAAL KI HINDI, NOT SHUDDH/SANSKRITIZED HINDI — this is the single most important rule. Write natural, spoken, colloquial Hindi (Bolchaal ki Hindi), never formal/literary/heavily-Sanskritized Hindi (Shuddh Hindi), and never a stiff literal translation from English:
+- Always reach for the local, everyday word over the Sanskritized/formal one. For example: "स्वीकार करें" (Sweekar Karein) → "लो" (Lo) or "ठीक है" (Theek Hai); "प्रस्थान करना" (Prasthan Karna) → "निकलना" (Nikalna) or "जाना" (Jaana); "वार्तालाप" (Vartalap) → "बातचीत" (Baatcheet); "क्रोधित" (Krodhit) → "गुस्सा" (Gussa). This applies throughout — nouns, adjectives, and verbs alike.
+- Pronouns and verb endings must match WHO is talking to WHOM, not default to the formal "आप" for everyone. Toward an elder, a boss, or anyone owed respect, "आप" and its verb forms are correct. But toward a friend, a junior, a child, or in most intimate family address, use "तुम"/"तू" instead — an AI default of "आप" for every single line is exactly the textbook-Hindi mistake to avoid.
+- Sentences are often short, broken, and imperfect — trailing off, repeating a word for emphasis, talking over each other — the way people actually speak, not complete grammatical sentences.
+- EVERY LINE MUST CARRY EMOTION, NOT JUST INFORMATION. Never write dialogue as flat, cut-to-cut information-passing (character A states a fact, character B states the next fact). Real people hesitate, deflect, repeat themselves, ask questions instead of answering, or say something adjacent to what they mean when they're upset, scared, or holding something back. Preserve every beat of drama already established in the scene's one-liner and turn — do not summarize or compress it into fewer, flatter lines.
+- Natural code-switching with English is common and should be used wherever a character genuinely would: urban, educated, or younger characters casually drop English words or whole phrases into a Hindi sentence (a workplace term, a brand or app name, "seriously", "what a vibe", or everyday loanwords like "फ़ोन", "गाड़ी", "ऑफिस"); older, rural, or working-class characters use little to no English and lean on regional idiom instead.
+- Speech register must match the character: a security guard, a strict grandmother, a nagging in-law, joking office colleagues, and a frightened teenager should all sound distinctly different from each other in vocabulary, formality, and rhythm — never one uniform "polite Hindi" voice for everyone.
+- Family and social relationship terms (Maa, Papa, Bhaiya, Chacha, Mausi, Dadi, or their regional equivalents) get used constantly in address, more often than actual names.
+- Tense or emotional dialogue tends to get clipped and urgent rather than eloquent.
 
-You may add a "flashback" element when a brief memory genuinely intrudes on the present scene: give "character" as whose POV/memory it is, and "text" describing what's remembered (rendered as "FLASH - [CHARACTER]'S POV:" followed by the description) — the description itself should still follow all the Odia rules above. An ECHOING dialogue element often follows a flashback element, giving voice to what's being remembered. You may also add ONE "transition" element (text like "CUT TO:", "CUT FLASH:", "TRANSITION SHOT.", "MATCH CUT TO:", or "DISSOLVE TO:") at the very end of a scene's elements, but only when a specific transition is dramatically meaningful, not as routine punctuation on every scene. Transition text is a technical screenplay marker, not translatable content — put the EXACT SAME English term in both the "en" and "or" fields (e.g. both read "CUT TO:"), never translate it into Odia words, matching how real Odia shooting scripts keep these terms in English.`;
+IMPORTANT — script, not Romanization: dialogue must always be written in actual Hindi (Devanagari) script, never Romanized/transliterated Hindi (Latin letters, e.g. "Kya kar rahe ho"). Code-switching means an occasional English word or short phrase embedded naturally INSIDE a Devanagari sentence — it does not mean writing whole sentences in Latin letters.`,
+};
+
+function buildScreenplaySystemPrompt(dialogueLanguage) {
+  const craft = SCREENPLAY_DIALOGUE_CRAFT[dialogueLanguage] ?? SCREENPLAY_DIALOGUE_CRAFT.en;
+  return `${SCREENPLAY_BASE_PROMPT}\n\n${craft}`;
+}
 
 const SCRIPT_BREAKDOWN_SYSTEM_PROMPT = `You are an experienced Assistant Director / Script Supervisor performing a professional SCRIPT BREAKDOWN — the standard pre-scheduling analysis every production does once a script is locked, reading it closely for everything the production team needs to plan for. You are precise and thorough, not creative — extract what's actually in the script, don't invent story content.
 
@@ -538,14 +574,17 @@ Given the full scene list and major characters, plus availability information fo
 - You will be given a TARGET number of shoot days the Production Manager wants to fit within. Try genuinely to fit the schedule into that many days by grouping efficiently — but if it's truly not feasible given the amount of material, say so PLAINLY in the "conflicts" list (e.g. "this needs at least 9 days at a realistic pace; compressing to 6 would require cutting scenes or very long days") rather than silently padding or rushing the schedule to hit the number.
 Write bilingual fields (location names, notes, conflicts) in THREE languages — English, Odia (Odia script), and Hindi (Devanagari script) — each a natural, native-quality version, not a literal translation of the others.`;
 
+// Plain strings, not BILINGUAL_TEXT_SCHEMA — the screenplay's dialogue
+// language is a single per-generation choice (see SCREENPLAY_DIALOGUE_CRAFT),
+// not a fixed trilingual object like the rest of the app's content.
 const SCREENPLAY_ELEMENT_SCHEMA = {
   type: Type.OBJECT,
   properties: {
     type: { type: Type.STRING, enum: ["action", "dialogue", "transition", "flashback"] },
     character: { type: Type.STRING },
     characterModifier: { type: Type.STRING, enum: ["none", "CONT'D", "O.S.", "V.O.", "ECHOING"] },
-    parenthetical: BILINGUAL_TEXT_SCHEMA,
-    text: BILINGUAL_TEXT_SCHEMA,
+    parenthetical: { type: Type.STRING },
+    text: { type: Type.STRING },
   },
   required: ["type", "text"],
 };
@@ -582,6 +621,25 @@ const FOREIGN_SCRIPT_REGEX = new RegExp(
 // few common "smart" punctuation marks Gemini legitimately uses is a mistake.
 const EN_FOREIGN_SCRIPT_REGEX = /[^\x00-\x7FÀ-ſ‘’“”–—…]/g;
 
+// Same idea as FOREIGN_SCRIPT_REGEX, mirrored for Hindi: Devanagari itself
+// (U+0900-U+097F, including the shared danda punctuation) is never stripped
+// — only a stray character from some OTHER Indic or Arabic script leaking
+// into a "hi" field is a mistake.
+const HI_FOREIGN_SCRIPT_REGEX = new RegExp(
+  "[" +
+    "؀-ۿ" + // Arabic
+    "଀-୷" + // Odia
+    "ঀ-৿" + // Bengali/Assamese
+    "਀-੿" + // Gurmukhi
+    "઀-૿" + // Gujarati
+    "஀-௿" + // Tamil
+    "ఀ-౿" + // Telugu
+    "ಀ-೿" + // Kannada
+    "ഀ-ൿ" + // Malayalam
+    "]",
+  "g"
+);
+
 function sanitizeBilingualContent(value) {
   if (Array.isArray(value)) {
     return value.map(sanitizeBilingualContent);
@@ -591,6 +649,8 @@ function sanitizeBilingualContent(value) {
     for (const [key, val] of Object.entries(value)) {
       if (key === "or" && typeof val === "string") {
         result[key] = val.replace(FOREIGN_SCRIPT_REGEX, "").replace(/ {2,}/g, " ").trim();
+      } else if (key === "hi" && typeof val === "string") {
+        result[key] = val.replace(HI_FOREIGN_SCRIPT_REGEX, "").replace(/ {2,}/g, " ").trim();
       } else if (key === "en" && typeof val === "string") {
         result[key] = val.replace(EN_FOREIGN_SCRIPT_REGEX, "").replace(/ {2,}/g, " ").trim();
       } else {
@@ -949,7 +1009,7 @@ app.post("/api/generate-storylines", requireRole("admin"), async (req, res) => {
 
   const formatInstruction =
     format?.type === "vertical"
-      ? `Format: vertical micro-drama, ${format.episodeCount ?? "many"} episodes of only ${format.episodeMinutes ?? "~1-2"} minutes each — shape each storyline direction so it can sustain a long run of very short, hook-driven episodes (ReelShort/short-drama app style), not a single continuous film arc.`
+      ? `Format: vertical micro-drama, ${format.episodeCount ?? "many"} episodes of only ${format.episodeMinutes ?? "~1-2"} minutes each — shape each storyline direction so it can sustain a long run of very short, hook-driven episodes (ReelShort/short-drama app style), not a single continuous film arc. This is a LOW-BUDGET format meant to shoot in just 2-3 days: every storyline direction must be one that naturally plays out with around 5 main characters (plus a little background crowd at most) and within a small, contained setting — think a family home and its immediate surroundings, or one workplace — driven by dialogue and personal drama, NOT a story that needs many locations, a large cast, or spectacle to work.`
       : format?.type === "series"
         ? `Format: web series, ${format.episodeCount ?? "several"} episodes of ${format.episodeMinutes ?? "~25"} minutes each — shape each storyline direction so it can sustain a multi-episode arc, not just a single-sitting story.`
         : `Format: feature film, target runtime ${format?.runtimeMinutes ?? "~90"} minutes.`;
@@ -3307,7 +3367,9 @@ async function generatePitchDeckContent(storyline, format, revision) {
 
   let formatInstruction = "Format: feature film.";
   if (isVerticalDrama) {
-    formatInstruction = `Format: vertical micro-drama, exactly ${format.episodeCount} episodes of only ${format.episodeMinutes} minutes each — these are extremely short, fast-paced episodes (think ReelShort/short-drama app style), NOT scaled-down web-series episodes. Break the story into exactly ${format.episodeCount} episodes forming one coherent arc from setup to finale. For each episode give a short punchy title (2-5 words, do NOT include the word "Episode" or a number in the title itself — that is added separately by the app), a tight 3-4 sentence synopsis that gets straight to the point — establish the situation fast, land one sharp turn, no wasted setup or padding since there's no time for it — and a separate "hook" field: the EXACT, SPECIFIC cliffhanger, twist, or reveal line the episode ends on, stated concretely (e.g. "She opens the envelope and finds her own wedding photo — with his face scratched out" — never a vague placeholder like "things get complicated" or "a shocking twist is revealed"). Every single episode, including the very last one, must end on a real hook of this kind.`;
+    formatInstruction = `Format: vertical micro-drama, exactly ${format.episodeCount} episodes of only ${format.episodeMinutes} minutes each — these are extremely short, fast-paced episodes (think ReelShort/short-drama app style), NOT scaled-down web-series episodes. Break the story into exactly ${format.episodeCount} episodes forming one coherent arc from setup to finale. For each episode give a short punchy title (2-5 words, do NOT include the word "Episode" or a number in the title itself — that is added separately by the app), a tight 3-4 sentence synopsis that gets straight to the point — establish the situation fast, land one sharp turn, no wasted setup or padding since there's no time for it — and a separate "hook" field: the EXACT, SPECIFIC beat the episode ends on, stated concretely — it can be a line of dialogue (e.g. a character says something that changes everything) OR a silent action/visual beat (e.g. "She opens the envelope and finds her own wedding photo — with his face scratched out"), whichever genuinely suits that episode better; never a vague placeholder like "things get complicated" or "a shocking twist is revealed". Every single episode, including the very last one, must end on a real hook of this kind.
+
+BUDGET-FRIENDLY PRODUCTION CONSTRAINT — this is a low-budget format meant to shoot in just 2-3 days total, so the story itself must be conceived to need very little: around 5 main characters (plus a little background crowd at most, never a large cast), and a small, contained setting — a single family home (its rooms — kitchen, bedroom, drawing room, dining room — count as one location) plus at most one more interior (like a shop or restaurant) and a couple of simple free exterior spots. Never invent a plot that requires many locations, a big cast, or spectacle — the drama must come from dialogue, relationships, and what happens between these few people in this one small world.`;
     properties.episodes = {
       type: Type.ARRAY,
       items: {
@@ -4357,6 +4419,66 @@ function suggestBitCount(minutes) {
 // that episode's own mini three-act structure); for a film, one Bit Sheet
 // covering the whole three-act structure. When `revision` is given, the
 // prompt asks for a rewrite that addresses feedback instead of a first draft.
+// One Gemini call per batch of episodes, not one call for the whole series —
+// a real test with just 8 vertical-drama episodes already truncated the JSON
+// response at 12288 tokens (each episode needs its own full set of trilingual
+// structural bits). Same lesson as AD_SHEET_BATCH_SIZE: chunk and run
+// concurrently rather than betting on ever-larger single-call token budgets,
+// since a 60-episode vertical drama would overflow almost any single-call
+// ceiling. See project_gemini_token_budget memory for the earlier pitch-deck
+// version of this same failure mode.
+const BIT_SHEET_EPISODE_BATCH_SIZE = 5;
+
+async function generateBitSheetEpisodeBatch(episodesChunk, structuresChunk, startIndex, deck, isVerticalDrama, threeAct, revision) {
+  const episodesText = episodesChunk
+    .map((episode, i) => {
+      const structure = structuresChunk[i];
+      const suggested = suggestBitCount(deck.format.episodeMinutes);
+      const hookLine = isVerticalDrama && episode.hook ? `\nHook this episode must end on: ${episode.hook.en}` : "";
+      return `Episode ${startIndex + i + 1}: ${episode.title.en} (aim for roughly ${suggested} bits)\nSetup: ${actText(structure.setup)}\nConfrontation: ${actText(structure.confrontation)}\nResolution: ${actText(structure.resolution)}${hookLine}`;
+    })
+    .join("\n\n");
+
+  let contents = isVerticalDrama
+    ? `This is a vertical micro-drama with ${deck.episodes.length} short episodes in total. Here is ONE BATCH of ${episodesChunk.length} of them, each with its own three-act mini-structure, plus the specific hook it must end on:\n\n${episodesText}\n\nFor EACH episode in this batch, break its three acts into its OWN complete Bit Sheet — an ordered list of its major plot-point beats. Each episode is a self-contained mini-story, so each episode's Bit Sheet must include its own opening_image, theme_stated, plot_point_1, all_is_lost, plot_point_2, and final_image anchors positioned within that episode, not just once for the whole series. Since these episodes are extremely short, keep each episode's bit list lean — the final bit (final_image) MUST be the concrete moment that delivers that episode's hook, exactly as given above, not a softer or different beat. Return "episodeBits": an array of exactly ${episodesChunk.length} objects, in the same order as the episodes given above (this batch only, not the whole series).`
+    : `This is a web series with ${deck.episodes.length} episodes in total. Here is ONE BATCH of ${episodesChunk.length} of them, each with its own three-act mini-structure:\n\n${episodesText}\n\nFor EACH episode in this batch, break its three acts into its OWN complete Bit Sheet — an ordered list of its major plot-point beats. Each episode is a self-contained mini-story, so each episode's Bit Sheet must include its own opening_image, theme_stated, plot_point_1, all_is_lost, plot_point_2, and final_image anchors positioned within that episode, not just once for the whole series. Return "episodeBits": an array of exactly ${episodesChunk.length} objects, in the same order as the episodes given above (this batch only, not the whole series).`;
+
+  if (threeAct.controllingIdea) {
+    contents += `\n\nThe story's Controlling Idea (theme) is: "${threeAct.controllingIdea.en}" — the theme_stated bit especially, and every other bit generally, should stay true to this idea.`;
+  }
+
+  if (revision) {
+    const previousChunk = (revision.previous.episodeBits ?? []).slice(startIndex, startIndex + episodesChunk.length);
+    contents += `\n\nThis is a REVISION of a previous Bit Sheet. The Story Writer reviewed the whole thing and requested changes.\nFeedback: "${revision.feedback}"\nPrevious draft for JUST this batch of episodes:\n${JSON.stringify(previousChunk)}\nRevise this batch to address the feedback directly.`;
+  }
+
+  const response = await ai.models.generateContent({
+    model: "gemini-flash-lite-latest",
+    contents,
+    config: {
+      systemInstruction: BIT_SHEET_SYSTEM_PROMPT,
+      responseMimeType: "application/json",
+      maxOutputTokens: 16384,
+      responseSchema: {
+        type: Type.OBJECT,
+        properties: {
+          episodeBits: {
+            type: Type.ARRAY,
+            items: {
+              type: Type.OBJECT,
+              properties: { bits: { type: Type.ARRAY, items: BIT_SCHEMA } },
+              required: ["bits"],
+            },
+          },
+        },
+        required: ["episodeBits"],
+      },
+    },
+  });
+
+  return sanitizeBilingualContent(JSON.parse(response.text)).episodeBits;
+}
+
 async function generateBitSheetContent(threeAct, deck, revision) {
   const isVerticalDrama = deck.format?.type === "vertical";
   const isSeries =
@@ -4364,40 +4486,28 @@ async function generateBitSheetContent(threeAct, deck, revision) {
     Array.isArray(deck.episodes) &&
     Array.isArray(threeAct.episodeStructures);
 
-  const properties = {};
-  const required = [];
-  let contents;
-
   if (isSeries) {
-    const episodesText = deck.episodes
-      .map((episode, index) => {
-        const structure = threeAct.episodeStructures[index];
-        const suggested = suggestBitCount(deck.format.episodeMinutes);
-        const hookLine = isVerticalDrama && episode.hook ? `\nHook this episode must end on: ${episode.hook.en}` : "";
-        return `Episode ${index + 1}: ${episode.title.en} (aim for roughly ${suggested} bits)\nSetup: ${actText(structure.setup)}\nConfrontation: ${actText(structure.confrontation)}\nResolution: ${actText(structure.resolution)}${hookLine}`;
-      })
-      .join("\n\n");
+    const chunkStarts = [];
+    for (let i = 0; i < deck.episodes.length; i += BIT_SHEET_EPISODE_BATCH_SIZE) chunkStarts.push(i);
 
-    contents = isVerticalDrama
-      ? `This is a vertical micro-drama with ${deck.episodes.length} short episodes. Here is each episode's own three-act mini-structure, plus the specific hook it must end on:\n\n${episodesText}\n\nFor EACH episode, break its three acts into its OWN complete Bit Sheet — an ordered list of its major plot-point beats. Each episode is a self-contained mini-story, so each episode's Bit Sheet must include its own opening_image, theme_stated, plot_point_1, all_is_lost, plot_point_2, and final_image anchors positioned within that episode, not just once for the whole series. Since these episodes are extremely short, keep each episode's bit list lean — the final bit (final_image) MUST be the concrete moment that delivers that episode's hook, exactly as given above, not a softer or different beat. Return "episodeBits": an array of exactly ${deck.episodes.length} objects, in episode order, each with a "bits" array covering just that episode.`
-      : `This is a web series with ${deck.episodes.length} episodes. Here is each episode's own three-act mini-structure:\n\n${episodesText}\n\nFor EACH episode, break its three acts into its OWN complete Bit Sheet — an ordered list of its major plot-point beats. Each episode is a self-contained mini-story, so each episode's Bit Sheet must include its own opening_image, theme_stated, plot_point_1, all_is_lost, plot_point_2, and final_image anchors positioned within that episode, not just once for the whole series. Return "episodeBits": an array of exactly ${deck.episodes.length} objects, in episode order, each with a "bits" array covering just that episode.`;
+    const chunkResults = await mapWithConcurrency(chunkStarts, 3, (start) =>
+      generateBitSheetEpisodeBatch(
+        deck.episodes.slice(start, start + BIT_SHEET_EPISODE_BATCH_SIZE),
+        threeAct.episodeStructures.slice(start, start + BIT_SHEET_EPISODE_BATCH_SIZE),
+        start,
+        deck,
+        isVerticalDrama,
+        threeAct,
+        revision
+      )
+    );
 
-    properties.episodeBits = {
-      type: Type.ARRAY,
-      items: {
-        type: Type.OBJECT,
-        properties: { bits: { type: Type.ARRAY, items: BIT_SCHEMA } },
-        required: ["bits"],
-      },
-    };
-    required.push("episodeBits");
-  } else {
-    const suggested = suggestBitCount(deck.format?.runtimeMinutes);
-    contents = `Here is the film's locked three-act structure:\nSetup: ${actText(threeAct.setup)}\nConfrontation: ${actText(threeAct.confrontation)}\nResolution: ${actText(threeAct.resolution)}\n\nBreak this into a Bit Sheet — an ordered list of the film's major plot-point beats (aim for roughly ${suggested} bits, covering all three acts in order). Return "bits": a single array covering the whole film.`;
-
-    properties.bits = { type: Type.ARRAY, items: BIT_SCHEMA };
-    required.push("bits");
+    const content = { episodeBits: chunkResults.flat() };
+    return threeAct.controllingIdea ? { ...content, controllingIdea: threeAct.controllingIdea } : content;
   }
+
+  const suggested = suggestBitCount(deck.format?.runtimeMinutes);
+  let contents = `Here is the film's locked three-act structure:\nSetup: ${actText(threeAct.setup)}\nConfrontation: ${actText(threeAct.confrontation)}\nResolution: ${actText(threeAct.resolution)}\n\nBreak this into a Bit Sheet — an ordered list of the film's major plot-point beats (aim for roughly ${suggested} bits, covering all three acts in order). Return "bits": a single array covering the whole film.`;
 
   if (threeAct.controllingIdea) {
     contents += `\n\nThe story's Controlling Idea (theme) is: "${threeAct.controllingIdea.en}" — the theme_stated bit especially, and every other bit generally, should stay true to this idea.`;
@@ -4413,11 +4523,11 @@ async function generateBitSheetContent(threeAct, deck, revision) {
     config: {
       systemInstruction: BIT_SHEET_SYSTEM_PROMPT,
       responseMimeType: "application/json",
-      maxOutputTokens: isSeries ? 12288 : 6144,
+      maxOutputTokens: 6144,
       responseSchema: {
         type: Type.OBJECT,
-        properties,
-        required,
+        properties: { bits: { type: Type.ARRAY, items: BIT_SCHEMA } },
+        required: ["bits"],
       },
     },
   });
@@ -4601,28 +4711,13 @@ function annotateSceneListTotals(content, isSeries, episodeTargetMinutes, filmTa
   };
 }
 
-function sceneListNeedsRetry(content, isSeries) {
-  if (isSeries) {
-    return content.episodeScenes.some((episodeScene) =>
-      isFarFromTarget(episodeScene.totalEstimatedMinutes, episodeScene.targetMinutes)
-    );
-  }
+// Film-only: a batched series/vertical-drama scene list checks and retries
+// its runtime target per-batch instead (see generateSceneListEpisodeBatch).
+function sceneListNeedsRetry(content) {
   return isFarFromTarget(content.totalEstimatedMinutes, content.targetMinutes);
 }
 
-function buildRetryCorrectionNote(content, isSeries) {
-  if (isSeries) {
-    const lines = content.episodeScenes
-      .map((episodeScene, index) =>
-        isFarFromTarget(episodeScene.totalEstimatedMinutes, episodeScene.targetMinutes)
-          ? `Episode ${index + 1}: your scenes totaled ${episodeScene.totalEstimatedMinutes} minutes against a target of ${episodeScene.targetMinutes} minutes — adjust the number and length of scenes so the total is much closer to the target.`
-          : null
-      )
-      .filter(Boolean)
-      .join("\n");
-    return `\n\nIMPORTANT CORRECTION NEEDED:\n${lines}`;
-  }
-
+function buildRetryCorrectionNote(content) {
   return `\n\nIMPORTANT CORRECTION NEEDED: your scenes totaled ${content.totalEstimatedMinutes} minutes against a target of ${content.targetMinutes} minutes — adjust the number and length of scenes so the total is much closer to the target.`;
 }
 
@@ -4671,44 +4766,121 @@ async function callSceneListGemini(contents, isSeries, totalTargetMinutes) {
   return sanitizeBilingualContent(JSON.parse(response.text));
 }
 
+// Same chunking rationale as BIT_SHEET_EPISODE_BATCH_SIZE — a scene list call
+// covering many episodes at once (a high-episode-count vertical drama can
+// run to 60) risks the same output-token truncation the bit sheet hit.
+const SCENE_LIST_EPISODE_BATCH_SIZE = 5;
+
+// Generates the scene list for ONE batch of episodes. For a vertical drama,
+// `lockedLocations` is null only for the very first batch — that batch is
+// responsible for INVENTING the series' small, reusable location set; every
+// later batch is given that exact list and required to reuse it verbatim,
+// which is why the first batch must finish before the rest can start.
+async function generateSceneListEpisodeBatch(deck, bitSheet, episodesChunk, startIndex, episodeTargetMinutes, isVerticalDrama, lockedLocations, revision) {
+  const episodesText = episodesChunk
+    .map((episode, i) => {
+      const bits = bitSheet.episodeBits[startIndex + i].bits;
+      const targetLine = episodeTargetMinutes
+        ? ` Target on-screen runtime for this episode: ${episodeTargetMinutes} minutes (aim for roughly ${suggestSceneCount(episodeTargetMinutes)} scenes, adjusted as pacing requires).`
+        : "";
+      return `Episode ${startIndex + i + 1}: ${episode.title.en}${targetLine}\nBit Sheet (major plot points, in order):\n${bitSheetOutlineText(bits)}`;
+    })
+    .join("\n\n");
+
+  let contents = `This is a ${isVerticalDrama ? "vertical micro-drama" : "web series"} with ${deck.episodes.length} episodes in total. Here is ONE BATCH of ${episodesChunk.length} of them, each with its own Bit Sheet — its major plot-point beats, already verified:\n\n${episodesText}\n\nFor EACH episode in this batch, expand its Bit Sheet into a full scene-by-scene list — each bit typically becomes 1-3 scenes — whose scenes' combined "estimatedMinutes" add up to approximately that episode's target runtime given above. Return "episodeScenes": an array of exactly ${episodesChunk.length} objects, in the same order as the episodes given above (this batch only, not the whole series).`;
+
+  if (isVerticalDrama) {
+    contents += lockedLocations
+      ? `\n\nBUDGET-FRIENDLY PRODUCTION CONSTRAINT — this is a low-budget vertical micro-drama shooting in 2-3 days total. The series' small, fixed location set has ALREADY been decided from earlier episodes — do NOT invent any new location. Every scene's "location" English value in this batch MUST be EXACTLY one of these strings, verbatim: ${lockedLocations.map((l) => `"${l}"`).join(", ")}.`
+      : `\n\nBUDGET-FRIENDLY PRODUCTION CONSTRAINT — this is a low-budget vertical micro-drama meant to shoot in 2-3 days total, so the scene list MUST be built around a very small, reusable set of locations, not story variety for its own sake. These are the FIRST episodes, so you are ESTABLISHING the fixed location set every later batch of episodes will be required to reuse verbatim:
+- Use AT MOST 4-5 distinct physical locations for the WHOLE series — reuse the same handful of locations across many episodes rather than inventing a new place for each one.
+- Strongly prefer ONE house as the primary location, and treat its different rooms (kitchen, a bedroom, the drawing/living room, the dining room) as separate scene locations WITHIN that one house — that still counts as ONE location for the production (one address, one set to build/dress), not several.
+- At most one more interior location (e.g. one restaurant/shop/office) and a couple of simple, easy-to-access exterior locations (a street, a terrace, a park) that need no permission or set dressing — never multiple different houses or multiple different exterior neighborhoods.
+- The story must be carried by dialogue and character drama happening WITHIN this small set of locations, not by moving the story to new places or spectacle — favor confrontations, revelations, and emotional beats that naturally happen at home, at the one shop, or on the street outside, over anything that would require a new set.
+- Give each location a clear, reusable English name (e.g. "House — Kitchen", "House — Drawing Room", "Street Outside House", "The Shop") that later batches of episodes will match exactly.`;
+  }
+
+  if (bitSheet.controllingIdea) {
+    contents += `\n\nThe story's Controlling Idea (theme) is: "${bitSheet.controllingIdea.en}" — keep scenes true to it.`;
+  }
+
+  if (revision) {
+    const previousChunk = (revision.previous.episodeScenes ?? []).slice(startIndex, startIndex + episodesChunk.length);
+    contents += `\n\nThis is a REVISION of a previous scene list. The Screenplay Writer reviewed the whole thing and requested changes.\nFeedback: "${revision.feedback}"\nPrevious draft for JUST this batch of episodes:\n${JSON.stringify(previousChunk)}\nRevise this batch to address the feedback directly, keeping the same overall structure otherwise.`;
+  }
+
+  const totalTargetForBatch = episodeTargetMinutes ? episodeTargetMinutes * episodesChunk.length : null;
+  let content = await callSceneListGemini(contents, true, totalTargetForBatch);
+
+  // Per-batch retry if THIS batch's own runtime total is far off target —
+  // capped at one retry so a persistently stubborn response can't burn
+  // through the daily API quota.
+  const perEpisodeTotals = content.episodeScenes.map((es) => sumSceneMinutes(es.scenes));
+  if (perEpisodeTotals.some((total) => isFarFromTarget(total, episodeTargetMinutes))) {
+    const lines = perEpisodeTotals
+      .map((total, i) =>
+        isFarFromTarget(total, episodeTargetMinutes)
+          ? `Episode ${startIndex + i + 1}: your scenes totaled ${total} minutes against a target of ${episodeTargetMinutes} minutes — adjust the number and length of scenes so the total is much closer to the target.`
+          : null
+      )
+      .filter(Boolean)
+      .join("\n");
+    content = await callSceneListGemini(contents + `\n\nIMPORTANT CORRECTION NEEDED:\n${lines}`, true, totalTargetForBatch);
+  }
+
+  return content.episodeScenes;
+}
+
 async function generateSceneListContent(bitSheet, deck, revision) {
+  const isVerticalDrama = deck.format?.type === "vertical";
   const isSeries =
-    (deck.format?.type === "series" || deck.format?.type === "vertical") &&
+    (deck.format?.type === "series" || isVerticalDrama) &&
     Array.isArray(deck.episodes) &&
     Array.isArray(bitSheet.episodeBits);
 
   const episodeTargetMinutes = isSeries ? deck.format.episodeMinutes ?? null : null;
   const filmTargetMinutes = !isSeries ? deck.format?.runtimeMinutes ?? null : null;
 
-  // One Gemini call returns scenes for every episode at once (series) or the
-  // whole film — the token budget needs to cover that combined total, not
-  // just a single episode's runtime.
-  const totalTargetMinutes = isSeries
-    ? deck.format.episodeCount && episodeTargetMinutes
-      ? deck.format.episodeCount * episodeTargetMinutes
-      : null
-    : filmTargetMinutes;
-
-  let contents;
-
   if (isSeries) {
-    const episodesText = deck.episodes
-      .map((episode, index) => {
-        const bits = bitSheet.episodeBits[index].bits;
-        const targetLine = episodeTargetMinutes
-          ? ` Target on-screen runtime for this episode: ${episodeTargetMinutes} minutes (aim for roughly ${suggestSceneCount(episodeTargetMinutes)} scenes, adjusted as pacing requires).`
-          : "";
-        return `Episode ${index + 1}: ${episode.title.en}${targetLine}\nBit Sheet (major plot points, in order):\n${bitSheetOutlineText(bits)}`;
-      })
-      .join("\n\n");
+    const chunkStarts = [];
+    for (let i = 0; i < deck.episodes.length; i += SCENE_LIST_EPISODE_BATCH_SIZE) chunkStarts.push(i);
 
-    contents = `This is a web series with ${deck.episodes.length} episodes. Here is each episode's own Bit Sheet — its major plot-point beats, already verified:\n\n${episodesText}\n\nFor EACH episode, expand its Bit Sheet into a full scene-by-scene list — each bit typically becomes 1-3 scenes — whose scenes' combined "estimatedMinutes" add up to approximately that episode's target runtime given above. Return "episodeScenes": an array of exactly ${deck.episodes.length} objects, in episode order, each with a "scenes" array covering just that episode.`;
-  } else {
-    const targetLine = filmTargetMinutes
-      ? `Target on-screen runtime for the whole film: ${filmTargetMinutes} minutes (aim for roughly ${suggestSceneCount(filmTargetMinutes)} scenes, adjusted as pacing requires).`
-      : "";
-    contents = `Here is the film's Bit Sheet — its major plot-point beats, already verified, in order:\n${bitSheetOutlineText(bitSheet.bits)}\n${targetLine}\n\nExpand this Bit Sheet into a full scene-by-scene list for the entire film — each bit typically becomes 1-3 scenes — whose scenes' combined "estimatedMinutes" add up to approximately the target runtime given above. Return "scenes": a single array covering the whole film.`;
+    const episodeScenesChunks = new Array(chunkStarts.length);
+    let lockedLocations = null;
+    let remainingStarts = chunkStarts;
+
+    if (isVerticalDrama) {
+      // The first batch runs alone to establish the fixed location set that
+      // every later batch must then reuse verbatim.
+      const firstStart = chunkStarts[0];
+      const firstChunk = deck.episodes.slice(firstStart, firstStart + SCENE_LIST_EPISODE_BATCH_SIZE);
+      const firstScenes = await generateSceneListEpisodeBatch(
+        deck, bitSheet, firstChunk, firstStart, episodeTargetMinutes, isVerticalDrama, null, revision
+      );
+      episodeScenesChunks[0] = firstScenes;
+      lockedLocations = [...new Set(firstScenes.flatMap((es) => es.scenes.map((s) => s.location.en)))];
+      remainingStarts = chunkStarts.slice(1);
+    }
+
+    const remainingResults = await mapWithConcurrency(remainingStarts, 3, (start) => {
+      const episodesChunk = deck.episodes.slice(start, start + SCENE_LIST_EPISODE_BATCH_SIZE);
+      return generateSceneListEpisodeBatch(
+        deck, bitSheet, episodesChunk, start, episodeTargetMinutes, isVerticalDrama, lockedLocations, revision
+      );
+    });
+    remainingStarts.forEach((start, i) => {
+      episodeScenesChunks[chunkStarts.indexOf(start)] = remainingResults[i];
+    });
+
+    let content = { episodeScenes: episodeScenesChunks.flat() };
+    content = annotateSceneListTotals(content, true, episodeTargetMinutes, null);
+    return bitSheet.controllingIdea ? { ...content, controllingIdea: bitSheet.controllingIdea } : content;
   }
+
+  const targetLine = filmTargetMinutes
+    ? `Target on-screen runtime for the whole film: ${filmTargetMinutes} minutes (aim for roughly ${suggestSceneCount(filmTargetMinutes)} scenes, adjusted as pacing requires).`
+    : "";
+  let contents = `Here is the film's Bit Sheet — its major plot-point beats, already verified, in order:\n${bitSheetOutlineText(bitSheet.bits)}\n${targetLine}\n\nExpand this Bit Sheet into a full scene-by-scene list for the entire film — each bit typically becomes 1-3 scenes — whose scenes' combined "estimatedMinutes" add up to approximately the target runtime given above. Return "scenes": a single array covering the whole film.`;
 
   if (bitSheet.controllingIdea) {
     contents += `\n\nThe story's Controlling Idea (theme) is: "${bitSheet.controllingIdea.en}" — keep scenes true to it.`;
@@ -4718,16 +4890,16 @@ async function generateSceneListContent(bitSheet, deck, revision) {
     contents += `\n\nThis is a REVISION of a previous scene list. The Screenplay Writer reviewed it and requested changes.\nFeedback: "${revision.feedback}"\nRevise the scene list to address this feedback directly, keeping the same overall structure otherwise.`;
   }
 
-  let content = await callSceneListGemini(contents, isSeries, totalTargetMinutes);
-  content = annotateSceneListTotals(content, isSeries, episodeTargetMinutes, filmTargetMinutes);
+  let content = await callSceneListGemini(contents, false, filmTargetMinutes);
+  content = annotateSceneListTotals(content, false, null, filmTargetMinutes);
 
   // If the estimated total is far from the target runtime, give the model one
   // chance to correct itself — capped at a single retry so a persistently
   // stubborn response can't burn through the daily API quota.
-  if (sceneListNeedsRetry(content, isSeries)) {
-    const correctionNote = buildRetryCorrectionNote(content, isSeries);
-    content = await callSceneListGemini(contents + correctionNote, isSeries, totalTargetMinutes);
-    content = annotateSceneListTotals(content, isSeries, episodeTargetMinutes, filmTargetMinutes);
+  if (sceneListNeedsRetry(content)) {
+    const correctionNote = buildRetryCorrectionNote(content);
+    content = await callSceneListGemini(contents + correctionNote, false, filmTargetMinutes);
+    content = annotateSceneListTotals(content, false, null, filmTargetMinutes);
   }
 
   // Carry the Controlling Idea forward so the screenplay-writing stage can
@@ -4872,8 +5044,28 @@ function sceneOutlineLine(scene, index) {
 
 function elementsToPlainText(elements) {
   return elements
-    .map((element) => (element.type === "dialogue" ? `${element.character}: ${element.text.en}` : element.text.en))
+    .map((element) => (element.type === "dialogue" ? `${element.character}: ${element.text}` : element.text))
     .join("\n");
+}
+
+// Screenplay elements are now plain strings (see SCREENPLAY_ELEMENT_SCHEMA),
+// not {en,or,hi} objects, so sanitizeBilingualContent's key-based cleaning
+// doesn't apply — this strips stray foreign-script characters using the
+// element's OWN language instead: action/transition/flashback text is always
+// English, while dialogue/parenthetical follow the scene's dialogueLanguage.
+function sanitizeScreenplayElements(elements, dialogueLanguage) {
+  const dialogueRegex =
+    dialogueLanguage === "or" ? FOREIGN_SCRIPT_REGEX : dialogueLanguage === "hi" ? HI_FOREIGN_SCRIPT_REGEX : EN_FOREIGN_SCRIPT_REGEX;
+  const clean = (text, regex) => (typeof text === "string" ? text.replace(regex, "").replace(/ {2,}/g, " ").trim() : text);
+
+  return (elements ?? []).map((element) => {
+    const isDialogue = element.type === "dialogue";
+    return {
+      ...element,
+      text: clean(element.text, isDialogue ? dialogueRegex : EN_FOREIGN_SCRIPT_REGEX),
+      parenthetical: element.parenthetical != null ? clean(element.parenthetical, dialogueRegex) : element.parenthetical,
+    };
+  });
 }
 
 // Builds the full screenplay content — action lines and dialogue — for ONE
@@ -4882,7 +5074,9 @@ function elementsToPlainText(elements) {
 // continuity; `previousElements` (the immediately preceding scene's already-
 // written content, if any) helps keep character voice consistent scene to
 // scene. When `revision` is given, the prompt asks for a rewrite instead.
-async function generateScreenplaySceneContent(deck, allScenes, sceneIndex, previousElements, controllingIdea, revision) {
+// `dialogueLanguage` ("en"/"or"/"hi") is a per-scene choice made when the
+// Director clicks "Write This Scene" — action lines stay English regardless.
+async function generateScreenplaySceneContent(deck, allScenes, sceneIndex, previousElements, controllingIdea, revision, dialogueLanguage) {
   const targetScene = allScenes[sceneIndex];
   const outlineText = allScenes.map((scene, index) => sceneOutlineLine(scene, index)).join("\n");
   const suggestedElementCount = Math.max(3, Math.round(targetScene.estimatedMinutes * 5));
@@ -4905,7 +5099,7 @@ async function generateScreenplaySceneContent(deck, allScenes, sceneIndex, previ
     model: "gemini-flash-lite-latest",
     contents,
     config: {
-      systemInstruction: SCREENPLAY_SYSTEM_PROMPT,
+      systemInstruction: buildScreenplaySystemPrompt(dialogueLanguage),
       responseMimeType: "application/json",
       maxOutputTokens: 4096,
       responseSchema: {
@@ -4916,7 +5110,8 @@ async function generateScreenplaySceneContent(deck, allScenes, sceneIndex, previ
     },
   });
 
-  return sanitizeBilingualContent(JSON.parse(response.text));
+  const parsed = JSON.parse(response.text);
+  return { elements: sanitizeScreenplayElements(parsed.elements, dialogueLanguage), dialogueLanguage };
 }
 
 async function fetchLatestScreenplayScene(sceneListId, episodeIndex, sceneIndex) {
@@ -4943,8 +5138,9 @@ async function fetchSceneListContext(sceneListId) {
 }
 
 app.post("/api/screenplay/scene", requireRole("admin"), async (req, res) => {
-  const { sceneListId, episodeIndex, sceneIndex } = req.body;
+  const { sceneListId, episodeIndex, sceneIndex, dialogueLanguage: rawDialogueLanguage } = req.body;
   const hasEpisode = episodeIndex !== null && episodeIndex !== undefined;
+  const dialogueLanguage = ["or", "hi"].includes(rawDialogueLanguage) ? rawDialogueLanguage : "en";
 
   try {
     const context = await fetchSceneListContext(sceneListId);
@@ -4973,7 +5169,9 @@ app.post("/api/screenplay/scene", requireRole("admin"), async (req, res) => {
       allScenes,
       sceneIndex,
       previousRow ? previousRow.content.elements : null,
-      context.scene_list_content.controllingIdea
+      context.scene_list_content.controllingIdea,
+      undefined,
+      dialogueLanguage
     );
 
     const insertResult = await db.query(
@@ -5056,7 +5254,8 @@ app.post("/api/screenplay/scene/:id/request-changes", requireRole("admin"), asyn
       sceneIndex,
       previousRow ? previousRow.content.elements : null,
       context.scene_list_content.controllingIdea,
-      { feedback, previous }
+      { feedback, previous },
+      previous.dialogueLanguage ?? "en"
     );
 
     const insertResult = await db.query(
@@ -5122,7 +5321,7 @@ async function buildBreakdownSourceText(sceneList, sceneListId) {
       .map((row) => {
         const elements = row.content.elements ?? [];
         const body = elements
-          .map((el) => (el.type === "dialogue" ? `${el.character}: ${el.text.en}` : el.text.en))
+          .map((el) => (el.type === "dialogue" ? `${el.character}: ${el.text}` : el.text))
           .join("\n");
         return `Scene ${row.scene_index + 1}:\n${body}`;
       })

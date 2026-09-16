@@ -295,6 +295,9 @@ const LABELS = {
     runtimeMismatchNote: 'This is off from the target runtime — use "Request Changes" below to ask for more or fewer scenes.',
     writeSceneButton: 'Write This Scene',
     generatingScreenplayScene: 'Writing scene...',
+    dialogueLanguageEnglish: 'Dialogue: English',
+    dialogueLanguageOdia: 'Dialogue: Odia',
+    dialogueLanguageHindi: 'Dialogue: Hindi',
     screenplayFeedbackPlaceholder: 'What would you like changed about this scene? e.g. "Make the dialogue sharper" or "Add a beat of hesitation before he answers"',
     screenplayCompleteBanner: '🎬 Full screenplay draft complete! This locked structure and final screenplay are ready to hand off to the next stage.',
     screenplayProgressLabel: (drafted, total) => `Screenplay progress: ${drafted} / ${total} scenes written`,
@@ -745,6 +748,9 @@ const LABELS = {
     runtimeMismatchNote: 'ଏହା ଲକ୍ଷ୍ୟ ଅବଧିଠାରୁ ଭିନ୍ନ ଅଛି — ତଳେ "ପରିବର୍ତ୍ତନ ପାଇଁ ଅନୁରୋଧ" ବ୍ୟବହାର କରନ୍ତୁ।',
     writeSceneButton: 'ଏହି ଦୃଶ୍ୟ ଲେଖନ୍ତୁ',
     generatingScreenplayScene: 'ଦୃଶ୍ୟ ଲେଖାଯାଉଛି...',
+    dialogueLanguageEnglish: 'ସଂଳାପ: ଇଂରାଜୀ',
+    dialogueLanguageOdia: 'ସଂଳାପ: ଓଡ଼ିଆ',
+    dialogueLanguageHindi: 'ସଂଳାପ: ହିନ୍ଦୀ',
     screenplayFeedbackPlaceholder: 'ଆପଣ ଏହି ଦୃଶ୍ୟରେ କଣ ପରିବର୍ତ୍ତନ ଚାହୁଁଛନ୍ତି?',
     screenplayCompleteBanner: '🎬 ସମ୍ପୂର୍ଣ୍ଣ ସ୍କ୍ରିନପ୍ଲେ ତିଆରି ହୋଇଗଲା! ଏହି ଲକ୍ ହୋଇଥିବା ସଂରଚନା ଏବଂ ଅନ୍ତିମ ସ୍କ୍ରିନପ୍ଲେ ପରବର୍ତ୍ତୀ ପର୍ଯ୍ୟାୟକୁ ହସ୍ତାନ୍ତର ପାଇଁ ପ୍ରସ୍ତୁତ।',
     screenplayProgressLabel: (drafted, total) => `ସ୍କ୍ରିନପ୍ଲେ ପ୍ରଗତି: ${drafted} / ${total} ଦୃଶ୍ୟ ଲେଖାଯାଇଛି`,
@@ -1279,7 +1285,7 @@ function defaultTentativeStartDate() {
   return d.toISOString().slice(0, 10)
 }
 
-function ScreenplayElements({ elements, language }) {
+function ScreenplayElements({ elements }) {
   return (
     <div className="screenplay-elements">
       {elements.map((element, index) => {
@@ -1289,29 +1295,29 @@ function ScreenplayElements({ elements, language }) {
             <div key={index} className="screenplay-dialogue">
               <p className="screenplay-character">{element.character}{modifier}</p>
               {element.parenthetical && (
-                <p className="screenplay-parenthetical">({element.parenthetical[language]})</p>
+                <p className="screenplay-parenthetical">({element.parenthetical})</p>
               )}
-              <p className="screenplay-dialogue-text">{element.text[language]}</p>
+              <p className="screenplay-dialogue-text">{element.text}</p>
             </div>
           )
         }
         if (element.type === 'transition') {
           return (
             <p key={index} className="screenplay-transition">
-              {element.text[language]}
+              {element.text}
             </p>
           )
         }
         if (element.type === 'flashback') {
           return (
             <p key={index} className="screenplay-flashback">
-              <strong>FLASH - {element.character}'S POV:</strong> {element.text[language]}
+              <strong>FLASH - {element.character}'S POV:</strong> {element.text}
             </p>
           )
         }
         return (
           <p key={index} className="screenplay-action">
-            {element.text[language]}
+            {element.text}
           </p>
         )
       })}
@@ -1319,7 +1325,7 @@ function ScreenplayElements({ elements, language }) {
   )
 }
 
-function ScreenplayBlock({ episodeIndex, sceneIndex, t, language, screenplay }) {
+function ScreenplayBlock({ episodeIndex, sceneIndex, t, screenplay }) {
   if (!screenplay) return null
 
   const key = screenplayKey(episodeIndex, sceneIndex)
@@ -1329,20 +1335,33 @@ function ScreenplayBlock({ episodeIndex, sceneIndex, t, language, screenplay }) 
   const showFeedbackForm = screenplay.feedbackFormKey === key
 
   if (!draft) {
+    const dialogueLanguage = screenplay.dialogueLanguageByKey[key] ?? 'en'
     return (
-      <button
-        className="choose-button write-scene-button"
-        onClick={() => screenplay.onWriteScene(episodeIndex, sceneIndex)}
-        disabled={isGenerating}
-      >
-        {isGenerating ? t.generatingScreenplayScene : t.writeSceneButton}
-      </button>
+      <div className="write-scene-controls">
+        <select
+          className="dialogue-language-select"
+          value={dialogueLanguage}
+          onChange={(e) => screenplay.onDialogueLanguageChange(key, e.target.value)}
+          disabled={isGenerating}
+        >
+          <option value="en">{t.dialogueLanguageEnglish}</option>
+          <option value="or">{t.dialogueLanguageOdia}</option>
+          <option value="hi">{t.dialogueLanguageHindi}</option>
+        </select>
+        <button
+          className="choose-button write-scene-button"
+          onClick={() => screenplay.onWriteScene(episodeIndex, sceneIndex, dialogueLanguage)}
+          disabled={isGenerating}
+        >
+          {isGenerating ? t.generatingScreenplayScene : t.writeSceneButton}
+        </button>
+      </div>
     )
   }
 
   return (
     <div className="screenplay-block">
-      <ScreenplayElements elements={draft.elements} language={language} />
+      <ScreenplayElements elements={draft.elements} />
 
       {draft.previousFeedback && (
         <p className="feedback-note">
@@ -1401,7 +1420,7 @@ function SceneRows({ scenes, t, language, episodeIndex, screenplay }) {
         )}
         <p>{scene.oneLiner[language]}</p>
         {scene.turn && <p className="scene-turn">{t.sceneTurnLabel}: {scene.turn[language]}</p>}
-        <ScreenplayBlock episodeIndex={episodeIndex} sceneIndex={index} t={t} language={language} screenplay={screenplay} />
+        <ScreenplayBlock episodeIndex={episodeIndex} sceneIndex={index} t={t} screenplay={screenplay} />
       </div>
     )
   })
@@ -3148,6 +3167,7 @@ function App() {
   const [screenplayFeedbackFormKey, setScreenplayFeedbackFormKey] = useState(null)
   const [screenplayFeedbackTextByKey, setScreenplayFeedbackTextByKey] = useState({})
   const [submittingScreenplayFeedbackKey, setSubmittingScreenplayFeedbackKey] = useState(null)
+  const [dialogueLanguageByKey, setDialogueLanguageByKey] = useState({})
 
   const [scriptBreakdown, setScriptBreakdown] = useState(null)
   const [isGeneratingBreakdown, setIsGeneratingBreakdown] = useState(false)
@@ -3310,7 +3330,7 @@ function App() {
   const [isReimportingScreenplay, setIsReimportingScreenplay] = useState(false)
   const [reimportResult, setReimportResult] = useState(null)
 
-  const t = LABELS[language]
+  const t = LABELS[language] ?? LABELS.en
   // Mirrors the backend's requireRole checks — hiding a control here is
   // purely UX (the real enforcement is server-side), so a director never
   // sees an Edit/Generate button that would just 403 if clicked, and a
@@ -5844,7 +5864,11 @@ function App() {
     setIsImportingScreenplayFile(false)
   }
 
-  async function handleWriteSceneClick(episodeIndex, sceneIndex) {
+  function handleDialogueLanguageChange(key, value) {
+    setDialogueLanguageByKey((prev) => ({ ...prev, [key]: value }))
+  }
+
+  async function handleWriteSceneClick(episodeIndex, sceneIndex, dialogueLanguage) {
     const key = screenplayKey(episodeIndex, sceneIndex)
     setGeneratingScreenplayKey(key)
     setErrorMessage(null)
@@ -5853,7 +5877,7 @@ function App() {
       const response = await fetch(`${BACKEND_URL}/api/screenplay/scene`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sceneListId: sceneList.id, episodeIndex, sceneIndex }),
+        body: JSON.stringify({ sceneListId: sceneList.id, episodeIndex, sceneIndex, dialogueLanguage }),
       })
       const data = await response.json()
 
@@ -6293,7 +6317,6 @@ function App() {
           >
             <option value="en">English</option>
             <option value="or">ଓଡ଼ିଆ (Odia)</option>
-            <option value="hi">हिन्दी (Hindi)</option>
           </select>
         </div>
 
@@ -7128,6 +7151,8 @@ function App() {
                     feedbackFormKey: screenplayFeedbackFormKey,
                     feedbackTextByKey: screenplayFeedbackTextByKey,
                     submittingFeedbackKey: submittingScreenplayFeedbackKey,
+                    dialogueLanguageByKey,
+                    onDialogueLanguageChange: handleDialogueLanguageChange,
                     onWriteScene: handleWriteSceneClick,
                     onToggleFeedback: handleToggleScreenplayFeedback,
                     onFeedbackTextChange: handleScreenplayFeedbackTextChange,

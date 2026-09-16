@@ -1398,8 +1398,25 @@ button, input, textarea, select {
   font-style: italic;
 }
 
-.write-scene-button {
+.write-scene-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   margin-top: 8px;
+}
+
+.dialogue-language-select {
+  font-size: 13px;
+  padding: 5px 10px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 14px;
+  background: var(--bg-surface-raised);
+  color: var(--text-primary);
+  cursor: pointer;
+}
+
+.write-scene-button {
+  margin-top: 0;
   font-size: 13px;
   padding: 5px 12px;
   background: transparent;

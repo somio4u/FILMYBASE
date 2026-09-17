@@ -2142,10 +2142,22 @@ button, input, textarea, select {
 
 .master-list-card-actions {
   display: flex;
+  align-items: center;
   gap: 6px;
   padding-top: 4px;
   border-top: 1px solid var(--border-subtle);
   margin-top: 2px;
+}
+
+.master-list-card-checkbox {
+  width: 16px;
+  height: 16px;
+  margin: 0 2px 0 0;
+  cursor: pointer;
+}
+
+.master-list-bulk-delete-button {
+  margin-bottom: 16px;
 }
 
 .master-list-assignments {

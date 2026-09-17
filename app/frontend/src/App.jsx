@@ -170,6 +170,10 @@ const LABELS = {
     unpinIconTitle: 'Unpin project',
     deleteIconTitle: 'Delete project',
     deleteProjectConfirm: 'Delete this project? This cannot be undone.',
+    bulkDeleteProjectsConfirm: (count) => `Delete ${count} selected project${count === 1 ? '' : 's'}? This cannot be undone.`,
+    selectProjectCheckboxTitle: 'Select this project',
+    deleteSelectedProjectsButton: (count) => `Delete Selected (${count})`,
+    deletingSelectedProjectsButton: 'Deleting...',
     startStageLabel: 'Start from:',
     startStageIdea: 'Idea',
     startStageSynopsis: 'Synopsis',
@@ -650,6 +654,10 @@ const LABELS = {
     unpinIconTitle: 'ପିନ୍ ହଟାନ୍ତୁ',
     deleteIconTitle: 'ପ୍ରୋଜେକ୍ଟ ଡିଲିଟ୍ କରନ୍ତୁ',
     deleteProjectConfirm: 'ଏହି ପ୍ରୋଜେକ୍ଟକୁ ଡିଲିଟ୍ କରିବେ? ଏହା ପୁନଃ ପାଇ ହେବ ନାହିଁ।',
+    bulkDeleteProjectsConfirm: (count) => `ବଛାଯାଇଥିବା ${count}ଟି ପ୍ରୋଜେକ୍ଟ ଡିଲିଟ୍ କରିବେ? ଏହା ପୁନଃ ପାଇ ହେବ ନାହିଁ।`,
+    selectProjectCheckboxTitle: 'ଏହି ପ୍ରୋଜେକ୍ଟକୁ ବାଛନ୍ତୁ',
+    deleteSelectedProjectsButton: (count) => `ବଛାଯାଇଥିବା ଡିଲିଟ୍ କରନ୍ତୁ (${count})`,
+    deletingSelectedProjectsButton: 'ଡିଲିଟ୍ ହେଉଛି...',
     startStageLabel: 'ଆରମ୍ଭ କରନ୍ତୁ:',
     startStageIdea: 'ଧାରଣା',
     startStageSynopsis: 'ସିନୋପ୍ସିସ୍',
@@ -3855,6 +3863,8 @@ function App() {
   const [projectType, setProjectType] = useState('story')
   const [masterProjectList, setMasterProjectList] = useState([])
   const [isLoadingMasterList, setIsLoadingMasterList] = useState(false)
+  const [selectedMasterProjectIds, setSelectedMasterProjectIds] = useState(() => new Set())
+  const [isBulkDeletingProjects, setIsBulkDeletingProjects] = useState(false)
   const [importScreenplayText, setImportScreenplayText] = useState('')
   const [isImportingScreenplay, setIsImportingScreenplay] = useState(false)
   const [isImportingScreenplayFile, setIsImportingScreenplayFile] = useState(false)
@@ -4040,6 +4050,37 @@ function App() {
     }
     loadMasterProjectList()
     loadProjectList()
+  }
+
+  function toggleMasterProjectSelected(projectId) {
+    setSelectedMasterProjectIds((current) => {
+      const next = new Set(current)
+      if (next.has(projectId)) {
+        next.delete(projectId)
+      } else {
+        next.add(projectId)
+      }
+      return next
+    })
+  }
+
+  async function handleBulkDeleteMasterProjectsClick() {
+    const ids = [...selectedMasterProjectIds]
+    if (ids.length === 0) return
+    if (!window.confirm(t.bulkDeleteProjectsConfirm(ids.length))) return
+
+    setIsBulkDeletingProjects(true)
+    try {
+      await Promise.all(ids.map((id) => fetch(`${BACKEND_URL}/api/concepts/${id}`, { method: 'DELETE' })))
+    } finally {
+      if (ids.includes(conceptId)) {
+        handleNewIdeaClick()
+      }
+      setSelectedMasterProjectIds(new Set())
+      setIsBulkDeletingProjects(false)
+      loadMasterProjectList()
+      loadProjectList()
+    }
   }
 
   // Loads exactly one project's full chain by its concept id — never "whatever's newest
@@ -7031,6 +7072,19 @@ function App() {
         <div className="three-act-structure" id="stage-master-list">
           <h2>{t.masterProjectListHeading}</h2>
 
+          {selectedMasterProjectIds.size > 0 && (
+            <button
+              type="button"
+              className="cancel-button master-list-bulk-delete-button"
+              onClick={handleBulkDeleteMasterProjectsClick}
+              disabled={isBulkDeletingProjects}
+            >
+              {isBulkDeletingProjects
+                ? t.deletingSelectedProjectsButton
+                : t.deleteSelectedProjectsButton(selectedMasterProjectIds.size)}
+            </button>
+          )}
+
           {isLoadingMasterList && <p className="sidebar-section-note">{t.loadingLabel}</p>}
 
           {!isLoadingMasterList && (
@@ -7057,6 +7111,15 @@ function App() {
                         </div>
                       </button>
                       <div className="master-list-card-actions">
+                        {currentUser.role === 'admin' && (
+                          <input
+                            type="checkbox"
+                            className="master-list-card-checkbox"
+                            checked={selectedMasterProjectIds.has(project.id)}
+                            onChange={() => toggleMasterProjectSelected(project.id)}
+                            title={t.selectProjectCheckboxTitle}
+                          />
+                        )}
                         <button
                           className="sidebar-history-icon-button"
                           onClick={() => handleRenameMasterProjectClick(project)}
@@ -7102,6 +7165,15 @@ function App() {
                         </div>
                       </button>
                       <div className="master-list-card-actions">
+                        {currentUser.role === 'admin' && (
+                          <input
+                            type="checkbox"
+                            className="master-list-card-checkbox"
+                            checked={selectedMasterProjectIds.has(project.id)}
+                            onChange={() => toggleMasterProjectSelected(project.id)}
+                            title={t.selectProjectCheckboxTitle}
+                          />
+                        )}
                         <button
                           className="sidebar-history-icon-button"
                           onClick={() => handleRenameMasterProjectClick(project)}

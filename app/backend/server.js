@@ -11782,3 +11782,20 @@ app.listen(PORT, () => {
 // on a regular interval for the rest of this process's own lifetime.
 reapStaleAutoPipelineRuns();
 setInterval(reapStaleAutoPipelineRuns, 5 * 60 * 1000);
+
+// Self-keepalive: Render's free/hobby tier spins this service down after
+// ~15 minutes with no incoming HTTP traffic — which is exactly what a
+// visitor waiting "15 seconds to load" is actually seeing (a cold start),
+// and can also silently kill an in-progress auto-pipeline run. A GitHub
+// Actions scheduled workflow was tried first as an external keepalive
+// ping, but never actually fired even once in several hours — GitHub's
+// `schedule` trigger is simply unreliable to depend on here. This has no
+// external dependency at all: the app pings its own public URL, which
+// Render sees as ordinary incoming traffic (same as any real visitor),
+// so the service never has a reason to go idle in the first place.
+if (!BACKEND_URL.includes("localhost")) {
+  const SELF_PING_INTERVAL_MS = 10 * 60 * 1000; // safely under Render's ~15-minute idle window
+  setInterval(() => {
+    fetch(`${BACKEND_URL}/api/health`).catch((error) => console.error("Self-ping failed:", error.message));
+  }, SELF_PING_INTERVAL_MS);
+}

@@ -3599,6 +3599,22 @@ BUDGET-FRIENDLY PRODUCTION CONSTRAINT — this is a low-budget format meant to s
     result.episodes = allEpisodes;
   }
 
+  // The trim above only ever fixes an OVERSHOOT — it can't invent missing
+  // story content for an undershoot. Observed in practice: with overshoots
+  // now trimmed away, some attempts land UNDER instead (a real run got 59
+  // when 60 were requested) and would otherwise hard-fail after burning all
+  // 3 revision rounds. One top-up batch for exactly the shortfall, framed
+  // as the final episodes completing the arc, is far cheaper than another
+  // full revision round and fixes the common case (a small gap) outright.
+  if (result.episodes.length < totalCount) {
+    const shortfall = totalCount - result.episodes.length;
+    const priorSummary = result.episodes.map((ep, i) => `${i + 1}. ${ep.title.en}: ${ep.synopsis.en}`).join("\n");
+    const topUp = await generatePitchDeckEpisodeBatch(
+      storyline, format, isVerticalDrama, result.episodes.length, shortfall, totalCount, priorSummary, null
+    );
+    result.episodes = result.episodes.concat(enforceBatchEpisodeCount(topUp, shortfall));
+  }
+
   return result;
 }
 
@@ -4467,7 +4483,23 @@ async function generateThreeActContent(deck, characterSheet, revision) {
     return batch.length > expectedCount ? batch.slice(0, expectedCount) : batch;
   });
 
-  return { ...overall, episodeStructures: chunkResults.flat() };
+  let episodeStructures = chunkResults.flat();
+  // Same undershoot gap as the pitch deck (see its own comment) — one
+  // top-up batch for exactly the shortfall, rather than a hard fail with
+  // no revision loop to fall back on for this stage.
+  if (episodeStructures.length < deck.episodes.length) {
+    const shortfall = deck.episodes.length - episodeStructures.length;
+    const topUp = await generateThreeActEpisodeBatch(
+      deck,
+      deck.episodes.slice(episodeStructures.length, episodeStructures.length + shortfall),
+      episodeStructures.length,
+      overallContext,
+      revision
+    );
+    episodeStructures = episodeStructures.concat(topUp.length > shortfall ? topUp.slice(0, shortfall) : topUp);
+  }
+
+  return { ...overall, episodeStructures };
 }
 
 app.post("/api/three-act-structure", requireRole("admin"), async (req, res) => {
@@ -4726,7 +4758,23 @@ async function generateBitSheetContent(threeAct, deck, revision) {
       return batch.length > expectedCount ? batch.slice(0, expectedCount) : batch;
     });
 
-    const content = { episodeBits: chunkResults.flat() };
+    let episodeBits = chunkResults.flat();
+    // Same undershoot gap as the pitch deck/three-act (see their comments).
+    if (episodeBits.length < deck.episodes.length) {
+      const shortfall = deck.episodes.length - episodeBits.length;
+      const topUp = await generateBitSheetEpisodeBatch(
+        deck.episodes.slice(episodeBits.length, episodeBits.length + shortfall),
+        threeAct.episodeStructures.slice(episodeBits.length, episodeBits.length + shortfall),
+        episodeBits.length,
+        deck,
+        isVerticalDrama,
+        threeAct,
+        revision
+      );
+      episodeBits = episodeBits.concat(topUp.length > shortfall ? topUp.slice(0, shortfall) : topUp);
+    }
+
+    const content = { episodeBits };
     return threeAct.controllingIdea ? { ...content, controllingIdea: threeAct.controllingIdea } : content;
   }
 
@@ -5105,7 +5153,24 @@ async function generateSceneListContent(bitSheet, deck, revision) {
       episodeScenesChunks[chunkStarts.indexOf(start)] = remainingResults[i];
     });
 
-    let content = { episodeScenes: episodeScenesChunks.flat() };
+    let episodeScenes = episodeScenesChunks.flat();
+    // Same undershoot gap as the other batched stages (see their comments).
+    if (episodeScenes.length < deck.episodes.length) {
+      const shortfall = deck.episodes.length - episodeScenes.length;
+      const topUp = await generateSceneListEpisodeBatch(
+        deck,
+        bitSheet,
+        deck.episodes.slice(episodeScenes.length, episodeScenes.length + shortfall),
+        episodeScenes.length,
+        episodeTargetMinutes,
+        isVerticalDrama,
+        lockedLocations,
+        revision
+      );
+      episodeScenes = episodeScenes.concat(enforceCount(topUp, shortfall));
+    }
+
+    let content = { episodeScenes };
     content = annotateSceneListTotals(content, true, episodeTargetMinutes, null);
     return bitSheet.controllingIdea ? { ...content, controllingIdea: bitSheet.controllingIdea } : content;
   }

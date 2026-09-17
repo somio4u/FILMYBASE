@@ -2917,13 +2917,14 @@ function splitScreenplayIntoEpisodes(text) {
 // need whole-script context but are tiny outputs, so no truncation risk
 // even for a long multi-episode script.
 async function generateScreenplayMetadataForProduction(fullText) {
-  const response = await generateContentWithRetry({
+  // No cap — a script with a large cast could genuinely need more than a
+  // small fixed budget for the character-name list alone.
+  const parsed = await generateJsonContent({
     model: GEMINI_MODEL_NAME,
     contents: `The user pasted an already-written screenplay below — treat it as authoritative, this is a transcription/structuring task, not a creative rewrite. Extract: a short English-only project title (a few words, internal reference only); and a list of the major character names who appear across the ENTIRE script (plain proper nouns, no descriptions).\n\nThe pasted screenplay:\n${fullText}`,
     config: {
       systemInstruction: SCENE_SYSTEM_PROMPT,
       responseMimeType: "application/json",
-      maxOutputTokens: 2048,
       responseSchema: {
         type: Type.OBJECT,
         properties: {
@@ -2935,7 +2936,7 @@ async function generateScreenplayMetadataForProduction(fullText) {
     },
   });
 
-  return sanitizeBilingualContent(JSON.parse(response.text));
+  return sanitizeBilingualContent(parsed);
 }
 
 // Extracts just ONE episode's (or, for a single-episode/film script, the
@@ -2950,13 +2951,18 @@ async function generateEpisodeScenesForProduction(episodeText, episodeNumber, ep
     ? ` This ${isSeries ? "episode" : "film"} runs approximately ${targetMinutes} minutes — use that to calibrate each scene's estimatedMinutes so they add up in the right ballpark, without forcing an exact match.`
     : "";
 
-  const response = await generateContentWithRetry({
+  // No maxOutputTokens cap — an uploaded script's own length is whatever it
+  // is (a real one already truncated a fixed budget), so this is left to
+  // the model's own maximum rather than another number we'd just have to
+  // keep raising. generateJsonContent also adds the retry-on-parse-failure
+  // safety net this call didn't have before (it used generateContentWithRetry
+  // directly, with a raw, unprotected JSON.parse).
+  const parsed = await generateJsonContent({
     model: GEMINI_MODEL_NAME,
     contents: `The user pasted an already-written screenplay below — treat it as authoritative, this is a transcription/structuring task, not a creative rewrite. ${episodeLine}Extract a faithful scene-by-scene breakdown of the ENTIRE material given — for each scene give sceneNumber (the scene's OWN literal number/label exactly as written in the source — e.g. "5A", "36", or whatever this script actually uses; copy it verbatim, including any letter suffix; NEVER assume it restarts at 1 per episode or renumber it sequentially yourself — if the source keeps counting up across episodes, or starts a scene list mid-sequence, or uses "5A"/"5B" for scenes inserted between 5 and 6, preserve that exactly, since this is what every department on set actually references), actNumber (estimate 1/2/3 from its position within this material), intExt (INT/EXT), a bilingual location (just the place name), timeOfDay (DAY/NIGHT), a bilingual oneLiner summarizing what happens — and it must name EVERY character physically present in the scene, not just whoever is speaking or central to it (someone silently dropping something off, a background figure the script names, etc. — never omit a named person from the one-liner just because their part is brief), an estimatedMinutes number (infer from the scene's length/content), a purpose ("plot_advancing" or "character_revealing"), and a bilingual turn (its value-shift).${targetLine} Odia must be real Odia (Oriya) script, never Romanized. Do not skip any scene, however short.\n\nThe pasted screenplay material:\n${episodeText}`,
     config: {
       systemInstruction: SCENE_SYSTEM_PROMPT,
       responseMimeType: "application/json",
-      maxOutputTokens: 16384,
       responseSchema: {
         type: Type.OBJECT,
         properties: { scenes: { type: Type.ARRAY, items: SCENE_SCHEMA } },
@@ -2965,7 +2971,7 @@ async function generateEpisodeScenesForProduction(episodeText, episodeNumber, ep
     },
   });
 
-  return sanitizeBilingualContent(JSON.parse(response.text)).scenes;
+  return sanitizeBilingualContent(parsed).scenes;
 }
 
 // Shared by both the paste-text and file-upload import routes: splits the
@@ -5805,13 +5811,11 @@ async function generateScriptBreakdownContent(sourceText, revision) {
       config: {
         systemInstruction: SCRIPT_BREAKDOWN_SYSTEM_PROMPT,
         responseMimeType: "application/json",
-        // A real 1064-line response ("Unterminated string...") truncated at
-        // the old 12288-token budget — five categories, each field in THREE
-        // languages, for a full-length script's whole cast/location/prop
-        // list at once needs real headroom. The retry wrapper alone can't
-        // fix a budget that's genuinely too small; a big script hits the
-        // ceiling every attempt, not just an occasional bad one.
-        maxOutputTokens: 32768,
+        // No cap — a real script truncated a 12288, then a 32768 budget in
+        // a row ("Unterminated string..."). This is the core analysis this
+        // whole app is built around, so it's left to the model's own
+        // maximum rather than another fixed number we'd have to keep
+        // raising for the next big script.
         responseSchema: {
           type: Type.OBJECT,
           properties: {
@@ -5889,10 +5893,7 @@ async function generateBreakdownCategoryContent(sourceText, category, existingIt
     config: {
       systemInstruction: SCRIPT_BREAKDOWN_SYSTEM_PROMPT,
       responseMimeType: "application/json",
-      // Same headroom reasoning as generateScriptBreakdownContent — a
-      // single category (e.g. a large cast's artistList) for a
-      // full-length script can still be sizable, trilingual content.
-      maxOutputTokens: 16384,
+      // No cap — same reasoning as generateScriptBreakdownContent.
       responseSchema: {
         type: Type.OBJECT,
         properties: { [category]: { type: Type.ARRAY, items: BREAKDOWN_CATEGORY_ITEM_SCHEMAS[category] } },
@@ -5912,13 +5913,12 @@ async function generateBreakdownCategoryContent(sourceText, category, existingIt
 async function findMissingCharactersInChunk(chunkText, knownLabels) {
   const contents = `The script material (one part of a larger script — the character list below spans the WHOLE script, not just this part):\n${chunkText}\n\nAlready-known characters (do NOT report any of these again, even if they appear here): ${knownLabels.join(", ") || "(none yet)"}\n\nThoroughly re-read this material and identify every character with ANY screen presence who is NOT already in the known list above — including characters who never speak, appear only briefly, or are simply named while physically present in a scene (someone silently dropping something off, a background figure the script gives a real name to, etc.). Do not skip anyone just because their part is small. Exclude only generic, unnamed background people or crowds ("a few guests", "kids playing football", "wedding crowd") — never exclude someone the script actually names. For each character found, give: a short bilingual note on their overall involvement, matching the style of an existing character-list entry; their approximate age (an age or age range as stated or reasonably inferable, e.g. "60s", "Late 20s", "Child, around 8" — "Unspecified" only if genuinely not inferable); and their gender (Male, Female, or Unspecified), inferred confidently from name/pronouns/context rather than defaulted. If none are missing from this material, return an empty array.`;
 
-  const response = await generateContentWithRetry({
+  const parsed = await generateJsonContent({
     model: GEMINI_MODEL_NAME,
     contents,
     config: {
       systemInstruction: SCRIPT_BREAKDOWN_SYSTEM_PROMPT,
       responseMimeType: "application/json",
-      maxOutputTokens: 4096,
       responseSchema: {
         type: Type.OBJECT,
         properties: { missingCharacters: { type: Type.ARRAY, items: BREAKDOWN_ARTIST_SCHEMA } },
@@ -5927,7 +5927,7 @@ async function findMissingCharactersInChunk(chunkText, knownLabels) {
     },
   });
 
-  return sanitizeBilingualContent(JSON.parse(response.text)).missingCharacters ?? [];
+  return sanitizeBilingualContent(parsed).missingCharacters ?? [];
 }
 
 // Splits on "EPISODE N" boundaries when the source has them (reusing the
@@ -5982,18 +5982,17 @@ const CAST_CATEGORY_EVIDENCE_SCHEMA = {
 async function classifyCastCategoriesInChunk(chunkText, knownLabels) {
   const contents = `The script material (one part of the full script):\n${chunkText}\n\nKnown characters to check (exact names): ${knownLabels.join(", ")}\n\nFor EACH of these characters who appears ANYWHERE in this material (skip anyone who doesn't appear at all here), report two things based strictly on this material:\n- "hasDialogueHere": true if they have any actual spoken line here — this includes a voice-over, a phone-call voice, a radio/PA announcement, or any other line attributed to them even when they aren't physically in the scene.\n- "physicallyPresentHere": true if they are physically present and visible in a scene here — performing an action, standing, moving, silently reacting — even if they never speak. False if their only appearance here is as a disembodied voice (V.O., O.S., over the phone/radio, etc.) with no physical presence in the scene.\nA character can have both true (present and speaking), only physicallyPresentHere true (present but silent), or only hasDialogueHere true (heard but never physically there). Only include characters that actually appear in this material in some form — omit anyone absent from it entirely.`;
 
-  const response = await generateContentWithRetry({
+  const parsed = await generateJsonContent({
     model: GEMINI_MODEL_NAME,
     contents,
     config: {
       systemInstruction: SCRIPT_BREAKDOWN_SYSTEM_PROMPT,
       responseMimeType: "application/json",
-      maxOutputTokens: 4096,
       responseSchema: CAST_CATEGORY_EVIDENCE_SCHEMA,
     },
   });
 
-  return JSON.parse(response.text).evidence ?? [];
+  return parsed.evidence ?? [];
 }
 
 // Splits into episode-sized chunks like the missing-character scan and AD
@@ -6273,13 +6272,12 @@ async function generateAdSheetDetailsForBatch(batchEntries, batchStartIndex, bre
 
   const contents = `The full script material (the authoritative source — use this to check exactly who and what is in each of the scenes below, not just their one-liners, which are compressed summaries that can omit incidental details):\n${sourceText}\n\nThese ${batchEntries.length} scenes are the ones to report back on this time, numbered by their true position in the full scene list:\n${numberedScenes}\n\nEstablished full cast list: ${knownCharacters}\n\nEstablished property list: ${knownProps || "(none yet)"}\n\nEstablished costume notes: ${knownCostumes || "(none yet)"}\n\nFor EACH of these ${batchEntries.length} scenes, in the same order given, re-read the corresponding part of the full script material carefully and determine:\n- mainCharacters: EVERY named individual who is physically part of that scene's action — whether or not they speak, and however brief their presence (someone dropping something off, a silent bystander who is nonetheless a named character, a baby being handed over, etc.). Do not default to just the scene's two lead characters — actively check for every name the script mentions in that scene. Prefer exact names from the established full cast list above when they match, but if the script clearly names someone not on that list, include them anyway using the name the script gives them — never silently drop a named person.\n- extras: unnamed/generic background people only (a crowd, "a few guests", "kids playing football") — never someone the script gives an actual name to; leave empty if none.\n- property: objects handled or referenced in that scene, preferring the established property list when relevant; leave empty if none.\n- costumeRemarks: a costume-specific note for that scene if the costume notes above say anything relevant; leave empty if nothing applies.\nReturn exactly ${batchEntries.length} rows in the same order as these scenes — do not skip, merge, or add extra rows.`;
 
-  const response = await generateContentWithRetry({
+  const parsed = await generateJsonContent({
     model: GEMINI_MODEL_NAME,
     contents,
     config: {
       systemInstruction: SCRIPT_BREAKDOWN_SYSTEM_PROMPT,
       responseMimeType: "application/json",
-      maxOutputTokens: 8192,
       responseSchema: {
         type: Type.OBJECT,
         properties: { rows: { type: Type.ARRAY, items: AD_SHEET_ROW_SCHEMA } },
@@ -6288,7 +6286,7 @@ async function generateAdSheetDetailsForBatch(batchEntries, batchStartIndex, bre
     },
   });
 
-  const rows = sanitizeBilingualContent(JSON.parse(response.text)).rows ?? [];
+  const rows = sanitizeBilingualContent(parsed).rows ?? [];
   const blankRow = { mainCharacters: [], extras: { en: "", or: "" }, property: { en: "", or: "" }, costumeRemarks: { en: "", or: "" } };
   // Defensive padding/truncation — the row COUNT must match the real scene
   // count no matter what the model returns, since every downstream row is

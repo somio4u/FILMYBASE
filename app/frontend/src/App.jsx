@@ -4007,6 +4007,41 @@ function App() {
     loadProject(project.id)
   }
 
+  // Unlike handleRenameProjectClick (which only ever renames whichever
+  // project is currently loaded, via conceptId), this renames ANY project
+  // listed here directly — no need to open it first.
+  async function handleRenameMasterProjectClick(project) {
+    const nextTitle = window.prompt(t.renameProjectPrompt, project.title)
+    if (nextTitle === null) return
+
+    const trimmed = nextTitle.trim()
+    const response = await fetch(`${BACKEND_URL}/api/concepts/${project.id}/title`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title: trimmed || null }),
+    })
+    if (!response.ok) return
+
+    if (project.id === conceptId) {
+      const data = await response.json()
+      setProjectTitle(data.title)
+    }
+    loadMasterProjectList()
+    loadProjectList()
+  }
+
+  async function handleDeleteMasterProjectClick(project) {
+    if (!window.confirm(t.deleteProjectConfirm)) return
+
+    await fetch(`${BACKEND_URL}/api/concepts/${project.id}`, { method: 'DELETE' })
+
+    if (project.id === conceptId) {
+      handleNewIdeaClick()
+    }
+    loadMasterProjectList()
+    loadProjectList()
+  }
+
   // Loads exactly one project's full chain by its concept id — never "whatever's newest
   // anywhere," which was the root cause of the app appearing to randomly jump projects.
   async function loadProject(id) {
@@ -7007,19 +7042,39 @@ function App() {
                 )}
                 <div className="master-list-grid">
                   {masterProjectList.filter((p) => p.stage === 'ongoing').map((project) => (
-                    <button key={project.id} className="master-list-card" onClick={() => handleOpenMasterProjectClick(project)}>
-                      <strong>{project.title}</strong>
-                      <span className="breakdown-item-meta">
-                        {project.projectType === 'production' ? t.productionAgentLabel : t.storyAgentLabel}
-                      </span>
-                      <div className="master-list-assignments">
-                        {project.assignedUsers.map((u, i) => (
-                          <span key={i} className="master-list-assignment-badge">
-                            {u.role === 'production_manager' ? t.adRoleLabel : t.directorRoleLabel}: {u.name}
-                          </span>
-                        ))}
+                    <div key={project.id} className="master-list-card">
+                      <button className="master-list-card-open" onClick={() => handleOpenMasterProjectClick(project)}>
+                        <strong>{project.title}</strong>
+                        <span className="breakdown-item-meta">
+                          {project.projectType === 'production' ? t.productionAgentLabel : t.storyAgentLabel}
+                        </span>
+                        <div className="master-list-assignments">
+                          {project.assignedUsers.map((u, i) => (
+                            <span key={i} className="master-list-assignment-badge">
+                              {u.role === 'production_manager' ? t.adRoleLabel : t.directorRoleLabel}: {u.name}
+                            </span>
+                          ))}
+                        </div>
+                      </button>
+                      <div className="master-list-card-actions">
+                        <button
+                          className="sidebar-history-icon-button"
+                          onClick={() => handleRenameMasterProjectClick(project)}
+                          title={t.renameIconTitle}
+                        >
+                          {ICONS.pencil}
+                        </button>
+                        {currentUser.role === 'admin' && (
+                          <button
+                            className="sidebar-history-icon-button"
+                            onClick={() => handleDeleteMasterProjectClick(project)}
+                            title={t.deleteIconTitle}
+                          >
+                            {ICONS.trash}
+                          </button>
+                        )}
                       </div>
-                    </button>
+                    </div>
                   ))}
                 </div>
               </div>
@@ -7031,20 +7086,40 @@ function App() {
                 )}
                 <div className="master-list-grid">
                   {masterProjectList.filter((p) => p.stage === 'in_development').map((project) => (
-                    <button key={project.id} className="master-list-card" onClick={() => handleOpenMasterProjectClick(project)}>
-                      <strong>{project.title}</strong>
-                      <span className="breakdown-item-meta">
-                        {project.projectType === 'production' ? t.productionAgentLabel : t.storyAgentLabel}
-                      </span>
-                      <div className="master-list-assignments">
-                        {project.assignedUsers.length === 0 && <span className="breakdown-item-meta">{t.noOneAssignedNote}</span>}
-                        {project.assignedUsers.map((u, i) => (
-                          <span key={i} className="master-list-assignment-badge">
-                            {u.role === 'production_manager' ? t.adRoleLabel : t.directorRoleLabel}: {u.name}
-                          </span>
-                        ))}
+                    <div key={project.id} className="master-list-card">
+                      <button className="master-list-card-open" onClick={() => handleOpenMasterProjectClick(project)}>
+                        <strong>{project.title}</strong>
+                        <span className="breakdown-item-meta">
+                          {project.projectType === 'production' ? t.productionAgentLabel : t.storyAgentLabel}
+                        </span>
+                        <div className="master-list-assignments">
+                          {project.assignedUsers.length === 0 && <span className="breakdown-item-meta">{t.noOneAssignedNote}</span>}
+                          {project.assignedUsers.map((u, i) => (
+                            <span key={i} className="master-list-assignment-badge">
+                              {u.role === 'production_manager' ? t.adRoleLabel : t.directorRoleLabel}: {u.name}
+                            </span>
+                          ))}
+                        </div>
+                      </button>
+                      <div className="master-list-card-actions">
+                        <button
+                          className="sidebar-history-icon-button"
+                          onClick={() => handleRenameMasterProjectClick(project)}
+                          title={t.renameIconTitle}
+                        >
+                          {ICONS.pencil}
+                        </button>
+                        {currentUser.role === 'admin' && (
+                          <button
+                            className="sidebar-history-icon-button"
+                            onClick={() => handleDeleteMasterProjectClick(project)}
+                            title={t.deleteIconTitle}
+                          >
+                            {ICONS.trash}
+                          </button>
+                        )}
                       </div>
-                    </button>
+                    </div>
                   ))}
                 </div>
               </div>

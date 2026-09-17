@@ -2114,18 +2114,38 @@ button, input, textarea, select {
 .master-list-card {
   display: flex;
   flex-direction: column;
-  align-items: flex-start;
   gap: 6px;
   padding: 14px;
   background: var(--bg-surface-raised);
   border: 1px solid var(--border-subtle);
   border-radius: 8px;
-  text-align: left;
-  cursor: pointer;
 }
 
 .master-list-card:hover {
   border-color: var(--border-strong);
+}
+
+.master-list-card-open {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  width: 100%;
+  padding: 0;
+  background: none;
+  border: none;
+  text-align: left;
+  cursor: pointer;
+  color: inherit;
+  font: inherit;
+}
+
+.master-list-card-actions {
+  display: flex;
+  gap: 6px;
+  padding-top: 4px;
+  border-top: 1px solid var(--border-subtle);
+  margin-top: 2px;
 }
 
 .master-list-assignments {

@@ -5798,28 +5798,28 @@ async function generateScriptBreakdownContent(sourceText, revision) {
     contents += `\n\nThis is a REVISION of a previous breakdown. Feedback: "${revision.feedback}"\nRevise the breakdown to address the feedback directly.`;
   }
 
-  const response = await generateContentWithRetry({
-    model: GEMINI_MODEL_NAME,
-    contents,
-    config: {
-      systemInstruction: SCRIPT_BREAKDOWN_SYSTEM_PROMPT,
-      responseMimeType: "application/json",
-      maxOutputTokens: 12288,
-      responseSchema: {
-        type: Type.OBJECT,
-        properties: {
-          artistList: { type: Type.ARRAY, items: BREAKDOWN_ARTIST_SCHEMA },
-          locationList: { type: Type.ARRAY, items: BREAKDOWN_LOCATION_SCHEMA },
-          props: { type: Type.ARRAY, items: BREAKDOWN_ITEM_SCHEMA },
-          costumes: { type: Type.ARRAY, items: BREAKDOWN_COSTUME_SCHEMA },
-          art: { type: Type.ARRAY, items: BREAKDOWN_ITEM_SCHEMA },
+  return sanitizeBilingualContent(
+    await generateJsonContent({
+      model: GEMINI_MODEL_NAME,
+      contents,
+      config: {
+        systemInstruction: SCRIPT_BREAKDOWN_SYSTEM_PROMPT,
+        responseMimeType: "application/json",
+        maxOutputTokens: 12288,
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            artistList: { type: Type.ARRAY, items: BREAKDOWN_ARTIST_SCHEMA },
+            locationList: { type: Type.ARRAY, items: BREAKDOWN_LOCATION_SCHEMA },
+            props: { type: Type.ARRAY, items: BREAKDOWN_ITEM_SCHEMA },
+            costumes: { type: Type.ARRAY, items: BREAKDOWN_COSTUME_SCHEMA },
+            art: { type: Type.ARRAY, items: BREAKDOWN_ITEM_SCHEMA },
+          },
+          required: ["artistList", "locationList", "props", "costumes", "art"],
         },
-        required: ["artistList", "locationList", "props", "costumes", "art"],
       },
-    },
-  });
-
-  return sanitizeBilingualContent(JSON.parse(response.text));
+    })
+  );
 }
 
 // Runs the initial breakdown, then immediately re-verifies every category
@@ -5877,7 +5877,7 @@ app.post("/api/script-breakdown", requireRole("admin"), async (req, res) => {
 async function generateBreakdownCategoryContent(sourceText, category, existingItems) {
   const contents = `The script material:\n${sourceText}\n\nThe current "${category}" list from a previous pass (it may have missed things):\n${JSON.stringify(existingItems ?? [])}\n\nRe-read the ENTIRE script carefully and produce a fresh, COMPLETE "${category}" list — ${BREAKDOWN_CATEGORY_DESCRIPTIONS[category]}. Specifically double-check for anything subtle or easy to miss on a first pass (brief appearances, background mentions, minor characters/props/locations mentioned only once) that the previous list may have left out. Don't just repeat the previous list unchanged — verify each entry against the script and correct or extend it.`;
 
-  const response = await generateContentWithRetry({
+  const parsed = await generateJsonContent({
     model: GEMINI_MODEL_NAME,
     contents,
     config: {
@@ -5892,7 +5892,7 @@ async function generateBreakdownCategoryContent(sourceText, category, existingIt
     },
   });
 
-  return sanitizeBilingualContent(JSON.parse(response.text))[category];
+  return sanitizeBilingualContent(parsed)[category];
 }
 
 // Additive-only sibling to "Re-analyze" — that button regenerates the

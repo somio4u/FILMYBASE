@@ -3557,13 +3557,28 @@ BUDGET-FRIENDLY PRODUCTION CONSTRAINT — this is a low-budget format meant to s
   const chunkStarts = [];
   for (let i = 0; i < totalCount; i += PITCH_DECK_EPISODE_BATCH_SIZE) chunkStarts.push(i);
 
+  // A real, repeatedly-observed failure: asking a batch for "EXACTLY N
+  // episodes" doesn't reliably get exactly N back — a real 60-episode
+  // concept cycled through 67, 63, 68, 62, 68, 61, 61 episodes across many
+  // separate attempts, NEVER once landing on 60, because the judge-revision
+  // loop only ever asks the model to try again and gets the same class of
+  // miss back. An overshoot is trimmed from the END of whichever batch
+  // produced it (safe — that's just this batch's own extra episode(s), not
+  // borrowed from a different, correct batch); an undershoot is left for
+  // the existing judge-loop retry, since inventing missing story content
+  // isn't something code can safely do.
+  function enforceBatchEpisodeCount(episodes, expectedCount) {
+    return episodes.length > expectedCount ? episodes.slice(0, expectedCount) : episodes;
+  }
+
   if (revision) {
     // Each batch has the OLD version of just its own chunk as continuity
     // grounding (same pattern as three-act/bit-sheet/scene-list revisions),
     // so batches are independent and can run concurrently.
-    const chunkResults = await mapWithConcurrency(chunkStarts, 3, (start) => {
+    const chunkResults = await mapWithConcurrency(chunkStarts, 3, async (start) => {
       const batchCount = Math.min(PITCH_DECK_EPISODE_BATCH_SIZE, totalCount - start);
-      return generatePitchDeckEpisodeBatch(storyline, format, isVerticalDrama, start, batchCount, totalCount, null, revision);
+      const batch = await generatePitchDeckEpisodeBatch(storyline, format, isVerticalDrama, start, batchCount, totalCount, null, revision);
+      return enforceBatchEpisodeCount(batch, batchCount);
     });
     result.episodes = chunkResults.flat();
   } else {
@@ -3579,7 +3594,7 @@ BUDGET-FRIENDLY PRODUCTION CONSTRAINT — this is a low-budget format meant to s
       const batch = await generatePitchDeckEpisodeBatch(
         storyline, format, isVerticalDrama, start, batchCount, totalCount, priorSummary, null
       );
-      allEpisodes = allEpisodes.concat(batch);
+      allEpisodes = allEpisodes.concat(enforceBatchEpisodeCount(batch, batchCount));
     }
     result.episodes = allEpisodes;
   }
@@ -4435,15 +4450,22 @@ async function generateThreeActContent(deck, characterSheet, revision) {
   const chunkStarts = [];
   for (let i = 0; i < deck.episodes.length; i += THREE_ACT_EPISODE_BATCH_SIZE) chunkStarts.push(i);
 
-  const chunkResults = await mapWithConcurrency(chunkStarts, 3, (start) =>
-    generateThreeActEpisodeBatch(
+  // Same real, observed failure as the pitch deck's episode batches: a
+  // batch asked for "exactly N" doesn't reliably come back at exactly N.
+  // Unlike the pitch deck, this stage has no judge-revision loop to retry
+  // through — assertEpisodeCount just throws immediately — so an overshoot
+  // here is a guaranteed hard failure unless trimmed first.
+  const chunkResults = await mapWithConcurrency(chunkStarts, 3, async (start) => {
+    const expectedCount = Math.min(THREE_ACT_EPISODE_BATCH_SIZE, deck.episodes.length - start);
+    const batch = await generateThreeActEpisodeBatch(
       deck,
       deck.episodes.slice(start, start + THREE_ACT_EPISODE_BATCH_SIZE),
       start,
       overallContext,
       revision
-    )
-  );
+    );
+    return batch.length > expectedCount ? batch.slice(0, expectedCount) : batch;
+  });
 
   return { ...overall, episodeStructures: chunkResults.flat() };
 }
@@ -4687,8 +4709,12 @@ async function generateBitSheetContent(threeAct, deck, revision) {
     const chunkStarts = [];
     for (let i = 0; i < deck.episodes.length; i += BIT_SHEET_EPISODE_BATCH_SIZE) chunkStarts.push(i);
 
-    const chunkResults = await mapWithConcurrency(chunkStarts, 3, (start) =>
-      generateBitSheetEpisodeBatch(
+    // Same real, observed overshoot failure as the pitch deck and three-act
+    // batches — no revision loop here either, so it's trimmed before
+    // assertEpisodeCount ever gets a chance to hard-fail the whole run.
+    const chunkResults = await mapWithConcurrency(chunkStarts, 3, async (start) => {
+      const expectedCount = Math.min(BIT_SHEET_EPISODE_BATCH_SIZE, deck.episodes.length - start);
+      const batch = await generateBitSheetEpisodeBatch(
         deck.episodes.slice(start, start + BIT_SHEET_EPISODE_BATCH_SIZE),
         threeAct.episodeStructures.slice(start, start + BIT_SHEET_EPISODE_BATCH_SIZE),
         start,
@@ -4696,8 +4722,9 @@ async function generateBitSheetContent(threeAct, deck, revision) {
         isVerticalDrama,
         threeAct,
         revision
-      )
-    );
+      );
+      return batch.length > expectedCount ? batch.slice(0, expectedCount) : batch;
+    });
 
     const content = { episodeBits: chunkResults.flat() };
     return threeAct.controllingIdea ? { ...content, controllingIdea: threeAct.controllingIdea } : content;
@@ -5046,24 +5073,33 @@ async function generateSceneListContent(bitSheet, deck, revision) {
     let lockedLocations = null;
     let remainingStarts = chunkStarts;
 
+    // Same real, observed overshoot failure as the other stages' episode
+    // batches — no revision loop here either, so it's trimmed before
+    // assertEpisodeCount ever gets a chance to hard-fail the whole run.
+    const enforceCount = (batch, expectedCount) => (batch.length > expectedCount ? batch.slice(0, expectedCount) : batch);
+
     if (isVerticalDrama) {
       // The first batch runs alone to establish the fixed location set that
       // every later batch must then reuse verbatim.
       const firstStart = chunkStarts[0];
       const firstChunk = deck.episodes.slice(firstStart, firstStart + SCENE_LIST_EPISODE_BATCH_SIZE);
-      const firstScenes = await generateSceneListEpisodeBatch(
-        deck, bitSheet, firstChunk, firstStart, episodeTargetMinutes, isVerticalDrama, null, revision
+      const firstScenes = enforceCount(
+        await generateSceneListEpisodeBatch(
+          deck, bitSheet, firstChunk, firstStart, episodeTargetMinutes, isVerticalDrama, null, revision
+        ),
+        Math.min(SCENE_LIST_EPISODE_BATCH_SIZE, deck.episodes.length - firstStart)
       );
       episodeScenesChunks[0] = firstScenes;
       lockedLocations = [...new Set(firstScenes.flatMap((es) => es.scenes.map((s) => s.location.en)))];
       remainingStarts = chunkStarts.slice(1);
     }
 
-    const remainingResults = await mapWithConcurrency(remainingStarts, 3, (start) => {
+    const remainingResults = await mapWithConcurrency(remainingStarts, 3, async (start) => {
       const episodesChunk = deck.episodes.slice(start, start + SCENE_LIST_EPISODE_BATCH_SIZE);
-      return generateSceneListEpisodeBatch(
+      const batch = await generateSceneListEpisodeBatch(
         deck, bitSheet, episodesChunk, start, episodeTargetMinutes, isVerticalDrama, lockedLocations, revision
       );
+      return enforceCount(batch, Math.min(SCENE_LIST_EPISODE_BATCH_SIZE, deck.episodes.length - start));
     });
     remainingStarts.forEach((start, i) => {
       episodeScenesChunks[chunkStarts.indexOf(start)] = remainingResults[i];

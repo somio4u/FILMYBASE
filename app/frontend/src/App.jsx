@@ -1535,6 +1535,12 @@ function FloatingAgentWidget({ currentUser, t, onRunCompleted }) {
   const [status, setStatus] = useState(null)
   const [isStarting, setIsStarting] = useState(false)
   const [isResuming, setIsResuming] = useState(false)
+  // Bumped whenever polling needs to be force-restarted for the SAME runId
+  // (see handleResume) — the poll effect below stops its own interval once
+  // a run reaches 'failed'/'completed' (no point polling a dead run), so
+  // resuming that same run id would otherwise leave nothing left to ever
+  // notice it's running again.
+  const [pollNonce, setPollNonce] = useState(0)
   const [errorMessage, setErrorMessage] = useState(null)
   const [nowTick, setNowTick] = useState(() => Date.now())
   const [frameIndex, setFrameIndex] = useState(0)
@@ -1644,7 +1650,7 @@ function FloatingAgentWidget({ currentUser, t, onRunCompleted }) {
       cancelled = true
       clearInterval(interval)
     }
-  }, [runId, t.genericError, onRunCompleted])
+  }, [runId, pollNonce, t.genericError, onRunCompleted])
 
   function handlePointerDown(e) {
     setIsDragging(true)
@@ -1735,7 +1741,9 @@ function FloatingAgentWidget({ currentUser, t, onRunCompleted }) {
         return
       }
       notifiedRef.current = false
+      statusRef.current = null
       setStatus(null)
+      setPollNonce((n) => n + 1)
     } catch {
       setErrorMessage(t.genericError)
     }

@@ -1083,7 +1083,10 @@ async function generateStorylinesContent(concept, format) {
       config: {
         systemInstruction: STORY_AGENT_SYSTEM_PROMPT,
         responseMimeType: "application/json",
-        maxOutputTokens: 4096,
+        // No cap — a fixed budget here truncates mid-JSON on a long/heavy
+        // concept (e.g. a 60-episode vertical drama with several storyline
+        // options), which looks like a random parse bug but is actually
+        // just running out of budget; left to the model's own maximum.
         responseSchema: {
           type: Type.OBJECT,
           properties: {
@@ -3474,7 +3477,6 @@ async function generatePitchDeckEpisodeBatch(
     config: {
       systemInstruction: PITCH_DECK_SYSTEM_PROMPT,
       responseMimeType: "application/json",
-      maxOutputTokens: 16384,
       responseSchema: {
         type: Type.OBJECT,
         properties: { episodes: { type: Type.ARRAY, items: episodeItemSchema } },
@@ -3529,10 +3531,10 @@ BUDGET-FRIENDLY PRODUCTION CONSTRAINT — this is a low-budget format meant to s
         // Every bilingual field here is now trilingual (en/or/hi) — premise,
         // 1-2 pages of storyPages prose, 3-5 full character sheets,
         // highlights, and sponsorshipAngle all in three languages easily
-        // exceeds the old 5120 budget, truncating the JSON mid-string (looks
+        // exceeds any fixed budget, truncating the JSON mid-string (looks
         // like a parse bug, isn't — see generateJsonContent's retry, which
-        // can't fix a genuinely too-small budget).
-        maxOutputTokens: 16384,
+        // can't fix a genuinely too-small budget). Left uncapped rather than
+        // raised again, since raising it kept just moving the same failure.
         responseSchema: {
           type: Type.OBJECT,
           properties,
@@ -4216,7 +4218,6 @@ async function generateCharacterSheetContent(deck, revision) {
     config: {
       systemInstruction: CHARACTER_SHEET_SYSTEM_PROMPT,
       responseMimeType: "application/json",
-      maxOutputTokens: 16384,
       responseSchema: {
         type: Type.OBJECT,
         properties: { characters: { type: Type.ARRAY, items: CHARACTER_SHEET_ENTRY_SCHEMA } },
@@ -4387,7 +4388,6 @@ async function generateThreeActEpisodeBatch(deck, episodesChunk, startIndex, ove
     config: {
       systemInstruction: THREE_ACT_SYSTEM_PROMPT,
       responseMimeType: "application/json",
-      maxOutputTokens: 16384,
       responseSchema: {
         type: Type.OBJECT,
         properties: {
@@ -4456,7 +4456,6 @@ async function generateThreeActContent(deck, characterSheet, revision) {
       config: {
         systemInstruction: THREE_ACT_SYSTEM_PROMPT,
         responseMimeType: "application/json",
-        maxOutputTokens: 4096,
         responseSchema: {
           type: Type.OBJECT,
           properties,
@@ -4715,7 +4714,6 @@ async function generateBitSheetEpisodeBatch(episodesChunk, structuresChunk, star
     config: {
       systemInstruction: BIT_SHEET_SYSTEM_PROMPT,
       responseMimeType: "application/json",
-      maxOutputTokens: 16384,
       responseSchema: {
         type: Type.OBJECT,
         properties: {
@@ -4802,7 +4800,6 @@ async function generateBitSheetContent(threeAct, deck, revision) {
       config: {
         systemInstruction: BIT_SHEET_SYSTEM_PROMPT,
         responseMimeType: "application/json",
-        maxOutputTokens: 6144,
         responseSchema: {
           type: Type.OBJECT,
           properties: { bits: { type: Type.ARRAY, items: BIT_SCHEMA } },

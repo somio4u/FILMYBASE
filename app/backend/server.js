@@ -1076,34 +1076,35 @@ async function generateStorylinesContent(concept, format) {
         ? `Format: web series, ${format.episodeCount ?? "several"} episodes of ${format.episodeMinutes ?? "~25"} minutes each — shape each storyline direction so it can sustain a multi-episode arc, not just a single-sitting story.`
         : `Format: feature film, target runtime ${format?.runtimeMinutes ?? "~90"} minutes.`;
 
-  const response = await ai.models.generateContent({
-    model: GEMINI_MODEL_NAME,
-    contents: `Movie concept: ${concept}\n${formatInstruction}`,
-    config: {
-      systemInstruction: STORY_AGENT_SYSTEM_PROMPT,
-      responseMimeType: "application/json",
-      responseSchema: {
-        type: Type.OBJECT,
-        properties: {
-          storylines: {
-            type: Type.ARRAY,
-            items: {
-              type: Type.OBJECT,
-              properties: {
-                title: BILINGUAL_TEXT_SCHEMA,
-                logline: BILINGUAL_TEXT_SCHEMA,
-                summary: BILINGUAL_TEXT_SCHEMA,
+  return sanitizeBilingualContent(
+    await generateJsonContent({
+      model: GEMINI_MODEL_NAME,
+      contents: `Movie concept: ${concept}\n${formatInstruction}`,
+      config: {
+        systemInstruction: STORY_AGENT_SYSTEM_PROMPT,
+        responseMimeType: "application/json",
+        maxOutputTokens: 4096,
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            storylines: {
+              type: Type.ARRAY,
+              items: {
+                type: Type.OBJECT,
+                properties: {
+                  title: BILINGUAL_TEXT_SCHEMA,
+                  logline: BILINGUAL_TEXT_SCHEMA,
+                  summary: BILINGUAL_TEXT_SCHEMA,
+                },
+                required: ["title", "logline", "summary"],
               },
-              required: ["title", "logline", "summary"],
             },
           },
+          required: ["storylines"],
         },
-        required: ["storylines"],
       },
-    },
-  });
-
-  return sanitizeBilingualContent(JSON.parse(response.text));
+    })
+  );
 }
 
 app.post("/api/generate-storylines", requireRole("admin"), async (req, res) => {
@@ -4713,22 +4714,22 @@ async function generateBitSheetContent(threeAct, deck, revision) {
     contents += `\n\nThis is a REVISION of a previous Bit Sheet. The Story Writer reviewed it and requested changes.\nFeedback: "${revision.feedback}"\nRevise the Bit Sheet to address the feedback directly.`;
   }
 
-  const response = await ai.models.generateContent({
-    model: GEMINI_MODEL_NAME,
-    contents,
-    config: {
-      systemInstruction: BIT_SHEET_SYSTEM_PROMPT,
-      responseMimeType: "application/json",
-      maxOutputTokens: 6144,
-      responseSchema: {
-        type: Type.OBJECT,
-        properties: { bits: { type: Type.ARRAY, items: BIT_SCHEMA } },
-        required: ["bits"],
+  const content = sanitizeBilingualContent(
+    await generateJsonContent({
+      model: GEMINI_MODEL_NAME,
+      contents,
+      config: {
+        systemInstruction: BIT_SHEET_SYSTEM_PROMPT,
+        responseMimeType: "application/json",
+        maxOutputTokens: 6144,
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: { bits: { type: Type.ARRAY, items: BIT_SCHEMA } },
+          required: ["bits"],
+        },
       },
-    },
-  });
-
-  const content = sanitizeBilingualContent(JSON.parse(response.text));
+    })
+  );
   // Carry the Controlling Idea forward so later stages (scene generation,
   // screenplay dialogue) can reference it without an extra database join.
   return threeAct.controllingIdea ? { ...content, controllingIdea: threeAct.controllingIdea } : content;
@@ -10606,18 +10607,22 @@ async function reviewPitchDeckHooks(deck) {
     .map((ep, i) => `Episode ${i + 1}: ${ep.title.en}\nSynopsis: ${ep.synopsis.en}\nHook: ${ep.hook.en}`)
     .join("\n\n");
 
-  const response = await ai.models.generateContent({
+  // Up to 60+ episodes can each generate their own flagged issue here — at
+  // the previous 2048-token budget, with NO retry-on-parse-failure wrapper
+  // (unlike generatePitchDeckContent), a long issues list truncated the
+  // JSON mid-string and killed the whole run instantly. This was the real,
+  // recurring cause behind repeated "Unterminated string in JSON" failures
+  // at the pitch-deck stage — not the core-content call fixed earlier.
+  return generateJsonContent({
     model: GEMINI_MODEL_NAME,
     contents: `You are reviewing a vertical micro-drama's episode hooks for quality, as a strict story editor. Here are all ${deck.episodes.length} episodes:\n\n${episodesText}\n\nFlag any episode whose hook is VAGUE or GENERIC (e.g. "things get complicated", "a shocking twist is revealed", or anything that doesn't state a concrete, specific moment) rather than a real, concrete beat — a hook can be a line of dialogue or a silent action beat, either is fine, but it must be SPECIFIC. Also flag if hooks feel repetitive across episodes (the same kind of twist reused too many times in a row). Cite the episode number for each real problem found. If everything is genuinely concrete and varied, return no issues.`,
     config: {
       systemInstruction: "You are a meticulous story editor reviewing episode hooks for a vertical micro-drama. Be strict but fair — only flag genuine problems, not stylistic preferences.",
       responseMimeType: "application/json",
-      maxOutputTokens: 2048,
+      maxOutputTokens: 8192,
       responseSchema: AUTO_PIPELINE_REVIEW_SCHEMA,
     },
   });
-
-  return JSON.parse(response.text);
 }
 
 // Reviewer 2 (deterministic, not AI): the "budget-friendly" location/cast
@@ -10654,18 +10659,16 @@ async function reviewDialogueAuthenticity(elements, dialogueLanguage) {
   if (!dialogueLines) return { needsRevision: false, issues: [] };
 
   const languageLabel = dialogueLanguage === "or" ? "Odia" : dialogueLanguage === "hi" ? "Hindi" : "English";
-  const response = await ai.models.generateContent({
+  return generateJsonContent({
     model: GEMINI_MODEL_NAME,
     contents: `You are reviewing dialogue from a screenplay scene for natural, authentic ${languageLabel} speech. Here are the dialogue lines:\n\n${dialogueLines}\n\nFlag it if the dialogue sounds stiff, overly formal/literary, like a textbook translation, or if every character sounds the same regardless of who they are. Also flag it if it's EXPOSITORY — a character or narrator (V.O.) stating an emotion, motivation, or plot point outright ("I feel so betrayed", "She must not find out about the merger") instead of revealing it through what's said, withheld, or done; real people rarely announce their own feelings that plainly. Real spoken dialogue is casual, has natural rhythm, shows feeling through behavior and subtext rather than announcing it, and different characters sound different from each other. If it genuinely reads as natural, authentic, and shown rather than told, return no issues.`,
     config: {
       systemInstruction: "You are a meticulous script supervisor reviewing dialogue authenticity. Be strict but fair.",
       responseMimeType: "application/json",
-      maxOutputTokens: 2048,
+      maxOutputTokens: 4096,
       responseSchema: AUTO_PIPELINE_REVIEW_SCHEMA,
     },
   });
-
-  return JSON.parse(response.text);
 }
 
 const AUTO_PIPELINE_SCORE_SCHEMA = {
@@ -10686,18 +10689,16 @@ const AUTO_PIPELINE_SCORE_SCHEMA = {
 async function scorePipelineStage(stageLabel, contentSummary, reviewerIssues) {
   const issuesText = reviewerIssues.length > 0 ? reviewerIssues.join(" ") : "No specific issues were flagged by the specialist reviewer.";
 
-  const response = await ai.models.generateContent({
+  return generateJsonContent({
     model: GEMINI_MODEL_NAME,
     contents: `You are the final judge for the "${stageLabel}" stage of a screenplay pipeline. Here is a summary of the current draft:\n\n${contentSummary}\n\nA specialist reviewer already flagged: ${issuesText}\n\nRate this draft's quality on a strict scale from 1 to 10 (10 = genuinely excellent and ready to ship; 8 = solid and usable; anything below 8 needs real work before it's acceptable). Be a tough, honest judge — do not hand out 8+ scores generously, and don't just repeat the specialist reviewer's words, form your own independent judgment. Give your verdict as a short, direct sentence, in this exact style: if below 8, "This is not up to the mark. This is only a(n) X-pointer because <specific, concrete reasons>." — if 8 or above, "This is a strong X-pointer — <what's genuinely working>."`,
     config: {
       systemInstruction: "You are the final quality judge in a multi-agent screenplay pipeline — blunt, specific, and consistent. Never inflate scores just to move things along.",
       responseMimeType: "application/json",
-      maxOutputTokens: 512,
+      maxOutputTokens: 1024,
       responseSchema: AUTO_PIPELINE_SCORE_SCHEMA,
     },
   });
-
-  return JSON.parse(response.text);
 }
 
 // Caps the reviewer-judge revision loop so a stubbornly low score can't spin

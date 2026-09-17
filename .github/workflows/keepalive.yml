@@ -1,0 +1,18 @@
+name: Keep Backend Awake
+
+# Render's free/hobby tier spins a web service down after enough idle time
+# with no incoming HTTP traffic — which can silently kill an in-progress
+# auto-pipeline run along with it. A real request every few minutes, from
+# outside the app itself, keeps the host from ever going idle in the
+# first place.
+on:
+  workflow_dispatch: {}
+  schedule:
+    - cron: "*/5 * * * *"
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping backend health endpoint
+        run: curl -sf --max-time 20 https://filmybase.onrender.com/api/health

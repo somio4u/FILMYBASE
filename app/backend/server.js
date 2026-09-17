@@ -5805,7 +5805,13 @@ async function generateScriptBreakdownContent(sourceText, revision) {
       config: {
         systemInstruction: SCRIPT_BREAKDOWN_SYSTEM_PROMPT,
         responseMimeType: "application/json",
-        maxOutputTokens: 12288,
+        // A real 1064-line response ("Unterminated string...") truncated at
+        // the old 12288-token budget — five categories, each field in THREE
+        // languages, for a full-length script's whole cast/location/prop
+        // list at once needs real headroom. The retry wrapper alone can't
+        // fix a budget that's genuinely too small; a big script hits the
+        // ceiling every attempt, not just an occasional bad one.
+        maxOutputTokens: 32768,
         responseSchema: {
           type: Type.OBJECT,
           properties: {
@@ -5883,7 +5889,10 @@ async function generateBreakdownCategoryContent(sourceText, category, existingIt
     config: {
       systemInstruction: SCRIPT_BREAKDOWN_SYSTEM_PROMPT,
       responseMimeType: "application/json",
-      maxOutputTokens: 8192,
+      // Same headroom reasoning as generateScriptBreakdownContent — a
+      // single category (e.g. a large cast's artistList) for a
+      // full-length script can still be sizable, trilingual content.
+      maxOutputTokens: 16384,
       responseSchema: {
         type: Type.OBJECT,
         properties: { [category]: { type: Type.ARRAY, items: BREAKDOWN_CATEGORY_ITEM_SCHEMAS[category] } },

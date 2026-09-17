@@ -11303,13 +11303,25 @@ app.post("/api/auto-pipeline/:id/resume", requireRole("admin"), async (req, res)
 // content rather than potentially drifting from it. Only dialogue and
 // parenthetical text are translated; action/transition/flashback text is
 // already plain English by convention and character names never change.
-async function translateScreenplaySceneElements(elements, targetLanguage) {
+const TRANSLATION_LANGUAGE_LABELS = {
+  en: "English",
+  or: "Odia (Oriya script)",
+  hi: "Hindi (Devanagari script)",
+};
+
+// Works between ANY two of the app's three dialogue languages — Odia is
+// the default for a NEW run, but an older run (or one where a different
+// language was picked deliberately) can have any of the three as its real
+// source, and this needs to translate correctly starting from whichever
+// one that actually is, not just "from Odia".
+async function translateScreenplaySceneElements(elements, sourceLanguage, targetLanguage) {
   const dialogueIndexes = elements
     .map((el, i) => (el.type === "dialogue" && el.text ? i : null))
     .filter((i) => i !== null);
   if (dialogueIndexes.length === 0) return elements;
 
-  const languageLabel = targetLanguage === "hi" ? "Hindi (Devanagari script)" : "English";
+  const sourceLabel = TRANSLATION_LANGUAGE_LABELS[sourceLanguage] ?? "the source language";
+  const targetLabel = TRANSLATION_LANGUAGE_LABELS[targetLanguage] ?? "English";
   const lines = dialogueIndexes.map((i, n) => {
     const el = elements[i];
     return `${n + 1}. ${el.text}${el.parenthetical ? ` [parenthetical: ${el.parenthetical}]` : ""}`;
@@ -11317,9 +11329,9 @@ async function translateScreenplaySceneElements(elements, targetLanguage) {
 
   const parsed = await generateJsonContent({
     model: GEMINI_MODEL_NAME,
-    contents: `Translate ONLY these screenplay dialogue lines from Odia into natural, spoken ${languageLabel} — the way a person would actually say the same thing, never a stiff literal translation. Preserve the exact meaning, tone, and emotional register of each line. Return them in the same order, one per input line.\n\n${lines.join("\n")}`,
+    contents: `Translate ONLY these screenplay dialogue lines from ${sourceLabel} into natural, spoken ${targetLabel} — the way a person would actually say the same thing, never a stiff literal translation. Preserve the exact meaning, tone, and emotional register of each line. Return them in the same order, one per input line.\n\n${lines.join("\n")}`,
     config: {
-      systemInstruction: `You are an expert screenplay translator producing natural, spoken ${languageLabel} dialogue translated faithfully from Odia — never a robotic word-for-word translation.`,
+      systemInstruction: `You are an expert screenplay translator producing natural, spoken ${targetLabel} dialogue translated faithfully from ${sourceLabel} — never a robotic word-for-word translation.`,
       responseMimeType: "application/json",
       maxOutputTokens: 4096,
       responseSchema: {
@@ -11524,19 +11536,22 @@ function renderFullScreenplayPdf(res, deck, sceneList, scenesByEpisode) {
 const SCREENPLAY_TRANSLATION_CONCURRENCY = 6;
 
 async function translateScreenplayScenesByEpisode(scenesByEpisode, targetLang) {
-  // Odia is the assumed base — translation only ever runs TOWARD Hindi or
-  // English, never back into Odia (there's nothing to translate "from" for
-  // an org request; a scene already in Odia is just left as generated).
-  if (targetLang !== "hi" && targetLang !== "en") return;
-
+  // Odia is the default for a NEW run, but an older run (like the very
+  // first ones, generated before Odia became the default) can genuinely
+  // have English or Hindi as its real dialogueLanguage — this used to
+  // assume the source was always Odia and silently no-op for anything
+  // else, which is exactly why picking "Odia" to download an English run
+  // still came back in English. Each scene is translated FROM its own
+  // actual stored language, whatever that is, TO whatever was requested.
   const allRows = [...scenesByEpisode.values()].flat();
   const rowsToTranslate = allRows.filter((row) => (row.content.dialogueLanguage ?? "or") !== targetLang);
   if (rowsToTranslate.length === 0) return;
 
   await mapWithConcurrency(rowsToTranslate, SCREENPLAY_TRANSLATION_CONCURRENCY, async (row) => {
+    const sourceLang = row.content.dialogueLanguage ?? "or";
     row.content = {
       ...row.content,
-      elements: await translateScreenplaySceneElements(row.content.elements, targetLang),
+      elements: await translateScreenplaySceneElements(row.content.elements, sourceLang, targetLang),
       dialogueLanguage: targetLang,
     };
   });

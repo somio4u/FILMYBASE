@@ -319,6 +319,8 @@ const LABELS = {
     floatingAgentSecondsSuffix: 's',
     floatingAgentDoneLabel: 'Your screenplay is ready.',
     floatingAgentDownloadButton: 'Download Screenplay',
+    floatingAgentRegenerateButton: 'Rewrite Dialogue In This Language',
+    floatingAgentRegenerating: 'Rewriting...',
     floatingAgentFormatPdf: 'PDF',
     floatingAgentFormatWord: 'Word (.docx)',
     floatingAgentNewRunButton: 'Start a New Run',
@@ -798,6 +800,8 @@ const LABELS = {
     floatingAgentSecondsSuffix: 'ସେ',
     floatingAgentDoneLabel: 'ଆପଣଙ୍କର ସ୍କ୍ରିନପ୍ଲେ ପ୍ରସ୍ତୁତ।',
     floatingAgentDownloadButton: 'ସ୍କ୍ରିନପ୍ଲେ ଡାଉନଲୋଡ୍ କରନ୍ତୁ',
+    floatingAgentRegenerateButton: 'ଏହି ଭାଷାରେ ସଂଳାପ ପୁନଃଲିଖନ କରନ୍ତୁ',
+    floatingAgentRegenerating: 'ପୁନଃଲିଖନ ହେଉଛି...',
     floatingAgentFormatPdf: 'PDF',
     floatingAgentFormatWord: 'ୱାର୍ଡ (.docx)',
     floatingAgentNewRunButton: 'ନୂଆ ରନ୍ ଆରମ୍ଭ କରନ୍ତୁ',
@@ -1541,6 +1545,8 @@ function FloatingAgentWidget({ currentUser, t, onRunCompleted }) {
   // resuming that same run id would otherwise leave nothing left to ever
   // notice it's running again.
   const [pollNonce, setPollNonce] = useState(0)
+  const [isRegenerating, setIsRegenerating] = useState(false)
+  const [regenerateLanguage, setRegenerateLanguage] = useState('or')
   const [errorMessage, setErrorMessage] = useState(null)
   const [nowTick, setNowTick] = useState(() => Date.now())
   const [frameIndex, setFrameIndex] = useState(0)
@@ -1728,6 +1734,32 @@ function FloatingAgentWidget({ currentUser, t, onRunCompleted }) {
     setIsStarting(false)
   }
 
+  async function handleRegenerateScreenplay() {
+    if (!runId) return
+    setIsRegenerating(true)
+    setErrorMessage(null)
+    try {
+      const response = await fetch(`${BACKEND_URL}/api/auto-pipeline/${runId}/regenerate-screenplay`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ dialogueLanguage: regenerateLanguage }),
+      })
+      const data = await response.json()
+      if (!response.ok) {
+        setErrorMessage(data.error || t.genericError)
+        setIsRegenerating(false)
+        return
+      }
+      notifiedRef.current = false
+      statusRef.current = null
+      setStatus(null)
+      setPollNonce((n) => n + 1)
+    } catch {
+      setErrorMessage(t.genericError)
+    }
+    setIsRegenerating(false)
+  }
+
   async function handleResume() {
     if (!runId) return
     setIsResuming(true)
@@ -1885,6 +1917,16 @@ function FloatingAgentWidget({ currentUser, t, onRunCompleted }) {
               >
                 {t.floatingAgentDownloadButton}
               </a>
+              <div className="floating-agent-row">
+                <select value={regenerateLanguage} onChange={(e) => setRegenerateLanguage(e.target.value)}>
+                  <option value="en">{t.dialogueLanguageEnglish}</option>
+                  <option value="or">{t.dialogueLanguageOdia}</option>
+                  <option value="hi">{t.dialogueLanguageHindi}</option>
+                </select>
+                <button type="button" className="choose-button" onClick={handleRegenerateScreenplay} disabled={isRegenerating}>
+                  {isRegenerating ? t.floatingAgentRegenerating : t.floatingAgentRegenerateButton}
+                </button>
+              </div>
               <button type="button" className="cancel-button" onClick={handleStartNew}>
                 {t.floatingAgentNewRunButton}
               </button>

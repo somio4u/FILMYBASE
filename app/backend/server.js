@@ -11097,6 +11097,23 @@ async function runAutoPipeline(runId, conceptText, format, dialogueLanguage, res
       alreadyWrittenResult.rows.map((row) => [`${row.episode_index}:${row.scene_index}`, row.content])
     );
 
+    await runScreenplayAndQualityPass(runId, deck, sceneList, sceneListId, dialogueLanguage, alreadyWritten);
+    await updateAutoPipelineRun(runId, { status: "completed", progress_stage: "done" });
+  } catch (error) {
+    console.error("Auto-pipeline run failed:", runId, error);
+    await updateAutoPipelineRun(runId, { status: "failed", error: error.message }).catch(() => {});
+  }
+}
+
+// Shared by runAutoPipeline (fresh/resumed run, respects alreadyWritten so a
+// resume doesn't rewrite scenes that already succeeded) and
+// regenerateScreenplayInLanguage below (a completed run's story/structure is
+// reused as-is — only the dialogue language differs — so it's called with
+// an empty alreadyWritten map to force every scene to regenerate). Writes
+// every episode's screenplay scenes, then runs the whole-script repetition
+// quality gate; does NOT itself mark the run completed/failed, since the two
+// callers want different final progress_stage values around it.
+async function runScreenplayAndQualityPass(runId, deck, sceneList, sceneListId, dialogueLanguage, alreadyWritten) {
     // Shared across every scene/episode of this one run (episodes write
     // concurrently, but JS's single-threaded event loop means plain
     // read-then-append on this Map is safe — an approximate, best-effort
@@ -11207,12 +11224,6 @@ async function runAutoPipeline(runId, conceptText, format, dialogueLanguage, res
         await touchAutoPipelineRun(runId);
       }
     }
-
-    await updateAutoPipelineRun(runId, { status: "completed", progress_stage: "done" });
-  } catch (error) {
-    console.error("Auto-pipeline run failed:", runId, error);
-    await updateAutoPipelineRun(runId, { status: "failed", error: error.message }).catch(() => {});
-  }
 }
 
 app.post("/api/auto-pipeline/start", requireRole("admin"), async (req, res) => {
@@ -11274,6 +11285,61 @@ app.post("/api/auto-pipeline/:id/resume", requireRole("admin"), async (req, res)
 
   // Deliberately not awaited — see runAutoPipeline's own comment.
   runAutoPipeline(run.id, run.concept_text, run.format, run.dialogue_language, run.concept_id);
+
+  res.json({ runId: run.id });
+});
+
+// Rewrites just the screenplay in a different dialogue language, reusing a
+// completed run's story/structure as-is (pitch deck, characters, three-act,
+// bit sheet, and scene list are already trilingual — only the screenplay's
+// dialogue is tied to one chosen language). Cheaper and faster than a full
+// re-run, and fixes the real case of picking the wrong dialogue language
+// the first time around.
+async function regenerateScreenplayInLanguage(runId, sceneListId, dialogueLanguage) {
+  try {
+    const sceneListResult = await db.query(
+      `SELECT sl.content AS scene_list_content, pd.content AS pitch_deck_content
+       FROM scene_lists sl
+       JOIN bit_sheets bs ON bs.id = sl.bit_sheet_id
+       JOIN three_act_structures tas ON tas.id = bs.three_act_structure_id
+       JOIN pitch_decks pd ON pd.id = tas.pitch_deck_id
+       WHERE sl.id = $1`,
+      [sceneListId]
+    );
+    const { scene_list_content: sceneList, pitch_deck_content: deck } = sceneListResult.rows[0];
+
+    // Empty map — every scene regenerates, none are skipped as "already
+    // written" (they're written, just in the wrong language).
+    await runScreenplayAndQualityPass(runId, deck, sceneList, sceneListId, dialogueLanguage, new Map());
+    await updateAutoPipelineRun(runId, { status: "completed", progress_stage: "done" });
+  } catch (error) {
+    console.error("Screenplay regeneration failed:", runId, error);
+    await updateAutoPipelineRun(runId, { status: "failed", error: error.message }).catch(() => {});
+  }
+}
+
+app.post("/api/auto-pipeline/:id/regenerate-screenplay", requireRole("admin"), async (req, res) => {
+  const dialogueLanguage = ["or", "hi"].includes(req.body?.dialogueLanguage) ? req.body.dialogueLanguage : "en";
+
+  const runResult = await db.query("SELECT * FROM auto_pipeline_runs WHERE id = $1", [req.params.id]);
+  const run = runResult.rows[0];
+
+  if (!run) {
+    res.status(404).json({ error: "Run not found." });
+    return;
+  }
+  if (run.status !== "completed" || !run.scene_list_id) {
+    res.status(400).json({ error: "This run hasn't completed yet — nothing to regenerate." });
+    return;
+  }
+
+  await db.query(
+    "UPDATE auto_pipeline_runs SET status = 'running', progress_stage = 'screenplay', dialogue_language = $2, error = NULL WHERE id = $1",
+    [run.id, dialogueLanguage]
+  );
+
+  // Deliberately not awaited — see runAutoPipeline's own comment.
+  regenerateScreenplayInLanguage(run.id, run.scene_list_id, dialogueLanguage);
 
   res.json({ runId: run.id });
 });

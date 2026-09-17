@@ -319,8 +319,7 @@ const LABELS = {
     floatingAgentSecondsSuffix: 's',
     floatingAgentDoneLabel: 'Your screenplay is ready.',
     floatingAgentDownloadButton: 'Download Screenplay',
-    floatingAgentRegenerateButton: 'Rewrite Dialogue In This Language',
-    floatingAgentRegenerating: 'Rewriting...',
+    floatingAgentTranslateDownloadButton: 'Translate & Download',
     floatingAgentFormatPdf: 'PDF',
     floatingAgentFormatWord: 'Word (.docx)',
     floatingAgentNewRunButton: 'Start a New Run',
@@ -800,8 +799,7 @@ const LABELS = {
     floatingAgentSecondsSuffix: 'ସେ',
     floatingAgentDoneLabel: 'ଆପଣଙ୍କର ସ୍କ୍ରିନପ୍ଲେ ପ୍ରସ୍ତୁତ।',
     floatingAgentDownloadButton: 'ସ୍କ୍ରିନପ୍ଲେ ଡାଉନଲୋଡ୍ କରନ୍ତୁ',
-    floatingAgentRegenerateButton: 'ଏହି ଭାଷାରେ ସଂଳାପ ପୁନଃଲିଖନ କରନ୍ତୁ',
-    floatingAgentRegenerating: 'ପୁନଃଲିଖନ ହେଉଛି...',
+    floatingAgentTranslateDownloadButton: 'ଅନୁବାଦ କରି ଡାଉନଲୋଡ୍ କରନ୍ତୁ',
     floatingAgentFormatPdf: 'PDF',
     floatingAgentFormatWord: 'ୱାର୍ଡ (.docx)',
     floatingAgentNewRunButton: 'ନୂଆ ରନ୍ ଆରମ୍ଭ କରନ୍ତୁ',
@@ -1526,8 +1524,9 @@ function FloatingAgentWidget({ currentUser, t, onRunCompleted }) {
   const [formatType, setFormatType] = useState('vertical')
   const [episodeCount, setEpisodeCount] = useState(60)
   const [episodeMinutes, setEpisodeMinutes] = useState(1.5)
-  const [dialogueLanguage, setDialogueLanguage] = useState('en')
+  const [dialogueLanguage, setDialogueLanguage] = useState('or')
   const [downloadFormat, setDownloadFormat] = useState('pdf')
+  const [downloadLanguage, setDownloadLanguage] = useState('or')
 
   const [runId, setRunId] = useState(() => {
     try {
@@ -1545,8 +1544,6 @@ function FloatingAgentWidget({ currentUser, t, onRunCompleted }) {
   // resuming that same run id would otherwise leave nothing left to ever
   // notice it's running again.
   const [pollNonce, setPollNonce] = useState(0)
-  const [isRegenerating, setIsRegenerating] = useState(false)
-  const [regenerateLanguage, setRegenerateLanguage] = useState('or')
   const [errorMessage, setErrorMessage] = useState(null)
   const [nowTick, setNowTick] = useState(() => Date.now())
   const [frameIndex, setFrameIndex] = useState(0)
@@ -1734,31 +1731,6 @@ function FloatingAgentWidget({ currentUser, t, onRunCompleted }) {
     setIsStarting(false)
   }
 
-  async function handleRegenerateScreenplay() {
-    if (!runId) return
-    setIsRegenerating(true)
-    setErrorMessage(null)
-    try {
-      const response = await fetch(`${BACKEND_URL}/api/auto-pipeline/${runId}/regenerate-screenplay`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ dialogueLanguage: regenerateLanguage }),
-      })
-      const data = await response.json()
-      if (!response.ok) {
-        setErrorMessage(data.error || t.genericError)
-        setIsRegenerating(false)
-        return
-      }
-      notifiedRef.current = false
-      statusRef.current = null
-      setStatus(null)
-      setPollNonce((n) => n + 1)
-    } catch {
-      setErrorMessage(t.genericError)
-    }
-    setIsRegenerating(false)
-  }
 
   async function handleResume() {
     if (!runId) return
@@ -1905,28 +1877,25 @@ function FloatingAgentWidget({ currentUser, t, onRunCompleted }) {
                 draggable="false"
               />
               <p>{t.floatingAgentDoneLabel}</p>
-              <select value={downloadFormat} onChange={(e) => setDownloadFormat(e.target.value)}>
-                <option value="pdf">{t.floatingAgentFormatPdf}</option>
-                <option value="docx">{t.floatingAgentFormatWord}</option>
-              </select>
+              <div className="floating-agent-row">
+                <select value={downloadFormat} onChange={(e) => setDownloadFormat(e.target.value)}>
+                  <option value="pdf">{t.floatingAgentFormatPdf}</option>
+                  <option value="docx">{t.floatingAgentFormatWord}</option>
+                </select>
+                <select value={downloadLanguage} onChange={(e) => setDownloadLanguage(e.target.value)}>
+                  <option value="or">{t.dialogueLanguageOdia}</option>
+                  <option value="hi">{t.dialogueLanguageHindi}</option>
+                  <option value="en">{t.dialogueLanguageEnglish}</option>
+                </select>
+              </div>
               <a
                 className="choose-button floating-agent-download"
-                href={`${BACKEND_URL}/api/auto-pipeline/${runId}/screenplay-${downloadFormat}`}
+                href={`${BACKEND_URL}/api/auto-pipeline/${runId}/screenplay-${downloadFormat}?lang=${downloadLanguage}`}
                 target="_blank"
                 rel="noreferrer"
               >
-                {t.floatingAgentDownloadButton}
+                {downloadLanguage === 'or' ? t.floatingAgentDownloadButton : t.floatingAgentTranslateDownloadButton}
               </a>
-              <div className="floating-agent-row">
-                <select value={regenerateLanguage} onChange={(e) => setRegenerateLanguage(e.target.value)}>
-                  <option value="en">{t.dialogueLanguageEnglish}</option>
-                  <option value="or">{t.dialogueLanguageOdia}</option>
-                  <option value="hi">{t.dialogueLanguageHindi}</option>
-                </select>
-                <button type="button" className="choose-button" onClick={handleRegenerateScreenplay} disabled={isRegenerating}>
-                  {isRegenerating ? t.floatingAgentRegenerating : t.floatingAgentRegenerateButton}
-                </button>
-              </div>
               <button type="button" className="cancel-button" onClick={handleStartNew}>
                 {t.floatingAgentNewRunButton}
               </button>

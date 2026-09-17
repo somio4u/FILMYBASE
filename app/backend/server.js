@@ -5597,7 +5597,7 @@ async function fetchSceneListContext(sceneListId) {
 app.post("/api/screenplay/scene", requireRole("admin"), async (req, res) => {
   const { sceneListId, episodeIndex, sceneIndex, dialogueLanguage: rawDialogueLanguage } = req.body;
   const hasEpisode = episodeIndex !== null && episodeIndex !== undefined;
-  const dialogueLanguage = ["or", "hi"].includes(rawDialogueLanguage) ? rawDialogueLanguage : "en";
+  const dialogueLanguage = ["en", "hi"].includes(rawDialogueLanguage) ? rawDialogueLanguage : "or";
 
   try {
     const context = await fetchSceneListContext(sceneListId);
@@ -11240,7 +11240,7 @@ app.post("/api/auto-pipeline/start", requireRole("admin"), async (req, res) => {
       : rawFormat?.type === "series"
         ? { type: "series", episodeCount: Number(rawFormat.episodeCount) || 10, episodeMinutes: Number(rawFormat.episodeMinutes) || 10 }
         : { type: "film", runtimeMinutes: Number(rawFormat?.runtimeMinutes) || 120 };
-  const dialogueLanguage = ["or", "hi"].includes(rawDialogueLanguage) ? rawDialogueLanguage : "en";
+  const dialogueLanguage = ["en", "hi"].includes(rawDialogueLanguage) ? rawDialogueLanguage : "or";
 
   try {
     const insertResult = await db.query(
@@ -11289,60 +11289,57 @@ app.post("/api/auto-pipeline/:id/resume", requireRole("admin"), async (req, res)
   res.json({ runId: run.id });
 });
 
-// Rewrites just the screenplay in a different dialogue language, reusing a
-// completed run's story/structure as-is (pitch deck, characters, three-act,
-// bit sheet, and scene list are already trilingual — only the screenplay's
-// dialogue is tied to one chosen language). Cheaper and faster than a full
-// re-run, and fixes the real case of picking the wrong dialogue language
-// the first time around.
-async function regenerateScreenplayInLanguage(runId, sceneListId, dialogueLanguage) {
-  try {
-    const sceneListResult = await db.query(
-      `SELECT sl.content AS scene_list_content, pd.content AS pitch_deck_content
-       FROM scene_lists sl
-       JOIN bit_sheets bs ON bs.id = sl.bit_sheet_id
-       JOIN three_act_structures tas ON tas.id = bs.three_act_structure_id
-       JOIN pitch_decks pd ON pd.id = tas.pitch_deck_id
-       WHERE sl.id = $1`,
-      [sceneListId]
-    );
-    const { scene_list_content: sceneList, pitch_deck_content: deck } = sceneListResult.rows[0];
+// Odia is the base/canonical dialogue language for the auto-pipeline (see
+// buildScreenplaySystemPrompt) — Hindi/English are produced by translating
+// that same Odia dialogue on export instead of independently regenerating
+// it, so the translated version stays faithful to the original creative
+// content rather than potentially drifting from it. Only dialogue and
+// parenthetical text are translated; action/transition/flashback text is
+// already plain English by convention and character names never change.
+async function translateScreenplaySceneElements(elements, targetLanguage) {
+  const dialogueIndexes = elements
+    .map((el, i) => (el.type === "dialogue" && el.text ? i : null))
+    .filter((i) => i !== null);
+  if (dialogueIndexes.length === 0) return elements;
 
-    // Empty map — every scene regenerates, none are skipped as "already
-    // written" (they're written, just in the wrong language).
-    await runScreenplayAndQualityPass(runId, deck, sceneList, sceneListId, dialogueLanguage, new Map());
-    await updateAutoPipelineRun(runId, { status: "completed", progress_stage: "done" });
-  } catch (error) {
-    console.error("Screenplay regeneration failed:", runId, error);
-    await updateAutoPipelineRun(runId, { status: "failed", error: error.message }).catch(() => {});
-  }
+  const languageLabel = targetLanguage === "hi" ? "Hindi (Devanagari script)" : "English";
+  const lines = dialogueIndexes.map((i, n) => {
+    const el = elements[i];
+    return `${n + 1}. ${el.text}${el.parenthetical ? ` [parenthetical: ${el.parenthetical}]` : ""}`;
+  });
+
+  const parsed = await generateJsonContent({
+    model: GEMINI_MODEL_NAME,
+    contents: `Translate ONLY these screenplay dialogue lines from Odia into natural, spoken ${languageLabel} — the way a person would actually say the same thing, never a stiff literal translation. Preserve the exact meaning, tone, and emotional register of each line. Return them in the same order, one per input line.\n\n${lines.join("\n")}`,
+    config: {
+      systemInstruction: `You are an expert screenplay translator producing natural, spoken ${languageLabel} dialogue translated faithfully from Odia — never a robotic word-for-word translation.`,
+      responseMimeType: "application/json",
+      maxOutputTokens: 4096,
+      responseSchema: {
+        type: Type.OBJECT,
+        properties: {
+          lines: {
+            type: Type.ARRAY,
+            items: {
+              type: Type.OBJECT,
+              properties: { text: { type: Type.STRING }, parenthetical: { type: Type.STRING } },
+              required: ["text"],
+            },
+          },
+        },
+        required: ["lines"],
+      },
+    },
+  });
+
+  const translated = [...elements];
+  dialogueIndexes.forEach((i, n) => {
+    const line = parsed.lines?.[n];
+    if (!line) return;
+    translated[i] = { ...translated[i], text: line.text, parenthetical: line.parenthetical || translated[i].parenthetical };
+  });
+  return translated;
 }
-
-app.post("/api/auto-pipeline/:id/regenerate-screenplay", requireRole("admin"), async (req, res) => {
-  const dialogueLanguage = ["or", "hi"].includes(req.body?.dialogueLanguage) ? req.body.dialogueLanguage : "en";
-
-  const runResult = await db.query("SELECT * FROM auto_pipeline_runs WHERE id = $1", [req.params.id]);
-  const run = runResult.rows[0];
-
-  if (!run) {
-    res.status(404).json({ error: "Run not found." });
-    return;
-  }
-  if (run.status !== "completed" || !run.scene_list_id) {
-    res.status(400).json({ error: "This run hasn't completed yet — nothing to regenerate." });
-    return;
-  }
-
-  await db.query(
-    "UPDATE auto_pipeline_runs SET status = 'running', progress_stage = 'screenplay', dialogue_language = $2, error = NULL WHERE id = $1",
-    [run.id, dialogueLanguage]
-  );
-
-  // Deliberately not awaited — see runAutoPipeline's own comment.
-  regenerateScreenplayInLanguage(run.id, run.scene_list_id, dialogueLanguage);
-
-  res.json({ runId: run.id });
-});
 
 app.get("/api/auto-pipeline/runs", requireLogin, async (req, res) => {
   // Scoped to the logged-in user (not every admin's runs) — the frontend
@@ -11511,7 +11508,34 @@ function renderFullScreenplayPdf(res, deck, sceneList, scenesByEpisode) {
 // completed run's scene list/deck and every screenplay scene actually
 // written (latest revision per position), or returns an { error, status }
 // pair for the route to relay directly.
-async function fetchAutoPipelineScreenplayData(runId) {
+// Auto-pipeline's default/canonical export is Odia — Hindi/English are
+// available on demand by translating that same Odia dialogue rather than
+// generating it independently (see translateScreenplaySceneElements). Only
+// runs on the scenes that actually need it (a scene already in the
+// requested language is left untouched), and runs with real concurrency
+// since a 60-episode script can be 150+ scenes.
+const SCREENPLAY_TRANSLATION_CONCURRENCY = 6;
+
+async function translateScreenplayScenesByEpisode(scenesByEpisode, targetLang) {
+  // Odia is the assumed base — translation only ever runs TOWARD Hindi or
+  // English, never back into Odia (there's nothing to translate "from" for
+  // an org request; a scene already in Odia is just left as generated).
+  if (targetLang !== "hi" && targetLang !== "en") return;
+
+  const allRows = [...scenesByEpisode.values()].flat();
+  const rowsToTranslate = allRows.filter((row) => (row.content.dialogueLanguage ?? "or") !== targetLang);
+  if (rowsToTranslate.length === 0) return;
+
+  await mapWithConcurrency(rowsToTranslate, SCREENPLAY_TRANSLATION_CONCURRENCY, async (row) => {
+    row.content = {
+      ...row.content,
+      elements: await translateScreenplaySceneElements(row.content.elements, targetLang),
+      dialogueLanguage: targetLang,
+    };
+  });
+}
+
+async function fetchAutoPipelineScreenplayData(runId, targetLang) {
   const runResult = await db.query("SELECT scene_list_id, status FROM auto_pipeline_runs WHERE id = $1", [runId]);
   if (runResult.rows.length === 0) {
     return { error: "Run not found", status: 404 };
@@ -11549,11 +11573,16 @@ async function fetchAutoPipelineScreenplayData(runId) {
     scenesByEpisode.get(key).push(row);
   });
 
+  if (targetLang) {
+    await translateScreenplayScenesByEpisode(scenesByEpisode, targetLang);
+  }
+
   return { deck, sceneList, scenesByEpisode };
 }
 
 app.get("/api/auto-pipeline/:id/screenplay-pdf", requireLogin, async (req, res) => {
-  const data = await fetchAutoPipelineScreenplayData(req.params.id);
+  const targetLang = ["en", "hi"].includes(req.query.lang) ? req.query.lang : "or";
+  const data = await fetchAutoPipelineScreenplayData(req.params.id, targetLang);
   if (data.error) {
     res.status(data.status).json({ error: data.error });
     return;
@@ -11692,7 +11721,8 @@ function buildFullScreenplayDocxParagraphs(deck, sceneList, scenesByEpisode) {
 }
 
 app.get("/api/auto-pipeline/:id/screenplay-docx", requireLogin, async (req, res) => {
-  const data = await fetchAutoPipelineScreenplayData(req.params.id);
+  const targetLang = ["en", "hi"].includes(req.query.lang) ? req.query.lang : "or";
+  const data = await fetchAutoPipelineScreenplayData(req.params.id, targetLang);
   if (data.error) {
     res.status(data.status).json({ error: data.error });
     return;

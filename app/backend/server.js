@@ -5887,6 +5887,17 @@ app.post("/api/script-breakdown", requireRole("admin"), async (req, res) => {
     res.json({ ...insertResult.rows[0], sceneListId, ...content });
   } catch (error) {
     console.error("Gemini API call failed:", error.message);
+    // A deep breakdown on a long script is several large Gemini calls back
+    // to back and can take minutes — if the project it belongs to gets
+    // deleted while that's still running, this INSERT's foreign key fails
+    // right at the end. Postgres' own message ("violates foreign key
+    // constraint...") is meaningless to a non-technical user, so translate
+    // the one error code (23503) that means exactly this into plain
+    // language instead of leaking raw SQL.
+    if (error.code === "23503") {
+      res.status(409).json({ error: "This project was deleted or changed while the analysis was still running. Please try again." });
+      return;
+    }
     res.status(502).json({ error: error.message });
   }
 });
@@ -6349,6 +6360,11 @@ app.post("/api/script-breakdown/:id/reanalyze", requireRole("admin"), async (req
     res.json({ ...insertResult.rows[0], sceneListId, ...updatedContent });
   } catch (error) {
     console.error("Gemini API call failed:", error.message);
+    // Same deleted-mid-run race as /api/script-breakdown's own insert.
+    if (error.code === "23503") {
+      res.status(409).json({ error: "This project was deleted or changed while the analysis was still running. Please try again." });
+      return;
+    }
     res.status(502).json({ error: error.message });
   }
 });

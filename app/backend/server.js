@@ -89,12 +89,36 @@ function parseRetryDelayMs(errorMessage) {
   return match ? Math.ceil(Number(match[1]) * 1000) : null;
 }
 
+// A real "stuck at 95% forever" was traced back to this call having no
+// timeout at all — if Gemini/Vertex ever stalls (no error, just never
+// responds), nothing here ever finds out, so the whole request (and the
+// frontend poll waiting on it) hangs until it gives up on its own. This
+// bounds every attempt to GEMINI_CALL_TIMEOUT_MS and treats a timeout the
+// same as a 429/503 — worth retrying, not a reason to give up immediately.
+const GEMINI_CALL_TIMEOUT_MS = 90_000;
+
+function withTimeout(promise, ms) {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(`Gemini call timed out after ${ms}ms`)), ms);
+    promise.then(
+      (value) => {
+        clearTimeout(timer);
+        resolve(value);
+      },
+      (error) => {
+        clearTimeout(timer);
+        reject(error);
+      }
+    );
+  });
+}
+
 async function generateContentWithRetry(params, { retries = 4, fallbackDelayMs = 2000 } = {}) {
   for (let attempt = 0; ; attempt++) {
     try {
-      return await ai.models.generateContent(params);
+      return await withTimeout(ai.models.generateContent(params), GEMINI_CALL_TIMEOUT_MS);
     } catch (error) {
-      const transient = /"code":\s*(429|503)/.test(error.message ?? "");
+      const transient = /"code":\s*(429|503)/.test(error.message ?? "") || /timed out after/.test(error.message ?? "");
       if (!transient || attempt >= retries) throw error;
       const delay = parseRetryDelayMs(error.message) ?? fallbackDelayMs * 2 ** attempt;
       console.error(`Gemini call failed (${error.message.slice(0, 100)}...), retrying in ${delay}ms`);

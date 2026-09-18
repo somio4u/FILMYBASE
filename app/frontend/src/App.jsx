@@ -124,6 +124,7 @@ const LABELS = {
     changesChatToggleLabel: 'Ask for changes',
     changesChatHeading: 'Changes',
     changesChatEmptyNote: 'Type a change below and it will show up here, along with what happened.',
+    generateIdeaButton: 'Generate Idea',
     changesChatAppliedMessage: '✅ Done — applied and regenerated.',
     changesChatErrorMessage: '⚠️ Something went wrong — please try again.',
     agentChatInputPlaceholder: 'Ask a question or describe a change — attach a photo too if it helps…',
@@ -608,6 +609,7 @@ const LABELS = {
     changesChatToggleLabel: 'ପରିବର୍ତ୍ତନ ପାଇଁ ପଚାରନ୍ତୁ',
     changesChatHeading: 'ପରିବର୍ତ୍ତନ',
     changesChatEmptyNote: 'ତଳେ ଏକ ପରିବର୍ତ୍ତନ ଲେଖନ୍ତୁ, ଏହା ଏଠାରେ ଦେଖାଯିବ, ସହିତ କଣ ହେଲା ତାହା ମଧ୍ୟ।',
+    generateIdeaButton: 'ଆଇଡିଆ ତିଆରି କରନ୍ତୁ',
     changesChatAppliedMessage: '✅ ହୋଇଗଲା — ପ୍ରୟୋଗ ଏବଂ ପୁନଃତିଆରି ହୋଇଗଲା।',
     changesChatErrorMessage: '⚠️ କିଛି ଭୁଲ ହେଲା — ପୁଣି ଚେଷ୍ଟା କରନ୍ତୁ।',
     agentChatInputPlaceholder: 'ଏକ ପ୍ରଶ୍ନ ପଚାରନ୍ତୁ କିମ୍ବା ପରିବର୍ତ୍ତନ ବର୍ଣ୍ଣନା କରନ୍ତୁ — ସାହାଯ୍ୟ ହେଲେ ଏକ ଫଟୋ ମଧ୍ୟ ଲଗାନ୍ତୁ…',
@@ -2821,7 +2823,7 @@ function useDraggableTogglePosition(storageKey, defaultPosition) {
 // exactly what silently swallowed a real request earlier in this project.
 // History persists per (project, stage) in localStorage so re-opening the
 // panel later still shows what was asked and what happened.
-function ChangesChatPanel({ t, historyKey, barConfig, isBusy, errorMessage, currentUserName }) {
+function ChangesChatPanel({ t, historyKey, barConfig, isBusy, errorMessage, currentUserName, openSignal, clearDraftHistorySignal }) {
   const [isOpen, setIsOpen] = useState(false)
   const { position, handlePointerDown, hasDraggedRef } = useDraggableTogglePosition(
     CHANGES_CHAT_TOGGLE_POSITION_STORAGE_KEY,
@@ -2841,6 +2843,31 @@ function ChangesChatPanel({ t, historyKey, barConfig, isBusy, errorMessage, curr
     if (hasDraggedRef.current) return
     setIsOpen((v) => !v)
   }
+
+  useEffect(() => {
+    if (openSignal) setIsOpen(true)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [openSignal])
+
+  // A project has no id yet until its first successful generation, so its
+  // chat history is filed under a placeholder "new:<stage>" key. Without
+  // this, starting a fresh idea after abandoning a previous unsaved one
+  // would resurface that previous attempt's messages — they share the same
+  // placeholder. "New Idea" bumps this signal to actually delete that
+  // placeholder bucket, not just hide it.
+  useEffect(() => {
+    if (!clearDraftHistorySignal) return
+    setHistoriesByKey((prev) => {
+      const next = Object.fromEntries(Object.entries(prev).filter(([key]) => !key.startsWith('new:')))
+      try {
+        localStorage.setItem('filmmaking-app:chatHistories', JSON.stringify(next))
+      } catch {
+        // Private-browsing/storage-blocked — fine, nothing to clean up then.
+      }
+      return next
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [clearDraftHistorySignal])
 
   const messages = historiesByKey[historyKey] ?? []
 
@@ -2936,8 +2963,12 @@ function ChangesChatPanel({ t, historyKey, barConfig, isBusy, errorMessage, curr
             placeholder={barConfig.placeholder}
             disabled={barConfig.disabled}
           />
-          <button className="changes-chat-send" onClick={handleSend} disabled={!barConfig.canSubmit}>
-            {isBusy ? '…' : '↵'}
+          <button
+            className={barConfig.stageKey === 'idea' ? 'changes-chat-send changes-chat-send-labeled' : 'changes-chat-send'}
+            onClick={handleSend}
+            disabled={!barConfig.canSubmit}
+          >
+            {isBusy ? '…' : barConfig.stageKey === 'idea' ? t.generateIdeaButton : '↵'}
           </button>
         </div>
       </div>
@@ -3892,6 +3923,8 @@ function App() {
   // because a schedule also happens to exist. Null until the AD actually
   // clicks one of those two nav items this session.
   const [chatFocusStage, setChatFocusStage] = useState(null)
+  const [openChangesChatSignal, setOpenChangesChatSignal] = useState(0)
+  const [clearDraftHistorySignal, setClearDraftHistorySignal] = useState(0)
   const [projectType, setProjectType] = useState('story')
   const [masterProjectList, setMasterProjectList] = useState([])
   const [isLoadingMasterList, setIsLoadingMasterList] = useState(false)
@@ -4419,6 +4452,7 @@ function App() {
     setProjectType(forAgent)
     setImportScreenplayText('')
     setStartStage('idea')
+    setClearDraftHistorySignal((n) => n + 1)
   }
 
   function handleGoHomeClick() {
@@ -6603,6 +6637,10 @@ function App() {
     setIsSidebarOpen(false)
     if (anchorId === 'stage-breakdown') setChatFocusStage('breakdown')
     if (anchorId === 'stage-schedule') setChatFocusStage('schedule')
+    // Clicking "Idea" before anything's been generated yet pops the Changes
+    // box open directly, instead of making the user find the pen icon —
+    // it's the box you type your idea into.
+    if (anchorId === 'stage-idea' && !storylines?.length) setOpenChangesChatSignal((n) => n + 1)
     document.getElementById(anchorId)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
   }
 
@@ -8965,6 +9003,8 @@ function App() {
               isBusy={isBarBusy}
               errorMessage={errorMessage}
               currentUserName={currentUser?.name}
+              openSignal={openChangesChatSignal}
+              clearDraftHistorySignal={clearDraftHistorySignal}
             />
           )}
         </aside>

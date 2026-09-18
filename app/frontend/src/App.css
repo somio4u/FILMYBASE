@@ -3201,6 +3201,14 @@ button, input, textarea, select {
   cursor: default;
 }
 
+.changes-chat-send-labeled {
+  width: auto;
+  border-radius: 18px;
+  padding: 0 16px;
+  font-size: 13px;
+  white-space: nowrap;
+}
+
 .changes-chat-attach {
   flex-shrink: 0;
   width: 36px;

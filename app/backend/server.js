@@ -5886,14 +5886,18 @@ async function generateDeepScriptBreakdownContent(sourceText, revision) {
   const firstPass = await generateScriptBreakdownContent(sourceText, revision);
 
   // Each of these re-sends the WHOLE script (same size as the first pass
-  // above) — on a real 166KB/13-episode script, 3 of those at once was
-  // enough to trip Vertex AI's own rate limit (429 "Resource exhausted"),
-  // which isn't a transient blip generateContentWithRetry can retry past
-  // here — it killed the category outright and, with it, the whole
-  // breakdown. Sequential is slower but reliable; and a genuinely
-  // persistent failure on ONE category now just keeps that category's
-  // first-pass result instead of losing the other four along with it.
-  const refinedEntries = await mapWithConcurrency(BREAKDOWN_CATEGORY_KEYS, 1, async (category) => {
+  // above) — on a real 166KB/13-episode script, 3 of those at once tripped
+  // a rate limit (429 "Resource exhausted") before this project had a real
+  // Vertex AI billing account attached, which knocked concurrency down to
+  // 1 (sequential) as a safe fallback. Real billing is attached now, with
+  // Vertex AI's default per-project quota well above the old free-tier
+  // limit, so this is back to 3 — the same concurrency every other
+  // multi-call Gemini batch in this file uses. Still backed by the same
+  // safety net either way: generateContentWithRetry retries a transient
+  // 429/503 automatically, and a genuinely persistent failure on ONE
+  // category just keeps that category's first-pass result instead of
+  // losing the other four along with it.
+  const refinedEntries = await mapWithConcurrency(BREAKDOWN_CATEGORY_KEYS, 3, async (category) => {
     try {
       const refreshed = await generateBreakdownCategoryContent(sourceText, category, firstPass[category]);
       return [category, refreshed];

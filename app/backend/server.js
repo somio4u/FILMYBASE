@@ -6160,6 +6160,54 @@ async function classifyCastCategoriesInChunk(chunkText, knownLabels) {
   return parsed.evidence ?? [];
 }
 
+const CAST_TIER_SCHEMA = {
+  type: Type.OBJECT,
+  properties: {
+    tiers: {
+      type: Type.ARRAY,
+      items: {
+        type: Type.OBJECT,
+        properties: {
+          label: { type: Type.STRING },
+          castTier: { type: Type.STRING, enum: ["lead", "sidekick", "extra"] },
+        },
+        required: ["label", "castTier"],
+      },
+    },
+  },
+  required: ["tiers"],
+};
+
+// Judges each SPEAKING character's narrative importance across the WHOLE
+// script in one call, unlike castCategory's per-episode evidence-gathering
+// just below (an independent boolean fact ORed across episodes) — "lead vs
+// sidekick vs extra" is a holistic, whole-story judgment that can't be
+// decomposed into per-chunk facts, so this reads the full script at once.
+// Safe to do in one call even on a large script: the truncation problem
+// fixed earlier was about large bilingual LIST outputs (170K+ characters);
+// this response is tiny (one label + one word per character).
+async function classifyCastTiers(sourceText, speakingLabels) {
+  if (speakingLabels.length === 0) return {};
+
+  const contents = `The script material:\n${sourceText}\n\nThe speaking characters in this story: ${speakingLabels.join(", ")}\n\nFor EACH of these characters, judge their overall narrative importance across the WHOLE story:\n- "lead": a backbone/central character the story revolves around (usually just a handful of people).\n- "sidekick": a supporting character who meaningfully drives scenes or the plot forward alongside a lead, without being the story's own center.\n- "extra": a minor speaking character with limited overall impact on the story (a few lines, a small role).\nBase this on their actual weight in the story (how central they are to the plot, screen time, dramatic stakes) — not just how many scenes they technically appear in.`;
+
+  const parsed = await generateJsonContent({
+    model: GEMINI_MODEL_NAME,
+    contents,
+    config: {
+      systemInstruction: SCRIPT_BREAKDOWN_SYSTEM_PROMPT,
+      responseMimeType: "application/json",
+      responseSchema: CAST_TIER_SCHEMA,
+    },
+  });
+
+  const tierByLabel = {};
+  (parsed.tiers ?? []).forEach((row) => {
+    if (row?.label) tierByLabel[row.label.toLowerCase()] = row.castTier;
+  });
+  return tierByLabel;
+}
+
 // Splits into episode-sized chunks like the missing-character scan and AD
 // sheet, since a character's category depends on evidence gathered across
 // the ENTIRE script, not just wherever they were first introduced. Merge
@@ -6171,7 +6219,11 @@ async function classifyCastCategoriesInChunk(chunkText, knownLabels) {
 // silent); ever-spoken but NEVER physically present anywhere ->
 // "off_screen" (pure voice-over/phone/radio — the actor never needs to be
 // on this set, no call sheet slot). Existing label/notes/age/gender on
-// each artistList entry are left untouched — this only adds castCategory.
+// each artistList entry are left untouched — this adds castCategory, then
+// (for speaking characters only) castTier — the Lead/Sidekick/Extra
+// distinction the casting UI uses to decide who needs individual casting
+// versus one shared "Junior Artist Coordinator" slot. Non-speaking
+// characters get castTier: null — they're excluded from casting entirely.
 async function classifyCastCategories(sourceText, artistList) {
   const knownLabels = artistList.map((a) => a.label);
   const chunks = splitScreenplayIntoEpisodes(sourceText);
@@ -6187,12 +6239,21 @@ async function classifyCastCategories(sourceText, artistList) {
     if (row.physicallyPresentHere) presentEver.add(key);
   });
 
-  return artistList.map((item) => {
+  const withCastCategory = artistList.map((item) => {
     const key = item.label.toLowerCase();
     const speaks = hasDialogueEver.has(key);
     const present = presentEver.has(key);
     const castCategory = present ? (speaks ? "speaking" : "non_speaking_action") : speaks ? "off_screen" : item.castCategory ?? "speaking";
     return { ...item, castCategory };
+  });
+
+  const speakingLabels = withCastCategory.filter((item) => item.castCategory === "speaking").map((item) => item.label);
+  const tierByLabel = await classifyCastTiers(sourceText, speakingLabels);
+
+  return withCastCategory.map((item) => {
+    if (item.castCategory !== "speaking") return { ...item, castTier: null };
+    const tier = tierByLabel[item.label.toLowerCase()] ?? item.castTier ?? "extra";
+    return { ...item, castTier: tier };
   });
 }
 
@@ -10281,13 +10342,25 @@ function computeDirectorOverview(sceneList, breakdownContent, shootSchedule, cre
   const locationFinalized = new Set(
     crewMembers.filter((m) => m.category === "location").map((m) => m.characterName.toLowerCase())
   );
+  // Must match the frontend's JUNIOR_ARTIST_COORDINATOR_KEY (App.jsx) — the
+  // same sentinel crew "characterName" standing in for every Extra/Junior
+  // character at once.
+  const juniorCoordinatorAdded = castFinalized.has("__junior_artist_coordinator__");
 
-  const characters = (breakdownContent?.artistList ?? []).map((item) => ({
-    label: item.label,
-    age: item.age ?? null,
-    gender: item.gender ?? null,
-    finalized: castFinalized.has(item.label.toLowerCase()),
-  }));
+  const characters = (breakdownContent?.artistList ?? [])
+    // Non-speaking characters (present-but-silent, or off-screen voice-only)
+    // aren't part of casting at all — left out of this count/list entirely,
+    // not counted as "pending".
+    .filter((item) => item.castCategory !== "non_speaking_action" && item.castCategory !== "off_screen")
+    .map((item) => ({
+      label: item.label,
+      age: item.age ?? null,
+      gender: item.gender ?? null,
+      // Extras/Juniors share ONE coordinator slot instead of individual
+      // casting — finalized for ALL of them together the moment that one
+      // coordinator crew member exists.
+      finalized: item.castTier === "extra" ? juniorCoordinatorAdded : castFinalized.has(item.label.toLowerCase()),
+    }));
 
   const locations = (breakdownContent?.locationList ?? []).map((item) => ({
     label: item.location?.en ?? "",

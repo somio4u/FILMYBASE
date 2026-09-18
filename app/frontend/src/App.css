@@ -2256,6 +2256,19 @@ button, input, textarea, select {
   color: var(--text-muted);
 }
 
+.junior-artist-coordinator {
+  margin-bottom: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  background: var(--surface-secondary, rgba(255, 255, 255, 0.03));
+  font-size: 13px;
+}
+
+.junior-artist-coordinator .breakdown-item-meta {
+  margin: 2px 0 8px;
+}
+
 .master-list-section {
   margin-bottom: 28px;
 }

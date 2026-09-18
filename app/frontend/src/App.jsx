@@ -319,11 +319,17 @@ const LABELS = {
     noMissingCharactersFoundLabel: 'No missing characters found — the cast list already covers everyone with screen presence.',
     classifyCastCategoriesButton: 'Classify Cast Categories',
     classifyingCastCategoriesLabel: 'Classifying...',
-    classifyCastCategoriesHint: 'Scans the full script and sorts every character into three groups: has dialogue, present but silent (action only), or only ever heard (voice-over/phone, never physically on set).',
+    classifyCastCategoriesHint: 'Scans the full script and sorts every character into groups: Lead, Sidekick, Extra/Junior (all speaking roles, by narrative importance), or non-speaking (present but silent, or only ever heard).',
     castCategorySpeakingLabel: 'Speaking / Lead Artists',
     castCategoryActionOnlyLabel: 'Action Only (No Dialogue)',
     castCategoryOffScreenLabel: 'Off-Screen / Voice Only (Not Called on Set)',
     castCategoryUnclassifiedLabel: 'Not Yet Classified',
+    castTierLeadLabel: 'Lead Characters',
+    castTierSidekickLabel: 'Sidekicks',
+    castTierExtraLabel: 'Extras / Junior Artists',
+    castTierNonSpeakingLabel: 'Non-Speaking Characters',
+    juniorArtistCoordinatorHeading: 'Junior Artist Coordinator',
+    juniorArtistCoordinatorHint: 'Add ONE coordinator here to mark every Extra/Junior character below as cast — no need to cast each one individually.',
     approveButton: 'Approve',
     requestChangesButton: 'Request Changes',
     approvedBadge: '✅ Approved',
@@ -815,11 +821,17 @@ const LABELS = {
     noMissingCharactersFoundLabel: 'କୌଣସି ମିଳିନଥିବା ଚରିତ୍ର ମିଳିଲା ନାହିଁ — କାଷ୍ଟ ତାଲିକା ଆଗରୁ ସମସ୍ତଙ୍କୁ ଅନ୍ତର୍ଭୁକ୍ତ କରିଥାଏ।',
     classifyCastCategoriesButton: 'କାଷ୍ଟ ବର୍ଗ ଶ୍ରେଣୀକରଣ କରନ୍ତୁ',
     classifyingCastCategoriesLabel: 'ଶ୍ରେଣୀକରଣ ହେଉଛି...',
-    classifyCastCategoriesHint: 'ସମ୍ପୂର୍ଣ୍ଣ ସ୍କ୍ରିପ୍ଟ ସ୍କାନ୍ କରି ପ୍ରତ୍ୟେକ ଚରିତ୍ରକୁ ତିନି ଗୋଷ୍ଠୀରେ ବିଭକ୍ତ କରେ: ସଂଳାପ ଥିବା, ଉପସ୍ଥିତ କିନ୍ତୁ ନିରବ (କେବଳ କାର୍ଯ୍ୟ), କିମ୍ବା କେବଳ ଶୁଣାଯାଏ (ଭଏସ୍-ଓଭର/ଫୋନ୍, କେବେ ସେଟ୍‌ରେ ଉପସ୍ଥିତ ନାହାନ୍ତି)।',
+    classifyCastCategoriesHint: 'ସମ୍ପୂର୍ଣ୍ଣ ସ୍କ୍ରିପ୍ଟ ସ୍କାନ୍ କରି ପ୍ରତ୍ୟେକ ଚରିତ୍ରକୁ ଗୋଷ୍ଠୀରେ ବିଭକ୍ତ କରେ: ଲିଡ୍, ସାଇଡ୍‌କିକ୍, ଏକ୍ସଟ୍ରା/ଜୁନିଅର୍ (ସବୁ ସଂଳାପ ଥିବା ଭୂମିକା, କାହାଣୀରେ ଗୁରୁତ୍ୱ ଅନୁସାରେ), କିମ୍ବା ନନ୍-ସ୍ପିକିଙ୍ଗ୍ (ଉପସ୍ଥିତ କିନ୍ତୁ ନିରବ, କିମ୍ବା କେବଳ ଶୁଣାଯାଏ)।',
     castCategorySpeakingLabel: 'ସଂଳାପ ଥିବା / ମୁଖ୍ୟ କଳାକାର',
     castCategoryActionOnlyLabel: 'କେବଳ କାର୍ଯ୍ୟ (ସଂଳାପ ନାହିଁ)',
     castCategoryOffScreenLabel: 'ଅଫ୍-ସ୍କ୍ରିନ୍ / କେବଳ ସ୍ୱର (ସେଟ୍‌ରେ ଡକାଯାଏ ନାହିଁ)',
     castCategoryUnclassifiedLabel: 'ଏପର୍ଯ୍ୟନ୍ତ ଶ୍ରେଣୀକରଣ ହୋଇନାହିଁ',
+    castTierLeadLabel: 'ମୁଖ୍ୟ ଚରିତ୍ର (Lead)',
+    castTierSidekickLabel: 'ସାଇଡ୍‌କିକ୍ (Sidekick)',
+    castTierExtraLabel: 'ଏକ୍ସଟ୍ରା / ଜୁନିଅର୍ ଆର୍ଟିଷ୍ଟ',
+    castTierNonSpeakingLabel: 'ନନ୍-ସ୍ପିକିଙ୍ଗ୍ ଚରିତ୍ର',
+    juniorArtistCoordinatorHeading: 'ଜୁନିଅର୍ ଆର୍ଟିଷ୍ଟ କୋଅର୍ଡିନେଟର୍',
+    juniorArtistCoordinatorHint: 'ତଳେ ଥିବା ସବୁ ଏକ୍ସଟ୍ରା/ଜୁନିଅର୍ ଚରିତ୍ରକୁ କାଷ୍ଟ ହୋଇଥିବା ଭାବରେ ଚିହ୍ନଟ କରିବାକୁ ଏଠି ଗୋଟିଏ କୋଅର୍ଡିନେଟର୍ ଯୋଡ଼ନ୍ତୁ — ପ୍ରତ୍ୟେକଙ୍କୁ ଅଲଗା ଅଲଗା କାଷ୍ଟ କରିବାର ଆବଶ୍ୟକତା ନାହିଁ।',
     approveButton: 'ଅନୁମୋଦନ କରନ୍ତୁ',
     requestChangesButton: 'ପରିବର୍ତ୍ତନ ପାଇଁ ଅନୁରୋଧ',
     approvedBadge: '✅ ଅନୁମୋଦିତ',
@@ -1402,15 +1414,30 @@ function formatExportTimestamp(date = new Date()) {
   return `${day}-${month}-${year}_${hours12}.${minutes}${ampm}`
 }
 
-// Display order for the three cast categories the AI classification sorts
-// characters into — unclassified (not yet run) floats to the top so it's
-// obvious there's something to classify, before speaking/action/off-screen.
-const CAST_CATEGORY_ORDER = { speaking: 0, non_speaking_action: 1, off_screen: 2 }
+// Display groups for the artist casting list. Speaking characters split
+// into Lead/Sidekick/Extra by narrative importance (castTier); the two
+// non-speaking castCategory values (present-but-silent, and off-screen
+// voice-only) collapse into ONE "non_speaking" group, since neither needs
+// individual casting. Unclassified (not yet run) floats to the top so
+// it's obvious there's still something to classify.
+const CAST_TIER_GROUP_ORDER = { unclassified: -1, lead: 0, sidekick: 1, extra: 2, non_speaking: 3 }
 
-function castCategoryLabel(castCategory, t) {
-  if (castCategory === 'speaking') return t.castCategorySpeakingLabel
-  if (castCategory === 'non_speaking_action') return t.castCategoryActionOnlyLabel
-  if (castCategory === 'off_screen') return t.castCategoryOffScreenLabel
+// A sentinel crew "characterName" — not a real character label — so ONE
+// crew member can stand in for every Extra/Junior character at once,
+// instead of casting each one individually.
+const JUNIOR_ARTIST_COORDINATOR_KEY = '__junior_artist_coordinator__'
+
+function castTierGroup(item) {
+  if (!item.castCategory) return 'unclassified'
+  if (item.castCategory !== 'speaking') return 'non_speaking'
+  return item.castTier || 'extra'
+}
+
+function castTierGroupLabel(group, t) {
+  if (group === 'lead') return t.castTierLeadLabel
+  if (group === 'sidekick') return t.castTierSidekickLabel
+  if (group === 'extra') return t.castTierExtraLabel
+  if (group === 'non_speaking') return t.castTierNonSpeakingLabel
   return t.castCategoryUnclassifiedLabel
 }
 
@@ -5942,16 +5969,25 @@ function App() {
           (category === 'artistList'
             ? items
                 .map((item, originalIndex) => ({ item, originalIndex }))
-                .sort((a, b) => (CAST_CATEGORY_ORDER[a.item.castCategory] ?? -1) - (CAST_CATEGORY_ORDER[b.item.castCategory] ?? -1))
+                .sort((a, b) => (CAST_TIER_GROUP_ORDER[castTierGroup(a.item)] ?? -1) - (CAST_TIER_GROUP_ORDER[castTierGroup(b.item)] ?? -1))
             : items.map((item, originalIndex) => ({ item, originalIndex }))
           ).map(({ item, originalIndex }, sortedIndex, sortedArray) => {
             const index = originalIndex
             const itemKey = `${category}:${index}`
+            const tierGroup = category === 'artistList' ? castTierGroup(item) : null
             const showCastCategoryHeader =
-              category === 'artistList' && (sortedIndex === 0 || sortedArray[sortedIndex - 1].item.castCategory !== item.castCategory)
+              category === 'artistList' && (sortedIndex === 0 || castTierGroup(sortedArray[sortedIndex - 1].item) !== tierGroup)
+            // Extras/juniors share ONE coordinator slot instead of being cast
+            // individually; non-speaking characters aren't cast at all — so
+            // "finalized" for either group isn't about THIS specific item.
+            const isExtraTier = tierGroup === 'extra'
+            const isNonSpeakingTier = tierGroup === 'non_speaking'
             const isExpanded = Boolean(expandedBreakdownItems[itemKey])
             const isCastFinalized =
-              category === 'artistList' && crewMembers.some((m) => m.category === 'artist' && m.characterName === item.label)
+              category === 'artistList' &&
+              (isExtraTier
+                ? crewMembers.some((m) => m.category === 'artist' && m.characterName === JUNIOR_ARTIST_COORDINATOR_KEY)
+                : crewMembers.some((m) => m.category === 'artist' && m.characterName === item.label))
             const isLocationFinalized =
               category === 'locationList' &&
               crewMembers.some((m) => m.category === 'location' && m.characterName === item.location.en)
@@ -5973,7 +6009,35 @@ function App() {
             return (
               <Fragment key={index}>
                 {showCastCategoryHeader && (
-                  <p className="cast-category-header">{castCategoryLabel(item.castCategory, t)}</p>
+                  <p className="cast-category-header">{castTierGroupLabel(tierGroup, t)}</p>
+                )}
+                {showCastCategoryHeader && isExtraTier && (
+                  <div className="junior-artist-coordinator">
+                    <strong>{t.juniorArtistCoordinatorHeading}</strong>
+                    <p className="breakdown-item-meta">{t.juniorArtistCoordinatorHint}</p>
+                    <InlineCastAttachment
+                      category="artist"
+                      linkKey={JUNIOR_ARTIST_COORDINATOR_KEY}
+                      members={crewMembers.filter((m) => m.category === 'artist' && m.characterName === JUNIOR_ARTIST_COORDINATOR_KEY)}
+                      onAdd={handleAddCrewMember}
+                      onUpdate={handleUpdateCrewMember}
+                      onDelete={handleDeleteCrewMember}
+                      isAdding={isAddingCrew}
+                      deletingId={crewDeletingId}
+                      updatingId={crewUpdatingId}
+                      t={t}
+                      BACKEND_URL={BACKEND_URL}
+                      canEdit={canEditProduction}
+                      googleConnected={googleConnected}
+                      googleContacts={googleContacts}
+                      isLoadingGoogleContacts={isLoadingGoogleContacts}
+                      onLoadGoogleContacts={loadGoogleContacts}
+                      onAddFromContact={handleAddCrewMemberFromContact}
+                      sceneListId={sceneList.id}
+                      language={language}
+                      projectTitle={projectTitle}
+                    />
+                  </div>
                 )}
                 <div className="breakdown-item">
                 <button className="breakdown-item-toggle" onClick={() => toggleBreakdownItem(itemKey)}>
@@ -6001,9 +6065,11 @@ function App() {
                           {shootStatus === 'wrapped' ? t.artistStatusWrappedLabel : shootStatus === 'in-progress' ? t.artistStatusInProgressLabel : t.artistStatusPendingLabel}
                         </span>
                       )}
-                      <span className={isCastFinalized ? 'breakdown-item-chip finalized' : 'breakdown-item-chip pending'}>
-                        {isCastFinalized ? '✓' : '…'}
-                      </span>
+                      {!isNonSpeakingTier && (
+                        <span className={isCastFinalized ? 'breakdown-item-chip finalized' : 'breakdown-item-chip pending'}>
+                          {isCastFinalized ? '✓' : '…'}
+                        </span>
+                      )}
                     </>
                   ) : (
                     <strong>{item.label}</strong>
@@ -6014,7 +6080,10 @@ function App() {
                   <>
                     <p>{category === 'costumes' ? item.description[language] : item.notes[language]}</p>
 
-                    {category === 'artistList' && (
+                    {/* Lead/Sidekick only — Extras/Juniors share ONE coordinator
+                        slot above instead (see isExtraTier block), and
+                        non-speaking characters aren't cast at all. */}
+                    {category === 'artistList' && !isExtraTier && !isNonSpeakingTier && (
                       <InlineCastAttachment
                         category="artist"
                         linkKey={item.label}

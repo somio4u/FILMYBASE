@@ -2754,6 +2754,65 @@ function ClapboardFullScreen({ t, BACKEND_URL, conceptId, sceneListId, sceneOpti
   )
 }
 
+const CHANGES_CHAT_TOGGLE_POSITION_STORAGE_KEY = 'filmmaking-app:changesChatTogglePosition'
+
+// Same drag mechanics as FloatingAgentWidget's button above — the pen icon
+// that opens the Changes chat is a floating button you can drag anywhere,
+// not one nailed to a fixed screen corner. Position is a per-viewer
+// localStorage convenience, same as the auto-pipeline widget's.
+function useDraggableTogglePosition(storageKey, defaultPosition) {
+  const [position, setPosition] = useState(() => {
+    try {
+      const saved = localStorage.getItem(storageKey)
+      if (saved) return JSON.parse(saved)
+    } catch {
+      // ignore — fall through to default
+    }
+    return typeof defaultPosition === 'function' ? defaultPosition() : defaultPosition
+  })
+  const [isDragging, setIsDragging] = useState(false)
+  const dragOffset = useRef({ x: 0, y: 0 })
+  const dragStart = useRef({ x: 0, y: 0 })
+  const hasDraggedRef = useRef(false)
+
+  function handlePointerDown(e) {
+    setIsDragging(true)
+    hasDraggedRef.current = false
+    dragStart.current = { x: e.clientX, y: e.clientY }
+    dragOffset.current = { x: e.clientX - position.x, y: e.clientY - position.y }
+  }
+
+  useEffect(() => {
+    if (!isDragging) return undefined
+
+    function handleMove(e) {
+      if (Math.abs(e.clientX - dragStart.current.x) > 5 || Math.abs(e.clientY - dragStart.current.y) > 5) {
+        hasDraggedRef.current = true
+      }
+      setPosition({ x: e.clientX - dragOffset.current.x, y: e.clientY - dragOffset.current.y })
+    }
+    function handleUp() {
+      setIsDragging(false)
+      setPosition((current) => {
+        try {
+          localStorage.setItem(storageKey, JSON.stringify(current))
+        } catch {
+          // per-viewer convenience only — fine if it can't persist
+        }
+        return current
+      })
+    }
+    window.addEventListener('pointermove', handleMove)
+    window.addEventListener('pointerup', handleUp)
+    return () => {
+      window.removeEventListener('pointermove', handleMove)
+      window.removeEventListener('pointerup', handleUp)
+    }
+  }, [isDragging, storageKey])
+
+  return { position, handlePointerDown, hasDraggedRef }
+}
+
 // A Messenger-style slide-in panel that replaces the old bare bottom input
 // bar for every "type your changes" flow in the app (breakdown revise,
 // schedule revise, pitch deck revise, etc. — one per barConfig.stageKey).
@@ -2764,6 +2823,10 @@ function ClapboardFullScreen({ t, BACKEND_URL, conceptId, sceneListId, sceneOpti
 // panel later still shows what was asked and what happened.
 function ChangesChatPanel({ t, historyKey, barConfig, isBusy, errorMessage, currentUserName }) {
   const [isOpen, setIsOpen] = useState(false)
+  const { position, handlePointerDown, hasDraggedRef } = useDraggableTogglePosition(
+    CHANGES_CHAT_TOGGLE_POSITION_STORAGE_KEY,
+    () => ({ x: window.innerWidth - 80, y: window.innerHeight - 80 })
+  )
   const [historiesByKey, setHistoriesByKey] = useState(() => {
     try {
       return JSON.parse(localStorage.getItem('filmmaking-app:chatHistories') || '{}')
@@ -2773,26 +2836,11 @@ function ChangesChatPanel({ t, historyKey, barConfig, isBusy, errorMessage, curr
   })
   const wasBusyRef = useRef(false)
   const messagesEndRef = useRef(null)
-  const closeTimeoutRef = useRef(null)
 
-  // Hovering the pen opens the panel without a click — closing on leave is
-  // delayed so moving the cursor from the toggle to the panel itself (or
-  // briefly off either edge) doesn't flicker it shut mid-move.
-  function cancelScheduledClose() {
-    if (closeTimeoutRef.current) {
-      clearTimeout(closeTimeoutRef.current)
-      closeTimeoutRef.current = null
-    }
+  function handleToggleClick() {
+    if (hasDraggedRef.current) return
+    setIsOpen((v) => !v)
   }
-  function handleHoverEnter() {
-    cancelScheduledClose()
-    setIsOpen(true)
-  }
-  function handleHoverLeave() {
-    cancelScheduledClose()
-    closeTimeoutRef.current = setTimeout(() => setIsOpen(false), 350)
-  }
-  useEffect(() => () => cancelScheduledClose(), [])
 
   const messages = historiesByKey[historyKey] ?? []
 
@@ -2838,18 +2886,14 @@ function ChangesChatPanel({ t, historyKey, barConfig, isBusy, errorMessage, curr
     <>
       <button
         className="changes-chat-toggle"
-        onClick={() => setIsOpen(!isOpen)}
-        onMouseEnter={handleHoverEnter}
-        onMouseLeave={handleHoverLeave}
+        style={{ left: position.x, top: position.y }}
+        onPointerDown={handlePointerDown}
+        onClick={handleToggleClick}
         title={t.changesChatToggleLabel}
       >
         {ICONS.penNib}
       </button>
-      <div
-        className={isOpen ? 'changes-chat-panel open' : 'changes-chat-panel'}
-        onMouseEnter={handleHoverEnter}
-        onMouseLeave={handleHoverLeave}
-      >
+      <div className={isOpen ? 'changes-chat-panel open' : 'changes-chat-panel'}>
         <div className="changes-chat-header">
           <strong>{t.changesChatHeading}</strong>
           <button className="changes-chat-close" onClick={() => setIsOpen(false)}>
@@ -2919,25 +2963,17 @@ function AgentChatPanel({ t, BACKEND_URL, conceptId, stageKey, currentUserName, 
   const [error, setError] = useState(null)
   const [isCameraOpen, setIsCameraOpen] = useState(false)
   const messagesEndRef = useRef(null)
-  const closeTimeoutRef = useRef(null)
   const fileInputRef = useRef(null)
   const documentInputRef = useRef(null)
+  const { position, handlePointerDown, hasDraggedRef } = useDraggableTogglePosition(
+    CHANGES_CHAT_TOGGLE_POSITION_STORAGE_KEY,
+    () => ({ x: window.innerWidth - 80, y: window.innerHeight - 80 })
+  )
 
-  function cancelScheduledClose() {
-    if (closeTimeoutRef.current) {
-      clearTimeout(closeTimeoutRef.current)
-      closeTimeoutRef.current = null
-    }
+  function handleToggleClick() {
+    if (hasDraggedRef.current) return
+    setIsOpen((v) => !v)
   }
-  function handleHoverEnter() {
-    cancelScheduledClose()
-    setIsOpen(true)
-  }
-  function handleHoverLeave() {
-    cancelScheduledClose()
-    closeTimeoutRef.current = setTimeout(() => setIsOpen(false), 350)
-  }
-  useEffect(() => () => cancelScheduledClose(), [])
 
   useEffect(() => {
     if (!conceptId) return
@@ -3030,18 +3066,14 @@ function AgentChatPanel({ t, BACKEND_URL, conceptId, stageKey, currentUserName, 
     <>
       <button
         className="changes-chat-toggle"
-        onClick={() => setIsOpen(!isOpen)}
-        onMouseEnter={handleHoverEnter}
-        onMouseLeave={handleHoverLeave}
+        style={{ left: position.x, top: position.y }}
+        onPointerDown={handlePointerDown}
+        onClick={handleToggleClick}
         title={t.changesChatToggleLabel}
       >
         {ICONS.penNib}
       </button>
-      <div
-        className={isOpen ? 'changes-chat-panel open' : 'changes-chat-panel'}
-        onMouseEnter={handleHoverEnter}
-        onMouseLeave={handleHoverLeave}
-      >
+      <div className={isOpen ? 'changes-chat-panel open' : 'changes-chat-panel'}>
         <div className="changes-chat-header">
           <strong>{t.changesChatHeading}</strong>
           <button className="changes-chat-close" onClick={() => setIsOpen(false)}>

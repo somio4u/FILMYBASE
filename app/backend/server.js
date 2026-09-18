@@ -103,8 +103,17 @@ async function generateContentWithRetry(params, { retries = 4, fallbackDelayMs =
 async function generateJsonContent(params, { jsonRetries = 3 } = {}) {
   let lastError;
   for (let attempt = 0; attempt <= jsonRetries; attempt++) {
-    const response = await generateContentWithRetry(params);
+    let response;
     try {
+      // generateContentWithRetry has its own 429/503 retry, but a call this
+      // loop wraps can still exhaust that inner budget (seen for real: 3
+      // large concurrent script-breakdown calls tripped Vertex's own
+      // RESOURCE_EXHAUSTED, which killed the call outright on the very
+      // first outer attempt since this used to sit OUTSIDE the try). It's
+      // now inside the loop too, so a persistent-but-not-permanent quota
+      // hiccup gets a few more spaced-out attempts instead of failing the
+      // whole calling function immediately.
+      response = await generateContentWithRetry(params);
       return JSON.parse(response.text);
     } catch (error) {
       lastError = error;
@@ -113,11 +122,17 @@ async function generateJsonContent(params, { jsonRetries = 3 } = {}) {
       // position N", which isn't enough on its own to tell a genuine
       // truncation (budget too low) apart from a malformed escape mid-string
       // (a content glitch), and diagnosing this blind wastes a full pipeline
-      // run each time it recurs.
-      const snippetStart = Math.max(0, (error.message.match(/position (\d+)/)?.[1] ?? 0) - 120);
-      console.error(
-        `JSON parse failed (attempt ${attempt + 1}/${jsonRetries + 1}): ${error.message}\nNear-failure snippet: ${response.text?.slice(snippetStart, snippetStart + 240)}\nResponse length: ${response.text?.length}`
-      );
+      // run each time it recurs. Only applies when a response actually came
+      // back and JSON.parse itself failed — a generateContentWithRetry
+      // throw (e.g. a sustained 429) never reached that point.
+      if (response) {
+        const snippetStart = Math.max(0, (error.message.match(/position (\d+)/)?.[1] ?? 0) - 120);
+        console.error(
+          `JSON parse failed (attempt ${attempt + 1}/${jsonRetries + 1}): ${error.message}\nNear-failure snippet: ${response.text?.slice(snippetStart, snippetStart + 240)}\nResponse length: ${response.text?.length}`
+        );
+      } else {
+        console.error(`Gemini call failed (attempt ${attempt + 1}/${jsonRetries + 1}): ${error.message}`);
+      }
     }
   }
   throw lastError;
@@ -5860,9 +5875,22 @@ async function generateScriptBreakdownContent(sourceText, revision) {
 async function generateDeepScriptBreakdownContent(sourceText, revision) {
   const firstPass = await generateScriptBreakdownContent(sourceText, revision);
 
-  const refinedEntries = await mapWithConcurrency(BREAKDOWN_CATEGORY_KEYS, 3, async (category) => {
-    const refreshed = await generateBreakdownCategoryContent(sourceText, category, firstPass[category]);
-    return [category, refreshed];
+  // Each of these re-sends the WHOLE script (same size as the first pass
+  // above) — on a real 166KB/13-episode script, 3 of those at once was
+  // enough to trip Vertex AI's own rate limit (429 "Resource exhausted"),
+  // which isn't a transient blip generateContentWithRetry can retry past
+  // here — it killed the category outright and, with it, the whole
+  // breakdown. Sequential is slower but reliable; and a genuinely
+  // persistent failure on ONE category now just keeps that category's
+  // first-pass result instead of losing the other four along with it.
+  const refinedEntries = await mapWithConcurrency(BREAKDOWN_CATEGORY_KEYS, 1, async (category) => {
+    try {
+      const refreshed = await generateBreakdownCategoryContent(sourceText, category, firstPass[category]);
+      return [category, refreshed];
+    } catch (error) {
+      console.error(`Breakdown refinement failed for "${category}", keeping the first-pass result:`, error.message);
+      return [category, firstPass[category]];
+    }
   });
 
   return { ...firstPass, ...Object.fromEntries(refinedEntries) };

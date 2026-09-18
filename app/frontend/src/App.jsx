@@ -1,5 +1,13 @@
-import { useState, useEffect, useRef, Fragment } from 'react'
+import { useState, useEffect, useRef, useContext, createContext, Fragment } from 'react'
 import './App.css'
+
+// Lets MicInput/MicTextarea reach the shared dictation language + t
+// anywhere in the tree without threading those two props through every
+// intermediate component between App and wherever a text field lives.
+const DictationContext = createContext(null)
+function useDictationContext() {
+  return useContext(DictationContext)
+}
 
 // Env-driven so the same build works against localhost in dev and the
 // deployed Render backend in production (set VITE_BACKEND_URL at build time).
@@ -125,6 +133,12 @@ const LABELS = {
     changesChatHeading: 'Changes',
     changesChatEmptyNote: 'Type a change below and it will show up here, along with what happened.',
     generateIdeaButton: 'Generate Idea',
+    micButtonTitle: 'Speak instead of typing',
+    micButtonListeningTitle: 'Listening… click to stop',
+    micLanguageSelectTitle: 'Language you\'ll speak in',
+    micLanguageEnglish: 'EN',
+    micLanguageHindi: 'HI',
+    micLanguageOdia: 'OR',
     changesChatAppliedMessage: '✅ Done — applied and regenerated.',
     changesChatErrorMessage: '⚠️ Something went wrong — please try again.',
     agentChatInputPlaceholder: 'Ask a question or describe a change — attach a photo too if it helps…',
@@ -611,6 +625,12 @@ const LABELS = {
     changesChatHeading: 'ପରିବର୍ତ୍ତନ',
     changesChatEmptyNote: 'ତଳେ ଏକ ପରିବର୍ତ୍ତନ ଲେଖନ୍ତୁ, ଏହା ଏଠାରେ ଦେଖାଯିବ, ସହିତ କଣ ହେଲା ତାହା ମଧ୍ୟ।',
     generateIdeaButton: 'ଆଇଡିଆ ତିଆରି କରନ୍ତୁ',
+    micButtonTitle: 'ଟାଇପ୍ କରିବା ବଦଳରେ କୁହନ୍ତୁ',
+    micButtonListeningTitle: 'ଶୁଣୁଛି… ବନ୍ଦ କରିବାକୁ କ୍ଲିକ୍ କରନ୍ତୁ',
+    micLanguageSelectTitle: 'ଆପଣ କେଉଁ ଭାଷାରେ କହିବେ',
+    micLanguageEnglish: 'EN',
+    micLanguageHindi: 'HI',
+    micLanguageOdia: 'OR',
     changesChatAppliedMessage: '✅ ହୋଇଗଲା — ପ୍ରୟୋଗ ଏବଂ ପୁନଃତିଆରି ହୋଇଗଲା।',
     changesChatErrorMessage: '⚠️ କିଛି ଭୁଲ ହେଲା — ପୁଣି ଚେଷ୍ଟା କରନ୍ତୁ।',
     agentChatInputPlaceholder: 'ଏକ ପ୍ରଶ୍ନ ପଚାରନ୍ତୁ କିମ୍ବା ପରିବର୍ତ୍ତନ ବର୍ଣ୍ଣନା କରନ୍ତୁ — ସାହାଯ୍ୟ ହେଲେ ଏକ ଫଟୋ ମଧ୍ୟ ଲଗାନ୍ତୁ…',
@@ -1023,6 +1043,12 @@ const ICONS = {
       <path d="M12 19l7-7 3 3-7 7-3-3Z" strokeLinecap="round" strokeLinejoin="round" />
       <path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18" strokeLinecap="round" strokeLinejoin="round" />
       <path d="M2 2l7.5 7.5" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  ),
+  mic: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+      <path d="M12 15a3 3 0 0 0 3-3V6a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3Z" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M6 11a6 6 0 0 0 12 0M12 17v4M9 21h6" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   ),
   users: (
@@ -1460,7 +1486,7 @@ function ScreenplayBlock({ episodeIndex, sceneIndex, t, language, screenplay }) 
 
       {showFeedbackForm && (
         <div className="feedback-form">
-          <textarea
+          <MicTextarea
             className="feedback-textarea"
             value={screenplay.feedbackTextByKey[key] || ''}
             onChange={(e) => screenplay.onFeedbackTextChange(key, e.target.value)}
@@ -1806,7 +1832,7 @@ function FloatingAgentWidget({ currentUser, t, onRunCompleted }) {
 
           {!runId && (
             <div className="floating-agent-form">
-              <textarea
+              <MicTextarea
                 placeholder={t.floatingAgentConceptPlaceholder}
                 value={concept}
                 onChange={(e) => setConcept(e.target.value)}
@@ -2039,9 +2065,9 @@ function CrewMemberEditForm({ member, onSave, onCancel, isSaving, t, showRole })
         <div className="crew-member-photo crew-member-photo-placeholder">{member.name.charAt(0).toUpperCase()}</div>
       )}
       <div className="crew-member-edit-fields">
-        <input type="text" placeholder={t.crewNameLabel} value={editName} onChange={(e) => setEditName(e.target.value)} />
+        <MicInput placeholder={t.crewNameLabel} value={editName} onChange={(e) => setEditName(e.target.value)} />
         {showRole && (
-          <input type="text" placeholder={t.crewRoleLabel} value={editRole} onChange={(e) => setEditRole(e.target.value)} />
+          <MicInput placeholder={t.crewRoleLabel} value={editRole} onChange={(e) => setEditRole(e.target.value)} />
         )}
         <input type="tel" placeholder={t.crewContactLabel} value={editContactNumber} onChange={(e) => setEditContactNumber(e.target.value)} />
         <div className="photo-input-row">
@@ -2182,9 +2208,9 @@ function CrewSection({ category, heading, members, characterOptions, onAdd, onUp
                   ))}
                 </select>
               )}
-              <input type="text" placeholder={t.crewNameLabel} value={name} onChange={(e) => setName(e.target.value)} />
+              <MicInput placeholder={t.crewNameLabel} value={name} onChange={(e) => setName(e.target.value)} />
               {!characterOptions && (
-                <input type="text" placeholder={t.crewRoleLabel} value={role} onChange={(e) => setRole(e.target.value)} />
+                <MicInput placeholder={t.crewRoleLabel} value={role} onChange={(e) => setRole(e.target.value)} />
               )}
               <input type="tel" placeholder={t.crewContactLabel} value={contactNumber} onChange={(e) => setContactNumber(e.target.value)} />
               <input
@@ -2817,6 +2843,128 @@ function useDraggableTogglePosition(storageKey, defaultPosition) {
   return { position, handlePointerDown, hasDraggedRef }
 }
 
+// Web Speech API doesn't auto-detect which language is being spoken — one
+// recognition session must be told a single language up front. So instead
+// of guessing, the person picks English/Hindi/Odia once via the small
+// dropdown next to the mic, and that choice is remembered (localStorage)
+// as their default for next time.
+const DICTATION_BCP47_BY_LANGUAGE = { en: 'en-IN', hi: 'hi-IN', or: 'or-IN' }
+
+// Dictation for any text box — uses the browser's built-in Web Speech API
+// (Chrome and Android's Chromium WebView both ship it, free, no API key,
+// no server round-trip). Renders nothing if the browser doesn't support it
+// (Safari/Firefox), rather than showing a mic that can't work. English and
+// Hindi recognition are both reliable; Odia support varies by device/OS.
+function MicButton({ t, dictationLanguage, onDictationLanguageChange, onResult, className, wrapClassName, title, listeningTitle }) {
+  const [isListening, setIsListening] = useState(false)
+  const recognitionRef = useRef(null)
+
+  const SpeechRecognitionImpl =
+    typeof window !== 'undefined' ? window.SpeechRecognition || window.webkitSpeechRecognition : null
+
+  function handleClick() {
+    if (!SpeechRecognitionImpl) return
+
+    if (isListening) {
+      recognitionRef.current?.stop()
+      return
+    }
+
+    const recognition = new SpeechRecognitionImpl()
+    recognition.lang = DICTATION_BCP47_BY_LANGUAGE[dictationLanguage] ?? 'en-IN'
+    recognition.interimResults = false
+    recognition.maxAlternatives = 1
+    recognition.onresult = (event) => {
+      const transcript = Array.from(event.results)
+        .map((result) => result[0].transcript)
+        .join(' ')
+        .trim()
+      if (transcript) onResult(transcript)
+    }
+    recognition.onend = () => setIsListening(false)
+    recognition.onerror = () => setIsListening(false)
+    recognitionRef.current = recognition
+    recognition.start()
+    setIsListening(true)
+  }
+
+  if (!SpeechRecognitionImpl) return null
+
+  return (
+    <span className={wrapClassName}>
+      <select
+        className="mic-language-select"
+        value={dictationLanguage}
+        onChange={(e) => onDictationLanguageChange(e.target.value)}
+        title={t.micLanguageSelectTitle}
+      >
+        <option value="en">{t.micLanguageEnglish}</option>
+        <option value="hi">{t.micLanguageHindi}</option>
+        <option value="or">{t.micLanguageOdia}</option>
+      </select>
+      <button
+        type="button"
+        className={isListening ? `${className} mic-button-listening` : className}
+        onClick={handleClick}
+        title={isListening ? listeningTitle : title}
+      >
+        {ICONS.mic}
+      </button>
+    </span>
+  )
+}
+
+// Drop-in replacements for a plain <input type="text"> / <textarea> that add
+// a mic button in the corner — same value/onChange contract as the native
+// element (onChange still receives a real change event with .target.value),
+// so swapping one in doesn't require touching whatever the existing
+// onChange handler does. dictationLanguage/onDictationLanguageChange/t are
+// threaded down from the top-level App component via context so every one
+// of these across the whole app shares one remembered language choice.
+function MicInput({ value, onChange, className, wrapClassName, ...rest }) {
+  const { t, dictationLanguage, onDictationLanguageChange } = useDictationContext()
+  return (
+    <span className={wrapClassName ? `mic-field-wrap ${wrapClassName}` : 'mic-field-wrap'}>
+      <input
+        type="text"
+        className={className}
+        value={value}
+        onChange={onChange}
+        {...rest}
+      />
+      <MicButton
+        t={t}
+        dictationLanguage={dictationLanguage}
+        onDictationLanguageChange={onDictationLanguageChange}
+        wrapClassName="mic-field-mic-wrap"
+        className="mic-field-mic"
+        title={t.micButtonTitle}
+        listeningTitle={t.micButtonListeningTitle}
+        onResult={(text) => onChange({ target: { value: value && value.trim() ? `${value.trim()} ${text}` : text } })}
+      />
+    </span>
+  )
+}
+
+function MicTextarea({ value, onChange, className, wrapClassName, ...rest }) {
+  const { t, dictationLanguage, onDictationLanguageChange } = useDictationContext()
+  return (
+    <span className={wrapClassName ? `mic-field-wrap mic-field-wrap-textarea ${wrapClassName}` : 'mic-field-wrap mic-field-wrap-textarea'}>
+      <textarea className={className} value={value} onChange={onChange} {...rest} />
+      <MicButton
+        t={t}
+        dictationLanguage={dictationLanguage}
+        onDictationLanguageChange={onDictationLanguageChange}
+        wrapClassName="mic-field-mic-wrap"
+        className="mic-field-mic"
+        title={t.micButtonTitle}
+        listeningTitle={t.micButtonListeningTitle}
+        onResult={(text) => onChange({ target: { value: value && value.trim() ? `${value.trim()} ${text}` : text } })}
+      />
+    </span>
+  )
+}
+
 // A Messenger-style slide-in panel that replaces the old bare bottom input
 // bar for every "type your changes" flow in the app (breakdown revise,
 // schedule revise, pitch deck revise, etc. — one per barConfig.stageKey).
@@ -2825,7 +2973,7 @@ function useDraggableTogglePosition(storageKey, defaultPosition) {
 // exactly what silently swallowed a real request earlier in this project.
 // History persists per (project, stage) in localStorage so re-opening the
 // panel later still shows what was asked and what happened.
-function ChangesChatPanel({ t, historyKey, barConfig, isBusy, errorMessage, currentUserName, openSignal, clearDraftHistorySignal }) {
+function ChangesChatPanel({ t, historyKey, barConfig, isBusy, errorMessage, currentUserName, openSignal, clearDraftHistorySignal, dictationLanguage, onDictationLanguageChange }) {
   const [isOpen, setIsOpen] = useState(false)
   const { position, handlePointerDown, hasDraggedRef } = useDraggableTogglePosition(
     CHANGES_CHAT_TOGGLE_POSITION_STORAGE_KEY,
@@ -2965,6 +3113,16 @@ function ChangesChatPanel({ t, historyKey, barConfig, isBusy, errorMessage, curr
             placeholder={barConfig.placeholder}
             disabled={barConfig.disabled}
           />
+          <MicButton
+            t={t}
+            dictationLanguage={dictationLanguage}
+            onDictationLanguageChange={onDictationLanguageChange}
+            wrapClassName="changes-chat-mic-wrap"
+            className="changes-chat-mic"
+            title={t.micButtonTitle}
+            listeningTitle={t.micButtonListeningTitle}
+            onResult={(text) => barConfig.onChange(barConfig.value.trim() ? `${barConfig.value.trim()} ${text}` : text)}
+          />
           <button
             className={barConfig.stageKey === 'idea' ? 'changes-chat-send changes-chat-send-labeled' : 'changes-chat-send'}
             onClick={handleSend}
@@ -2987,6 +3145,7 @@ function ChangesChatPanel({ t, historyKey, barConfig, isBusy, errorMessage, curr
 // attached right in the input — a handwritten AD note, or a person's photo
 // for a casting decision — instead of a separate upload button elsewhere.
 function AgentChatPanel({ t, BACKEND_URL, conceptId, stageKey, currentUserName, onScheduleUpdated, onCastMemberUpdated, onBreakdownUpdated }) {
+  const { dictationLanguage, onDictationLanguageChange } = useDictationContext()
   const [isOpen, setIsOpen] = useState(false)
   const [messages, setMessages] = useState([])
   const [inputText, setInputText] = useState('')
@@ -3294,6 +3453,16 @@ function AgentChatPanel({ t, BACKEND_URL, conceptId, stageKey, currentUserName, 
             }}
             placeholder={attachedFiles.length > 0 ? t.describeAttachmentPlaceholder : t.agentChatInputPlaceholder}
             disabled={isSending}
+          />
+          <MicButton
+            t={t}
+            dictationLanguage={dictationLanguage}
+            onDictationLanguageChange={onDictationLanguageChange}
+            wrapClassName="changes-chat-mic-wrap"
+            className="changes-chat-mic"
+            title={t.micButtonTitle}
+            listeningTitle={t.micButtonListeningTitle}
+            onResult={(text) => setInputText((prev) => (prev.trim() ? `${prev.trim()} ${text}` : text))}
           />
           <button className="changes-chat-send" onClick={handleSend} disabled={isSending || (!inputText.trim() && attachedFiles.length === 0)}>
             {isSending ? '…' : '↵'}
@@ -3617,8 +3786,7 @@ function InlineCastAttachment({
       )}
       {canEdit && (
         <form className="crew-add-form inline-cast-form" onSubmit={handleSubmit}>
-          <input
-            type="text"
+          <MicInput
             placeholder={category === 'artist' ? t.castingActorNamePlaceholder : t.locationConfirmedNamePlaceholder}
             value={name}
             onChange={(e) => setName(e.target.value)}
@@ -3665,8 +3833,7 @@ function InlineCastAttachment({
 
       {isPickerOpen && (
         <div className="contact-picker">
-          <input
-            type="text"
+          <MicInput
             className="contact-picker-search"
             placeholder={t.searchContactsPlaceholder}
             value={searchTerm}
@@ -3927,6 +4094,22 @@ function App() {
   const [chatFocusStage, setChatFocusStage] = useState(null)
   const [openChangesChatSignal, setOpenChangesChatSignal] = useState(0)
   const [clearDraftHistorySignal, setClearDraftHistorySignal] = useState(0)
+  const [dictationLanguage, setDictationLanguage] = useState(() => {
+    try {
+      return localStorage.getItem('filmmaking-app:dictationLanguage') || 'en'
+    } catch {
+      return 'en'
+    }
+  })
+
+  function handleDictationLanguageChange(nextLanguage) {
+    setDictationLanguage(nextLanguage)
+    try {
+      localStorage.setItem('filmmaking-app:dictationLanguage', nextLanguage)
+    } catch {
+      // per-viewer convenience only
+    }
+  }
   const [projectType, setProjectType] = useState('story')
   const [masterProjectList, setMasterProjectList] = useState([])
   const [isLoadingMasterList, setIsLoadingMasterList] = useState(false)
@@ -5810,8 +5993,7 @@ function App() {
                               <div className="costume-set-edit-list">
                                 {costumeSetsDraft.map((row, i) => (
                                   <div className="costume-set-edit-row" key={i}>
-                                    <input
-                                      type="text"
+                                    <MicInput
                                       placeholder={t.costumeSetCategoryPlaceholder}
                                       value={row.category}
                                       onChange={(e) => handleCostumeSetDraftFieldChange(i, 'category', e.target.value)}
@@ -5823,8 +6005,7 @@ function App() {
                                       value={row.quantity}
                                       onChange={(e) => handleCostumeSetDraftFieldChange(i, 'quantity', e.target.value)}
                                     />
-                                    <input
-                                      type="text"
+                                    <MicInput
                                       placeholder={t.costumeSetReasonPlaceholder}
                                       value={row.reasonEn}
                                       onChange={(e) => handleCostumeSetDraftFieldChange(i, 'reasonEn', e.target.value)}
@@ -5892,8 +6073,7 @@ function App() {
 
         {!isEditing && isCategoryExpanded && category === 'artistList' && canEditProduction && (
           <div className="add-missing-character-form">
-            <input
-              type="text"
+            <MicInput
               placeholder={t.missingCharacterNamePlaceholder}
               value={newCastCharacterName}
               onChange={(e) => setNewCastCharacterName(e.target.value)}
@@ -5943,8 +6123,7 @@ function App() {
                 {category === 'locationList' ? (
                   <>
                     <div className="breakdown-edit-field-pair">
-                      <input
-                        type="text"
+                      <MicInput
                         placeholder="Location (EN)"
                         value={item.location.en}
                         onChange={(e) =>
@@ -5954,8 +6133,7 @@ function App() {
                           }))
                         }
                       />
-                      <input
-                        type="text"
+                      <MicInput
                         placeholder="ସ୍ଥାନ (OR)"
                         value={item.location.or}
                         onChange={(e) =>
@@ -5965,8 +6143,7 @@ function App() {
                           }))
                         }
                       />
-                      <input
-                        type="text"
+                      <MicInput
                         placeholder="स्थान (HI)"
                         value={item.location.hi}
                         onChange={(e) =>
@@ -6001,7 +6178,7 @@ function App() {
                       />
                     </div>
                     <div className="breakdown-edit-field-pair">
-                      <textarea
+                      <MicTextarea
                         placeholder="Notes (EN)"
                         value={item.notes.en}
                         onChange={(e) =>
@@ -6011,7 +6188,7 @@ function App() {
                           }))
                         }
                       />
-                      <textarea
+                      <MicTextarea
                         placeholder="ମନ୍ତବ୍ୟ (OR)"
                         value={item.notes.or}
                         onChange={(e) =>
@@ -6021,7 +6198,7 @@ function App() {
                           }))
                         }
                       />
-                      <textarea
+                      <MicTextarea
                         placeholder="टिप्पणी (HI)"
                         value={item.notes.hi}
                         onChange={(e) =>
@@ -6035,8 +6212,7 @@ function App() {
                   </>
                 ) : category === 'costumes' ? (
                   <>
-                    <input
-                      type="text"
+                    <MicInput
                       placeholder="Character"
                       value={item.character}
                       onChange={(e) =>
@@ -6044,7 +6220,7 @@ function App() {
                       }
                     />
                     <div className="breakdown-edit-field-pair">
-                      <textarea
+                      <MicTextarea
                         placeholder="Description (EN)"
                         value={item.description.en}
                         onChange={(e) =>
@@ -6054,7 +6230,7 @@ function App() {
                           }))
                         }
                       />
-                      <textarea
+                      <MicTextarea
                         placeholder="ବିବରଣୀ (OR)"
                         value={item.description.or}
                         onChange={(e) =>
@@ -6064,7 +6240,7 @@ function App() {
                           }))
                         }
                       />
-                      <textarea
+                      <MicTextarea
                         placeholder="विवरण (HI)"
                         value={item.description.hi}
                         onChange={(e) =>
@@ -6078,8 +6254,7 @@ function App() {
                   </>
                 ) : category === 'artistList' ? (
                   <>
-                    <input
-                      type="text"
+                    <MicInput
                       placeholder="Label"
                       value={item.label}
                       onChange={(e) =>
@@ -6087,8 +6262,7 @@ function App() {
                       }
                     />
                     <div className="breakdown-edit-field-pair">
-                      <input
-                        type="text"
+                      <MicInput
                         placeholder={t.ageLabel}
                         value={item.age || ''}
                         onChange={(e) =>
@@ -6107,7 +6281,7 @@ function App() {
                       </select>
                     </div>
                     <div className="breakdown-edit-field-pair">
-                      <textarea
+                      <MicTextarea
                         placeholder="Notes (EN)"
                         value={item.notes.en}
                         onChange={(e) =>
@@ -6117,7 +6291,7 @@ function App() {
                           }))
                         }
                       />
-                      <textarea
+                      <MicTextarea
                         placeholder="ମନ୍ତବ୍ୟ (OR)"
                         value={item.notes.or}
                         onChange={(e) =>
@@ -6127,7 +6301,7 @@ function App() {
                           }))
                         }
                       />
-                      <textarea
+                      <MicTextarea
                         placeholder="टिप्पणी (HI)"
                         value={item.notes.hi}
                         onChange={(e) =>
@@ -6141,8 +6315,7 @@ function App() {
                   </>
                 ) : (
                   <>
-                    <input
-                      type="text"
+                    <MicInput
                       placeholder="Label"
                       value={item.label}
                       onChange={(e) =>
@@ -6150,7 +6323,7 @@ function App() {
                       }
                     />
                     <div className="breakdown-edit-field-pair">
-                      <textarea
+                      <MicTextarea
                         placeholder="Notes (EN)"
                         value={item.notes.en}
                         onChange={(e) =>
@@ -6160,7 +6333,7 @@ function App() {
                           }))
                         }
                       />
-                      <textarea
+                      <MicTextarea
                         placeholder="ମନ୍ତବ୍ୟ (OR)"
                         value={item.notes.or}
                         onChange={(e) =>
@@ -6170,7 +6343,7 @@ function App() {
                           }))
                         }
                       />
-                      <textarea
+                      <MicTextarea
                         placeholder="टिप्पणी (HI)"
                         value={item.notes.hi}
                         onChange={(e) =>
@@ -6880,6 +7053,7 @@ function App() {
   }
 
   return (
+    <DictationContext.Provider value={{ t, dictationLanguage, onDictationLanguageChange: handleDictationLanguageChange }}>
     <div className="app-shell">
       <FloatingAgentWidget currentUser={currentUser} t={t} onRunCompleted={() => loadProjectList()} />
       <div className="mobile-topbar">
@@ -6949,7 +7123,7 @@ function App() {
                   </div>
                 ))}
                 <form className="crew-add-form" onSubmit={handleCreateUserSubmit}>
-                  <input type="text" placeholder={t.crewNameLabel} value={newUserName} onChange={(e) => setNewUserName(e.target.value)} />
+                  <MicInput placeholder={t.crewNameLabel} value={newUserName} onChange={(e) => setNewUserName(e.target.value)} />
                   <input type="text" placeholder={t.usernameLabel} value={newUserUsername} onChange={(e) => setNewUserUsername(e.target.value)} />
                   <input type="password" placeholder={t.passwordLabel} value={newUserPassword} onChange={(e) => setNewUserPassword(e.target.value)} />
                   <select value={newUserRole} onChange={(e) => setNewUserRole(e.target.value)}>
@@ -7392,12 +7566,24 @@ function App() {
 
           {startStage === 'idea' ? (
             <div className="skip-ahead-form">
-              <textarea
-                className="skip-ahead-textarea"
-                value={concept}
-                onChange={(e) => setConcept(e.target.value)}
-                placeholder={t.skipPastePlaceholderIdea}
-              />
+              <div className="skip-ahead-textarea-wrap">
+                <textarea
+                  className="skip-ahead-textarea"
+                  value={concept}
+                  onChange={(e) => setConcept(e.target.value)}
+                  placeholder={t.skipPastePlaceholderIdea}
+                />
+                <MicButton
+                  t={t}
+                  dictationLanguage={dictationLanguage}
+                  onDictationLanguageChange={handleDictationLanguageChange}
+                  wrapClassName="skip-ahead-mic-wrap"
+                  className="skip-ahead-mic"
+                  title={t.micButtonTitle}
+                  listeningTitle={t.micButtonListeningTitle}
+                  onResult={(text) => setConcept((prev) => (prev.trim() ? `${prev.trim()} ${text}` : text))}
+                />
+              </div>
               <div className="skip-ahead-controls">
                 <button
                   className="choose-button"
@@ -7410,18 +7596,30 @@ function App() {
             </div>
           ) : (
             <div className="skip-ahead-form">
-              <textarea
-                className="skip-ahead-textarea"
-                value={skipPastedText}
-                onChange={(e) => setSkipPastedText(e.target.value)}
-                placeholder={
-                  startStage === 'synopsis'
-                    ? t.skipPastePlaceholderSynopsis
-                    : startStage === 'bitsheet'
-                      ? t.skipPastePlaceholderBitSheet
-                      : t.skipPastePlaceholderSceneList
-                }
-              />
+              <div className="skip-ahead-textarea-wrap">
+                <textarea
+                  className="skip-ahead-textarea"
+                  value={skipPastedText}
+                  onChange={(e) => setSkipPastedText(e.target.value)}
+                  placeholder={
+                    startStage === 'synopsis'
+                      ? t.skipPastePlaceholderSynopsis
+                      : startStage === 'bitsheet'
+                        ? t.skipPastePlaceholderBitSheet
+                        : t.skipPastePlaceholderSceneList
+                  }
+                />
+                <MicButton
+                  t={t}
+                  dictationLanguage={dictationLanguage}
+                  onDictationLanguageChange={handleDictationLanguageChange}
+                  wrapClassName="skip-ahead-mic-wrap"
+                  className="skip-ahead-mic"
+                  title={t.micButtonTitle}
+                  listeningTitle={t.micButtonListeningTitle}
+                  onResult={(text) => setSkipPastedText((prev) => (prev.trim() ? `${prev.trim()} ${text}` : text))}
+                />
+              </div>
               <div className="skip-ahead-controls">
                 <label className="skip-ahead-runtime-label">
                   {t.skipRuntimeLabel}
@@ -7591,7 +7789,7 @@ function App() {
 
                 {showFeedbackForm && (
                   <div className="feedback-form">
-                    <textarea
+                    <MicTextarea
                       className="feedback-textarea"
                       value={feedbackText}
                       onChange={(e) => setFeedbackText(e.target.value)}
@@ -7701,7 +7899,7 @@ function App() {
 
                 {showCharacterSheetFeedbackForm && (
                   <div className="feedback-form">
-                    <textarea
+                    <MicTextarea
                       className="feedback-textarea"
                       value={characterSheetFeedbackText}
                       onChange={(e) => setCharacterSheetFeedbackText(e.target.value)}
@@ -7780,7 +7978,7 @@ function App() {
 
                 {showStructureFeedbackForm && (
                   <div className="feedback-form">
-                    <textarea
+                    <MicTextarea
                       className="feedback-textarea"
                       value={structureFeedbackText}
                       onChange={(e) => setStructureFeedbackText(e.target.value)}
@@ -7895,7 +8093,7 @@ function App() {
 
                 {showBitSheetFeedbackForm && (
                   <div className="feedback-form">
-                    <textarea
+                    <MicTextarea
                       className="feedback-textarea"
                       value={bitSheetFeedbackText}
                       onChange={(e) => setBitSheetFeedbackText(e.target.value)}
@@ -7994,7 +8192,7 @@ function App() {
 
                 {showSceneListFeedbackForm && (
                   <div className="feedback-form">
-                    <textarea
+                    <MicTextarea
                       className="feedback-textarea"
                       value={sceneListFeedbackText}
                       onChange={(e) => setSceneListFeedbackText(e.target.value)}
@@ -8112,7 +8310,7 @@ function App() {
               <p className="screenplay-file-formats-note">{t.screenplayFileFormatsNote}</p>
 
               <p className="availability-form-intro">{t.importScreenplayOrPaste}</p>
-              <textarea
+              <MicTextarea
                 className="skip-ahead-textarea"
                 value={importScreenplayText}
                 onChange={(e) => setImportScreenplayText(e.target.value)}
@@ -8203,7 +8401,7 @@ function App() {
                   />
                   <p className="screenplay-file-formats-note">{t.screenplayFileFormatsNote}</p>
                   <p className="availability-form-intro">{t.importScreenplayOrPaste}</p>
-                  <textarea
+                  <MicTextarea
                     className="skip-ahead-textarea"
                     value={reimportScreenplayText}
                     onChange={(e) => setReimportScreenplayText(e.target.value)}
@@ -8343,7 +8541,7 @@ function App() {
 
                       {showBreakdownFeedbackForm && (
                         <div className="feedback-form">
-                          <textarea
+                          <MicTextarea
                             className="feedback-textarea"
                             value={breakdownFeedbackText}
                             onChange={(e) => setBreakdownFeedbackText(e.target.value)}
@@ -8490,7 +8688,7 @@ function App() {
 
               <label className="schedule-setup-field schedule-setup-field-wide">
                 {t.scheduleSpecialInstructionsLabel}
-                <textarea
+                <MicTextarea
                   className="skip-ahead-textarea"
                   value={scheduleSpecialInstructions}
                   onChange={(e) => setScheduleSpecialInstructions(e.target.value)}
@@ -8506,8 +8704,7 @@ function App() {
                 return (
                   <div key={characterName} className="availability-row">
                     <span className="availability-row-name">{characterName}</span>
-                    <input
-                      type="text"
+                    <MicInput
                       className="availability-dates-input"
                       value={entry.availableDates}
                       disabled={entry.unknown}
@@ -8542,8 +8739,7 @@ function App() {
                 return (
                   <div key={location.en} className="availability-row">
                     <span className="availability-row-name">{location[language]}</span>
-                    <input
-                      type="text"
+                    <MicInput
                       className="availability-dates-input"
                       value={entry.availableDates}
                       disabled={entry.unknown}
@@ -8741,20 +8937,17 @@ function App() {
                                         )}
                                         {isEditingScene && (
                                           <div className="scene-edit-form">
-                                            <input
-                                              type="text"
+                                            <MicInput
                                               placeholder={t.costumeLabel}
                                               value={editSceneCostume}
                                               onChange={(e) => setEditSceneCostume(e.target.value)}
                                             />
-                                            <input
-                                              type="text"
+                                            <MicInput
                                               placeholder={t.propertiesLabel}
                                               value={editSceneProperties}
                                               onChange={(e) => setEditSceneProperties(e.target.value)}
                                             />
-                                            <input
-                                              type="text"
+                                            <MicInput
                                               placeholder={t.adRemarkLabel}
                                               value={editSceneAdRemark}
                                               onChange={(e) => setEditSceneAdRemark(e.target.value)}
@@ -8795,7 +8988,7 @@ function App() {
                           markingShotDayNumber === day.dayNumber ? (
                             <div className="skip-ahead-controls schedule-mark-shot-controls">
                               <p className="availability-form-intro">{t.dayCompletionReportIntro}</p>
-                              <textarea
+                              <MicTextarea
                                 className="skip-ahead-textarea"
                                 value={dayCompletionReportText}
                                 onChange={(e) => setDayCompletionReportText(e.target.value)}
@@ -8821,7 +9014,7 @@ function App() {
                               )}
 
                               <p className="availability-form-intro">{t.extraScenesReportIntro}</p>
-                              <textarea
+                              <MicTextarea
                                 className="skip-ahead-textarea"
                                 value={extraSceneReportText}
                                 onChange={(e) => setExtraSceneReportText(e.target.value)}
@@ -8852,7 +9045,7 @@ function App() {
                                 </div>
                               )}
 
-                              <textarea
+                              <MicTextarea
                                 className="skip-ahead-textarea"
                                 value={shotCompletionNote}
                                 onChange={(e) => setShotCompletionNote(e.target.value)}
@@ -8961,7 +9154,7 @@ function App() {
 
                       {showScheduleFeedbackForm && (
                         <div className="feedback-form">
-                          <textarea
+                          <MicTextarea
                             className="feedback-textarea"
                             value={scheduleFeedbackText}
                             onChange={(e) => setScheduleFeedbackText(e.target.value)}
@@ -9025,6 +9218,8 @@ function App() {
               currentUserName={currentUser?.name}
               openSignal={openChangesChatSignal}
               clearDraftHistorySignal={clearDraftHistorySignal}
+              dictationLanguage={dictationLanguage}
+              onDictationLanguageChange={handleDictationLanguageChange}
             />
           )}
         </aside>
@@ -9056,6 +9251,7 @@ function App() {
         />
       )}
     </div>
+    </DictationContext.Provider>
   )
 }
 

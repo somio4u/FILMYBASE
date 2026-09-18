@@ -750,6 +750,136 @@ button, input, textarea, select {
   resize: vertical;
 }
 
+.skip-ahead-textarea-wrap {
+  position: relative;
+}
+
+.skip-ahead-textarea-wrap .skip-ahead-textarea {
+  padding-right: 46px;
+}
+
+.skip-ahead-mic-wrap {
+  position: absolute;
+  right: 8px;
+  bottom: 8px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.changes-chat-mic-wrap {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.mic-language-select {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 4px;
+  background: var(--bg-surface-raised);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.skip-ahead-mic,
+.changes-chat-mic {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-surface-raised);
+  color: var(--text-secondary);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Generic mic-button wrapper used by MicInput/MicTextarea, dropped in next
+   to any writable field across the app. A single-line input gets the mic
+   beside it; a multi-line textarea gets it overlaid in the corner instead,
+   so it doesn't add an awkward extra row under a tall box. */
+.mic-field-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+}
+
+.mic-field-wrap input {
+  flex: 1;
+  min-width: 0;
+}
+
+.mic-field-wrap-textarea {
+  display: block;
+  position: relative;
+}
+
+.mic-field-wrap-textarea textarea {
+  width: 100%;
+  padding-right: 42px;
+}
+
+.mic-field-mic-wrap {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.mic-field-wrap-textarea .mic-field-mic-wrap {
+  position: absolute;
+  right: 6px;
+  bottom: 6px;
+}
+
+.mic-field-mic {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-surface-raised);
+  color: var(--text-secondary);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.mic-field-mic svg {
+  width: 13px;
+  height: 13px;
+}
+
+.mic-field-wrap .mic-language-select {
+  font-size: 10px;
+  padding: 1px 3px;
+}
+
+.skip-ahead-mic svg,
+.changes-chat-mic svg {
+  width: 16px;
+  height: 16px;
+}
+
+.mic-button-listening {
+  color: #131314 !important;
+  background: var(--accent-gradient) !important;
+  border-color: transparent !important;
+  animation: mic-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes mic-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(138, 180, 248, 0.5); }
+  50% { box-shadow: 0 0 0 6px rgba(138, 180, 248, 0); }
+}
+
 .skip-ahead-controls {
   display: flex;
   align-items: flex-end;
@@ -3163,10 +3293,11 @@ button, input, textarea, select {
   gap: 8px;
   padding: 14px;
   border-top: 1px solid var(--border-subtle);
+  flex-wrap: wrap;
 }
 
 .changes-chat-input {
-  flex: 1;
+  flex: 1 1 100%;
   padding: 10px 14px;
   font-size: 14px;
   background: var(--bg-surface-raised);

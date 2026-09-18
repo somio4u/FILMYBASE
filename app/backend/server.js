@@ -5860,45 +5860,46 @@ async function generateDeepScriptBreakdownContent(sourceText, revision) {
   return { ...firstPass, ...Object.fromEntries(refinedEntries) };
 }
 
+// The first-ever breakdown on a long script is a first pass PLUS 5
+// concurrent per-category refinement calls, each re-sending the whole
+// script — easily several minutes for a real feature-length or
+// multi-episode script, well past Render's own proxy timeout for a single
+// request (a real 166KB/13-episode script reliably hit a 502 here). So
+// this responds immediately and does the actual generation in the
+// background, exactly like the auto-pipeline's own runAutoPipeline —
+// the frontend polls (via the existing /full endpoint) for the new row
+// to show up instead of waiting on this one request.
 app.post("/api/script-breakdown", requireRole("admin"), async (req, res) => {
   const { sceneListId } = req.body;
 
+  const sceneListResult = await db.query("SELECT content, status FROM scene_lists WHERE id = $1", [sceneListId]);
+
+  if (sceneListResult.rows.length === 0) {
+    res.status(404).json({ error: "Scene list not found" });
+    return;
+  }
+
+  if (sceneListResult.rows[0].status !== "approved") {
+    res.status(400).json({ error: "The scene list must be approved before running a script breakdown." });
+    return;
+  }
+
+  res.json({ status: "processing" });
+
   try {
-    const sceneListResult = await db.query("SELECT content, status FROM scene_lists WHERE id = $1", [sceneListId]);
-
-    if (sceneListResult.rows.length === 0) {
-      res.status(404).json({ error: "Scene list not found" });
-      return;
-    }
-
-    if (sceneListResult.rows[0].status !== "approved") {
-      res.status(400).json({ error: "The scene list must be approved before running a script breakdown." });
-      return;
-    }
-
     const sourceText = await buildBreakdownSourceText(sceneListResult.rows[0].content, sceneListId);
     const content = await generateDeepScriptBreakdownContent(sourceText);
 
-    const insertResult = await db.query(
-      "INSERT INTO script_breakdowns (scene_list_id, content) VALUES ($1, $2) RETURNING id, status, feedback",
-      [sceneListId, JSON.stringify(content)]
-    );
-
-    res.json({ ...insertResult.rows[0], sceneListId, ...content });
+    await db.query("INSERT INTO script_breakdowns (scene_list_id, content) VALUES ($1, $2)", [sceneListId, JSON.stringify(content)]);
   } catch (error) {
-    console.error("Gemini API call failed:", error.message);
-    // A deep breakdown on a long script is several large Gemini calls back
-    // to back and can take minutes — if the project it belongs to gets
-    // deleted while that's still running, this INSERT's foreign key fails
-    // right at the end. Postgres' own message ("violates foreign key
-    // constraint...") is meaningless to a non-technical user, so translate
-    // the one error code (23503) that means exactly this into plain
-    // language instead of leaking raw SQL.
-    if (error.code === "23503") {
-      res.status(409).json({ error: "This project was deleted or changed while the analysis was still running. Please try again." });
-      return;
+    // Nothing left to respond to (the request already returned above) — the
+    // frontend's poll just never finds a new row and eventually gives up.
+    // The one exception worth calling out: if the project got deleted (or
+    // the scene list changed) while this was still running, this INSERT's
+    // own foreign key fails right at the end — expected, not a real error.
+    if (error.code !== "23503") {
+      console.error("Script breakdown generation failed:", error.message);
     }
-    res.status(502).json({ error: error.message });
   }
 });
 

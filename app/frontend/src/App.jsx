@@ -288,6 +288,7 @@ const LABELS = {
     episodeLabel: 'Episode',
     hookLabel: 'Hook',
     genericError: 'Something went wrong. Please wait a moment and try again.',
+    breakdownTimedOutError: "This script is taking unusually long to analyze. It's likely still running in the background — please check back in a few minutes, or refresh the page.",
     screenplayUploadedToast: 'Screenplay uploaded successfully. Click "Analyze Script" below to generate the breakdown (characters, props, locations, and more).',
     missingCharacterNamePlaceholder: 'Missed a character? Type their name…',
     addMissingCharacterButton: 'Add Character',
@@ -782,6 +783,7 @@ const LABELS = {
     episodeLabel: 'ପର୍ବ',
     hookLabel: 'ହୁକ୍',
     genericError: 'କିଛି ଭୁଲ ହେଲା। ଦୟାକରି ଅଳ୍ପ ସମୟ ଅପେକ୍ଷା କରି ପୁନଃ ଚେଷ୍ଟା କରନ୍ତୁ।',
+    breakdownTimedOutError: 'ଏହି ସ୍କ୍ରିପ୍ଟକୁ ବିଶ୍ଳେଷଣ କରିବାକୁ ଅସାଧାରଣ ସମୟ ଲାଗୁଛି। ଏହା ବୋଧହୁଏ ପଛରେ ଚାଲୁଛି — ଦୟାକରି କିଛି ମିନିଟ୍ ପରେ ଯାଞ୍ଚ କରନ୍ତୁ, କିମ୍ବା ପେଜ୍ ରିଫ୍ରେସ୍ କରନ୍ତୁ।',
     screenplayUploadedToast: 'ସ୍କ୍ରିପ୍ଟ ସଫଳତାର ସହିତ ଅପଲୋଡ୍ ହେଲା। ବ୍ରେକଡାଉନ୍ (ଚରିତ୍ର, ପ୍ରପର୍ଟି, ଲୋକେସନ୍ ଏବଂ ଅନ୍ୟାନ୍ୟ) ତିଆରି କରିବାକୁ ତଳେ "Analyze Script" କ୍ଲିକ୍ କରନ୍ତୁ।',
     missingCharacterNamePlaceholder: 'ଏକ ଚରିତ୍ର ଛାଡ଼ିଗଲା କି? ତାହାର ନାମ ଲେଖନ୍ତୁ…',
     addMissingCharacterButton: 'ଚରିତ୍ର ଯୋଡ଼ନ୍ତୁ',
@@ -5406,11 +5408,41 @@ function App() {
         return
       }
 
-      setScriptBreakdown(data)
+      // A long script's first breakdown can take several minutes (a first
+      // pass plus 5 concurrent per-category refinement calls) — the server
+      // now kicks it off and responds right away instead of holding the
+      // request open, so pick up the finished result by polling the
+      // project's own data instead of waiting on this one response.
+      await pollForScriptBreakdown()
     } catch {
       setErrorMessage(t.genericError)
+      setIsGeneratingBreakdown(false)
+    }
+  }
+
+  async function pollForScriptBreakdown() {
+    const pollIntervalMs = 5000
+    const maxAttempts = 240 // 20 minutes
+
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      await new Promise((resolve) => setTimeout(resolve, pollIntervalMs))
+
+      try {
+        const response = await fetch(`${BACKEND_URL}/api/concepts/${conceptId}/full`)
+        if (response.ok) {
+          const data = await response.json()
+          if (data.scriptBreakdown) {
+            setScriptBreakdown(data.scriptBreakdown)
+            setIsGeneratingBreakdown(false)
+            return
+          }
+        }
+      } catch {
+        // A single missed poll isn't fatal — just try again next tick.
+      }
     }
 
+    setErrorMessage(t.breakdownTimedOutError)
     setIsGeneratingBreakdown(false)
   }
 

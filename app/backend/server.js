@@ -1370,6 +1370,63 @@ app.delete("/api/concepts/:id", requireRole("admin"), async (req, res) => {
   res.json({ id: result.rows[0].id });
 });
 
+// Tracks breakdown ids currently being auto-backfilled so a burst of page
+// loads/polls doesn't kick off the same expensive classification pass
+// several times at once. Reset on every deploy/restart — worst case after
+// one, a harmless extra pass runs once more.
+const breakdownAutoBackfillInFlight = new Set();
+
+function breakdownNeedsCastTierBackfill(breakdownContent) {
+  return (breakdownContent.artistList ?? []).some((item) => item.castCategory === "speaking" && !item.castTier);
+}
+
+function breakdownNeedsEpisodeNumberBackfill(breakdownContent, sceneListContent) {
+  if (!sceneListContent?.episodeScenes) return false; // only ever relevant for a series
+  return BREAKDOWN_CATEGORY_KEYS.some((category) =>
+    (breakdownContent[category] ?? []).some((item) => !item.episodeNumbers || item.episodeNumbers.length === 0)
+  );
+}
+
+// Fire-and-forget: called every time a breakdown is loaded (never awaited,
+// so it adds zero latency to that request) — if it's missing cast tiers or
+// episode numbers a fresh "Analyze Script" run would now include, this
+// computes and saves them in the background so simply opening the project
+// again shortly after picks up the fix, with nothing for anyone to click.
+// Exists specifically for a breakdown analyzed before this feature shipped
+// (a fresh analysis already gets both automatically — see
+// generateDeepScriptBreakdownContent).
+function triggerScriptBreakdownAutoBackfill(sceneListRow, breakdownRow) {
+  if (breakdownAutoBackfillInFlight.has(breakdownRow.id)) return;
+
+  const needsCastTier = breakdownNeedsCastTierBackfill(breakdownRow.content);
+  const needsEpisodeNumbers = breakdownNeedsEpisodeNumberBackfill(breakdownRow.content, sceneListRow.content);
+  if (!needsCastTier && !needsEpisodeNumbers) return;
+
+  breakdownAutoBackfillInFlight.add(breakdownRow.id);
+  (async () => {
+    try {
+      const sourceText = await buildBreakdownSourceText(sceneListRow.content, sceneListRow.id);
+      let updated = breakdownRow.content;
+      if (needsCastTier) {
+        updated = { ...updated, artistList: await classifyCastCategories(sourceText, updated.artistList ?? []) };
+      }
+      if (needsEpisodeNumbers) {
+        updated = await classifyEpisodeNumbers(sourceText, updated);
+      }
+      await db.query("INSERT INTO script_breakdowns (scene_list_id, content, status, feedback) VALUES ($1, $2, $3, $4)", [
+        sceneListRow.id,
+        JSON.stringify(updated),
+        breakdownRow.status,
+        "Auto-backfilled cast tiers / episode numbers",
+      ]);
+    } catch (error) {
+      console.error(`Auto-backfill failed for breakdown ${breakdownRow.id}:`, error.message);
+    } finally {
+      breakdownAutoBackfillInFlight.delete(breakdownRow.id);
+    }
+  })();
+}
+
 // Loads one project's entire chain, scoped strictly to that concept — unlike the various
 // "/latest" endpoints above, which each just grab the single newest row in their table
 // regardless of which project it belongs to. This is what makes Load Project / History work
@@ -1448,6 +1505,7 @@ app.get("/api/concepts/:id/full", requireLogin, async (req, res) => {
         feedback: breakdownRow.feedback,
         ...breakdownRow.content,
       };
+      triggerScriptBreakdownAutoBackfill(sceneListRow, breakdownRow);
     }
 
     const shootScheduleResult = await db.query(
@@ -1564,6 +1622,7 @@ app.get("/api/concepts/:id/full", requireLogin, async (req, res) => {
       feedback: breakdownRow.feedback,
       ...breakdownRow.content,
     };
+    triggerScriptBreakdownAutoBackfill(sceneListRow, breakdownRow);
   }
 
   const shootScheduleResult = await db.query(
@@ -5959,11 +6018,17 @@ async function generateDeepScriptBreakdownContent(sourceText, revision) {
   });
 
   const combined = { ...firstPass, ...Object.fromEntries(refinedEntries) };
+
+  // Speaking/non-speaking + Lead/Sidekick/Extra, run as part of every fresh
+  // analysis rather than requiring a separate "Classify Cast Categories"
+  // click afterward — a real cast list only showed Extra/Non-Speaking
+  // because this step was previously a manual, easy-to-miss follow-up.
+  const withCastTiers = { ...combined, artistList: await classifyCastCategories(sourceText, combined.artistList ?? []) };
+
   // Tags every item in every category with which episode(s) it appears in
   // (episode-level only, not exact scenes — see classifyEpisodeNumbers for
-  // why). Runs after refinement so it sees the final, fully-refined lists,
-  // not the first pass's possibly-incomplete ones.
-  return await classifyEpisodeNumbers(sourceText, combined);
+  // why). Runs after refinement/cast-tiering so it sees the final lists.
+  return await classifyEpisodeNumbers(sourceText, withCastTiers);
 }
 
 // The first-ever breakdown on a long script is a first pass PLUS 5

@@ -568,7 +568,13 @@ AVOID reflexive genre-stock description shorthand — phrases like "eyes narrow"
 
 Use "characterModifier" on a dialogue element when it genuinely applies: "CONT'D" if the same character keeps speaking after a brief action beat interrupted them without leaving the scene, "O.S." if they're heard but not seen on screen, "V.O." for narration, an inner thought, or a phone/recording voice, "ECHOING" for a remembered line from a past scene or a character who isn't physically present, replaying in another character's mind (distinct from V.O. — this is specifically a memory echoing back, not present-tense narration). Use "none" otherwise — most dialogue needs no modifier.
 
-You may add a "flashback" element when a brief memory genuinely intrudes on the present scene: give "character" as whose POV/memory it is, and "text" describing what's remembered (rendered as "FLASH - [CHARACTER]'S POV:" followed by the description, always in English). An ECHOING dialogue element often follows a flashback element, giving voice to what's being remembered. You may also add ONE "transition" element (text like "CUT TO:", "CUT FLASH:", "TRANSITION SHOT.", "MATCH CUT TO:", or "DISSOLVE TO:") at the very end of a scene's elements, but only when a specific transition is dramatically meaningful, not as routine punctuation on every scene. Transition text is a technical screenplay marker, always in English, never translated.`;
+You may add a "flashback" element when a brief memory genuinely intrudes on the present scene: give "character" as whose POV/memory it is, and "text" describing what's remembered (rendered as "FLASH - [CHARACTER]'S POV:" followed by the description, always in English). An ECHOING dialogue element often follows a flashback element, giving voice to what's being remembered. You may also add ONE "transition" element (text like "CUT TO:", "CUT FLASH:", "TRANSITION SHOT.", "MATCH CUT TO:", or "DISSOLVE TO:") at the very end of a scene's elements, but only when a specific transition is dramatically meaningful, not as routine punctuation on every scene. Transition text is a technical screenplay marker, always in English, never translated.
+
+EVERY "dialogue" element MUST have a real, non-empty "character" naming exactly who is speaking (matching a name already established for this story) — never leave it blank, generic, or omitted. A screenplay where the reader can't tell who's talking is unusable on set. For "action", "transition", and "flashback" elements, "character" only applies to "flashback" (whose memory it is); leave it as an empty string for "action" and "transition".
+
+CONTINUITY OF OBJECTS AND REVEALS: you are shown the full scene-by-scene outline for this exact reason — before writing, check it for any prop, document, injury, secret, or reveal that this scene's one-liner connects to in an earlier or later scene, and make sure it's planted, referenced, and paid off consistently (an object introduced in one scene should still exist/matter if a later scene's outline depends on it; a reveal shouldn't come out of nowhere if the outline shows it was seeded earlier). Don't invent a new unearned twist that the outline doesn't support.
+
+SHOW, DON'T TELL: never name a character's emotion directly in an action line ("he feels betrayed", "she is nervous") — dramatize it through a specific physical action, choice, or reaction instead. Keep the protagonist active: even in a scene where they're being manipulated, pressured, or outmatched, give them a real choice, reaction, or small act of resistance/agency in the moment, rather than having them simply absorb what's happening to them.`;
 
 const SCREENPLAY_DIALOGUE_CRAFT = {
   en: `DIALOGUE LANGUAGE FOR THIS SCENE: English. Write dialogue (and any "parenthetical") in natural, contemporary spoken English — the way real people actually talk, never a stiff or literary register.
@@ -593,7 +599,15 @@ CHALITA BHASHA, NOT SADHU BHASHA — this is the single most important rule. Wri
 - Real dialogue lines are often shorter than you'd guess — many effective lines are just a handful of words rather than a full sentence. Don't pad a line into a complete grammatical thought when a short, clipped fragment lands harder.
 - If a minor/secondary character's background clearly establishes a different mother tongue (an outsider from another state, a migrant worker, someone explicitly non-Odia), let THEM speak in their own natural language instead of forcing every character to speak Odia — e.g. a Bengali or Hindi-speaking outsider talking to an Odia character would naturally use their own language, not Odia.
 
-IMPORTANT — script, not Romanization: many real Odia shooting scripts write dialogue in Romanized/transliterated Odia (Latin letters, e.g. "Kana kahuchhanti") for on-set convenience. Do NOT do that here. Dialogue must always be written in actual Odia (Oriya) script (ଓଡ଼ିଆ), never Romanized. Code-switching means an occasional English word or short phrase embedded naturally INSIDE an Odia-script sentence (e.g. "ମୋତେ ସିରିଅସ୍ଲି କାହିଁକି ଡରାଉଛୁ?") — it does not mean writing whole sentences in Latin letters.`,
+IMPORTANT — script, not Romanization: many real Odia shooting scripts write dialogue in Romanized/transliterated Odia (Latin letters, e.g. "Kana kahuchhanti") for on-set convenience. Do NOT do that here. Dialogue must always be written in actual Odia (Oriya) script (ଓଡ଼ିଆ), never Romanized. Code-switching means an occasional English word or short phrase embedded naturally INSIDE an Odia-script sentence (e.g. "ମୋତେ ସିରିଅସ୍ଲି କାହିଁକି ଡରାଉଛୁ?") — it does not mean writing whole sentences in Latin letters.
+
+FINAL PROOFREAD, EVERY LINE — before finalizing, reread each Odia sentence you've written and correct any spelling/grammar mistake, the same way a careful native proofreader would, rather than trusting your first draft:
+- Matra (vowel sign) accuracy: don't confuse similar-looking vowel signs (ି vs ୀ, ୁ vs ୂ, େ vs ୈ) — the wrong one changes or breaks the word.
+- Correct conjunct/compound letters (ଯୁକ୍ତାକ୍ଷର) for the actual word intended, not a visually-similar wrong conjunct.
+- Nasal marks: don't drop or misuse ଁ (chandrabindu) and ଂ (anusvara) — many common words need one and are misspelled without it.
+- Postposition/case particles (େର, କୁ, ର, ଠାରୁ, ପାଇଁ) must attach correctly to the preceding word with correct spelling — a common AI mistake is a subtly wrong or missing particle.
+- Verb-ending agreement must match the subject's person, number, and the respect level already established for that speaker/listener pair (see the ଛନ୍ତି vs ଛି/ଛୁ/ଛ rule above) — check this per line, not just once for the whole scene.
+- If a word could be a Sadhu Bhasha holdover you missed, replace it with the natural spoken word (see the Chalita Bhasha rule above) as part of this same pass.`,
 
   hi: `DIALOGUE LANGUAGE FOR THIS SCENE: Hindi. You are an expert Hindi dialogue writer and script supervisor ("Script Doctor") whose job is to make every line sound like real spoken Hindi, never a textbook.
 
@@ -650,7 +664,7 @@ const SCREENPLAY_ELEMENT_SCHEMA = {
     parenthetical: { type: Type.STRING },
     text: { type: Type.STRING },
   },
-  required: ["type", "text"],
+  required: ["type", "character", "text"],
 };
 
 // Gemini occasionally slips a stray character from an unrelated Indic or

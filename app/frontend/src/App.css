@@ -642,6 +642,16 @@ button, input, textarea, select {
   font-size: 14px;
 }
 
+.success-banner {
+  margin: 12px 0;
+  padding: 10px 14px;
+  background: var(--success-bg);
+  border: 1px solid var(--success);
+  border-radius: 8px;
+  color: var(--success);
+  font-size: 14px;
+}
+
 .empty-state {
   margin-top: 18vh;
   text-align: center;

@@ -220,6 +220,7 @@ const LABELS = {
     episodeLabel: 'Episode',
     hookLabel: 'Hook',
     genericError: 'Something went wrong. Please wait a moment and try again.',
+    screenplayUploadedToast: 'Screenplay uploaded successfully. Click "Analyze Script" below to generate the breakdown (characters, props, locations, and more).',
     missingCharacterNamePlaceholder: 'Missed a character? Type their name…',
     addMissingCharacterButton: 'Add Character',
     addingCharacterLabel: 'Adding…',
@@ -704,6 +705,7 @@ const LABELS = {
     episodeLabel: 'ପର୍ବ',
     hookLabel: 'ହୁକ୍',
     genericError: 'କିଛି ଭୁଲ ହେଲା। ଦୟାକରି ଅଳ୍ପ ସମୟ ଅପେକ୍ଷା କରି ପୁନଃ ଚେଷ୍ଟା କରନ୍ତୁ।',
+    screenplayUploadedToast: 'ସ୍କ୍ରିପ୍ଟ ସଫଳତାର ସହିତ ଅପଲୋଡ୍ ହେଲା। ବ୍ରେକଡାଉନ୍ (ଚରିତ୍ର, ପ୍ରପର୍ଟି, ଲୋକେସନ୍ ଏବଂ ଅନ୍ୟାନ୍ୟ) ତିଆରି କରିବାକୁ ତଳେ "Analyze Script" କ୍ଲିକ୍ କରନ୍ତୁ।',
     missingCharacterNamePlaceholder: 'ଏକ ଚରିତ୍ର ଛାଡ଼ିଗଲା କି? ତାହାର ନାମ ଲେଖନ୍ତୁ…',
     addMissingCharacterButton: 'ଚରିତ୍ର ଯୋଡ଼ନ୍ତୁ',
     addingCharacterLabel: 'ଯୋଡ଼ୁଛି…',
@@ -3666,6 +3668,7 @@ function App() {
   const [episodeMinutes, setEpisodeMinutes] = useState(10)
   const [runtimeMinutes, setRuntimeMinutes] = useState(120)
   const [errorMessage, setErrorMessage] = useState(null)
+  const [toastMessage, setToastMessage] = useState(null)
 
   const [showFeedbackForm, setShowFeedbackForm] = useState(false)
   const [feedbackText, setFeedbackText] = useState('')
@@ -5073,6 +5076,7 @@ function App() {
   async function handleGenerateBreakdownClick() {
     setIsGeneratingBreakdown(true)
     setErrorMessage(null)
+    setToastMessage(null)
 
     try {
       const response = await fetch(`${BACKEND_URL}/api/script-breakdown`, {
@@ -6352,6 +6356,7 @@ function App() {
 
     setIsImportingScreenplay(true)
     setErrorMessage(null)
+    setToastMessage(null)
 
     try {
       const response = await fetch(`${BACKEND_URL}/api/import-screenplay-for-production`, {
@@ -6370,6 +6375,7 @@ function App() {
       setImportScreenplayText('')
       await loadProject(data.conceptId)
       loadProjectList()
+      setToastMessage(t.screenplayUploadedToast)
     } catch {
       setErrorMessage(t.genericError)
     }
@@ -6452,6 +6458,7 @@ function App() {
 
     setIsImportingScreenplayFile(true)
     setErrorMessage(null)
+    setToastMessage(null)
 
     try {
       const formData = new FormData()
@@ -6472,6 +6479,7 @@ function App() {
 
       await loadProject(data.conceptId)
       loadProjectList()
+      setToastMessage(t.screenplayUploadedToast)
     } catch {
       setErrorMessage(t.genericError)
     }
@@ -7067,6 +7075,7 @@ function App() {
       <main className="chat-viewport">
     <div className="concept-page" id="stage-idea">
       {errorMessage && <div className="error-banner">{errorMessage}</div>}
+      {toastMessage && <div className="success-banner">{toastMessage}</div>}
 
       {activeAgent === 'masterList' && (
         <div className="three-act-structure" id="stage-master-list">

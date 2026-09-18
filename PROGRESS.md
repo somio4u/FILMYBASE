@@ -8,6 +8,37 @@ itself as work finishes — if it doesn't, ask it to.
 
 ---
 
+## App Deployed Online — No Longer Just Local ✅ DONE
+User asked to "make it online" so the app can be reached from a browser
+instead of only running on one laptop. Checked and confirmed, rather than
+re-doing from scratch, since a lot of this turned out to already exist:
+
+- [x] **Database + file storage (Supabase)** — the `FILM ESSENTIALS`
+  Supabase project already has every table from `backend/schema.sql`
+  created, plus a public `crew-photos` storage bucket for crew/cast photos.
+- [x] **Backend (Render)** — a `FILMYBASE` web service on Render, auto-
+  deploying from GitHub's `main` branch on every push. Live at
+  **https://filmybase.onrender.com**, confirmed healthy via `/api/health`.
+  Free tier, so it "sleeps" after inactivity — the first request after a
+  quiet spell can take ~50 seconds to wake up.
+- [x] **Frontend (Vercel)** — a `filmybase` project on Vercel, also auto-
+  deploying from `main`. Live at **https://filmybase.vercel.app**, with
+  `VITE_BACKEND_URL` already pointed at the Render backend.
+- [x] **Confirmed working for real** — opened the live site, typed a movie
+  concept, hit Generate, got real AI-generated storylines back. Frontend
+  and backend are genuinely talking to each other in production, not just
+  independently "up."
+
+**What this means going forward:** the app is reachable from any browser
+now, not just localhost — share `https://filmybase.vercel.app` with anyone
+who needs to try it. Any change pushed to the `main` branch on GitHub
+auto-deploys to both Vercel and Render within a minute or two, so no manual
+redeploy step is needed after future work. Next: keep building/chatting
+here as before — new features still land on a working branch first, same
+as always, and reach the live site once merged to `main`.
+
+---
+
 ## Agents Restructure: Independent Production Management ✅ DONE
 User felt Production Management shouldn't live "after Screenplay" as just
 another stage in one long list — it should be genuinely independent of the
@@ -1212,3 +1243,4 @@ Full spec: `agents/production-management-agent.md`
 - User reviewed the stage-nav redesign live and said directly it was "a messed up ui," then shared a real Gemini UI screenshot plus custom icons and a precise respecification: no stage tracker, a genuine scrolling chat log, one persistent contextual input bar, and side-by-side storyline options with a locked/dimmed visual state. Confirmed via two quick questions (Gemini-style only, no stage tracker; icon placement left to Claude's judgment) before rebuilding. Removed the stage-nav entirely and rebuilt: empty-state gradient greeting, persistent bottom input bar that switches between "generate" and "regenerate" modes depending on whether storylines already exist, side-by-side option cards with a "✓ Locked in" badge + dimmed sibling, and a full dark Gemini-inspired color theme applied across every existing card (pitch deck, three-act, bit sheet, scene list, screenplay), not just the sidebar. Also fixed a leftover Vite-starter default (`#root` boxed at 1126px with side borders) that was fighting the new full-bleed layout. Tested the entire flow live in the browser end-to-end — matches the user's spec exactly. Next: the right-side action panel, then real multi-project switching.
 - Fixed the "always shows the last project" bug and built real multi-project support: found the actual root cause (every `/latest` backend endpoint grabbed the single newest row anywhere, ignoring which project it belonged to), added scoped endpoints (list all projects, load one project's full chain by id, rename), and wired the sidebar's History section up to them for real Load/New project switching — "New Idea" now also clears its `localStorage` pointer so a refresh actually stays fresh. Brought back a stage-progress list in the sidebar (Idea/Synopsis/Bit Sheet/Screenplay, done/current/upcoming) that smooth-scrolls to a section on click instead of replacing the chat log, learning from what actually went wrong with the earlier reverted stage-nav. Made the persistent input bar truly persistent — it no longer disappears after the synopsis, and now routes typed feedback to whichever stage is currently awaiting a decision. Also fixed the sidebar visibly scrolling away with the main content (an `.app-shell` sizing bug) so it now stays fixed. Caught and fixed a real bug during testing: loading a project from History lost the in-memory "chosen storyline" marker, which briefly made the input bar wrongly offer to regenerate storylines even when a pitch deck already existed. Tested end-to-end live in the browser. Rename is code-complete but needs the user's own manual test (uses a native prompt() dialog the automated browser can't drive). Next: the right-side action panel.
 - Big batch: added Export Idea/Import Idea (download/reload a project as a `.json` file on your own computer), History pin and delete (changed the database foreign keys from `ON DELETE SET NULL` to `ON DELETE CASCADE` so deleting a project cleanly removes its whole chain), and "skip ahead" — a "Start from: Idea/Synopsis/Bit Sheet/Scene One-Liners" tab row that lets you paste your own already-written material and have ONE AI call both faithfully parse it into the real schema AND invent plausible, consistent earlier stages behind it (film format only for now). Also moved the film/web-series question to the very first screen (before typing an idea at all) instead of after choosing a storyline, and threaded that format into storyline generation itself — choosing a storyline now goes straight to building the pitch deck since format is already known. Tested export→import round-trip, cascade-delete, pin-to-top, the full format-first flow, and a real skip-to-bitsheet paste end-to-end live in the browser; skip-to-synopsis/skip-to-scenelist verified by code review only to conserve the day's Gemini quota (same proven one-call pattern). Noted one rare AI glitch (a stray Hebrew character in one English title) — not chasing it as a general fix since it's a one-off. Rename/delete confirmation dialogs are native browser prompts the automated test browser can't drive — worth the user's own click-through. Next: the right-side action panel; trying rename/delete/skip-ahead (all 3 target stages) yourself.
+- User asked to "make it online" so work could continue from a chat session instead of a local laptop. Rather than deploying from scratch, checked each piece first and found it was mostly already live from earlier work: Supabase database + `crew-photos` storage bucket both set up, a Render backend already auto-deploying from `main` (https://filmybase.onrender.com, confirmed healthy), and a Vercel frontend already auto-deploying from `main` (https://filmybase.vercel.app) with `VITE_BACKEND_URL` already pointed at the Render backend. Confirmed for real by opening the live site and generating actual storylines from a typed concept. Nothing needed building — just verified end-to-end and documented it here since it hadn't been logged before. Next: keep building features from this chat; any push to `main` auto-deploys within a minute or two, no manual redeploy step needed.

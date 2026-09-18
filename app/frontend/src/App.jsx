@@ -4341,7 +4341,7 @@ function App() {
     setIsAddingCrew(false)
   }
 
-  function handleNewIdeaClick() {
+  function handleNewIdeaClick(forAgent = activeAgent) {
     localStorage.removeItem(CURRENT_CONCEPT_STORAGE_KEY)
     setConcept('')
     setConceptId(null)
@@ -4384,8 +4384,16 @@ function App() {
     setLocationAvailability({})
     setScheduleStartDate(defaultTentativeStartDate())
     setScheduleTargetDays(10)
-    setProjectType(activeAgent)
+    setProjectType(forAgent)
     setImportScreenplayText('')
+    setStartStage('idea')
+  }
+
+  function handleGoHomeClick() {
+    if (isScopedToOneProject) return
+    setActiveAgent('story')
+    handleNewIdeaClick('story')
+    setIsSidebarOpen(false)
   }
 
   async function handleRenameProjectClick() {
@@ -6813,24 +6821,31 @@ function App() {
 
       <aside className={`sidebar ${isSidebarOpen ? 'sidebar-open' : ''}`}>
         <div className="sidebar-header">
-          <span className="sidebar-logo">{ICONS.clapperboard}</span>
-          <span className="sidebar-title">
-            {conceptId ? (
-              (() => {
-                const { main, sub } = splitProjectTitleForSidebar(sidebarProjectLabel)
-                return sub ? (
-                  <>
-                    <span className="sidebar-title-main">{main}</span>
-                    <span className="sidebar-title-sub">{sub}</span>
-                  </>
-                ) : (
-                  main
-                )
-              })()
-            ) : (
-              t.heading
-            )}
-          </span>
+          <button
+            className="sidebar-home-button"
+            onClick={handleGoHomeClick}
+            disabled={isScopedToOneProject}
+            aria-label={t.heading}
+          >
+            <span className="sidebar-logo">{ICONS.clapperboard}</span>
+            <span className="sidebar-title">
+              {conceptId ? (
+                (() => {
+                  const { main, sub } = splitProjectTitleForSidebar(sidebarProjectLabel)
+                  return sub ? (
+                    <>
+                      <span className="sidebar-title-main">{main}</span>
+                      <span className="sidebar-title-sub">{sub}</span>
+                    </>
+                  ) : (
+                    main
+                  )
+                })()
+              ) : (
+                t.heading
+              )}
+            </span>
+          </button>
           <button className="sidebar-close-button" onClick={() => setIsSidebarOpen(false)} aria-label={t.closeMenuLabel}>
             ✕
           </button>

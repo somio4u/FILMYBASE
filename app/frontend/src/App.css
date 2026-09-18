@@ -99,6 +99,25 @@ button, input, textarea, select {
   filter: drop-shadow(0 0 8px rgba(138, 180, 248, 0.5));
 }
 
+.sidebar-home-button {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1;
+  min-width: 0;
+  padding: 0;
+  background: transparent;
+  border: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.sidebar-home-button:disabled {
+  cursor: default;
+}
+
 .current-user-row {
   display: flex;
   align-items: center;

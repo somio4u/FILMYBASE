@@ -46,6 +46,16 @@ const ai = googleServiceAccount
     })
   : new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
+// Silent otherwise: a misspelled/missing env var would fall back to the free
+// AI Studio key with zero indication anything was wrong, which is exactly
+// the kind of "did my Vertex AI switch actually take effect?" question this
+// line exists to answer from Render's logs.
+console.log(
+  googleServiceAccount
+    ? `Using Vertex AI (project: ${googleServiceAccount.project_id}, location: ${process.env.GOOGLE_CLOUD_LOCATION || "us-central1"})`
+    : "Using AI Studio free-tier Gemini API key (GOOGLE_SERVICE_ACCOUNT_JSON not set)"
+);
+
 // The AI Studio "-latest" alias doesn't resolve on Vertex AI, so every call
 // in this file uses this constant (a real, explicit model id valid on both
 // AI Studio and Vertex AI) instead of a literal model name.

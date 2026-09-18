@@ -99,6 +99,25 @@ button, input, textarea, select {
   filter: drop-shadow(0 0 8px rgba(138, 180, 248, 0.5));
 }
 
+.sidebar-home-button {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1;
+  min-width: 0;
+  padding: 0;
+  background: transparent;
+  border: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.sidebar-home-button:disabled {
+  cursor: default;
+}
+
 .current-user-row {
   display: flex;
   align-items: center;
@@ -739,6 +758,136 @@ button, input, textarea, select {
   border-radius: 10px;
   font-size: 14px;
   resize: vertical;
+}
+
+.skip-ahead-textarea-wrap {
+  position: relative;
+}
+
+.skip-ahead-textarea-wrap .skip-ahead-textarea {
+  padding-right: 46px;
+}
+
+.skip-ahead-mic-wrap {
+  position: absolute;
+  right: 8px;
+  bottom: 8px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.changes-chat-mic-wrap {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.mic-language-select {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 4px;
+  background: var(--bg-surface-raised);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.skip-ahead-mic,
+.changes-chat-mic {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-surface-raised);
+  color: var(--text-secondary);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Generic mic-button wrapper used by MicInput/MicTextarea, dropped in next
+   to any writable field across the app. A single-line input gets the mic
+   beside it; a multi-line textarea gets it overlaid in the corner instead,
+   so it doesn't add an awkward extra row under a tall box. */
+.mic-field-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+}
+
+.mic-field-wrap input {
+  flex: 1;
+  min-width: 0;
+}
+
+.mic-field-wrap-textarea {
+  display: block;
+  position: relative;
+}
+
+.mic-field-wrap-textarea textarea {
+  width: 100%;
+  padding-right: 42px;
+}
+
+.mic-field-mic-wrap {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.mic-field-wrap-textarea .mic-field-mic-wrap {
+  position: absolute;
+  right: 6px;
+  bottom: 6px;
+}
+
+.mic-field-mic {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-surface-raised);
+  color: var(--text-secondary);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.mic-field-mic svg {
+  width: 13px;
+  height: 13px;
+}
+
+.mic-field-wrap .mic-language-select {
+  font-size: 10px;
+  padding: 1px 3px;
+}
+
+.skip-ahead-mic svg,
+.changes-chat-mic svg {
+  width: 16px;
+  height: 16px;
+}
+
+.mic-button-listening {
+  color: #131314 !important;
+  background: var(--accent-gradient) !important;
+  border-color: transparent !important;
+  animation: mic-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes mic-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(138, 180, 248, 0.5); }
+  50% { box-shadow: 0 0 0 6px rgba(138, 180, 248, 0); }
 }
 
 .skip-ahead-controls {
@@ -2980,8 +3129,6 @@ button, input, textarea, select {
 
 .changes-chat-toggle {
   position: fixed;
-  right: 24px;
-  bottom: 24px;
   z-index: 60;
   width: 56px;
   height: 56px;
@@ -2990,13 +3137,18 @@ button, input, textarea, select {
   background: var(--accent-gradient);
   background-size: 200% 200%;
   color: #131314;
-  cursor: pointer;
+  cursor: grab;
+  touch-action: none;
   display: flex;
   align-items: center;
   justify-content: center;
   box-shadow: 0 4px 20px rgba(138, 180, 248, 0.35), 0 2px 8px rgba(0, 0, 0, 0.35);
   transition: transform 0.25s var(--ease-spring), box-shadow 0.25s var(--ease-spring), background-position 0.6s ease;
   animation: chat-toggle-breathe 4s ease-in-out infinite;
+}
+
+.changes-chat-toggle:active {
+  cursor: grabbing;
 }
 
 .changes-chat-toggle:hover {
@@ -3018,27 +3170,32 @@ button, input, textarea, select {
 
 .changes-chat-panel {
   position: fixed;
-  top: 0;
-  right: 0;
-  bottom: 0;
+  right: 24px;
+  bottom: 92px;
   width: 360px;
-  max-width: 90vw;
+  max-width: calc(100vw - 32px);
+  height: 480px;
+  max-height: min(480px, calc(100vh - 140px));
+  border-radius: 18px;
   background: var(--glass-bg);
   backdrop-filter: blur(24px);
   -webkit-backdrop-filter: blur(24px);
-  border-left: 1px solid var(--glass-border);
+  border: 1px solid var(--glass-border);
   display: flex;
   flex-direction: column;
-  transform: translateX(100%);
+  overflow: hidden;
+  transform: translateY(16px) scale(0.96);
   opacity: 0;
-  transition: transform 0.3s var(--ease-spring), opacity 0.25s ease;
+  pointer-events: none;
+  transition: transform 0.25s var(--ease-spring), opacity 0.2s ease;
   z-index: 55;
-  box-shadow: -8px 0 32px rgba(0, 0, 0, 0.45);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.45);
 }
 
 .changes-chat-panel.open {
-  transform: translateX(0);
+  transform: translateY(0) scale(1);
   opacity: 1;
+  pointer-events: auto;
 }
 
 .changes-chat-header {
@@ -3050,6 +3207,7 @@ button, input, textarea, select {
   color: var(--text-primary);
   font-family: var(--font-heading);
   background: var(--accent-gradient-soft);
+  flex-shrink: 0;
 }
 
 .changes-chat-close {
@@ -3145,10 +3303,11 @@ button, input, textarea, select {
   gap: 8px;
   padding: 14px;
   border-top: 1px solid var(--border-subtle);
+  flex-wrap: wrap;
 }
 
 .changes-chat-input {
-  flex: 1;
+  flex: 1 1 100%;
   padding: 10px 14px;
   font-size: 14px;
   background: var(--bg-surface-raised);
@@ -3181,6 +3340,14 @@ button, input, textarea, select {
 .changes-chat-send:disabled {
   opacity: 0.35;
   cursor: default;
+}
+
+.changes-chat-send-labeled {
+  width: auto;
+  border-radius: 18px;
+  padding: 0 16px;
+  font-size: 13px;
+  white-space: nowrap;
 }
 
 .changes-chat-attach {
@@ -3402,48 +3569,16 @@ button, input, textarea, select {
   transform: translateY(-1px);
 }
 
-/* On desktop, the chat becomes a permanent third column (sidebar | main |
-   chat-dock) instead of a hover-triggered floating overlay — matching the
-   reference layout the user asked for. Mobile keeps the original
-   floating-toggle behavior untouched (see the max-width block below). */
-@media (min-width: 901px) {
-  .chat-dock {
-    width: 380px;
-    flex-shrink: 0;
-    height: 100%;
-    display: flex;
-    flex-direction: column;
-    overflow: hidden;
-    border-left: 1px solid var(--glass-border);
-    background: var(--bg-sidebar);
-  }
-
-  .chat-dock .changes-chat-toggle {
-    display: none;
-  }
-
-  .chat-dock .changes-chat-close {
-    display: none;
-  }
-
-  .chat-dock .changes-chat-panel {
-    position: static;
-    width: 100%;
-    height: 100%;
-    max-width: none;
-    transform: none;
-    opacity: 1;
-    box-shadow: none;
-    border-left: none;
-    backdrop-filter: none;
-    background: transparent;
-  }
-}
-
+/* The "make a change" chat is always a small pop-out box you open with the
+   floating pen button — never a permanent sidebar/column, on any screen
+   size. Same behavior on mobile and desktop. */
 @media (max-width: 640px) {
   .changes-chat-panel {
-    width: 100vw;
-    max-width: 100vw;
+    right: 16px;
+    left: 16px;
+    width: auto;
+    bottom: 84px;
+    max-height: min(420px, calc(100vh - 120px));
   }
 }
 
@@ -4036,6 +4171,38 @@ button, input, textarea, select {
   background: var(--accent, #6c5ce7);
   border-radius: 4px;
   transition: width 0.6s ease;
+}
+
+/* Shows a live, ever-growing (never real, since these are single blocking
+   AI calls with no backend stage to poll — see estimatedProgressPercent)
+   percentage plus elapsed time, for any analyze/generate/upload call long
+   enough that a static "Loading..." label alone leaves you wondering
+   whether it's stuck. */
+.inline-progress {
+  margin-top: 10px;
+  max-width: 320px;
+}
+
+.inline-progress-track {
+  position: relative;
+  width: 100%;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--bg-surface-raised);
+  overflow: hidden;
+}
+
+.inline-progress-fill {
+  height: 100%;
+  border-radius: 3px;
+  background: var(--accent-gradient);
+  transition: width 1s linear;
+}
+
+.inline-progress-label {
+  margin: 6px 0 0;
+  font-size: 12px;
+  color: var(--text-secondary);
 }
 
 .floating-agent-stage-line {

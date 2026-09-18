@@ -1,5 +1,64 @@
-import { useState, useEffect, useRef, Fragment } from 'react'
+import { useState, useEffect, useRef, useContext, createContext, Fragment } from 'react'
 import './App.css'
+
+// Lets MicInput/MicTextarea reach the shared dictation language + t
+// anywhere in the tree without threading those two props through every
+// intermediate component between App and wherever a text field lives.
+const DictationContext = createContext(null)
+function useDictationContext() {
+  return useContext(DictationContext)
+}
+
+// Ticks up once a second for as long as `active` is true, resetting to 0
+// whenever it goes false. Used to show a live elapsed-time count next to a
+// long-running AI call so it's visibly still working, not stuck.
+function useElapsedSeconds(active) {
+  const [seconds, setSeconds] = useState(0)
+  const startRef = useRef(null)
+
+  useEffect(() => {
+    if (!active) {
+      setSeconds(0)
+      startRef.current = null
+      return undefined
+    }
+    startRef.current = Date.now()
+    setSeconds(0)
+    const id = setInterval(() => setSeconds(Math.floor((Date.now() - startRef.current) / 1000)), 1000)
+    return () => clearInterval(id)
+  }, [active])
+
+  return seconds
+}
+
+// There's no real backend progress to poll here — each of these is one
+// blocking AI call, not a staged run like the auto-pipeline widget has.
+// So the percentage is an ESTIMATE: it climbs quickly at first then eases
+// off, capped at 95% until the call actually finishes (never claims 100%
+// while still waiting, and never goes backwards). `estimatedSeconds` is a
+// rough guess at how long this particular call usually takes — get it
+// wrong and the bar just eases off sooner or later, it doesn't break.
+function estimatedProgressPercent(elapsedSeconds, estimatedSeconds) {
+  const timeConstant = estimatedSeconds / 2.3
+  const percent = 100 * (1 - Math.exp(-elapsedSeconds / timeConstant))
+  return Math.min(95, Math.round(percent))
+}
+
+function AnalyzingProgressBar({ active, label, estimatedSeconds = 30 }) {
+  const seconds = useElapsedSeconds(active)
+  if (!active) return null
+  const percent = estimatedProgressPercent(seconds, estimatedSeconds)
+  return (
+    <div className="inline-progress">
+      <div className="inline-progress-track">
+        <div className="inline-progress-fill" style={{ width: `${percent}%` }} />
+      </div>
+      <p className="inline-progress-label">
+        {label} · {percent}% · {seconds}s
+      </p>
+    </div>
+  )
+}
 
 // Env-driven so the same build works against localhost in dev and the
 // deployed Render backend in production (set VITE_BACKEND_URL at build time).
@@ -124,6 +183,14 @@ const LABELS = {
     changesChatToggleLabel: 'Ask for changes',
     changesChatHeading: 'Changes',
     changesChatEmptyNote: 'Type a change below and it will show up here, along with what happened.',
+    changesChatWorkingLabel: 'Working on it',
+    generateIdeaButton: 'Generate Idea',
+    micButtonTitle: 'Speak instead of typing',
+    micButtonListeningTitle: 'Listening… click to stop',
+    micLanguageSelectTitle: 'Language you\'ll speak in',
+    micLanguageEnglish: 'EN',
+    micLanguageHindi: 'HI',
+    micLanguageOdia: 'OR',
     changesChatAppliedMessage: '✅ Done — applied and regenerated.',
     changesChatErrorMessage: '⚠️ Something went wrong — please try again.',
     agentChatInputPlaceholder: 'Ask a question or describe a change — attach a photo too if it helps…',
@@ -179,6 +246,7 @@ const LABELS = {
     startStageSynopsis: 'Synopsis',
     startStageBitSheet: 'Bit Sheet',
     startStageSceneList: 'Scene One-Liners',
+    skipPastePlaceholderIdea: 'Paste your idea here…',
     skipPastePlaceholderSynopsis: 'Paste your synopsis or pitch text here…',
     skipPastePlaceholderBitSheet: 'Paste your Bit Sheet (plot points) text here…',
     skipPastePlaceholderSceneList: 'Paste your scene-by-scene one-liners here…',
@@ -609,6 +677,14 @@ const LABELS = {
     changesChatToggleLabel: 'ପରିବର୍ତ୍ତନ ପାଇଁ ପଚାରନ୍ତୁ',
     changesChatHeading: 'ପରିବର୍ତ୍ତନ',
     changesChatEmptyNote: 'ତଳେ ଏକ ପରିବର୍ତ୍ତନ ଲେଖନ୍ତୁ, ଏହା ଏଠାରେ ଦେଖାଯିବ, ସହିତ କଣ ହେଲା ତାହା ମଧ୍ୟ।',
+    changesChatWorkingLabel: 'କାମ ଚାଲୁଛି',
+    generateIdeaButton: 'ଆଇଡିଆ ତିଆରି କରନ୍ତୁ',
+    micButtonTitle: 'ଟାଇପ୍ କରିବା ବଦଳରେ କୁହନ୍ତୁ',
+    micButtonListeningTitle: 'ଶୁଣୁଛି… ବନ୍ଦ କରିବାକୁ କ୍ଲିକ୍ କରନ୍ତୁ',
+    micLanguageSelectTitle: 'ଆପଣ କେଉଁ ଭାଷାରେ କହିବେ',
+    micLanguageEnglish: 'EN',
+    micLanguageHindi: 'HI',
+    micLanguageOdia: 'OR',
     changesChatAppliedMessage: '✅ ହୋଇଗଲା — ପ୍ରୟୋଗ ଏବଂ ପୁନଃତିଆରି ହୋଇଗଲା।',
     changesChatErrorMessage: '⚠️ କିଛି ଭୁଲ ହେଲା — ପୁଣି ଚେଷ୍ଟା କରନ୍ତୁ।',
     agentChatInputPlaceholder: 'ଏକ ପ୍ରଶ୍ନ ପଚାରନ୍ତୁ କିମ୍ବା ପରିବର୍ତ୍ତନ ବର୍ଣ୍ଣନା କରନ୍ତୁ — ସାହାଯ୍ୟ ହେଲେ ଏକ ଫଟୋ ମଧ୍ୟ ଲଗାନ୍ତୁ…',
@@ -664,6 +740,7 @@ const LABELS = {
     startStageSynopsis: 'ସିନୋପ୍ସିସ୍',
     startStageBitSheet: 'ବିଟ୍ ସିଟ୍',
     startStageSceneList: 'ସିନ୍ ଲିଷ୍ଟ',
+    skipPastePlaceholderIdea: 'ଆପଣଙ୍କ ଆଇଡିଆ ଏଠାରେ ପେଷ୍ଟ କରନ୍ତୁ…',
     skipPastePlaceholderSynopsis: 'ଆପଣଙ୍କ ସିନୋପ୍ସିସ୍ କିମ୍ବା ପିଚ୍ ଟେକ୍ସଟ୍ ଏଠାରେ ପେଷ୍ଟ କରନ୍ତୁ…',
     skipPastePlaceholderBitSheet: 'ଆପଣଙ୍କ ବିଟ୍ ସିଟ୍ (ପ୍ଲଟ୍ ପଏଣ୍ଟ) ଟେକ୍ସଟ୍ ଏଠାରେ ପେଷ୍ଟ କରନ୍ତୁ…',
     skipPastePlaceholderSceneList: 'ଆପଣଙ୍କ ସିନ୍-ବାଏ-ସିନ୍ ୱାନ୍-ଲାଇନର୍ ଏଠାରେ ପେଷ୍ଟ କରନ୍ତୁ…',
@@ -1021,6 +1098,12 @@ const ICONS = {
       <path d="M12 19l7-7 3 3-7 7-3-3Z" strokeLinecap="round" strokeLinejoin="round" />
       <path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18" strokeLinecap="round" strokeLinejoin="round" />
       <path d="M2 2l7.5 7.5" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  ),
+  mic: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+      <path d="M12 15a3 3 0 0 0 3-3V6a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3Z" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M6 11a6 6 0 0 0 12 0M12 17v4M9 21h6" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   ),
   users: (
@@ -1433,6 +1516,7 @@ function ScreenplayBlock({ episodeIndex, sceneIndex, t, language, screenplay }) 
         >
           {isGenerating ? t.generatingScreenplayScene : t.writeSceneButton}
         </button>
+        <AnalyzingProgressBar active={isGenerating} label={t.generatingScreenplayScene} estimatedSeconds={25} />
       </div>
     )
   }
@@ -1458,7 +1542,7 @@ function ScreenplayBlock({ episodeIndex, sceneIndex, t, language, screenplay }) 
 
       {showFeedbackForm && (
         <div className="feedback-form">
-          <textarea
+          <MicTextarea
             className="feedback-textarea"
             value={screenplay.feedbackTextByKey[key] || ''}
             onChange={(e) => screenplay.onFeedbackTextChange(key, e.target.value)}
@@ -1804,7 +1888,7 @@ function FloatingAgentWidget({ currentUser, t, onRunCompleted }) {
 
           {!runId && (
             <div className="floating-agent-form">
-              <textarea
+              <MicTextarea
                 placeholder={t.floatingAgentConceptPlaceholder}
                 value={concept}
                 onChange={(e) => setConcept(e.target.value)}
@@ -2037,9 +2121,9 @@ function CrewMemberEditForm({ member, onSave, onCancel, isSaving, t, showRole })
         <div className="crew-member-photo crew-member-photo-placeholder">{member.name.charAt(0).toUpperCase()}</div>
       )}
       <div className="crew-member-edit-fields">
-        <input type="text" placeholder={t.crewNameLabel} value={editName} onChange={(e) => setEditName(e.target.value)} />
+        <MicInput placeholder={t.crewNameLabel} value={editName} onChange={(e) => setEditName(e.target.value)} />
         {showRole && (
-          <input type="text" placeholder={t.crewRoleLabel} value={editRole} onChange={(e) => setEditRole(e.target.value)} />
+          <MicInput placeholder={t.crewRoleLabel} value={editRole} onChange={(e) => setEditRole(e.target.value)} />
         )}
         <input type="tel" placeholder={t.crewContactLabel} value={editContactNumber} onChange={(e) => setEditContactNumber(e.target.value)} />
         <div className="photo-input-row">
@@ -2180,9 +2264,9 @@ function CrewSection({ category, heading, members, characterOptions, onAdd, onUp
                   ))}
                 </select>
               )}
-              <input type="text" placeholder={t.crewNameLabel} value={name} onChange={(e) => setName(e.target.value)} />
+              <MicInput placeholder={t.crewNameLabel} value={name} onChange={(e) => setName(e.target.value)} />
               {!characterOptions && (
-                <input type="text" placeholder={t.crewRoleLabel} value={role} onChange={(e) => setRole(e.target.value)} />
+                <MicInput placeholder={t.crewRoleLabel} value={role} onChange={(e) => setRole(e.target.value)} />
               )}
               <input type="tel" placeholder={t.crewContactLabel} value={contactNumber} onChange={(e) => setContactNumber(e.target.value)} />
               <input
@@ -2756,6 +2840,187 @@ function ClapboardFullScreen({ t, BACKEND_URL, conceptId, sceneListId, sceneOpti
   )
 }
 
+const CHANGES_CHAT_TOGGLE_POSITION_STORAGE_KEY = 'filmmaking-app:changesChatTogglePosition'
+
+// Same drag mechanics as FloatingAgentWidget's button above — the pen icon
+// that opens the Changes chat is a floating button you can drag anywhere,
+// not one nailed to a fixed screen corner. Position is a per-viewer
+// localStorage convenience, same as the auto-pipeline widget's.
+function useDraggableTogglePosition(storageKey, defaultPosition) {
+  const [position, setPosition] = useState(() => {
+    try {
+      const saved = localStorage.getItem(storageKey)
+      if (saved) return JSON.parse(saved)
+    } catch {
+      // ignore — fall through to default
+    }
+    return typeof defaultPosition === 'function' ? defaultPosition() : defaultPosition
+  })
+  const [isDragging, setIsDragging] = useState(false)
+  const dragOffset = useRef({ x: 0, y: 0 })
+  const dragStart = useRef({ x: 0, y: 0 })
+  const hasDraggedRef = useRef(false)
+
+  function handlePointerDown(e) {
+    setIsDragging(true)
+    hasDraggedRef.current = false
+    dragStart.current = { x: e.clientX, y: e.clientY }
+    dragOffset.current = { x: e.clientX - position.x, y: e.clientY - position.y }
+  }
+
+  useEffect(() => {
+    if (!isDragging) return undefined
+
+    function handleMove(e) {
+      if (Math.abs(e.clientX - dragStart.current.x) > 5 || Math.abs(e.clientY - dragStart.current.y) > 5) {
+        hasDraggedRef.current = true
+      }
+      setPosition({ x: e.clientX - dragOffset.current.x, y: e.clientY - dragOffset.current.y })
+    }
+    function handleUp() {
+      setIsDragging(false)
+      setPosition((current) => {
+        try {
+          localStorage.setItem(storageKey, JSON.stringify(current))
+        } catch {
+          // per-viewer convenience only — fine if it can't persist
+        }
+        return current
+      })
+    }
+    window.addEventListener('pointermove', handleMove)
+    window.addEventListener('pointerup', handleUp)
+    return () => {
+      window.removeEventListener('pointermove', handleMove)
+      window.removeEventListener('pointerup', handleUp)
+    }
+  }, [isDragging, storageKey])
+
+  return { position, handlePointerDown, hasDraggedRef }
+}
+
+// Web Speech API doesn't auto-detect which language is being spoken — one
+// recognition session must be told a single language up front. So instead
+// of guessing, the person picks English/Hindi/Odia once via the small
+// dropdown next to the mic, and that choice is remembered (localStorage)
+// as their default for next time.
+const DICTATION_BCP47_BY_LANGUAGE = { en: 'en-IN', hi: 'hi-IN', or: 'or-IN' }
+
+// Dictation for any text box — uses the browser's built-in Web Speech API
+// (Chrome and Android's Chromium WebView both ship it, free, no API key,
+// no server round-trip). Renders nothing if the browser doesn't support it
+// (Safari/Firefox), rather than showing a mic that can't work. English and
+// Hindi recognition are both reliable; Odia support varies by device/OS.
+function MicButton({ t, dictationLanguage, onDictationLanguageChange, onResult, className, wrapClassName, title, listeningTitle }) {
+  const [isListening, setIsListening] = useState(false)
+  const recognitionRef = useRef(null)
+
+  const SpeechRecognitionImpl =
+    typeof window !== 'undefined' ? window.SpeechRecognition || window.webkitSpeechRecognition : null
+
+  function handleClick() {
+    if (!SpeechRecognitionImpl) return
+
+    if (isListening) {
+      recognitionRef.current?.stop()
+      return
+    }
+
+    const recognition = new SpeechRecognitionImpl()
+    recognition.lang = DICTATION_BCP47_BY_LANGUAGE[dictationLanguage] ?? 'en-IN'
+    recognition.interimResults = false
+    recognition.maxAlternatives = 1
+    recognition.onresult = (event) => {
+      const transcript = Array.from(event.results)
+        .map((result) => result[0].transcript)
+        .join(' ')
+        .trim()
+      if (transcript) onResult(transcript)
+    }
+    recognition.onend = () => setIsListening(false)
+    recognition.onerror = () => setIsListening(false)
+    recognitionRef.current = recognition
+    recognition.start()
+    setIsListening(true)
+  }
+
+  if (!SpeechRecognitionImpl) return null
+
+  return (
+    <span className={wrapClassName}>
+      <select
+        className="mic-language-select"
+        value={dictationLanguage}
+        onChange={(e) => onDictationLanguageChange(e.target.value)}
+        title={t.micLanguageSelectTitle}
+      >
+        <option value="en">{t.micLanguageEnglish}</option>
+        <option value="hi">{t.micLanguageHindi}</option>
+        <option value="or">{t.micLanguageOdia}</option>
+      </select>
+      <button
+        type="button"
+        className={isListening ? `${className} mic-button-listening` : className}
+        onClick={handleClick}
+        title={isListening ? listeningTitle : title}
+      >
+        {ICONS.mic}
+      </button>
+    </span>
+  )
+}
+
+// Drop-in replacements for a plain <input type="text"> / <textarea> that add
+// a mic button in the corner — same value/onChange contract as the native
+// element (onChange still receives a real change event with .target.value),
+// so swapping one in doesn't require touching whatever the existing
+// onChange handler does. dictationLanguage/onDictationLanguageChange/t are
+// threaded down from the top-level App component via context so every one
+// of these across the whole app shares one remembered language choice.
+function MicInput({ value, onChange, className, wrapClassName, ...rest }) {
+  const { t, dictationLanguage, onDictationLanguageChange } = useDictationContext()
+  return (
+    <span className={wrapClassName ? `mic-field-wrap ${wrapClassName}` : 'mic-field-wrap'}>
+      <input
+        type="text"
+        className={className}
+        value={value}
+        onChange={onChange}
+        {...rest}
+      />
+      <MicButton
+        t={t}
+        dictationLanguage={dictationLanguage}
+        onDictationLanguageChange={onDictationLanguageChange}
+        wrapClassName="mic-field-mic-wrap"
+        className="mic-field-mic"
+        title={t.micButtonTitle}
+        listeningTitle={t.micButtonListeningTitle}
+        onResult={(text) => onChange({ target: { value: value && value.trim() ? `${value.trim()} ${text}` : text } })}
+      />
+    </span>
+  )
+}
+
+function MicTextarea({ value, onChange, className, wrapClassName, ...rest }) {
+  const { t, dictationLanguage, onDictationLanguageChange } = useDictationContext()
+  return (
+    <span className={wrapClassName ? `mic-field-wrap mic-field-wrap-textarea ${wrapClassName}` : 'mic-field-wrap mic-field-wrap-textarea'}>
+      <textarea className={className} value={value} onChange={onChange} {...rest} />
+      <MicButton
+        t={t}
+        dictationLanguage={dictationLanguage}
+        onDictationLanguageChange={onDictationLanguageChange}
+        wrapClassName="mic-field-mic-wrap"
+        className="mic-field-mic"
+        title={t.micButtonTitle}
+        listeningTitle={t.micButtonListeningTitle}
+        onResult={(text) => onChange({ target: { value: value && value.trim() ? `${value.trim()} ${text}` : text } })}
+      />
+    </span>
+  )
+}
+
 // A Messenger-style slide-in panel that replaces the old bare bottom input
 // bar for every "type your changes" flow in the app (breakdown revise,
 // schedule revise, pitch deck revise, etc. — one per barConfig.stageKey).
@@ -2764,8 +3029,12 @@ function ClapboardFullScreen({ t, BACKEND_URL, conceptId, sceneListId, sceneOpti
 // exactly what silently swallowed a real request earlier in this project.
 // History persists per (project, stage) in localStorage so re-opening the
 // panel later still shows what was asked and what happened.
-function ChangesChatPanel({ t, historyKey, barConfig, isBusy, errorMessage, currentUserName }) {
+function ChangesChatPanel({ t, historyKey, barConfig, isBusy, errorMessage, currentUserName, openSignal, clearDraftHistorySignal, dictationLanguage, onDictationLanguageChange }) {
   const [isOpen, setIsOpen] = useState(false)
+  const { position, handlePointerDown, hasDraggedRef } = useDraggableTogglePosition(
+    CHANGES_CHAT_TOGGLE_POSITION_STORAGE_KEY,
+    () => ({ x: window.innerWidth - 80, y: window.innerHeight - 80 })
+  )
   const [historiesByKey, setHistoriesByKey] = useState(() => {
     try {
       return JSON.parse(localStorage.getItem('filmmaking-app:chatHistories') || '{}')
@@ -2775,26 +3044,36 @@ function ChangesChatPanel({ t, historyKey, barConfig, isBusy, errorMessage, curr
   })
   const wasBusyRef = useRef(false)
   const messagesEndRef = useRef(null)
-  const closeTimeoutRef = useRef(null)
 
-  // Hovering the pen opens the panel without a click — closing on leave is
-  // delayed so moving the cursor from the toggle to the panel itself (or
-  // briefly off either edge) doesn't flicker it shut mid-move.
-  function cancelScheduledClose() {
-    if (closeTimeoutRef.current) {
-      clearTimeout(closeTimeoutRef.current)
-      closeTimeoutRef.current = null
-    }
+  function handleToggleClick() {
+    if (hasDraggedRef.current) return
+    setIsOpen((v) => !v)
   }
-  function handleHoverEnter() {
-    cancelScheduledClose()
-    setIsOpen(true)
-  }
-  function handleHoverLeave() {
-    cancelScheduledClose()
-    closeTimeoutRef.current = setTimeout(() => setIsOpen(false), 350)
-  }
-  useEffect(() => () => cancelScheduledClose(), [])
+
+  useEffect(() => {
+    if (openSignal) setIsOpen(true)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [openSignal])
+
+  // A project has no id yet until its first successful generation, so its
+  // chat history is filed under a placeholder "new:<stage>" key. Without
+  // this, starting a fresh idea after abandoning a previous unsaved one
+  // would resurface that previous attempt's messages — they share the same
+  // placeholder. "New Idea" bumps this signal to actually delete that
+  // placeholder bucket, not just hide it.
+  useEffect(() => {
+    if (!clearDraftHistorySignal) return
+    setHistoriesByKey((prev) => {
+      const next = Object.fromEntries(Object.entries(prev).filter(([key]) => !key.startsWith('new:')))
+      try {
+        localStorage.setItem('filmmaking-app:chatHistories', JSON.stringify(next))
+      } catch {
+        // Private-browsing/storage-blocked — fine, nothing to clean up then.
+      }
+      return next
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [clearDraftHistorySignal])
 
   const messages = historiesByKey[historyKey] ?? []
 
@@ -2840,18 +3119,14 @@ function ChangesChatPanel({ t, historyKey, barConfig, isBusy, errorMessage, curr
     <>
       <button
         className="changes-chat-toggle"
-        onClick={() => setIsOpen(!isOpen)}
-        onMouseEnter={handleHoverEnter}
-        onMouseLeave={handleHoverLeave}
+        style={{ left: position.x, top: position.y }}
+        onPointerDown={handlePointerDown}
+        onClick={handleToggleClick}
         title={t.changesChatToggleLabel}
       >
         {ICONS.penNib}
       </button>
-      <div
-        className={isOpen ? 'changes-chat-panel open' : 'changes-chat-panel'}
-        onMouseEnter={handleHoverEnter}
-        onMouseLeave={handleHoverLeave}
-      >
+      <div className={isOpen ? 'changes-chat-panel open' : 'changes-chat-panel'}>
         <div className="changes-chat-header">
           <strong>{t.changesChatHeading}</strong>
           <button className="changes-chat-close" onClick={() => setIsOpen(false)}>
@@ -2877,6 +3152,7 @@ function ChangesChatPanel({ t, historyKey, barConfig, isBusy, errorMessage, curr
               <span className="changes-chat-dot" />
             </div>
           )}
+          <AnalyzingProgressBar active={isBusy} label={t.changesChatWorkingLabel} estimatedSeconds={30} />
           <div ref={messagesEndRef} />
         </div>
         <div className="changes-chat-input-row">
@@ -2894,8 +3170,22 @@ function ChangesChatPanel({ t, historyKey, barConfig, isBusy, errorMessage, curr
             placeholder={barConfig.placeholder}
             disabled={barConfig.disabled}
           />
-          <button className="changes-chat-send" onClick={handleSend} disabled={!barConfig.canSubmit}>
-            {isBusy ? '…' : '↵'}
+          <MicButton
+            t={t}
+            dictationLanguage={dictationLanguage}
+            onDictationLanguageChange={onDictationLanguageChange}
+            wrapClassName="changes-chat-mic-wrap"
+            className="changes-chat-mic"
+            title={t.micButtonTitle}
+            listeningTitle={t.micButtonListeningTitle}
+            onResult={(text) => barConfig.onChange(barConfig.value.trim() ? `${barConfig.value.trim()} ${text}` : text)}
+          />
+          <button
+            className={barConfig.stageKey === 'idea' ? 'changes-chat-send changes-chat-send-labeled' : 'changes-chat-send'}
+            onClick={handleSend}
+            disabled={!barConfig.canSubmit}
+          >
+            {isBusy ? '…' : barConfig.stageKey === 'idea' ? t.generateIdeaButton : '↵'}
           </button>
         </div>
       </div>
@@ -2912,6 +3202,7 @@ function ChangesChatPanel({ t, historyKey, barConfig, isBusy, errorMessage, curr
 // attached right in the input — a handwritten AD note, or a person's photo
 // for a casting decision — instead of a separate upload button elsewhere.
 function AgentChatPanel({ t, BACKEND_URL, conceptId, stageKey, currentUserName, onScheduleUpdated, onCastMemberUpdated, onBreakdownUpdated }) {
+  const { dictationLanguage, onDictationLanguageChange } = useDictationContext()
   const [isOpen, setIsOpen] = useState(false)
   const [messages, setMessages] = useState([])
   const [inputText, setInputText] = useState('')
@@ -2921,25 +3212,17 @@ function AgentChatPanel({ t, BACKEND_URL, conceptId, stageKey, currentUserName, 
   const [error, setError] = useState(null)
   const [isCameraOpen, setIsCameraOpen] = useState(false)
   const messagesEndRef = useRef(null)
-  const closeTimeoutRef = useRef(null)
   const fileInputRef = useRef(null)
   const documentInputRef = useRef(null)
+  const { position, handlePointerDown, hasDraggedRef } = useDraggableTogglePosition(
+    CHANGES_CHAT_TOGGLE_POSITION_STORAGE_KEY,
+    () => ({ x: window.innerWidth - 80, y: window.innerHeight - 80 })
+  )
 
-  function cancelScheduledClose() {
-    if (closeTimeoutRef.current) {
-      clearTimeout(closeTimeoutRef.current)
-      closeTimeoutRef.current = null
-    }
+  function handleToggleClick() {
+    if (hasDraggedRef.current) return
+    setIsOpen((v) => !v)
   }
-  function handleHoverEnter() {
-    cancelScheduledClose()
-    setIsOpen(true)
-  }
-  function handleHoverLeave() {
-    cancelScheduledClose()
-    closeTimeoutRef.current = setTimeout(() => setIsOpen(false), 350)
-  }
-  useEffect(() => () => cancelScheduledClose(), [])
 
   useEffect(() => {
     if (!conceptId) return
@@ -3032,18 +3315,14 @@ function AgentChatPanel({ t, BACKEND_URL, conceptId, stageKey, currentUserName, 
     <>
       <button
         className="changes-chat-toggle"
-        onClick={() => setIsOpen(!isOpen)}
-        onMouseEnter={handleHoverEnter}
-        onMouseLeave={handleHoverLeave}
+        style={{ left: position.x, top: position.y }}
+        onPointerDown={handlePointerDown}
+        onClick={handleToggleClick}
         title={t.changesChatToggleLabel}
       >
         {ICONS.penNib}
       </button>
-      <div
-        className={isOpen ? 'changes-chat-panel open' : 'changes-chat-panel'}
-        onMouseEnter={handleHoverEnter}
-        onMouseLeave={handleHoverLeave}
-      >
+      <div className={isOpen ? 'changes-chat-panel open' : 'changes-chat-panel'}>
         <div className="changes-chat-header">
           <strong>{t.changesChatHeading}</strong>
           <button className="changes-chat-close" onClick={() => setIsOpen(false)}>
@@ -3231,6 +3510,16 @@ function AgentChatPanel({ t, BACKEND_URL, conceptId, stageKey, currentUserName, 
             }}
             placeholder={attachedFiles.length > 0 ? t.describeAttachmentPlaceholder : t.agentChatInputPlaceholder}
             disabled={isSending}
+          />
+          <MicButton
+            t={t}
+            dictationLanguage={dictationLanguage}
+            onDictationLanguageChange={onDictationLanguageChange}
+            wrapClassName="changes-chat-mic-wrap"
+            className="changes-chat-mic"
+            title={t.micButtonTitle}
+            listeningTitle={t.micButtonListeningTitle}
+            onResult={(text) => setInputText((prev) => (prev.trim() ? `${prev.trim()} ${text}` : text))}
           />
           <button className="changes-chat-send" onClick={handleSend} disabled={isSending || (!inputText.trim() && attachedFiles.length === 0)}>
             {isSending ? '…' : '↵'}
@@ -3554,8 +3843,7 @@ function InlineCastAttachment({
       )}
       {canEdit && (
         <form className="crew-add-form inline-cast-form" onSubmit={handleSubmit}>
-          <input
-            type="text"
+          <MicInput
             placeholder={category === 'artist' ? t.castingActorNamePlaceholder : t.locationConfirmedNamePlaceholder}
             value={name}
             onChange={(e) => setName(e.target.value)}
@@ -3602,8 +3890,7 @@ function InlineCastAttachment({
 
       {isPickerOpen && (
         <div className="contact-picker">
-          <input
-            type="text"
+          <MicInput
             className="contact-picker-search"
             placeholder={t.searchContactsPlaceholder}
             value={searchTerm}
@@ -3863,6 +4150,24 @@ function App() {
   // because a schedule also happens to exist. Null until the AD actually
   // clicks one of those two nav items this session.
   const [chatFocusStage, setChatFocusStage] = useState(null)
+  const [openChangesChatSignal, setOpenChangesChatSignal] = useState(0)
+  const [clearDraftHistorySignal, setClearDraftHistorySignal] = useState(0)
+  const [dictationLanguage, setDictationLanguage] = useState(() => {
+    try {
+      return localStorage.getItem('filmmaking-app:dictationLanguage') || 'en'
+    } catch {
+      return 'en'
+    }
+  })
+
+  function handleDictationLanguageChange(nextLanguage) {
+    setDictationLanguage(nextLanguage)
+    try {
+      localStorage.setItem('filmmaking-app:dictationLanguage', nextLanguage)
+    } catch {
+      // per-viewer convenience only
+    }
+  }
   const [projectType, setProjectType] = useState('story')
   const [masterProjectList, setMasterProjectList] = useState([])
   const [isLoadingMasterList, setIsLoadingMasterList] = useState(false)
@@ -4344,7 +4649,7 @@ function App() {
     setIsAddingCrew(false)
   }
 
-  function handleNewIdeaClick() {
+  function handleNewIdeaClick(forAgent = activeAgent) {
     localStorage.removeItem(CURRENT_CONCEPT_STORAGE_KEY)
     setConcept('')
     setConceptId(null)
@@ -4387,8 +4692,17 @@ function App() {
     setLocationAvailability({})
     setScheduleStartDate(defaultTentativeStartDate())
     setScheduleTargetDays(10)
-    setProjectType(activeAgent)
+    setProjectType(forAgent)
     setImportScreenplayText('')
+    setStartStage('idea')
+    setClearDraftHistorySignal((n) => n + 1)
+  }
+
+  function handleGoHomeClick() {
+    if (isScopedToOneProject) return
+    setActiveAgent('story')
+    handleNewIdeaClick('story')
+    setIsSidebarOpen(false)
   }
 
   async function handleRenameProjectClick() {
@@ -5555,6 +5869,8 @@ function App() {
           </div>
         </div>
 
+        <AnalyzingProgressBar active={isReanalyzing} label={t.reanalyzingLabel} estimatedSeconds={20} />
+
         {!isEditing && isCategoryExpanded && items.length > 1 && (
           <button
             className="breakdown-action-button breakdown-expand-all-button"
@@ -5703,14 +6019,17 @@ function App() {
                         if (!rec) {
                           return (
                             canEditProduction && (
-                              <button
-                                className="breakdown-action-button costume-recommendation-trigger"
-                                onClick={() => handleGenerateCostumeRecommendationClick(item.character)}
-                                disabled={isGeneratingThis || !scriptBreakdown.adSheet?.length}
-                                title={!scriptBreakdown.adSheet?.length ? t.costumeRecommendationsNeedsAdSheetHint : undefined}
-                              >
-                                {isGeneratingThis ? t.generatingCostumeRecommendationsLabel : t.generateCostumeRecommendationsButton}
-                              </button>
+                              <>
+                                <button
+                                  className="breakdown-action-button costume-recommendation-trigger"
+                                  onClick={() => handleGenerateCostumeRecommendationClick(item.character)}
+                                  disabled={isGeneratingThis || !scriptBreakdown.adSheet?.length}
+                                  title={!scriptBreakdown.adSheet?.length ? t.costumeRecommendationsNeedsAdSheetHint : undefined}
+                                >
+                                  {isGeneratingThis ? t.generatingCostumeRecommendationsLabel : t.generateCostumeRecommendationsButton}
+                                </button>
+                                <AnalyzingProgressBar active={isGeneratingThis} label={t.generatingCostumeRecommendationsLabel} estimatedSeconds={20} />
+                              </>
                             )
                           )
                         }
@@ -5738,8 +6057,7 @@ function App() {
                               <div className="costume-set-edit-list">
                                 {costumeSetsDraft.map((row, i) => (
                                   <div className="costume-set-edit-row" key={i}>
-                                    <input
-                                      type="text"
+                                    <MicInput
                                       placeholder={t.costumeSetCategoryPlaceholder}
                                       value={row.category}
                                       onChange={(e) => handleCostumeSetDraftFieldChange(i, 'category', e.target.value)}
@@ -5751,8 +6069,7 @@ function App() {
                                       value={row.quantity}
                                       onChange={(e) => handleCostumeSetDraftFieldChange(i, 'quantity', e.target.value)}
                                     />
-                                    <input
-                                      type="text"
+                                    <MicInput
                                       placeholder={t.costumeSetReasonPlaceholder}
                                       value={row.reasonEn}
                                       onChange={(e) => handleCostumeSetDraftFieldChange(i, 'reasonEn', e.target.value)}
@@ -5820,8 +6137,7 @@ function App() {
 
         {!isEditing && isCategoryExpanded && category === 'artistList' && canEditProduction && (
           <div className="add-missing-character-form">
-            <input
-              type="text"
+            <MicInput
               placeholder={t.missingCharacterNamePlaceholder}
               value={newCastCharacterName}
               onChange={(e) => setNewCastCharacterName(e.target.value)}
@@ -5853,6 +6169,8 @@ function App() {
                 {isClassifyingCastCategories ? t.classifyingCastCategoriesLabel : t.classifyCastCategoriesButton}
               </button>
             )}
+            <AnalyzingProgressBar active={isFindingMissingCharacters} label={t.findingMissingCharactersLabel} estimatedSeconds={25} />
+            <AnalyzingProgressBar active={isClassifyingCastCategories} label={t.classifyingCastCategoriesLabel} estimatedSeconds={20} />
           </div>
         )}
 
@@ -5871,8 +6189,7 @@ function App() {
                 {category === 'locationList' ? (
                   <>
                     <div className="breakdown-edit-field-pair">
-                      <input
-                        type="text"
+                      <MicInput
                         placeholder="Location (EN)"
                         value={item.location.en}
                         onChange={(e) =>
@@ -5882,8 +6199,7 @@ function App() {
                           }))
                         }
                       />
-                      <input
-                        type="text"
+                      <MicInput
                         placeholder="ସ୍ଥାନ (OR)"
                         value={item.location.or}
                         onChange={(e) =>
@@ -5893,8 +6209,7 @@ function App() {
                           }))
                         }
                       />
-                      <input
-                        type="text"
+                      <MicInput
                         placeholder="स्थान (HI)"
                         value={item.location.hi}
                         onChange={(e) =>
@@ -5929,7 +6244,7 @@ function App() {
                       />
                     </div>
                     <div className="breakdown-edit-field-pair">
-                      <textarea
+                      <MicTextarea
                         placeholder="Notes (EN)"
                         value={item.notes.en}
                         onChange={(e) =>
@@ -5939,7 +6254,7 @@ function App() {
                           }))
                         }
                       />
-                      <textarea
+                      <MicTextarea
                         placeholder="ମନ୍ତବ୍ୟ (OR)"
                         value={item.notes.or}
                         onChange={(e) =>
@@ -5949,7 +6264,7 @@ function App() {
                           }))
                         }
                       />
-                      <textarea
+                      <MicTextarea
                         placeholder="टिप्पणी (HI)"
                         value={item.notes.hi}
                         onChange={(e) =>
@@ -5963,8 +6278,7 @@ function App() {
                   </>
                 ) : category === 'costumes' ? (
                   <>
-                    <input
-                      type="text"
+                    <MicInput
                       placeholder="Character"
                       value={item.character}
                       onChange={(e) =>
@@ -5972,7 +6286,7 @@ function App() {
                       }
                     />
                     <div className="breakdown-edit-field-pair">
-                      <textarea
+                      <MicTextarea
                         placeholder="Description (EN)"
                         value={item.description.en}
                         onChange={(e) =>
@@ -5982,7 +6296,7 @@ function App() {
                           }))
                         }
                       />
-                      <textarea
+                      <MicTextarea
                         placeholder="ବିବରଣୀ (OR)"
                         value={item.description.or}
                         onChange={(e) =>
@@ -5992,7 +6306,7 @@ function App() {
                           }))
                         }
                       />
-                      <textarea
+                      <MicTextarea
                         placeholder="विवरण (HI)"
                         value={item.description.hi}
                         onChange={(e) =>
@@ -6006,8 +6320,7 @@ function App() {
                   </>
                 ) : category === 'artistList' ? (
                   <>
-                    <input
-                      type="text"
+                    <MicInput
                       placeholder="Label"
                       value={item.label}
                       onChange={(e) =>
@@ -6015,8 +6328,7 @@ function App() {
                       }
                     />
                     <div className="breakdown-edit-field-pair">
-                      <input
-                        type="text"
+                      <MicInput
                         placeholder={t.ageLabel}
                         value={item.age || ''}
                         onChange={(e) =>
@@ -6035,7 +6347,7 @@ function App() {
                       </select>
                     </div>
                     <div className="breakdown-edit-field-pair">
-                      <textarea
+                      <MicTextarea
                         placeholder="Notes (EN)"
                         value={item.notes.en}
                         onChange={(e) =>
@@ -6045,7 +6357,7 @@ function App() {
                           }))
                         }
                       />
-                      <textarea
+                      <MicTextarea
                         placeholder="ମନ୍ତବ୍ୟ (OR)"
                         value={item.notes.or}
                         onChange={(e) =>
@@ -6055,7 +6367,7 @@ function App() {
                           }))
                         }
                       />
-                      <textarea
+                      <MicTextarea
                         placeholder="टिप्पणी (HI)"
                         value={item.notes.hi}
                         onChange={(e) =>
@@ -6069,8 +6381,7 @@ function App() {
                   </>
                 ) : (
                   <>
-                    <input
-                      type="text"
+                    <MicInput
                       placeholder="Label"
                       value={item.label}
                       onChange={(e) =>
@@ -6078,7 +6389,7 @@ function App() {
                       }
                     />
                     <div className="breakdown-edit-field-pair">
-                      <textarea
+                      <MicTextarea
                         placeholder="Notes (EN)"
                         value={item.notes.en}
                         onChange={(e) =>
@@ -6088,7 +6399,7 @@ function App() {
                           }))
                         }
                       />
-                      <textarea
+                      <MicTextarea
                         placeholder="ମନ୍ତବ୍ୟ (OR)"
                         value={item.notes.or}
                         onChange={(e) =>
@@ -6098,7 +6409,7 @@ function App() {
                           }))
                         }
                       />
-                      <textarea
+                      <MicTextarea
                         placeholder="टिप्पणी (HI)"
                         value={item.notes.hi}
                         onChange={(e) =>
@@ -6571,6 +6882,10 @@ function App() {
     setIsSidebarOpen(false)
     if (anchorId === 'stage-breakdown') setChatFocusStage('breakdown')
     if (anchorId === 'stage-schedule') setChatFocusStage('schedule')
+    // Clicking "Idea" before anything's been generated yet pops the Changes
+    // box open directly, instead of making the user find the pen icon —
+    // it's the box you type your idea into.
+    if (anchorId === 'stage-idea' && !storylines?.length) setOpenChangesChatSignal((n) => n + 1)
     document.getElementById(anchorId)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
   }
 
@@ -6808,6 +7123,7 @@ function App() {
   }
 
   return (
+    <DictationContext.Provider value={{ t, dictationLanguage, onDictationLanguageChange: handleDictationLanguageChange }}>
     <div className="app-shell">
       <FloatingAgentWidget currentUser={currentUser} t={t} onRunCompleted={() => loadProjectList()} />
       <div className="mobile-topbar">
@@ -6821,24 +7137,31 @@ function App() {
 
       <aside className={`sidebar ${isSidebarOpen ? 'sidebar-open' : ''}`}>
         <div className="sidebar-header">
-          <span className="sidebar-logo">{ICONS.clapperboard}</span>
-          <span className="sidebar-title">
-            {conceptId ? (
-              (() => {
-                const { main, sub } = splitProjectTitleForSidebar(sidebarProjectLabel)
-                return sub ? (
-                  <>
-                    <span className="sidebar-title-main">{main}</span>
-                    <span className="sidebar-title-sub">{sub}</span>
-                  </>
-                ) : (
-                  main
-                )
-              })()
-            ) : (
-              t.heading
-            )}
-          </span>
+          <button
+            className="sidebar-home-button"
+            onClick={handleGoHomeClick}
+            disabled={isScopedToOneProject}
+            aria-label={t.heading}
+          >
+            <span className="sidebar-logo">{ICONS.clapperboard}</span>
+            <span className="sidebar-title">
+              {conceptId ? (
+                (() => {
+                  const { main, sub } = splitProjectTitleForSidebar(sidebarProjectLabel)
+                  return sub ? (
+                    <>
+                      <span className="sidebar-title-main">{main}</span>
+                      <span className="sidebar-title-sub">{sub}</span>
+                    </>
+                  ) : (
+                    main
+                  )
+                })()
+              ) : (
+                t.heading
+              )}
+            </span>
+          </button>
           <button className="sidebar-close-button" onClick={() => setIsSidebarOpen(false)} aria-label={t.closeMenuLabel}>
             ✕
           </button>
@@ -6870,7 +7193,7 @@ function App() {
                   </div>
                 ))}
                 <form className="crew-add-form" onSubmit={handleCreateUserSubmit}>
-                  <input type="text" placeholder={t.crewNameLabel} value={newUserName} onChange={(e) => setNewUserName(e.target.value)} />
+                  <MicInput placeholder={t.crewNameLabel} value={newUserName} onChange={(e) => setNewUserName(e.target.value)} />
                   <input type="text" placeholder={t.usernameLabel} value={newUserUsername} onChange={(e) => setNewUserUsername(e.target.value)} />
                   <input type="password" placeholder={t.passwordLabel} value={newUserPassword} onChange={(e) => setNewUserPassword(e.target.value)} />
                   <select value={newUserRole} onChange={(e) => setNewUserRole(e.target.value)}>
@@ -7312,20 +7635,62 @@ function App() {
             ))}
           </div>
 
-          {startStage !== 'idea' && (
+          {startStage === 'idea' ? (
             <div className="skip-ahead-form">
-              <textarea
-                className="skip-ahead-textarea"
-                value={skipPastedText}
-                onChange={(e) => setSkipPastedText(e.target.value)}
-                placeholder={
-                  startStage === 'synopsis'
-                    ? t.skipPastePlaceholderSynopsis
-                    : startStage === 'bitsheet'
-                      ? t.skipPastePlaceholderBitSheet
-                      : t.skipPastePlaceholderSceneList
-                }
-              />
+              <div className="skip-ahead-textarea-wrap">
+                <textarea
+                  className="skip-ahead-textarea"
+                  value={concept}
+                  onChange={(e) => setConcept(e.target.value)}
+                  placeholder={t.skipPastePlaceholderIdea}
+                />
+                <MicButton
+                  t={t}
+                  dictationLanguage={dictationLanguage}
+                  onDictationLanguageChange={handleDictationLanguageChange}
+                  wrapClassName="skip-ahead-mic-wrap"
+                  className="skip-ahead-mic"
+                  title={t.micButtonTitle}
+                  listeningTitle={t.micButtonListeningTitle}
+                  onResult={(text) => setConcept((prev) => (prev.trim() ? `${prev.trim()} ${text}` : text))}
+                />
+              </div>
+              <div className="skip-ahead-controls">
+                <button
+                  className="choose-button"
+                  onClick={handleGenerateClick}
+                  disabled={isLoading || !concept.trim()}
+                >
+                  {isLoading ? t.skipContinueButtonLoading : t.generateIdeaButton}
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="skip-ahead-form">
+              <div className="skip-ahead-textarea-wrap">
+                <textarea
+                  className="skip-ahead-textarea"
+                  value={skipPastedText}
+                  onChange={(e) => setSkipPastedText(e.target.value)}
+                  placeholder={
+                    startStage === 'synopsis'
+                      ? t.skipPastePlaceholderSynopsis
+                      : startStage === 'bitsheet'
+                        ? t.skipPastePlaceholderBitSheet
+                        : t.skipPastePlaceholderSceneList
+                  }
+                />
+                <MicButton
+                  t={t}
+                  dictationLanguage={dictationLanguage}
+                  onDictationLanguageChange={handleDictationLanguageChange}
+                  wrapClassName="skip-ahead-mic-wrap"
+                  className="skip-ahead-mic"
+                  title={t.micButtonTitle}
+                  listeningTitle={t.micButtonListeningTitle}
+                  onResult={(text) => setSkipPastedText((prev) => (prev.trim() ? `${prev.trim()} ${text}` : text))}
+                />
+              </div>
               <div className="skip-ahead-controls">
                 <label className="skip-ahead-runtime-label">
                   {t.skipRuntimeLabel}
@@ -7392,6 +7757,7 @@ function App() {
       {isGeneratingPitchDeck && (
         <div className="ai-bubble">
           <p>{t.buildingPitchDeck}</p>
+          <AnalyzingProgressBar active={isGeneratingPitchDeck} label={t.buildingPitchDeck} estimatedSeconds={30} />
         </div>
       )}
       </>
@@ -7495,7 +7861,7 @@ function App() {
 
                 {showFeedbackForm && (
                   <div className="feedback-form">
-                    <textarea
+                    <MicTextarea
                       className="feedback-textarea"
                       value={feedbackText}
                       onChange={(e) => setFeedbackText(e.target.value)}
@@ -7541,6 +7907,7 @@ function App() {
           {isGeneratingCharacterSheet ? t.generatingCharacterSheetLabel : t.generateCharacterSheetButton}
         </button>
       )}
+      <AnalyzingProgressBar active={isGeneratingCharacterSheet} label={t.generatingCharacterSheetLabel} estimatedSeconds={30} />
 
       {characterSheet && (
         <div className="three-act-structure" id="stage-characters">
@@ -7605,7 +7972,7 @@ function App() {
 
                 {showCharacterSheetFeedbackForm && (
                   <div className="feedback-form">
-                    <textarea
+                    <MicTextarea
                       className="feedback-textarea"
                       value={characterSheetFeedbackText}
                       onChange={(e) => setCharacterSheetFeedbackText(e.target.value)}
@@ -7635,6 +8002,7 @@ function App() {
           {isGeneratingStructure ? t.generatingThreeAct : t.generateThreeAct}
         </button>
       )}
+      <AnalyzingProgressBar active={isGeneratingStructure} label={t.generatingThreeAct} estimatedSeconds={30} />
 
       {threeActStructure && (
         <div className="three-act-structure">
@@ -7684,7 +8052,7 @@ function App() {
 
                 {showStructureFeedbackForm && (
                   <div className="feedback-form">
-                    <textarea
+                    <MicTextarea
                       className="feedback-textarea"
                       value={structureFeedbackText}
                       onChange={(e) => setStructureFeedbackText(e.target.value)}
@@ -7763,6 +8131,7 @@ function App() {
           {isGeneratingBitSheet ? t.generatingBitSheet : t.generateBitSheet}
         </button>
       )}
+      <AnalyzingProgressBar active={isGeneratingBitSheet} label={t.generatingBitSheet} estimatedSeconds={35} />
 
       {bitSheet && (
         <div className="three-act-structure" id="stage-bitsheet">
@@ -7799,7 +8168,7 @@ function App() {
 
                 {showBitSheetFeedbackForm && (
                   <div className="feedback-form">
-                    <textarea
+                    <MicTextarea
                       className="feedback-textarea"
                       value={bitSheetFeedbackText}
                       onChange={(e) => setBitSheetFeedbackText(e.target.value)}
@@ -7829,6 +8198,7 @@ function App() {
           {isGeneratingSceneList ? t.generatingSceneList : t.generateSceneList}
         </button>
       )}
+      <AnalyzingProgressBar active={isGeneratingSceneList} label={t.generatingSceneList} estimatedSeconds={35} />
 
       {sceneList && projectType === 'story' && (
         <div className="three-act-structure" id="stage-screenplay">
@@ -7898,7 +8268,7 @@ function App() {
 
                 {showSceneListFeedbackForm && (
                   <div className="feedback-form">
-                    <textarea
+                    <MicTextarea
                       className="feedback-textarea"
                       value={sceneListFeedbackText}
                       onChange={(e) => setSceneListFeedbackText(e.target.value)}
@@ -8016,7 +8386,7 @@ function App() {
               <p className="screenplay-file-formats-note">{t.screenplayFileFormatsNote}</p>
 
               <p className="availability-form-intro">{t.importScreenplayOrPaste}</p>
-              <textarea
+              <MicTextarea
                 className="skip-ahead-textarea"
                 value={importScreenplayText}
                 onChange={(e) => setImportScreenplayText(e.target.value)}
@@ -8031,6 +8401,7 @@ function App() {
                   {isImportingScreenplay ? t.importingScreenplayLabel : t.importScreenplayButton}
                 </button>
               </div>
+              <AnalyzingProgressBar active={isImportingScreenplay || isImportingScreenplayFile} label={t.importingScreenplayLabel} estimatedSeconds={40} />
             </div>
           )}
 
@@ -8107,7 +8478,7 @@ function App() {
                   />
                   <p className="screenplay-file-formats-note">{t.screenplayFileFormatsNote}</p>
                   <p className="availability-form-intro">{t.importScreenplayOrPaste}</p>
-                  <textarea
+                  <MicTextarea
                     className="skip-ahead-textarea"
                     value={reimportScreenplayText}
                     onChange={(e) => setReimportScreenplayText(e.target.value)}
@@ -8129,6 +8500,7 @@ function App() {
                       {t.cancelEditButton}
                     </button>
                   </div>
+                  <AnalyzingProgressBar active={isReimportingScreenplay} label={t.reimportingScreenplayLabel} estimatedSeconds={40} />
                 </div>
               )}
 
@@ -8168,13 +8540,16 @@ function App() {
           <h2>{t.scriptBreakdownHeading}</h2>
 
           {!scriptBreakdown && (
-            <button
-              className="choose-button generate-structure-button"
-              onClick={handleGenerateBreakdownClick}
-              disabled={isGeneratingBreakdown}
-            >
-              {isGeneratingBreakdown ? t.generatingBreakdownLabel : t.generateBreakdownButton}
-            </button>
+            <>
+              <button
+                className="choose-button generate-structure-button"
+                onClick={handleGenerateBreakdownClick}
+                disabled={isGeneratingBreakdown}
+              >
+                {isGeneratingBreakdown ? t.generatingBreakdownLabel : t.generateBreakdownButton}
+              </button>
+              <AnalyzingProgressBar active={isGeneratingBreakdown} label={t.generatingBreakdownLabel} estimatedSeconds={45} />
+            </>
           )}
 
           {scriptBreakdown && (
@@ -8189,6 +8564,7 @@ function App() {
                     {isGeneratingAdSheet ? t.generatingAdSheetLabel : t.generateAdSheetButton}
                   </button>
                 )}
+                <AnalyzingProgressBar active={isGeneratingAdSheet} label={t.generatingAdSheetLabel} estimatedSeconds={30} />
                 {scriptBreakdown.adSheet && (
                   <DownloadChoiceButton
                     t={t}
@@ -8247,7 +8623,7 @@ function App() {
 
                       {showBreakdownFeedbackForm && (
                         <div className="feedback-form">
-                          <textarea
+                          <MicTextarea
                             className="feedback-textarea"
                             value={breakdownFeedbackText}
                             onChange={(e) => setBreakdownFeedbackText(e.target.value)}
@@ -8394,7 +8770,7 @@ function App() {
 
               <label className="schedule-setup-field schedule-setup-field-wide">
                 {t.scheduleSpecialInstructionsLabel}
-                <textarea
+                <MicTextarea
                   className="skip-ahead-textarea"
                   value={scheduleSpecialInstructions}
                   onChange={(e) => setScheduleSpecialInstructions(e.target.value)}
@@ -8410,8 +8786,7 @@ function App() {
                 return (
                   <div key={characterName} className="availability-row">
                     <span className="availability-row-name">{characterName}</span>
-                    <input
-                      type="text"
+                    <MicInput
                       className="availability-dates-input"
                       value={entry.availableDates}
                       disabled={entry.unknown}
@@ -8446,8 +8821,7 @@ function App() {
                 return (
                   <div key={location.en} className="availability-row">
                     <span className="availability-row-name">{location[language]}</span>
-                    <input
-                      type="text"
+                    <MicInput
                       className="availability-dates-input"
                       value={entry.availableDates}
                       disabled={entry.unknown}
@@ -8483,6 +8857,7 @@ function App() {
               >
                 {isGeneratingSchedule ? t.generatingScheduleLabel : t.generateScheduleButton}
               </button>
+              <AnalyzingProgressBar active={isGeneratingSchedule} label={t.generatingScheduleLabel} estimatedSeconds={35} />
             </div>
           )}
 
@@ -8645,20 +9020,17 @@ function App() {
                                         )}
                                         {isEditingScene && (
                                           <div className="scene-edit-form">
-                                            <input
-                                              type="text"
+                                            <MicInput
                                               placeholder={t.costumeLabel}
                                               value={editSceneCostume}
                                               onChange={(e) => setEditSceneCostume(e.target.value)}
                                             />
-                                            <input
-                                              type="text"
+                                            <MicInput
                                               placeholder={t.propertiesLabel}
                                               value={editSceneProperties}
                                               onChange={(e) => setEditSceneProperties(e.target.value)}
                                             />
-                                            <input
-                                              type="text"
+                                            <MicInput
                                               placeholder={t.adRemarkLabel}
                                               value={editSceneAdRemark}
                                               onChange={(e) => setEditSceneAdRemark(e.target.value)}
@@ -8699,7 +9071,7 @@ function App() {
                           markingShotDayNumber === day.dayNumber ? (
                             <div className="skip-ahead-controls schedule-mark-shot-controls">
                               <p className="availability-form-intro">{t.dayCompletionReportIntro}</p>
-                              <textarea
+                              <MicTextarea
                                 className="skip-ahead-textarea"
                                 value={dayCompletionReportText}
                                 onChange={(e) => setDayCompletionReportText(e.target.value)}
@@ -8714,6 +9086,7 @@ function App() {
                                   {isParsingDayCompletion ? t.parsingDayCompletionLabel : t.interpretReportButton}
                                 </button>
                               </div>
+                              <AnalyzingProgressBar active={isParsingDayCompletion} label={t.parsingDayCompletionLabel} estimatedSeconds={15} />
 
                               {dayCompletionParseResult && (
                                 <div className="reimport-changes-summary">
@@ -8725,7 +9098,7 @@ function App() {
                               )}
 
                               <p className="availability-form-intro">{t.extraScenesReportIntro}</p>
-                              <textarea
+                              <MicTextarea
                                 className="skip-ahead-textarea"
                                 value={extraSceneReportText}
                                 onChange={(e) => setExtraSceneReportText(e.target.value)}
@@ -8756,7 +9129,7 @@ function App() {
                                 </div>
                               )}
 
-                              <textarea
+                              <MicTextarea
                                 className="skip-ahead-textarea"
                                 value={shotCompletionNote}
                                 onChange={(e) => setShotCompletionNote(e.target.value)}
@@ -8865,7 +9238,7 @@ function App() {
 
                       {showScheduleFeedbackForm && (
                         <div className="feedback-form">
-                          <textarea
+                          <MicTextarea
                             className="feedback-textarea"
                             value={scheduleFeedbackText}
                             onChange={(e) => setScheduleFeedbackText(e.target.value)}
@@ -8927,6 +9300,10 @@ function App() {
               isBusy={isBarBusy}
               errorMessage={errorMessage}
               currentUserName={currentUser?.name}
+              openSignal={openChangesChatSignal}
+              clearDraftHistorySignal={clearDraftHistorySignal}
+              dictationLanguage={dictationLanguage}
+              onDictationLanguageChange={handleDictationLanguageChange}
             />
           )}
         </aside>
@@ -8958,6 +9335,7 @@ function App() {
         />
       )}
     </div>
+    </DictationContext.Provider>
   )
 }
 

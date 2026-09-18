@@ -9,6 +9,49 @@ function useDictationContext() {
   return useContext(DictationContext)
 }
 
+// Ticks up once a second for as long as `active` is true, resetting to 0
+// whenever it goes false. Used to show a live elapsed-time count next to a
+// long-running AI call so it's visibly still working, not stuck.
+function useElapsedSeconds(active) {
+  const [seconds, setSeconds] = useState(0)
+  const startRef = useRef(null)
+
+  useEffect(() => {
+    if (!active) {
+      setSeconds(0)
+      startRef.current = null
+      return undefined
+    }
+    startRef.current = Date.now()
+    setSeconds(0)
+    const id = setInterval(() => setSeconds(Math.floor((Date.now() - startRef.current) / 1000)), 1000)
+    return () => clearInterval(id)
+  }, [active])
+
+  return seconds
+}
+
+// A real percentage isn't available here — script analysis/re-analysis is
+// one blocking AI call with no staged backend progress to poll (unlike the
+// auto-pipeline widget's multi-stage run). So this is an honest
+// indeterminate bar (constant motion, no fake percentage) plus a live
+// elapsed-time count, instead of a static "Analyzing..." label with no
+// other sign of life.
+function AnalyzingProgressBar({ active, label }) {
+  const seconds = useElapsedSeconds(active)
+  if (!active) return null
+  return (
+    <div className="inline-progress">
+      <div className="inline-progress-track">
+        <div className="inline-progress-fill" />
+      </div>
+      <p className="inline-progress-label">
+        {label} · {seconds}s
+      </p>
+    </div>
+  )
+}
+
 // Env-driven so the same build works against localhost in dev and the
 // deployed Render backend in production (set VITE_BACKEND_URL at build time).
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:4000'
@@ -5810,6 +5853,8 @@ function App() {
           </div>
         </div>
 
+        <AnalyzingProgressBar active={isReanalyzing} label={t.reanalyzingLabel} />
+
         {!isEditing && isCategoryExpanded && items.length > 1 && (
           <button
             className="breakdown-action-button breakdown-expand-all-button"
@@ -8462,13 +8507,16 @@ function App() {
           <h2>{t.scriptBreakdownHeading}</h2>
 
           {!scriptBreakdown && (
-            <button
-              className="choose-button generate-structure-button"
-              onClick={handleGenerateBreakdownClick}
-              disabled={isGeneratingBreakdown}
-            >
-              {isGeneratingBreakdown ? t.generatingBreakdownLabel : t.generateBreakdownButton}
-            </button>
+            <>
+              <button
+                className="choose-button generate-structure-button"
+                onClick={handleGenerateBreakdownClick}
+                disabled={isGeneratingBreakdown}
+              >
+                {isGeneratingBreakdown ? t.generatingBreakdownLabel : t.generateBreakdownButton}
+              </button>
+              <AnalyzingProgressBar active={isGeneratingBreakdown} label={t.generatingBreakdownLabel} />
+            </>
           )}
 
           {scriptBreakdown && (

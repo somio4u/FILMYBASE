@@ -1131,6 +1131,37 @@ app.get("/api/health", (req, res) => {
   res.json({ status: "ok", message: "Backend is alive" });
 });
 
+// A quick, isolated way to check the Gemini/Vertex AI connection itself —
+// one tiny short-story request, nothing else in the pipeline (no scene
+// list, no background job, no polling) — so a slow or failing response
+// here points straight at the API/billing setup, not at any app logic.
+// Open this URL directly in a browser while logged into the app (it needs
+// the same admin session cookie the app itself uses).
+app.get("/api/test-gemini", requireRole("admin"), async (req, res) => {
+  const startedAt = Date.now();
+  try {
+    const response = await generateContentWithRetry({
+      model: GEMINI_MODEL_NAME,
+      contents: "Write a very short story (3-4 sentences) about a fisherman on the Odisha coast who finds something unexpected in his net.",
+    });
+    res.json({
+      ok: true,
+      backend: googleServiceAccount ? "vertex-ai" : "ai-studio-free-tier",
+      model: GEMINI_MODEL_NAME,
+      elapsedMs: Date.now() - startedAt,
+      story: response.text,
+    });
+  } catch (error) {
+    res.status(502).json({
+      ok: false,
+      backend: googleServiceAccount ? "vertex-ai" : "ai-studio-free-tier",
+      model: GEMINI_MODEL_NAME,
+      elapsedMs: Date.now() - startedAt,
+      error: error.message,
+    });
+  }
+});
+
 async function generateStorylinesContent(concept, format) {
   const formatInstruction =
     format?.type === "vertical"

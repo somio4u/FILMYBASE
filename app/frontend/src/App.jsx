@@ -328,6 +328,10 @@ const LABELS = {
     castTierSidekickLabel: 'Sidekicks',
     castTierExtraLabel: 'Extras / Junior Artists',
     castTierNonSpeakingLabel: 'Non-Speaking Characters',
+    classifyEpisodeNumbersButton: 'Tag Episode Numbers',
+    classifyingEpisodeNumbersLabel: 'Tagging episodes...',
+    classifyEpisodeNumbersHint: 'Scans the full script and notes which episode(s) every character, location, prop, costume, and art-department item appears in.',
+    episodeNumbersPrefix: 'Ep',
     juniorArtistCoordinatorHeading: 'Junior Artist Coordinator',
     juniorArtistCoordinatorHint: 'Add ONE coordinator here to mark every Extra/Junior character below as cast — no need to cast each one individually.',
     approveButton: 'Approve',
@@ -830,6 +834,10 @@ const LABELS = {
     castTierSidekickLabel: 'ସାଇଡ୍‌କିକ୍ (Sidekick)',
     castTierExtraLabel: 'ଏକ୍ସଟ୍ରା / ଜୁନିଅର୍ ଆର୍ଟିଷ୍ଟ',
     castTierNonSpeakingLabel: 'ନନ୍-ସ୍ପିକିଙ୍ଗ୍ ଚରିତ୍ର',
+    classifyEpisodeNumbersButton: 'ଏପିସୋଡ୍ ନମ୍ବର ଟ୍ୟାଗ୍ କରନ୍ତୁ',
+    classifyingEpisodeNumbersLabel: 'ଏପିସୋଡ୍ ଟ୍ୟାଗ୍ ହେଉଛି...',
+    classifyEpisodeNumbersHint: 'ସମ୍ପୂର୍ଣ୍ଣ ସ୍କ୍ରିପ୍ଟ ସ୍କାନ୍ କରି ପ୍ରତ୍ୟେକ ଚରିତ୍ର, ଲୋକେସନ୍, ପ୍ରପ୍, ପୋଷାକ ଏବଂ କଳା ବିଭାଗ ବିଷୟ କେଉଁ ଏପିସୋଡ୍(ଗୁଡ଼ିକ)ରେ ଆସୁଛି ତାହା ଚିହ୍ନଟ କରେ।',
+    episodeNumbersPrefix: 'Ep',
     juniorArtistCoordinatorHeading: 'ଜୁନିଅର୍ ଆର୍ଟିଷ୍ଟ କୋଅର୍ଡିନେଟର୍',
     juniorArtistCoordinatorHint: 'ତଳେ ଥିବା ସବୁ ଏକ୍ସଟ୍ରା/ଜୁନିଅର୍ ଚରିତ୍ରକୁ କାଷ୍ଟ ହୋଇଥିବା ଭାବରେ ଚିହ୍ନଟ କରିବାକୁ ଏଠି ଗୋଟିଏ କୋଅର୍ଡିନେଟର୍ ଯୋଡ଼ନ୍ତୁ — ପ୍ରତ୍ୟେକଙ୍କୁ ଅଲଗା ଅଲଗା କାଷ୍ଟ କରିବାର ଆବଶ୍ୟକତା ନାହିଁ।',
     approveButton: 'ଅନୁମୋଦନ କରନ୍ତୁ',
@@ -1439,6 +1447,13 @@ function castTierGroupLabel(group, t) {
   if (group === 'extra') return t.castTierExtraLabel
   if (group === 'non_speaking') return t.castTierNonSpeakingLabel
   return t.castCategoryUnclassifiedLabel
+}
+
+// null for a film/short with no episodes, or an item episode-tagging
+// hasn't reached yet — nothing renders in either case.
+function formatEpisodeNumbers(item, t) {
+  if (!item.episodeNumbers || item.episodeNumbers.length === 0) return null
+  return `${t.episodeNumbersPrefix} ${item.episodeNumbers.join(', ')}`
 }
 
 // wa.me needs the number in full international form with no "+", spaces, or
@@ -4075,6 +4090,7 @@ function App() {
   const [isFindingMissingCharacters, setIsFindingMissingCharacters] = useState(false)
   const [foundMissingCharacters, setFoundMissingCharacters] = useState(null)
   const [isClassifyingCastCategories, setIsClassifyingCastCategories] = useState(false)
+  const [isClassifyingEpisodeNumbers, setIsClassifyingEpisodeNumbers] = useState(false)
   const [generatingCostumeRecommendationFor, setGeneratingCostumeRecommendationFor] = useState(null)
   const [approvingCostumeRecommendationFor, setApprovingCostumeRecommendationFor] = useState(null)
   const [editingCostumeSetsFor, setEditingCostumeSetsFor] = useState(null)
@@ -5792,6 +5808,30 @@ function App() {
     setIsClassifyingCastCategories(false)
   }
 
+  async function handleClassifyEpisodeNumbersClick() {
+    setIsClassifyingEpisodeNumbers(true)
+    setErrorMessage(null)
+
+    try {
+      const response = await fetch(`${BACKEND_URL}/api/script-breakdown/${scriptBreakdown.id}/classify-episode-numbers`, {
+        method: 'POST',
+      })
+      const data = await response.json()
+
+      if (!response.ok) {
+        setErrorMessage(data.error || t.genericError)
+        setIsClassifyingEpisodeNumbers(false)
+        return
+      }
+
+      setScriptBreakdown(data)
+    } catch {
+      setErrorMessage(t.genericError)
+    }
+
+    setIsClassifyingEpisodeNumbers(false)
+  }
+
   async function handleGenerateCostumeRecommendationClick(characterName) {
     setGeneratingCostumeRecommendationFor(characterName)
     setErrorMessage(null)
@@ -6048,18 +6088,29 @@ function App() {
                       <span className="breakdown-item-meta">
                         ({item.intExt} — {item.sceneCount} {t.scenesLabel})
                       </span>
+                      {formatEpisodeNumbers(item, t) && (
+                        <span className="breakdown-item-episodes">{formatEpisodeNumbers(item, t)}</span>
+                      )}
                       <span className={isLocationFinalized ? 'breakdown-item-chip finalized' : 'breakdown-item-chip pending'}>
                         {isLocationFinalized ? '✓' : '…'}
                       </span>
                     </>
                   ) : category === 'costumes' ? (
-                    <strong>{item.character}</strong>
+                    <>
+                      <strong>{item.character}</strong>
+                      {formatEpisodeNumbers(item, t) && (
+                        <span className="breakdown-item-episodes">{' '}{formatEpisodeNumbers(item, t)}</span>
+                      )}
+                    </>
                   ) : category === 'artistList' ? (
                     <>
                       <strong className={shootStatus ? `artist-name-${shootStatus}` : ''}>{item.label}</strong>{' '}
                       <span className="breakdown-item-meta">
                         ({item.gender || t.unspecifiedLabel}, {item.age || t.unspecifiedLabel})
                       </span>
+                      {formatEpisodeNumbers(item, t) && (
+                        <span className="breakdown-item-episodes">{formatEpisodeNumbers(item, t)}</span>
+                      )}
                       {shootStatus && (
                         <span className={`artist-schedule-status-chip ${shootStatus}`}>
                           {shootStatus === 'wrapped' ? t.artistStatusWrappedLabel : shootStatus === 'in-progress' ? t.artistStatusInProgressLabel : t.artistStatusPendingLabel}
@@ -6072,7 +6123,12 @@ function App() {
                       )}
                     </>
                   ) : (
-                    <strong>{item.label}</strong>
+                    <>
+                      <strong>{item.label}</strong>
+                      {formatEpisodeNumbers(item, t) && (
+                        <span className="breakdown-item-episodes">{' '}{formatEpisodeNumbers(item, t)}</span>
+                      )}
+                    </>
                   )}
                 </button>
 
@@ -8676,6 +8732,17 @@ function App() {
           {scriptBreakdown && (
             <>
               <div className="ad-sheet-panel">
+                {canEditProduction && Boolean(sceneList.episodeScenes) && (
+                  <button
+                    className="breakdown-action-button"
+                    onClick={handleClassifyEpisodeNumbersClick}
+                    disabled={isClassifyingEpisodeNumbers}
+                    title={t.classifyEpisodeNumbersHint}
+                  >
+                    {isClassifyingEpisodeNumbers ? t.classifyingEpisodeNumbersLabel : t.classifyEpisodeNumbersButton}
+                  </button>
+                )}
+                <AnalyzingProgressBar active={isClassifyingEpisodeNumbers} label={t.classifyingEpisodeNumbersLabel} estimatedSeconds={30} />
                 {canEditProduction && (
                   <button
                     className="breakdown-action-button"

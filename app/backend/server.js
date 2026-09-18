@@ -5958,7 +5958,12 @@ async function generateDeepScriptBreakdownContent(sourceText, revision) {
     }
   });
 
-  return { ...firstPass, ...Object.fromEntries(refinedEntries) };
+  const combined = { ...firstPass, ...Object.fromEntries(refinedEntries) };
+  // Tags every item in every category with which episode(s) it appears in
+  // (episode-level only, not exact scenes — see classifyEpisodeNumbers for
+  // why). Runs after refinement so it sees the final, fully-refined lists,
+  // not the first pass's possibly-incomplete ones.
+  return await classifyEpisodeNumbers(sourceText, combined);
 }
 
 // The first-ever breakdown on a long script is a first pass PLUS 5
@@ -6012,6 +6017,14 @@ function breakdownItemKey(category, item) {
   if (category === "locationList") return item?.location?.en?.toLowerCase() ?? "";
   if (category === "costumes") return item?.character?.toLowerCase() ?? "";
   return item?.label?.toLowerCase() ?? "";
+}
+
+// Same idea as breakdownItemKey, but the original-case display text — used
+// when building a prompt for a human/model to read, never as a lookup key.
+function breakdownItemDisplayLabel(category, item) {
+  if (category === "locationList") return item?.location?.en ?? "";
+  if (category === "costumes") return item?.character ?? "";
+  return item?.label ?? "";
 }
 
 // Re-checks ONE category against ONE chunk of the script (an episode, when
@@ -6165,14 +6178,7 @@ const CAST_TIER_SCHEMA = {
   properties: {
     tiers: {
       type: Type.ARRAY,
-      items: {
-        type: Type.OBJECT,
-        properties: {
-          label: { type: Type.STRING },
-          castTier: { type: Type.STRING, enum: ["lead", "sidekick", "extra"] },
-        },
-        required: ["label", "castTier"],
-      },
+      items: { type: Type.STRING, enum: ["lead", "sidekick", "extra"] },
     },
   },
   required: ["tiers"],
@@ -6185,11 +6191,22 @@ const CAST_TIER_SCHEMA = {
 // decomposed into per-chunk facts, so this reads the full script at once.
 // Safe to do in one call even on a large script: the truncation problem
 // fixed earlier was about large bilingual LIST outputs (170K+ characters);
-// this response is tiny (one label + one word per character).
+// this response is tiny (one word per character).
+//
+// Positional, not label-matched, and deliberately so: an earlier version
+// asked the model to echo each name back alongside its tier and matched by
+// that echoed text — on a real 87-character cast list, most names came
+// back with zero match (a respelling, dropped honorific, different
+// capitalization — any small drift breaks an exact string match at this
+// scale), so nearly everyone silently fell back to "extra" with no error
+// raised anywhere. Asking for a plain array in the SAME order as the input
+// list removes that failure mode entirely — the correspondence is by
+// position, not by the model re-typing text correctly.
 async function classifyCastTiers(sourceText, speakingLabels) {
-  if (speakingLabels.length === 0) return {};
+  if (speakingLabels.length === 0) return [];
 
-  const contents = `The script material:\n${sourceText}\n\nThe speaking characters in this story: ${speakingLabels.join(", ")}\n\nFor EACH of these characters, judge their overall narrative importance across the WHOLE story:\n- "lead": a backbone/central character the story revolves around (usually just a handful of people).\n- "sidekick": a supporting character who meaningfully drives scenes or the plot forward alongside a lead, without being the story's own center.\n- "extra": a minor speaking character with limited overall impact on the story (a few lines, a small role).\nBase this on their actual weight in the story (how central they are to the plot, screen time, dramatic stakes) — not just how many scenes they technically appear in.`;
+  const numberedList = speakingLabels.map((label, i) => `${i + 1}. ${label}`).join("\n");
+  const contents = `The script material:\n${sourceText}\n\nThe speaking characters in this story, numbered:\n${numberedList}\n\nFor EACH numbered character above, judge their overall narrative importance across the WHOLE story:\n- "lead": a backbone/central character the story revolves around (usually just a handful of people).\n- "sidekick": a supporting character who meaningfully drives scenes or the plot forward alongside a lead, without being the story's own center.\n- "extra": a minor speaking character with limited overall impact on the story (a few lines, a small role).\nBase this on their actual weight in the story (how central they are to the plot, screen time, dramatic stakes) — not just how many scenes they technically appear in.\n\nReturn a "tiers" array with EXACTLY ${speakingLabels.length} entries, in the SAME ORDER as the numbered list above (entry 1 = character 1, entry 2 = character 2, and so on) — never skip, merge, or reorder an entry.`;
 
   const parsed = await generateJsonContent({
     model: GEMINI_MODEL_NAME,
@@ -6201,11 +6218,14 @@ async function classifyCastTiers(sourceText, speakingLabels) {
     },
   });
 
-  const tierByLabel = {};
-  (parsed.tiers ?? []).forEach((row) => {
-    if (row?.label) tierByLabel[row.label.toLowerCase()] = row.castTier;
-  });
-  return tierByLabel;
+  const tiers = parsed.tiers ?? [];
+  if (tiers.length !== speakingLabels.length) {
+    // A misaligned array would silently misassign every character after
+    // the point it drifted — safer to report nothing than trust it.
+    console.error(`classifyCastTiers: expected ${speakingLabels.length} entries, got ${tiers.length} — discarding this pass.`);
+    return [];
+  }
+  return tiers;
 }
 
 // Splits into episode-sized chunks like the missing-character scan and AD
@@ -6247,14 +6267,84 @@ async function classifyCastCategories(sourceText, artistList) {
     return { ...item, castCategory };
   });
 
-  const speakingLabels = withCastCategory.filter((item) => item.castCategory === "speaking").map((item) => item.label);
-  const tierByLabel = await classifyCastTiers(sourceText, speakingLabels);
+  const speakingItems = withCastCategory.filter((item) => item.castCategory === "speaking");
+  const tiers = await classifyCastTiers(sourceText, speakingItems.map((item) => item.label));
+
+  // Positional zip against speakingItems (the exact array the labels above
+  // were derived from), not a label-text lookup — see classifyCastTiers for
+  // why matching by re-typed text silently failed at real cast-list scale.
+  const tierByKey = new Map();
+  speakingItems.forEach((item, i) => {
+    if (tiers[i]) tierByKey.set(item.label.toLowerCase(), tiers[i]);
+  });
 
   return withCastCategory.map((item) => {
     if (item.castCategory !== "speaking") return { ...item, castTier: null };
-    const tier = tierByLabel[item.label.toLowerCase()] ?? item.castTier ?? "extra";
+    const tier = tierByKey.get(item.label.toLowerCase()) ?? item.castTier ?? "extra";
     return { ...item, castTier: tier };
   });
+}
+
+const EPISODE_NUMBERS_SCHEMA = {
+  type: Type.OBJECT,
+  properties: {
+    episodeNumbers: {
+      type: Type.ARRAY,
+      items: { type: Type.ARRAY, items: { type: Type.INTEGER } },
+    },
+  },
+  required: ["episodeNumbers"],
+};
+
+// Which EPISODE(s) each item of one category appears in — episode-level
+// only (not exact scene numbers), per the deliberate choice to keep this
+// cheap: getting real scene numbers right would need its own chunked pass
+// per category, meaningfully slowing down an already-long analysis for a
+// large script. Positional (see classifyCastTiers above for why), one call
+// per category rather than mixing all 5 into one prompt, since a nested
+// "array of arrays, but only within category boundaries" instruction is
+// more error-prone than five simple flat lists.
+async function classifyEpisodeNumbersForCategory(sourceText, category, labels) {
+  if (labels.length === 0) return [];
+
+  const numberedList = labels.map((label, i) => `${i + 1}. ${label}`).join("\n");
+  const contents = `The script material:\n${sourceText}\n\nThe full "${category}" list for this script, numbered:\n${numberedList}\n\nFor EACH numbered item above, list every EPISODE NUMBER (as marked by "EPISODE N" headers in the script) in which it actually appears or is referenced.\n\nReturn an "episodeNumbers" array with EXACTLY ${labels.length} entries, in the SAME ORDER as the numbered list above (entry 1 = item 1, and so on) — never skip, merge, or reorder an entry. Each entry is itself an array of episode numbers, e.g. [2, 3, 4] — use an empty array only if an item genuinely appears nowhere (shouldn't normally happen, since every item comes from the script itself).`;
+
+  const parsed = await generateJsonContent({
+    model: GEMINI_MODEL_NAME,
+    contents,
+    config: {
+      systemInstruction: SCRIPT_BREAKDOWN_SYSTEM_PROMPT,
+      responseMimeType: "application/json",
+      responseSchema: EPISODE_NUMBERS_SCHEMA,
+    },
+  });
+
+  const result = parsed.episodeNumbers ?? [];
+  if (result.length !== labels.length) {
+    console.error(`classifyEpisodeNumbersForCategory(${category}): expected ${labels.length} entries, got ${result.length} — discarding this pass.`);
+    return [];
+  }
+  return result;
+}
+
+// Runs across all 5 categories, one small call each. Skipped entirely for
+// a single-episode film/short (splitScreenplayIntoEpisodes returns just
+// one chunk) — there's only ever one "episode" there, not worth tagging.
+async function classifyEpisodeNumbers(sourceText, breakdownContent) {
+  if (splitScreenplayIntoEpisodes(sourceText).length <= 1) return breakdownContent;
+
+  const updated = { ...breakdownContent };
+  await mapWithConcurrency(BREAKDOWN_CATEGORY_KEYS, 3, async (category) => {
+    const items = breakdownContent[category] ?? [];
+    const labels = items.map((item) => breakdownItemDisplayLabel(category, item));
+    const episodeNumbersList = await classifyEpisodeNumbersForCategory(sourceText, category, labels);
+    updated[category] = items.map((item, i) => ({
+      ...item,
+      episodeNumbers: episodeNumbersList[i] ?? item.episodeNumbers ?? [],
+    }));
+  });
+  return updated;
 }
 
 // One entry per real scene, in order — the deterministic half of the AD
@@ -6777,6 +6867,53 @@ app.post("/api/script-breakdown/:id/classify-cast-categories", requireRole("admi
     res.json({ ...insertResult.rows[0], sceneListId, ...updatedContent });
   } catch (error) {
     console.error("Classify cast categories failed:", error.message);
+    res.status(502).json({ error: error.message });
+  }
+});
+
+// A standalone way to (re)tag every category with episode numbers on a
+// breakdown that already exists — "Analyze Script" only runs once per
+// project (the button disappears once a breakdown exists), so a project
+// analyzed before this feature shipped has no other way to pick it up
+// short of deleting and rebuilding the whole breakdown from scratch.
+app.post("/api/script-breakdown/:id/classify-episode-numbers", requireRole("admin", "production_manager"), async (req, res) => {
+  const existing = await db.query("SELECT scene_list_id FROM script_breakdowns WHERE id = $1", [req.params.id]);
+  if (existing.rows.length === 0) {
+    res.status(404).json({ error: "Script breakdown not found" });
+    return;
+  }
+
+  const sceneListId = existing.rows[0].scene_list_id;
+  if (!(await userOwnsSceneList(req.user, sceneListId))) {
+    res.status(403).json({ error: "You don't have access to this project." });
+    return;
+  }
+
+  const latest = await db.query(
+    "SELECT id, content, status FROM script_breakdowns WHERE scene_list_id = $1 ORDER BY created_at DESC LIMIT 1",
+    [sceneListId]
+  );
+  if (String(latest.rows[0].id) !== String(req.params.id)) {
+    res.status(409).json({ error: "Someone else updated this breakdown since you loaded it. Reload the page and try again." });
+    return;
+  }
+
+  try {
+    const sceneListResult = await db.query("SELECT content FROM scene_lists WHERE id = $1", [sceneListId]);
+    const sourceText = await buildBreakdownSourceText(sceneListResult.rows[0].content, sceneListId);
+
+    const updatedContent = await classifyEpisodeNumbers(sourceText, latest.rows[0].content);
+
+    // Pure enrichment, same reasoning as classify-cast-categories above —
+    // carries the previous approval status forward.
+    const insertResult = await db.query(
+      "INSERT INTO script_breakdowns (scene_list_id, content, status, feedback) VALUES ($1, $2, $3, $4) RETURNING id, status, feedback",
+      [sceneListId, JSON.stringify(updatedContent), latest.rows[0].status, "Tagged every category with episode numbers"]
+    );
+
+    res.json({ ...insertResult.rows[0], sceneListId, ...updatedContent });
+  } catch (error) {
+    console.error("Classify episode numbers failed:", error.message);
     res.status(502).json({ error: error.message });
   }
 });

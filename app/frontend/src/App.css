@@ -2192,6 +2192,17 @@ button, input, textarea, select {
   color: var(--text-muted);
 }
 
+.breakdown-item-episodes {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+  padding: 1px 7px;
+  margin: 0 4px;
+  white-space: nowrap;
+}
+
 .breakdown-expand-all-button {
   margin-bottom: 8px;
 }

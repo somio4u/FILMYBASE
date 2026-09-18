@@ -405,6 +405,7 @@ const LABELS = {
     productionHeading: 'Production Management',
     scriptBreakdownHeading: 'Script Breakdown',
     generateBreakdownButton: 'Analyze Script',
+    cancelBreakdownButton: 'Cancel & retry',
     generatingBreakdownLabel: 'Analyzing script...',
     generateAdSheetButton: 'Generate AD Scene Breakdown Sheet',
     generatingAdSheetLabel: 'Generating AD sheet...',
@@ -900,6 +901,7 @@ const LABELS = {
     productionHeading: 'ପ୍ରଡକ୍ସନ୍ ମେନେଜମେଣ୍ଟ',
     scriptBreakdownHeading: 'ସ୍କ୍ରିପ୍ଟ ବ୍ରେକଡାଉନ୍',
     generateBreakdownButton: 'ସ୍କ୍ରିପ୍ଟ ବିଶ୍ଳେଷଣ କରନ୍ତୁ',
+    cancelBreakdownButton: 'ବାତିଲ୍ କରି ପୁନଃ ଚେଷ୍ଟା କରନ୍ତୁ',
     generatingBreakdownLabel: 'ସ୍କ୍ରିପ୍ଟ ବିଶ୍ଳେଷଣ ହେଉଛି...',
     generateAdSheetButton: 'AD ସିନ୍ ବ୍ରେକଡାଉନ୍ ସିଟ୍ ତିଆରି କରନ୍ତୁ',
     generatingAdSheetLabel: 'AD ସିଟ୍ ତିଆରି ହେଉଛି...',
@@ -4004,6 +4006,7 @@ function App() {
 
   const [scriptBreakdown, setScriptBreakdown] = useState(null)
   const [isGeneratingBreakdown, setIsGeneratingBreakdown] = useState(false)
+  const breakdownPollCancelRef = useRef(false)
   const [isGeneratingAdSheet, setIsGeneratingAdSheet] = useState(false)
   const [isApprovingBreakdown, setIsApprovingBreakdown] = useState(false)
   const [showBreakdownFeedbackForm, setShowBreakdownFeedbackForm] = useState(false)
@@ -5390,6 +5393,12 @@ function App() {
   }
 
   async function handleGenerateBreakdownClick() {
+    if (!conceptId) {
+      setErrorMessage(t.genericError)
+      return
+    }
+
+    breakdownPollCancelRef.current = false
     setIsGeneratingBreakdown(true)
     setErrorMessage(null)
     setToastMessage(null)
@@ -5413,22 +5422,28 @@ function App() {
       // now kicks it off and responds right away instead of holding the
       // request open, so pick up the finished result by polling the
       // project's own data instead of waiting on this one response.
-      await pollForScriptBreakdown()
+      await pollForScriptBreakdown(conceptId)
     } catch {
       setErrorMessage(t.genericError)
       setIsGeneratingBreakdown(false)
     }
   }
 
-  async function pollForScriptBreakdown() {
+  function handleCancelBreakdownPollClick() {
+    breakdownPollCancelRef.current = true
+    setIsGeneratingBreakdown(false)
+  }
+
+  async function pollForScriptBreakdown(pollConceptId) {
     const pollIntervalMs = 5000
     const maxAttempts = 240 // 20 minutes
 
     for (let attempt = 0; attempt < maxAttempts; attempt++) {
       await new Promise((resolve) => setTimeout(resolve, pollIntervalMs))
+      if (breakdownPollCancelRef.current) return
 
       try {
-        const response = await fetch(`${BACKEND_URL}/api/concepts/${conceptId}/full`)
+        const response = await fetch(`${BACKEND_URL}/api/concepts/${pollConceptId}/full`)
         if (response.ok) {
           const data = await response.json()
           if (data.scriptBreakdown) {
@@ -8580,6 +8595,11 @@ function App() {
               >
                 {isGeneratingBreakdown ? t.generatingBreakdownLabel : t.generateBreakdownButton}
               </button>
+              {isGeneratingBreakdown && (
+                <button className="cancel-button" onClick={handleCancelBreakdownPollClick}>
+                  {t.cancelBreakdownButton}
+                </button>
+              )}
               <AnalyzingProgressBar active={isGeneratingBreakdown} label={t.generatingBreakdownLabel} estimatedSeconds={45} />
             </>
           )}

@@ -1295,6 +1295,14 @@ app.delete("/api/concepts/:id", requireRole("admin"), async (req, res) => {
 // regardless of which project it belongs to. This is what makes Load Project / History work
 // correctly instead of silently mixing up whichever project was touched most recently anywhere.
 app.get("/api/concepts/:id/full", requireLogin, async (req, res) => {
+  // A bad/missing id here (e.g. a frontend request fired before its own
+  // conceptId state was ready) used to reach the query below and crash with
+  // Postgres' own raw "invalid input syntax for type integer" message.
+  if (!/^\d+$/.test(req.params.id)) {
+    res.status(400).json({ error: "Invalid project id." });
+    return;
+  }
+
   if (req.user.role !== "admin" && String(req.user.concept_id) !== String(req.params.id)) {
     res.status(403).json({ error: "You don't have access to this project." });
     return;

@@ -2203,6 +2203,21 @@ button, input, textarea, select {
   white-space: nowrap;
 }
 
+.auto-backfill-banner {
+  margin: 8px 0 16px;
+  padding: 10px 14px;
+  border-radius: 8px;
+  font-size: 13px;
+  background: rgba(124, 92, 255, 0.12);
+  border: 1px solid rgba(124, 92, 255, 0.35);
+  color: var(--text-secondary);
+}
+
+.auto-backfill-banner.retry {
+  background: rgba(255, 170, 60, 0.12);
+  border-color: rgba(255, 170, 60, 0.35);
+}
+
 .breakdown-expand-all-button {
   margin-bottom: 8px;
 }

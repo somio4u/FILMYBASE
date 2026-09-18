@@ -414,6 +414,8 @@ const LABELS = {
     screenplayProgressLabel: (drafted, total) => `Screenplay progress: ${drafted} / ${total} scenes written`,
     productionHeading: 'Production Management',
     scriptBreakdownHeading: 'Script Breakdown',
+    autoBackfillInProgressNote: 'Updating cast tiers and episode numbers in the background — this can take a few minutes. This page will refresh automatically once it\'s done, nothing to click.',
+    autoBackfillRetryingNote: 'The last background update attempt failed — retrying automatically now. This page will refresh once it succeeds.',
     generateBreakdownButton: 'Analyze Script',
     cancelBreakdownButton: 'Cancel & retry',
     generatingBreakdownLabel: 'Analyzing script...',
@@ -920,6 +922,8 @@ const LABELS = {
     screenplayProgressLabel: (drafted, total) => `ସ୍କ୍ରିନପ୍ଲେ ପ୍ରଗତି: ${drafted} / ${total} ଦୃଶ୍ୟ ଲେଖାଯାଇଛି`,
     productionHeading: 'ପ୍ରଡକ୍ସନ୍ ମେନେଜମେଣ୍ଟ',
     scriptBreakdownHeading: 'ସ୍କ୍ରିପ୍ଟ ବ୍ରେକଡାଉନ୍',
+    autoBackfillInProgressNote: 'କାଷ୍ଟ ଟିଅର୍ ଏବଂ ଏପିସୋଡ୍ ନମ୍ବର ପଛରେ ଅପଡେଟ୍ ହେଉଛି — ଏଥିରେ କିଛି ମିନିଟ୍ ଲାଗିପାରେ। ସମାପ୍ତ ହେଲେ ଏହି ପେଜ୍ ଆପେ ରିଫ୍ରେସ୍ ହେବ, କିଛି କ୍ଲିକ୍ କରିବାର ଆବଶ୍ୟକତା ନାହିଁ।',
+    autoBackfillRetryingNote: 'ପଛରେ ହୋଇଥିବା ଅପଡେଟ୍ ପ୍ରୟାସ ବିଫଳ ହୋଇଥିଲା — ଏବେ ପୁନଃ ଚେଷ୍ଟା ହେଉଛି। ସଫଳ ହେଲେ ଏହି ପେଜ୍ ରିଫ୍ରେସ୍ ହେବ।',
     generateBreakdownButton: 'ସ୍କ୍ରିପ୍ଟ ବିଶ୍ଳେଷଣ କରନ୍ତୁ',
     cancelBreakdownButton: 'ବାତିଲ୍ କରି ପୁନଃ ଚେଷ୍ଟା କରନ୍ତୁ',
     generatingBreakdownLabel: 'ସ୍କ୍ରିପ୍ଟ ବିଶ୍ଳେଷଣ ହେଉଛି...',
@@ -4439,6 +4443,33 @@ function App() {
     }
   }
 
+  // A breakdown analyzed before cast tiers/episode numbers existed gets
+  // fixed in the background (see triggerScriptBreakdownAutoBackfill on the
+  // backend) the moment its project is opened — this polls quietly until
+  // that finishes, so the fix actually becomes visible without the user
+  // needing to know to refresh or click anything themselves.
+  async function pollForAutoBackfill(id) {
+    const pollIntervalMs = 10000
+    const maxAttempts = 60 // 10 minutes
+
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      await new Promise((resolve) => setTimeout(resolve, pollIntervalMs))
+
+      try {
+        const response = await fetch(`${BACKEND_URL}/api/concepts/${id}/full`)
+        if (!response.ok) continue
+        const data = await response.json()
+        const status = data.scriptBreakdown?.autoBackfillStatus
+        if (status === 'in_progress' || status === 'retrying_after_failure') continue
+
+        setScriptBreakdown(data.scriptBreakdown)
+        return
+      } catch {
+        // a single missed poll isn't fatal — just try again next tick
+      }
+    }
+  }
+
   // Loads exactly one project's full chain by its concept id — never "whatever's newest
   // anywhere," which was the root cause of the app appearing to randomly jump projects.
   async function loadProject(id) {
@@ -4501,6 +4532,9 @@ function App() {
     setBreakdownFeedbackText('')
     setEditingBreakdownCategory(null)
     setBreakdownCategoryDraft([])
+    if (data.scriptBreakdown?.autoBackfillStatus === 'in_progress' || data.scriptBreakdown?.autoBackfillStatus === 'retrying_after_failure') {
+      pollForAutoBackfill(id)
+    }
 
     setShootSchedule(data.shootSchedule)
     setShowScheduleFeedbackForm(false)
@@ -8710,6 +8744,13 @@ function App() {
       {activeAgent === 'production' && sceneList && sceneList.status === 'approved' && (
         <div className="three-act-structure" id="stage-breakdown">
           <h2>{t.scriptBreakdownHeading}</h2>
+
+          {scriptBreakdown?.autoBackfillStatus === 'in_progress' && (
+            <p className="auto-backfill-banner">{t.autoBackfillInProgressNote}</p>
+          )}
+          {scriptBreakdown?.autoBackfillStatus === 'retrying_after_failure' && (
+            <p className="auto-backfill-banner retry">{t.autoBackfillRetryingNote}</p>
+          )}
 
           {!scriptBreakdown && (
             <>

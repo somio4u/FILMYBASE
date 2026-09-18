@@ -1395,14 +1395,26 @@ function breakdownNeedsEpisodeNumberBackfill(breakdownContent, sceneListContent)
 // Exists specifically for a breakdown analyzed before this feature shipped
 // (a fresh analysis already gets both automatically — see
 // generateDeepScriptBreakdownContent).
+// Remembers the last OUTCOME per breakdown id too (not just "in flight"),
+// so a failure is visible instead of just silently vanishing back to
+// "not_needed" on the load that retries it — the frontend surfaces this
+// rather than staying silent about whether the background fix worked.
+const breakdownAutoBackfillLastError = new Map();
+
+// Returns a status string the frontend shows: "in_progress" (just
+// started, nothing to report yet), "retrying_after_failure" (the last
+// attempt errored — see breakdownAutoBackfillLastError — and a fresh one
+// just started), or "not_needed" (nothing missing).
 function triggerScriptBreakdownAutoBackfill(sceneListRow, breakdownRow) {
-  if (breakdownAutoBackfillInFlight.has(breakdownRow.id)) return;
+  if (breakdownAutoBackfillInFlight.has(breakdownRow.id)) return "in_progress";
 
   const needsCastTier = breakdownNeedsCastTierBackfill(breakdownRow.content);
   const needsEpisodeNumbers = breakdownNeedsEpisodeNumberBackfill(breakdownRow.content, sceneListRow.content);
-  if (!needsCastTier && !needsEpisodeNumbers) return;
+  if (!needsCastTier && !needsEpisodeNumbers) return "not_needed";
 
+  const hadPriorFailure = breakdownAutoBackfillLastError.has(breakdownRow.id);
   breakdownAutoBackfillInFlight.add(breakdownRow.id);
+  breakdownAutoBackfillLastError.delete(breakdownRow.id);
   (async () => {
     try {
       const sourceText = await buildBreakdownSourceText(sceneListRow.content, sceneListRow.id);
@@ -1421,10 +1433,12 @@ function triggerScriptBreakdownAutoBackfill(sceneListRow, breakdownRow) {
       ]);
     } catch (error) {
       console.error(`Auto-backfill failed for breakdown ${breakdownRow.id}:`, error.message);
+      breakdownAutoBackfillLastError.set(breakdownRow.id, error.message);
     } finally {
       breakdownAutoBackfillInFlight.delete(breakdownRow.id);
     }
   })();
+  return hadPriorFailure ? "retrying_after_failure" : "in_progress";
 }
 
 // Loads one project's entire chain, scoped strictly to that concept — unlike the various
@@ -1503,9 +1517,9 @@ app.get("/api/concepts/:id/full", requireLogin, async (req, res) => {
         sceneListId: sceneListRow.id,
         status: breakdownRow.status,
         feedback: breakdownRow.feedback,
+        autoBackfillStatus: triggerScriptBreakdownAutoBackfill(sceneListRow, breakdownRow),
         ...breakdownRow.content,
       };
-      triggerScriptBreakdownAutoBackfill(sceneListRow, breakdownRow);
     }
 
     const shootScheduleResult = await db.query(
@@ -1620,9 +1634,9 @@ app.get("/api/concepts/:id/full", requireLogin, async (req, res) => {
       sceneListId: sceneListRow.id,
       status: breakdownRow.status,
       feedback: breakdownRow.feedback,
+      autoBackfillStatus: triggerScriptBreakdownAutoBackfill(sceneListRow, breakdownRow),
       ...breakdownRow.content,
     };
-    triggerScriptBreakdownAutoBackfill(sceneListRow, breakdownRow);
   }
 
   const shootScheduleResult = await db.query(

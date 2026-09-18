@@ -5940,19 +5940,15 @@ async function generateScriptBreakdownContent(sourceText, revision) {
 async function generateDeepScriptBreakdownContent(sourceText, revision) {
   const firstPass = await generateScriptBreakdownContent(sourceText, revision);
 
-  // Each of these re-sends the WHOLE script (same size as the first pass
-  // above) — on a real 166KB/13-episode script, 3 of those at once tripped
-  // a rate limit (429 "Resource exhausted") before this project had a real
-  // Vertex AI billing account attached, which knocked concurrency down to
-  // 1 (sequential) as a safe fallback. Real billing is attached now, with
-  // Vertex AI's default per-project quota well above the old free-tier
-  // limit, so this is back to 3 — the same concurrency every other
-  // multi-call Gemini batch in this file uses. Still backed by the same
-  // safety net either way: generateContentWithRetry retries a transient
-  // 429/503 automatically, and a genuinely persistent failure on ONE
-  // category just keeps that category's first-pass result instead of
-  // losing the other four along with it.
-  const refinedEntries = await mapWithConcurrency(BREAKDOWN_CATEGORY_KEYS, 3, async (category) => {
+  // Sequential across categories, not concurrent — each category call below
+  // now runs its OWN concurrent batch of per-episode chunk calls (see
+  // generateBreakdownCategoryContent), so running 3 categories at once here
+  // too would stack up to 9 simultaneous Gemini calls. Still backed by the
+  // same safety net: generateContentWithRetry retries a transient 429/503
+  // (or a stalled call, via the timeout) automatically, and a genuinely
+  // persistent failure on ONE category just keeps that category's
+  // first-pass result instead of losing the other four along with it.
+  const refinedEntries = await mapWithConcurrency(BREAKDOWN_CATEGORY_KEYS, 1, async (category) => {
     try {
       const refreshed = await generateBreakdownCategoryContent(sourceText, category, firstPass[category]);
       return [category, refreshed];
@@ -6008,12 +6004,24 @@ app.post("/api/script-breakdown", requireRole("admin"), async (req, res) => {
   }
 });
 
-// Re-checks the script for just ONE category (in case the first pass missed
-// something) rather than regenerating the whole breakdown. Shown the
-// previous list for that category so it corrects/extends it instead of
-// starting blind, but told explicitly to re-verify against the full script.
-async function generateBreakdownCategoryContent(sourceText, category, existingItems) {
-  const contents = `The script material:\n${sourceText}\n\nThe current "${category}" list from a previous pass (it may have missed things):\n${JSON.stringify(existingItems ?? [])}\n\nRe-read the ENTIRE script carefully and produce a fresh, COMPLETE "${category}" list — ${BREAKDOWN_CATEGORY_DESCRIPTIONS[category]}. Specifically double-check for anything subtle or easy to miss on a first pass (brief appearances, background mentions, minor characters/props/locations mentioned only once) that the previous list may have left out. Don't just repeat the previous list unchanged — verify each entry against the script and correct or extend it.`;
+// Different category schemas key their items differently (a bilingual
+// "location" object vs a plain "label"/"character" string) — this is the
+// one place that needs to know which, so chunk results can be matched
+// against the already-known list without double-counting the same entry.
+function breakdownItemKey(category, item) {
+  if (category === "locationList") return item?.location?.en?.toLowerCase() ?? "";
+  if (category === "costumes") return item?.character?.toLowerCase() ?? "";
+  return item?.label?.toLowerCase() ?? "";
+}
+
+// Re-checks ONE category against ONE chunk of the script (an episode, when
+// the script has episode markers) — additive-only, the same "append what a
+// first pass may have missed, never touch or reorder what's already there"
+// design as findMissingCharactersInChunk below. A call that only sees one
+// chunk can't safely decide an EXISTING entry is wrong (it hasn't seen the
+// rest of the script), so it only ever adds newly-found items.
+async function generateBreakdownCategoryAdditionsForChunk(chunkText, category, knownKeys) {
+  const contents = `The script material (one part of a larger script):\n${chunkText}\n\nThe current "${category}" list from earlier passes over the WHOLE script (do NOT report any of these again, even if they appear here): ${knownKeys.join(", ") || "(none yet)"}\n\nThoroughly re-read this material and identify anything belonging in the "${category}" list that is NOT already in the known list above — ${BREAKDOWN_CATEGORY_DESCRIPTIONS[category]}. Specifically catch anything subtle or easy to miss on a first pass (brief appearances, background mentions, minor items mentioned only once). If nothing new is found in this material, return an empty array.`;
 
   const parsed = await generateJsonContent({
     model: GEMINI_MODEL_NAME,
@@ -6021,7 +6029,6 @@ async function generateBreakdownCategoryContent(sourceText, category, existingIt
     config: {
       systemInstruction: SCRIPT_BREAKDOWN_SYSTEM_PROMPT,
       responseMimeType: "application/json",
-      // No cap — same reasoning as generateScriptBreakdownContent.
       responseSchema: {
         type: Type.OBJECT,
         properties: { [category]: { type: Type.ARRAY, items: BREAKDOWN_CATEGORY_ITEM_SCHEMAS[category] } },
@@ -6030,7 +6037,37 @@ async function generateBreakdownCategoryContent(sourceText, category, existingIt
     },
   });
 
-  return sanitizeBilingualContent(parsed)[category];
+  return sanitizeBilingualContent(parsed)[category] ?? [];
+}
+
+// Re-checks the script for just ONE category (in case the first pass missed
+// something) rather than regenerating the whole breakdown. Used to send the
+// WHOLE script in a single call and ask for a fresh COMPLETE list back —
+// on a real 166KB/13-episode script, that response (170K+ characters, no
+// output cap) reliably got cut off mid-string on every retry attempt,
+// producing invalid JSON every time and never actually finishing. Chunked
+// by episode instead (same splitter used by findMissingCharacters below),
+// so each individual response stays a small fraction of that size, and
+// merged additively into the first pass rather than replacing it — a
+// per-chunk call only ever adds, so nothing already found gets lost.
+async function generateBreakdownCategoryContent(sourceText, category, existingItems) {
+  const chunks = splitScreenplayIntoEpisodes(sourceText);
+  const textChunks = chunks.length > 1 ? chunks.map((c) => c.text) : [sourceText];
+  const knownKeys = (existingItems ?? []).map((item) => breakdownItemKey(category, item)).filter(Boolean);
+
+  const results = await mapWithConcurrency(textChunks, 3, (chunkText) =>
+    generateBreakdownCategoryAdditionsForChunk(chunkText, category, knownKeys)
+  );
+
+  const seenKeys = new Set(knownKeys);
+  const merged = [...(existingItems ?? [])];
+  results.flat().forEach((item) => {
+    const key = breakdownItemKey(category, item);
+    if (!key || seenKeys.has(key)) return;
+    seenKeys.add(key);
+    merged.push(item);
+  });
+  return merged;
 }
 
 // Additive-only sibling to "Re-analyze" — that button regenerates the

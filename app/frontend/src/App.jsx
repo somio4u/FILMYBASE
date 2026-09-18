@@ -31,22 +31,30 @@ function useElapsedSeconds(active) {
   return seconds
 }
 
-// A real percentage isn't available here — script analysis/re-analysis is
-// one blocking AI call with no staged backend progress to poll (unlike the
-// auto-pipeline widget's multi-stage run). So this is an honest
-// indeterminate bar (constant motion, no fake percentage) plus a live
-// elapsed-time count, instead of a static "Analyzing..." label with no
-// other sign of life.
-function AnalyzingProgressBar({ active, label }) {
+// There's no real backend progress to poll here — each of these is one
+// blocking AI call, not a staged run like the auto-pipeline widget has.
+// So the percentage is an ESTIMATE: it climbs quickly at first then eases
+// off, capped at 95% until the call actually finishes (never claims 100%
+// while still waiting, and never goes backwards). `estimatedSeconds` is a
+// rough guess at how long this particular call usually takes — get it
+// wrong and the bar just eases off sooner or later, it doesn't break.
+function estimatedProgressPercent(elapsedSeconds, estimatedSeconds) {
+  const timeConstant = estimatedSeconds / 2.3
+  const percent = 100 * (1 - Math.exp(-elapsedSeconds / timeConstant))
+  return Math.min(95, Math.round(percent))
+}
+
+function AnalyzingProgressBar({ active, label, estimatedSeconds = 30 }) {
   const seconds = useElapsedSeconds(active)
   if (!active) return null
+  const percent = estimatedProgressPercent(seconds, estimatedSeconds)
   return (
     <div className="inline-progress">
       <div className="inline-progress-track">
-        <div className="inline-progress-fill" />
+        <div className="inline-progress-fill" style={{ width: `${percent}%` }} />
       </div>
       <p className="inline-progress-label">
-        {label} · {seconds}s
+        {label} · {percent}% · {seconds}s
       </p>
     </div>
   )
@@ -175,6 +183,7 @@ const LABELS = {
     changesChatToggleLabel: 'Ask for changes',
     changesChatHeading: 'Changes',
     changesChatEmptyNote: 'Type a change below and it will show up here, along with what happened.',
+    changesChatWorkingLabel: 'Working on it',
     generateIdeaButton: 'Generate Idea',
     micButtonTitle: 'Speak instead of typing',
     micButtonListeningTitle: 'Listening… click to stop',
@@ -667,6 +676,7 @@ const LABELS = {
     changesChatToggleLabel: 'ପରିବର୍ତ୍ତନ ପାଇଁ ପଚାରନ୍ତୁ',
     changesChatHeading: 'ପରିବର୍ତ୍ତନ',
     changesChatEmptyNote: 'ତଳେ ଏକ ପରିବର୍ତ୍ତନ ଲେଖନ୍ତୁ, ଏହା ଏଠାରେ ଦେଖାଯିବ, ସହିତ କଣ ହେଲା ତାହା ମଧ୍ୟ।',
+    changesChatWorkingLabel: 'କାମ ଚାଲୁଛି',
     generateIdeaButton: 'ଆଇଡିଆ ତିଆରି କରନ୍ତୁ',
     micButtonTitle: 'ଟାଇପ୍ କରିବା ବଦଳରେ କୁହନ୍ତୁ',
     micButtonListeningTitle: 'ଶୁଣୁଛି… ବନ୍ଦ କରିବାକୁ କ୍ଲିକ୍ କରନ୍ତୁ',
@@ -1504,6 +1514,7 @@ function ScreenplayBlock({ episodeIndex, sceneIndex, t, language, screenplay }) 
         >
           {isGenerating ? t.generatingScreenplayScene : t.writeSceneButton}
         </button>
+        <AnalyzingProgressBar active={isGenerating} label={t.generatingScreenplayScene} estimatedSeconds={25} />
       </div>
     )
   }
@@ -3139,6 +3150,7 @@ function ChangesChatPanel({ t, historyKey, barConfig, isBusy, errorMessage, curr
               <span className="changes-chat-dot" />
             </div>
           )}
+          <AnalyzingProgressBar active={isBusy} label={t.changesChatWorkingLabel} estimatedSeconds={30} />
           <div ref={messagesEndRef} />
         </div>
         <div className="changes-chat-input-row">
@@ -5853,7 +5865,7 @@ function App() {
           </div>
         </div>
 
-        <AnalyzingProgressBar active={isReanalyzing} label={t.reanalyzingLabel} />
+        <AnalyzingProgressBar active={isReanalyzing} label={t.reanalyzingLabel} estimatedSeconds={20} />
 
         {!isEditing && isCategoryExpanded && items.length > 1 && (
           <button
@@ -6003,14 +6015,17 @@ function App() {
                         if (!rec) {
                           return (
                             canEditProduction && (
-                              <button
-                                className="breakdown-action-button costume-recommendation-trigger"
-                                onClick={() => handleGenerateCostumeRecommendationClick(item.character)}
-                                disabled={isGeneratingThis || !scriptBreakdown.adSheet?.length}
-                                title={!scriptBreakdown.adSheet?.length ? t.costumeRecommendationsNeedsAdSheetHint : undefined}
-                              >
-                                {isGeneratingThis ? t.generatingCostumeRecommendationsLabel : t.generateCostumeRecommendationsButton}
-                              </button>
+                              <>
+                                <button
+                                  className="breakdown-action-button costume-recommendation-trigger"
+                                  onClick={() => handleGenerateCostumeRecommendationClick(item.character)}
+                                  disabled={isGeneratingThis || !scriptBreakdown.adSheet?.length}
+                                  title={!scriptBreakdown.adSheet?.length ? t.costumeRecommendationsNeedsAdSheetHint : undefined}
+                                >
+                                  {isGeneratingThis ? t.generatingCostumeRecommendationsLabel : t.generateCostumeRecommendationsButton}
+                                </button>
+                                <AnalyzingProgressBar active={isGeneratingThis} label={t.generatingCostumeRecommendationsLabel} estimatedSeconds={20} />
+                              </>
                             )
                           )
                         }
@@ -6150,6 +6165,8 @@ function App() {
                 {isClassifyingCastCategories ? t.classifyingCastCategoriesLabel : t.classifyCastCategoriesButton}
               </button>
             )}
+            <AnalyzingProgressBar active={isFindingMissingCharacters} label={t.findingMissingCharactersLabel} estimatedSeconds={25} />
+            <AnalyzingProgressBar active={isClassifyingCastCategories} label={t.classifyingCastCategoriesLabel} estimatedSeconds={20} />
           </div>
         )}
 
@@ -7731,6 +7748,7 @@ function App() {
       {isGeneratingPitchDeck && (
         <div className="ai-bubble">
           <p>{t.buildingPitchDeck}</p>
+          <AnalyzingProgressBar active={isGeneratingPitchDeck} label={t.buildingPitchDeck} estimatedSeconds={30} />
         </div>
       )}
       </>
@@ -7880,6 +7898,7 @@ function App() {
           {isGeneratingCharacterSheet ? t.generatingCharacterSheetLabel : t.generateCharacterSheetButton}
         </button>
       )}
+      <AnalyzingProgressBar active={isGeneratingCharacterSheet} label={t.generatingCharacterSheetLabel} estimatedSeconds={30} />
 
       {characterSheet && (
         <div className="three-act-structure" id="stage-characters">
@@ -7974,6 +7993,7 @@ function App() {
           {isGeneratingStructure ? t.generatingThreeAct : t.generateThreeAct}
         </button>
       )}
+      <AnalyzingProgressBar active={isGeneratingStructure} label={t.generatingThreeAct} estimatedSeconds={30} />
 
       {threeActStructure && (
         <div className="three-act-structure">
@@ -8102,6 +8122,7 @@ function App() {
           {isGeneratingBitSheet ? t.generatingBitSheet : t.generateBitSheet}
         </button>
       )}
+      <AnalyzingProgressBar active={isGeneratingBitSheet} label={t.generatingBitSheet} estimatedSeconds={35} />
 
       {bitSheet && (
         <div className="three-act-structure" id="stage-bitsheet">
@@ -8168,6 +8189,7 @@ function App() {
           {isGeneratingSceneList ? t.generatingSceneList : t.generateSceneList}
         </button>
       )}
+      <AnalyzingProgressBar active={isGeneratingSceneList} label={t.generatingSceneList} estimatedSeconds={35} />
 
       {sceneList && projectType === 'story' && (
         <div className="three-act-structure" id="stage-screenplay">
@@ -8370,6 +8392,7 @@ function App() {
                   {isImportingScreenplay ? t.importingScreenplayLabel : t.importScreenplayButton}
                 </button>
               </div>
+              <AnalyzingProgressBar active={isImportingScreenplay || isImportingScreenplayFile} label={t.importingScreenplayLabel} estimatedSeconds={40} />
             </div>
           )}
 
@@ -8468,6 +8491,7 @@ function App() {
                       {t.cancelEditButton}
                     </button>
                   </div>
+                  <AnalyzingProgressBar active={isReimportingScreenplay} label={t.reimportingScreenplayLabel} estimatedSeconds={40} />
                 </div>
               )}
 
@@ -8515,7 +8539,7 @@ function App() {
               >
                 {isGeneratingBreakdown ? t.generatingBreakdownLabel : t.generateBreakdownButton}
               </button>
-              <AnalyzingProgressBar active={isGeneratingBreakdown} label={t.generatingBreakdownLabel} />
+              <AnalyzingProgressBar active={isGeneratingBreakdown} label={t.generatingBreakdownLabel} estimatedSeconds={45} />
             </>
           )}
 
@@ -8531,6 +8555,7 @@ function App() {
                     {isGeneratingAdSheet ? t.generatingAdSheetLabel : t.generateAdSheetButton}
                   </button>
                 )}
+                <AnalyzingProgressBar active={isGeneratingAdSheet} label={t.generatingAdSheetLabel} estimatedSeconds={30} />
                 {scriptBreakdown.adSheet && (
                   <DownloadChoiceButton
                     t={t}
@@ -8823,6 +8848,7 @@ function App() {
               >
                 {isGeneratingSchedule ? t.generatingScheduleLabel : t.generateScheduleButton}
               </button>
+              <AnalyzingProgressBar active={isGeneratingSchedule} label={t.generatingScheduleLabel} estimatedSeconds={35} />
             </div>
           )}
 
@@ -9051,6 +9077,7 @@ function App() {
                                   {isParsingDayCompletion ? t.parsingDayCompletionLabel : t.interpretReportButton}
                                 </button>
                               </div>
+                              <AnalyzingProgressBar active={isParsingDayCompletion} label={t.parsingDayCompletionLabel} estimatedSeconds={15} />
 
                               {dayCompletionParseResult && (
                                 <div className="reimport-changes-summary">

@@ -4163,10 +4163,11 @@ button, input, textarea, select {
   transition: width 0.6s ease;
 }
 
-/* Indeterminate — script analysis/re-analysis is one blocking AI call with
-   no real progress to report, so this shows constant motion (never a fake
-   percentage) plus a live elapsed-time count instead of a static label
-   with no other sign of life. */
+/* Shows a live, ever-growing (never real, since these are single blocking
+   AI calls with no backend stage to poll — see estimatedProgressPercent)
+   percentage plus elapsed time, for any analyze/generate/upload call long
+   enough that a static "Loading..." label alone leaves you wondering
+   whether it's stuck. */
 .inline-progress {
   margin-top: 10px;
   max-width: 320px;
@@ -4182,19 +4183,10 @@ button, input, textarea, select {
 }
 
 .inline-progress-fill {
-  position: absolute;
-  top: 0;
-  left: -40%;
-  width: 40%;
   height: 100%;
   border-radius: 3px;
   background: var(--accent-gradient);
-  animation: inline-progress-slide 1.3s ease-in-out infinite;
-}
-
-@keyframes inline-progress-slide {
-  0% { left: -40%; }
-  100% { left: 100%; }
+  transition: width 1s linear;
 }
 
 .inline-progress-label {

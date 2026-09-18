@@ -180,6 +180,7 @@ const LABELS = {
     startStageSynopsis: 'Synopsis',
     startStageBitSheet: 'Bit Sheet',
     startStageSceneList: 'Scene One-Liners',
+    skipPastePlaceholderIdea: 'Paste your idea here…',
     skipPastePlaceholderSynopsis: 'Paste your synopsis or pitch text here…',
     skipPastePlaceholderBitSheet: 'Paste your Bit Sheet (plot points) text here…',
     skipPastePlaceholderSceneList: 'Paste your scene-by-scene one-liners here…',
@@ -665,6 +666,7 @@ const LABELS = {
     startStageSynopsis: 'ସିନୋପ୍ସିସ୍',
     startStageBitSheet: 'ବିଟ୍ ସିଟ୍',
     startStageSceneList: 'ସିନ୍ ଲିଷ୍ଟ',
+    skipPastePlaceholderIdea: 'ଆପଣଙ୍କ ଆଇଡିଆ ଏଠାରେ ପେଷ୍ଟ କରନ୍ତୁ…',
     skipPastePlaceholderSynopsis: 'ଆପଣଙ୍କ ସିନୋପ୍ସିସ୍ କିମ୍ବା ପିଚ୍ ଟେକ୍ସଟ୍ ଏଠାରେ ପେଷ୍ଟ କରନ୍ତୁ…',
     skipPastePlaceholderBitSheet: 'ଆପଣଙ୍କ ବିଟ୍ ସିଟ୍ (ପ୍ଲଟ୍ ପଏଣ୍ଟ) ଟେକ୍ସଟ୍ ଏଠାରେ ପେଷ୍ଟ କରନ୍ତୁ…',
     skipPastePlaceholderSceneList: 'ଆପଣଙ୍କ ସିନ୍-ବାଏ-ସିନ୍ ୱାନ୍-ଲାଇନର୍ ଏଠାରେ ପେଷ୍ଟ କରନ୍ତୁ…',
@@ -7388,7 +7390,25 @@ function App() {
             ))}
           </div>
 
-          {startStage !== 'idea' && (
+          {startStage === 'idea' ? (
+            <div className="skip-ahead-form">
+              <textarea
+                className="skip-ahead-textarea"
+                value={concept}
+                onChange={(e) => setConcept(e.target.value)}
+                placeholder={t.skipPastePlaceholderIdea}
+              />
+              <div className="skip-ahead-controls">
+                <button
+                  className="choose-button"
+                  onClick={handleGenerateClick}
+                  disabled={isLoading || !concept.trim()}
+                >
+                  {isLoading ? t.skipContinueButtonLoading : t.generateIdeaButton}
+                </button>
+              </div>
+            </div>
+          ) : (
             <div className="skip-ahead-form">
               <textarea
                 className="skip-ahead-textarea"

@@ -6407,21 +6407,32 @@ async function classifyEpisodeNumbersForCategory(sourceText, category, labels) {
   return result;
 }
 
-// Runs across all 5 categories, one small call each. Skipped entirely for
-// a single-episode film/short (splitScreenplayIntoEpisodes returns just
-// one chunk) — there's only ever one "episode" there, not worth tagging.
+// Runs across all 5 categories, one small call each — but "small" is only
+// the RESPONSE; each call below still re-sends the WHOLE sourceText as
+// context (same as every other breakdown call), so 3 of these at once hits
+// the exact same Vertex AI RESOURCE_EXHAUSTED confirmed elsewhere in this
+// file. Sequential, and a category that still fails after retries just
+// skips episode-tagging for that one category instead of losing the
+// breakdown that's otherwise already complete at this point.
+// Skipped entirely for a single-episode film/short
+// (splitScreenplayIntoEpisodes returns just one chunk) — there's only ever
+// one "episode" there, not worth tagging.
 async function classifyEpisodeNumbers(sourceText, breakdownContent) {
   if (splitScreenplayIntoEpisodes(sourceText).length <= 1) return breakdownContent;
 
   const updated = { ...breakdownContent };
-  await mapWithConcurrency(BREAKDOWN_CATEGORY_KEYS, 3, async (category) => {
+  await mapWithConcurrency(BREAKDOWN_CATEGORY_KEYS, 1, async (category) => {
     const items = breakdownContent[category] ?? [];
     const labels = items.map((item) => breakdownItemDisplayLabel(category, item));
-    const episodeNumbersList = await classifyEpisodeNumbersForCategory(sourceText, category, labels);
-    updated[category] = items.map((item, i) => ({
-      ...item,
-      episodeNumbers: episodeNumbersList[i] ?? item.episodeNumbers ?? [],
-    }));
+    try {
+      const episodeNumbersList = await classifyEpisodeNumbersForCategory(sourceText, category, labels);
+      updated[category] = items.map((item, i) => ({
+        ...item,
+        episodeNumbers: episodeNumbersList[i] ?? item.episodeNumbers ?? [],
+      }));
+    } catch (error) {
+      console.error(`Episode-number tagging failed for "${category}", leaving it untagged:`, error.message);
+    }
   });
   return updated;
 }

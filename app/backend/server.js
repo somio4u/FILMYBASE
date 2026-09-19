@@ -5981,39 +5981,40 @@ async function buildBreakdownSourceText(sceneList, sceneListId) {
   return flattenScenesForScheduling(sceneList);
 }
 
+// One category at a time across the WHOLE script, not all 5 in one call.
+// A real 166KB/13-episode script proved this matters: asking for all 5
+// categories together (90+ scenes' worth of artists/locations/props/
+// costumes/art, each with trilingual notes) produced a response that hit
+// the MODEL's own actual output ceiling — not a maxOutputTokens config
+// value (already left uncapped), an intrinsic limit — and got cut off
+// mid-string on every one of 4 retry attempts in a row, since a retry
+// asks for the exact same amount of content and hits the same wall again.
+// One category's worth of content comfortably fits well under that
+// ceiling on its own.
 async function generateScriptBreakdownContent(sourceText, revision) {
-  let contents = `The script material:\n${sourceText}`;
+  const results = await mapWithConcurrency(BREAKDOWN_CATEGORY_KEYS, 1, async (category) => {
+    let contents = `The script material:\n${sourceText}\n\nProduce the "${category}" list — ${BREAKDOWN_CATEGORY_DESCRIPTIONS[category]}. Be thorough but only include things actually implied by the material.`;
+    if (revision) {
+      contents += `\n\nThis is a REVISION of a previous breakdown. Feedback: "${revision.feedback}"\nRevise this category's list to address the feedback directly, where relevant.`;
+    }
 
-  if (revision) {
-    contents += `\n\nThis is a REVISION of a previous breakdown. Feedback: "${revision.feedback}"\nRevise the breakdown to address the feedback directly.`;
-  }
-
-  return sanitizeBilingualContent(
-    await generateJsonContent({
+    const parsed = await generateJsonContent({
       model: GEMINI_MODEL_NAME,
       contents,
       config: {
         systemInstruction: SCRIPT_BREAKDOWN_SYSTEM_PROMPT,
         responseMimeType: "application/json",
-        // No cap — a real script truncated a 12288, then a 32768 budget in
-        // a row ("Unterminated string..."). This is the core analysis this
-        // whole app is built around, so it's left to the model's own
-        // maximum rather than another fixed number we'd have to keep
-        // raising for the next big script.
         responseSchema: {
           type: Type.OBJECT,
-          properties: {
-            artistList: { type: Type.ARRAY, items: BREAKDOWN_ARTIST_SCHEMA },
-            locationList: { type: Type.ARRAY, items: BREAKDOWN_LOCATION_SCHEMA },
-            props: { type: Type.ARRAY, items: BREAKDOWN_ITEM_SCHEMA },
-            costumes: { type: Type.ARRAY, items: BREAKDOWN_COSTUME_SCHEMA },
-            art: { type: Type.ARRAY, items: BREAKDOWN_ITEM_SCHEMA },
-          },
-          required: ["artistList", "locationList", "props", "costumes", "art"],
+          properties: { [category]: { type: Type.ARRAY, items: BREAKDOWN_CATEGORY_ITEM_SCHEMAS[category] } },
+          required: [category],
         },
       },
-    })
-  );
+    });
+    return [category, parsed[category]];
+  });
+
+  return sanitizeBilingualContent(Object.fromEntries(results));
 }
 
 // Runs the initial breakdown, then immediately re-verifies every category

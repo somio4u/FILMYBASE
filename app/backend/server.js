@@ -95,7 +95,19 @@ function parseRetryDelayMs(errorMessage) {
 // frontend poll waiting on it) hangs until it gives up on its own. This
 // bounds every attempt to GEMINI_CALL_TIMEOUT_MS and treats a timeout the
 // same as a 429/503 — worth retrying, not a reason to give up immediately.
-const GEMINI_CALL_TIMEOUT_MS = 90_000;
+//
+// 90s turned out to be too tight: a real 166KB/13-episode script's own
+// first-pass breakdown call (the whole script, all 5 categories,
+// trilingual) legitimately runs past 90s on its own, with no stall at all
+// — so EVERY attempt (and every retry, since a retry repeats the exact
+// same call) kept getting killed by this timeout before Gemini could ever
+// actually finish, which is a big part of why analysis never completed.
+// withTimeout also can't cancel the underlying request, so a premature
+// timeout doesn't even free up the in-flight call — it just piles a
+// redundant one on top, making the rate-limit exhaustion worse, not
+// better. Raised with real margin above the observed range instead of
+// nudged up incrementally, to actually stop recurring.
+const GEMINI_CALL_TIMEOUT_MS = 240_000;
 
 function withTimeout(promise, ms) {
   return new Promise((resolve, reject) => {

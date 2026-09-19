@@ -6695,9 +6695,21 @@ async function generateAdSheetDetails(sceneEntries, breakdownContent, sourceText
     batches.push({ start: i, entries: sceneEntries.slice(i, i + AD_SHEET_BATCH_SIZE) });
   }
 
-  const batchResults = await mapWithConcurrency(batches, 3, (batch) =>
-    generateAdSheetDetailsForBatch(batch.entries, batch.start, breakdownContent, sourceText)
-  );
+  // Same lesson as generateDeepScriptBreakdownContent: each batch re-sends
+  // the WHOLE script, so several of these at once reliably trips Vertex
+  // AI's own rate limit (a real 166KB script + several batches confirmed
+  // it) — sequential is slower but actually finishes. A batch that still
+  // fails after retries falls back to blank rows for just that batch
+  // instead of losing the whole AD sheet.
+  const blankRow = { mainCharacters: [], extras: { en: "", or: "" }, property: { en: "", or: "" }, costumeRemarks: { en: "", or: "" } };
+  const batchResults = await mapWithConcurrency(batches, 1, async (batch) => {
+    try {
+      return await generateAdSheetDetailsForBatch(batch.entries, batch.start, breakdownContent, sourceText);
+    } catch (error) {
+      console.error(`AD sheet batch starting at scene ${batch.start} failed, filling with blank rows:`, error.message);
+      return batch.entries.map(() => blankRow);
+    }
+  });
 
   return batchResults.flat();
 }
@@ -7377,6 +7389,13 @@ app.post("/api/script-breakdown/:id/generate-ad-sheet", requireRole("admin", "pr
     return;
   }
 
+  // Same reasoning as /api/script-breakdown: one batch per ~15 scenes, each
+  // re-sending the whole script, run sequentially now for rate-limit
+  // safety — a real script easily pushes this past Render's own request
+  // timeout. Respond immediately and let the frontend poll for the new
+  // row instead of holding this request open.
+  res.json({ status: "processing" });
+
   try {
     const sceneListResult = await db.query("SELECT content FROM scene_lists WHERE id = $1", [sceneListId]);
     const sceneList = sceneListResult.rows[0].content;
@@ -7391,15 +7410,12 @@ app.post("/api/script-breakdown/:id/generate-ad-sheet", requireRole("admin", "pr
     // approval as an operational step) — carries the previous approval
     // status forward instead of silently reverting to pending, which
     // would hide the Shoot Schedule (it only shows once approved).
-    const insertResult = await db.query(
-      "INSERT INTO script_breakdowns (scene_list_id, content, status, feedback) VALUES ($1, $2, $3, $4) RETURNING id, status, feedback",
+    await db.query(
+      "INSERT INTO script_breakdowns (scene_list_id, content, status, feedback) VALUES ($1, $2, $3, $4)",
       [sceneListId, JSON.stringify(updatedContent), latest.rows[0].status, "Generated AD Scene Breakdown Sheet"]
     );
-
-    res.json({ ...insertResult.rows[0], sceneListId, ...updatedContent });
   } catch (error) {
     console.error("AD sheet generation failed:", error.message);
-    res.status(502).json({ error: error.message });
   }
 });
 

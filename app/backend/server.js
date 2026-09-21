@@ -125,6 +125,20 @@ function withTimeout(promise, ms) {
   });
 }
 
+// Every Gemini/Vertex call already retries a 429 several times (see
+// generateContentWithRetry above), but a SUSTAINED quota exhaustion — the
+// whole Google Cloud project out of budget, not just one burst — outlasts
+// that retry budget and the raw error (a nested JSON blob with a Google
+// Cloud docs URL) ends up on screen verbatim, which reads as the app being
+// broken rather than what it actually is: a real, external quota limit
+// that needs to be checked/raised in Google Cloud Console, not a bug here.
+function friendlyGeminiErrorMessage(rawMessage) {
+  if (/RESOURCE_EXHAUSTED|"code":\s*429/.test(rawMessage ?? "")) {
+    return "The AI service's usage quota is temporarily exhausted (this is a Google Cloud limit, not an app bug). This usually clears on its own within a few minutes to an hour — please try again shortly. If it keeps happening, the project's Vertex AI quota may need to be raised in Google Cloud Console.";
+  }
+  return rawMessage;
+}
+
 async function generateContentWithRetry(params, { retries = 4, fallbackDelayMs = 2000 } = {}) {
   for (let attempt = 0; ; attempt++) {
     try {
@@ -11607,7 +11621,7 @@ async function runAutoPipeline(runId, conceptText, format, dialogueLanguage, res
     await updateAutoPipelineRun(runId, { status: "completed", progress_stage: "done" });
   } catch (error) {
     console.error("Auto-pipeline run failed:", runId, error);
-    await updateAutoPipelineRun(runId, { status: "failed", error: error.message }).catch(() => {});
+    await updateAutoPipelineRun(runId, { status: "failed", error: friendlyGeminiErrorMessage(error.message) }).catch(() => {});
   }
 }
 

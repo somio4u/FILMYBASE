@@ -2973,13 +2973,41 @@ function flattenAiMovieContentForExtraction(pastedText, backfill) {
 // Reference Material section (a real book/source, manually-specified
 // character/property/art details, or anything else) — fed into both
 // generation calls below as grounding they must stay faithful to.
+//
+// Capped in total size: a project can have a dozen-plus real documents
+// attached (a full handoff package — story drafts, scene breakdowns, whole
+// screenplay acts), and dumping all of it uncapped into one prompt was
+// seen to make generation slow enough to time out before any response came
+// back at all (the caller saw a bare network failure, not even a real
+// error message). Keeps whole documents up to the budget rather than
+// slicing mid-document, so whatever's included stays coherent; newest
+// first, since that's most likely to be the current/active material.
+const AI_MOVIE_REFERENCE_MATERIAL_CHAR_BUDGET = 60_000;
+const AI_MOVIE_REFERENCE_DOCUMENT_CHAR_CAP = 20_000;
+
 async function getAiMovieReferenceMaterialText(projectId) {
   if (!projectId) return "";
   const result = await db.query(
-    "SELECT category, label, content FROM ai_movie_reference_files WHERE project_id = $1 ORDER BY created_at",
+    "SELECT category, label, content FROM ai_movie_reference_files WHERE project_id = $1 ORDER BY created_at DESC",
     [projectId]
   );
-  return result.rows.map((row) => `[${row.category}] ${row.label ?? ""}\n${row.content}`).join("\n\n---\n\n");
+
+  const included = [];
+  let total = 0;
+  for (const row of result.rows) {
+    const content =
+      row.content.length > AI_MOVIE_REFERENCE_DOCUMENT_CHAR_CAP
+        ? `${row.content.slice(0, AI_MOVIE_REFERENCE_DOCUMENT_CHAR_CAP)}\n(truncated for length)`
+        : row.content;
+    const entry = `[${row.category}] ${row.label ?? ""}\n${content}`;
+    if (total > 0 && total + entry.length > AI_MOVIE_REFERENCE_MATERIAL_CHAR_BUDGET) break;
+    included.push(entry);
+    total += entry.length;
+  }
+
+  const omitted = result.rows.length - included.length;
+  const text = included.join("\n\n---\n\n");
+  return omitted > 0 ? `${text}\n\n---\n\n(${omitted} more attached document(s) omitted for length.)` : text;
 }
 
 app.post("/api/ai-movie/backfill", requireRole("admin"), async (req, res) => {

@@ -2861,11 +2861,27 @@ const AI_MOVIE_BACKFILL_SYSTEM_PROMPT = `You are working on an AI Movie — a fi
 
 The user has pasted material below at a specific, already-identified stage of development. Treat that pasted material as final and authoritative for its own stage — never rewrite it, never critique or "improve" it, never second-guess it. Your only job is to invent the EARLIER, missing layers the schema below asks for, fully consistent with what was pasted (same story, same characters, same world — you are filling in what came before it, not changing it).`;
 
+// AI Movie's own bilingual field shape — English + Hindi only, deliberately
+// separate from the shared BILINGUAL_TEXT_SCHEMA (en/or/hi) used everywhere
+// else in this app. The Movie/shooting pipeline's Odia work (colloquial
+// dialogue, Odia PDF export, the language toggle) is untouched by this —
+// AI Movie's Odia output was coming back Romanized/phonetic rather than
+// real Odia script, so Odia is dropped from AI Movie's own fields in favor
+// of Hindi, which was coming back usable.
+const AI_MOVIE_BILINGUAL_TEXT_SCHEMA = {
+  type: Type.OBJECT,
+  properties: {
+    en: { type: Type.STRING },
+    hi: { type: Type.STRING },
+  },
+  required: ["en", "hi"],
+};
+
 const AI_MOVIE_STORY_LAYER_SCHEMA = {
   type: Type.OBJECT,
   properties: {
-    title: BILINGUAL_TEXT_SCHEMA,
-    summary: BILINGUAL_TEXT_SCHEMA,
+    title: AI_MOVIE_BILINGUAL_TEXT_SCHEMA,
+    summary: AI_MOVIE_BILINGUAL_TEXT_SCHEMA,
   },
   required: ["title", "summary"],
 };
@@ -2873,10 +2889,10 @@ const AI_MOVIE_STORY_LAYER_SCHEMA = {
 const AI_MOVIE_SYNOPSIS_LAYER_SCHEMA = {
   type: Type.OBJECT,
   properties: {
-    logline: BILINGUAL_TEXT_SCHEMA,
-    premise: BILINGUAL_TEXT_SCHEMA,
-    toneGenre: BILINGUAL_TEXT_SCHEMA,
-    targetAudience: BILINGUAL_TEXT_SCHEMA,
+    logline: AI_MOVIE_BILINGUAL_TEXT_SCHEMA,
+    premise: AI_MOVIE_BILINGUAL_TEXT_SCHEMA,
+    toneGenre: AI_MOVIE_BILINGUAL_TEXT_SCHEMA,
+    targetAudience: AI_MOVIE_BILINGUAL_TEXT_SCHEMA,
   },
   required: ["logline", "premise", "toneGenre", "targetAudience"],
 };
@@ -2884,8 +2900,8 @@ const AI_MOVIE_SYNOPSIS_LAYER_SCHEMA = {
 const AI_MOVIE_PLOT_BEAT_SCHEMA = {
   type: Type.OBJECT,
   properties: {
-    title: BILINGUAL_TEXT_SCHEMA,
-    description: BILINGUAL_TEXT_SCHEMA,
+    title: AI_MOVIE_BILINGUAL_TEXT_SCHEMA,
+    description: AI_MOVIE_BILINGUAL_TEXT_SCHEMA,
   },
   required: ["title", "description"],
 };
@@ -2894,9 +2910,9 @@ const AI_MOVIE_CHARACTER_ARC_SCHEMA = {
   type: Type.OBJECT,
   properties: {
     name: { type: Type.STRING },
-    want: BILINGUAL_TEXT_SCHEMA,
-    need: BILINGUAL_TEXT_SCHEMA,
-    arc: BILINGUAL_TEXT_SCHEMA,
+    want: AI_MOVIE_BILINGUAL_TEXT_SCHEMA,
+    need: AI_MOVIE_BILINGUAL_TEXT_SCHEMA,
+    arc: AI_MOVIE_BILINGUAL_TEXT_SCHEMA,
   },
   required: ["name", "want", "need", "arc"],
 };
@@ -2909,9 +2925,9 @@ const AI_MOVIE_CHARACTER_ARC_SCHEMA = {
 const AI_MOVIE_THREE_ACT_SCHEMA = {
   type: Type.OBJECT,
   properties: {
-    actName: BILINGUAL_TEXT_SCHEMA,
-    description: BILINGUAL_TEXT_SCHEMA,
-    turningPoint: BILINGUAL_TEXT_SCHEMA,
+    actName: AI_MOVIE_BILINGUAL_TEXT_SCHEMA,
+    description: AI_MOVIE_BILINGUAL_TEXT_SCHEMA,
+    turningPoint: AI_MOVIE_BILINGUAL_TEXT_SCHEMA,
   },
   required: ["actName", "description", "turningPoint"],
 };
@@ -3046,15 +3062,11 @@ function flattenAiMovieContentForExtraction(pastedText, backfill) {
     );
   }
   if (backfill?.plot) parts.push(`Beat Sheet:\n${backfill.plot.map((beat) => `${beat.title.en}: ${beat.description.en}`).join("\n")}`);
-  if (backfill?.screenplay) {
-    parts.push(
-      `Screenplay:\n${backfill.screenplay
-        .map(
-          (scene) =>
-            `${scene.sceneHeading.en}\n${scene.action.en}\n${scene.dialogue.map((d) => `${d.character}: ${d.line.en}`).join("\n")}`
-        )
-        .join("\n\n")}`
-    );
+  if (backfill?.screenplayBeats) {
+    const scenes = backfill.screenplayBeats.filter((b) => b.scenes).flatMap((b) => b.scenes);
+    if (scenes.length > 0) {
+      parts.push(`Screenplay:\n${scenes.map((scene) => `${scene.sceneHeading.en}\n${scene.action.en}`).join("\n\n")}`);
+    }
   }
   return parts.join("\n\n");
 }
@@ -3242,21 +3254,17 @@ const AI_MOVIE_STAGE_GENERATION_SYSTEM_PROMPT = `You are working on an AI Movie 
 
 You are given the story's already-approved, locked earlier layers below — treat them as fixed and fully consistent, never contradict or rewrite them. Generate ONLY the one new layer the schema asks for, as a natural continuation of everything already locked in.`;
 
+// No dialogue yet, deliberately — this stage writes the scenic breakdown
+// only (scene heading + what happens), matching the user's own original
+// Scenic Breakdown file, which separated visual description from dialogue
+// on purpose. Dialogue becomes its own later pass, designed separately.
 const AI_MOVIE_SCREENPLAY_SCENE_SCHEMA = {
   type: Type.OBJECT,
   properties: {
-    sceneHeading: BILINGUAL_TEXT_SCHEMA,
-    action: BILINGUAL_TEXT_SCHEMA,
-    dialogue: {
-      type: Type.ARRAY,
-      items: {
-        type: Type.OBJECT,
-        properties: { character: { type: Type.STRING }, line: BILINGUAL_TEXT_SCHEMA },
-        required: ["character", "line"],
-      },
-    },
+    sceneHeading: AI_MOVIE_BILINGUAL_TEXT_SCHEMA,
+    action: AI_MOVIE_BILINGUAL_TEXT_SCHEMA,
   },
-  required: ["sceneHeading", "action", "dialogue"],
+  required: ["sceneHeading", "action"],
 };
 
 const AI_MOVIE_FORWARD_STAGE_SCHEMAS = {
@@ -3292,20 +3300,30 @@ async function generateAiMovieForwardStage(stageKey, priorContextText, reference
 // roughly 120-150 full scenes ("a beat is a pocket, not one scene"), which
 // no single Gemini call can hold regardless of token budget: a first
 // attempt at "the whole screenplay in one call" produced only 3 scenes
-// before running out of room. Screenplay generation now writes ONE beat's
+// before running out of room. Screenplay generation writes ONE beat's
 // scenes at a time, using every scene already written as context, so the
 // result reads as one continuous draft instead of 46 disconnected
 // fragments.
+//
+// Reviewed the same way, one beat at a time: backfill.screenplayBeats is an
+// array parallel to backfill.plot, each entry { scenes, status, feedback }
+// with status one of not_started / generating / pending / approved / error.
+// A background "buffer" of AI_MOVIE_SCREENPLAY_BUFFER_SIZE beats stays
+// generated ahead of whichever beat the user is currently reviewing, topped
+// back up each time they approve one — so there's always a small queue of
+// ready beats waiting, never a wait for the next one to write itself.
+const AI_MOVIE_SCREENPLAY_BUFFER_SIZE = 4;
+
 const AI_MOVIE_SCREENPLAY_BEAT_SYSTEM_PROMPT = `You are working on an AI Movie — a film that will be entirely AI-generated, never physically shot. Because of that, never reason about budget, cast/crew/location availability, shoot schedules, or any real-world production constraint — anything that can be imagined can be included, with no limitation.
 
-You are given the story's already-approved, locked layers (Story, Synopsis, Characters, Three-Act Structure, full Beat Sheet) below, plus every screenplay scene already written so far. Write ONLY the scenes for the ONE beat named at the end — a beat is a pocket, not a single scene, so expand it into 2 to 4 full scenes with real action lines and dialogue. Continue directly from the last scene already written (same characters, same momentum, no repeats) — never jump ahead to a later beat.`;
+You are given the story's already-approved, locked layers (Story, Synopsis, Characters, Three-Act Structure, full Beat Sheet) below, plus every screenplay scene already written so far. Write ONLY the scenes for the ONE beat named at the end — a beat is a pocket, not a single scene, so expand it into 2 to 4 full scenes with a scene heading and a vivid action/visual description each. Do NOT write any dialogue — that is a separate, later pass; describe what happens and what's said only in action-line terms (e.g. "she pleads with him"), never as quoted lines. Continue directly from the last scene already written (same characters, same momentum, no repeats) — never jump ahead to a later beat.`;
 
 async function generateAiMovieScreenplayBeat(priorContextText, referenceMaterialText, scenesSoFarText, beat, feedback) {
   const referenceBlock = referenceMaterialText
     ? `\n\nThe user has also provided reference material below — treat it as authoritative grounding, stay faithful to it:\n\n${referenceMaterialText}`
     : "";
   const feedbackBlock = feedback
-    ? `\n\nThe user reviewed an earlier draft of the whole screenplay and asked for these changes — apply them here too, still fully consistent with the locked layers above:\n${feedback}`
+    ? `\n\nThe user reviewed an earlier draft of this exact beat's scenes and asked for these changes — revise accordingly, still fully consistent with the locked layers above:\n${feedback}`
     : "";
   const scenesBlock = scenesSoFarText ? `\n\nScreenplay scenes already written so far:\n\n${scenesSoFarText}` : "";
 
@@ -3326,62 +3344,79 @@ async function generateAiMovieScreenplayBeat(priorContextText, referenceMaterial
   return result.scenes;
 }
 
-// Updates just the backfill JSON for one stage, without touching
-// stage_status -- used while screenplay generation is still in progress, so
-// scenes already written are visible/saved without the stage looking
-// approved or even reviewable until the whole draft is done.
+// Updates just the backfill JSON for one field, without touching
+// stage_status -- used throughout screenplay generation so partial/in-
+// progress work is visible and saved without the stage looking approved.
 async function saveAiMovieBackfillField(projectId, stageKey, content) {
   const result = await db.query("SELECT backfill FROM ai_movie_projects WHERE id = $1", [projectId]);
   const backfill = { ...(result.rows[0]?.backfill ?? {}), [stageKey]: content };
   await db.query("UPDATE ai_movie_projects SET backfill = $1, updated_at = now() WHERE id = $2", [JSON.stringify(backfill), projectId]);
 }
 
-// In-memory only (same tradeoff as the Akhada fill status: fine for a job
-// that finishes in minutes, resets harmlessly on a redeploy since the
-// client just re-POSTs to restart it).
-const aiMovieScreenplayStatus = new Map();
+// Builds the "scenes already written" context text out of every beat before
+// the given index that has scenes yet (regardless of approval status --
+// continuity only cares that a beat came before this one in the draft).
+function flattenAiMovieScreenplayScenesSoFar(screenplayBeats, beforeIndex) {
+  return screenplayBeats
+    .slice(0, beforeIndex)
+    .filter((b) => b.scenes)
+    .flatMap((b) => b.scenes)
+    .map((s) => `${s.sceneHeading.en}\n${s.action.en}`)
+    .join("\n\n");
+}
 
-async function runAiMovieScreenplayGeneration(projectId, feedback) {
-  // Set before any await, so a status poll landing right after the kickoff
-  // response never sees a stale "none" while the first DB query is still
-  // in flight.
-  aiMovieScreenplayStatus.set(projectId, { status: "running", completed: 0, total: 0 });
+// Writes exactly the next not-yet-started beat's scenes (if any), saving
+// status transitions (not_started -> generating -> pending/error) as it
+// goes so a project reload at any moment reflects real progress. Returns
+// "generated", "no_more", or "error" -- fillAiMovieScreenplayBuffer below
+// uses this to know whether to keep looping.
+async function generateNextAiMovieScreenplayBeat(projectId) {
+  const projectResult = await db.query("SELECT pasted_text, backfill FROM ai_movie_projects WHERE id = $1", [projectId]);
+  const project = projectResult.rows[0];
+  if (!project) return "no_more";
+
+  const beats = project.backfill?.plot ?? [];
+  const screenplayBeats = project.backfill?.screenplayBeats ?? [];
+  const nextIndex = screenplayBeats.findIndex((b) => b.status === "not_started");
+  if (nextIndex === -1) return "no_more";
+
+  screenplayBeats[nextIndex] = { ...screenplayBeats[nextIndex], status: "generating" };
+  await saveAiMovieBackfillField(projectId, "screenplayBeats", screenplayBeats);
+
   try {
-    const projectResult = await db.query("SELECT pasted_text, backfill FROM ai_movie_projects WHERE id = $1", [projectId]);
-    const project = projectResult.rows[0];
-    const beats = project?.backfill?.plot ?? [];
-
     const referenceMaterialText = await getAiMovieReferenceMaterialText(projectId);
     const priorContextText = flattenAiMovieContentForExtraction(project.pasted_text, project.backfill);
+    const scenesSoFarText = flattenAiMovieScreenplayScenesSoFar(screenplayBeats, nextIndex);
+    const scenes = await generateAiMovieScreenplayBeat(priorContextText, referenceMaterialText, scenesSoFarText, beats[nextIndex], null);
 
-    // A retry (or a Request Changes resubmit) starts the draft over from
-    // scene one rather than trying to reconcile it with a half-finished
-    // previous attempt.
-    const scenes = [];
-    await saveAiMovieBackfillField(projectId, "screenplay", scenes);
-    aiMovieScreenplayStatus.set(projectId, { status: "running", completed: 0, total: beats.length });
-
-    for (let i = 0; i < beats.length; i++) {
-      const scenesSoFarText = scenes
-        .map(
-          (s) =>
-            `${s.sceneHeading.en}\n${s.action.en}\n${s.dialogue.map((d) => `${d.character}: ${d.line.en}`).join("\n")}`
-        )
-        .join("\n\n");
-      const beatScenes = await generateAiMovieScreenplayBeat(priorContextText, referenceMaterialText, scenesSoFarText, beats[i], feedback);
-      scenes.push(...beatScenes);
-      await saveAiMovieBackfillField(projectId, "screenplay", scenes);
-      aiMovieScreenplayStatus.set(projectId, { status: "running", completed: i + 1, total: beats.length });
-    }
-
-    await db.query(
-      "UPDATE ai_movie_projects SET stage_status = stage_status || $1::jsonb, updated_at = now() WHERE id = $2",
-      [JSON.stringify({ screenplay: { status: "pending", feedback: feedback ?? null } }), projectId]
-    );
-    aiMovieScreenplayStatus.set(projectId, { status: "done", completed: beats.length, total: beats.length });
+    const latest = (await db.query("SELECT backfill FROM ai_movie_projects WHERE id = $1", [projectId])).rows[0].backfill;
+    const latestBeats = latest.screenplayBeats ?? screenplayBeats;
+    latestBeats[nextIndex] = { scenes, status: "pending", feedback: null };
+    await saveAiMovieBackfillField(projectId, "screenplayBeats", latestBeats);
+    return "generated";
   } catch (error) {
-    console.error("Screenplay beat-by-beat generation failed:", error.message);
-    aiMovieScreenplayStatus.set(projectId, { status: "error", error: error.message });
+    console.error(`Screenplay beat ${nextIndex} generation failed:`, error.message);
+    const latest = (await db.query("SELECT backfill FROM ai_movie_projects WHERE id = $1", [projectId])).rows[0].backfill;
+    const latestBeats = latest.screenplayBeats ?? screenplayBeats;
+    latestBeats[nextIndex] = { ...latestBeats[nextIndex], status: "error", feedback: error.message };
+    await saveAiMovieBackfillField(projectId, "screenplayBeats", latestBeats);
+    return "error";
+  }
+}
+
+// Keeps generating beats until the buffer (pending + generating beats,
+// i.e. everything written but not yet approved) reaches the target size,
+// or there's nothing left to generate, or a beat fails. Runs beats
+// strictly one at a time (never in parallel), both for continuity and to
+// keep Gemini call volume predictable.
+async function fillAiMovieScreenplayBuffer(projectId) {
+  for (;;) {
+    const result = await db.query("SELECT backfill FROM ai_movie_projects WHERE id = $1", [projectId]);
+    const screenplayBeats = result.rows[0]?.backfill?.screenplayBeats ?? [];
+    const inFlight = screenplayBeats.filter((b) => b.status === "pending" || b.status === "generating").length;
+    if (inFlight >= AI_MOVIE_SCREENPLAY_BUFFER_SIZE) return;
+    const outcome = await generateNextAiMovieScreenplayBeat(projectId);
+    if (outcome !== "generated") return;
   }
 }
 
@@ -3406,17 +3441,26 @@ app.post("/api/ai-movie/stages/:stage/generate", requireRole("admin"), async (re
   }
 
   if (stageKey === "screenplay") {
-    if (!project.backfill?.plot || project.backfill.plot.length === 0) {
+    const beats = project.backfill?.plot ?? [];
+    if (beats.length === 0) {
       res.status(400).json({ error: "Generate the Beat Sheet first." });
       return;
     }
-    // Respond immediately and keep writing beats afterward — see
-    // runAiMovieScreenplayGeneration for why this can't be one request.
-    // projectId is a number here (parsed from the JSON body) but a string
-    // when the status endpoint reads it from a query param — normalize so
-    // the same project doesn't produce two different Map keys.
+    // A fresh click always restarts the draft from beat one, rather than
+    // trying to reconcile with a half-finished previous attempt.
+    const screenplayBeats = beats.map(() => ({ scenes: null, status: "not_started", feedback: null }));
+    await saveAiMovieBackfillField(projectId, "screenplayBeats", screenplayBeats);
+    await db.query(
+      "UPDATE ai_movie_projects SET stage_status = stage_status - 'screenplay', updated_at = now() WHERE id = $1",
+      [projectId]
+    );
+    // Respond immediately and fill the buffer afterward -- no single
+    // request holds open across what's really several sequential Gemini
+    // calls. Progress is entirely readable from the project's own backfill
+    // (backfill.screenplayBeats), so the client just polls the normal
+    // project-detail endpoint rather than a separate status endpoint.
     res.json({ started: true });
-    runAiMovieScreenplayGeneration(String(projectId), feedback);
+    fillAiMovieScreenplayBuffer(projectId);
     return;
   }
 
@@ -3438,10 +3482,87 @@ app.post("/api/ai-movie/stages/:stage/generate", requireRole("admin"), async (re
   }
 });
 
-app.get("/api/ai-movie/stages/screenplay/status", requireRole("admin"), (req, res) => {
-  const { projectId } = req.query;
-  const status = aiMovieScreenplayStatus.get(projectId) ?? { status: "none" };
-  res.json(status);
+// Approves one beat's scenes and, unless the whole screenplay is now done,
+// tops the generation buffer back up by one -- fire-and-forget, same
+// non-blocking pattern as the initial kickoff.
+app.post("/api/ai-movie/stages/screenplay/beats/:index/approve", requireRole("admin"), async (req, res) => {
+  const beatIndex = Number(req.params.index);
+  const { projectId } = req.body;
+  if (!projectId) {
+    res.status(400).json({ error: "No project to approve into." });
+    return;
+  }
+
+  const projectResult = await db.query("SELECT backfill FROM ai_movie_projects WHERE id = $1", [projectId]);
+  const project = projectResult.rows[0];
+  if (!project) {
+    res.status(404).json({ error: "Project not found." });
+    return;
+  }
+
+  const screenplayBeats = project.backfill?.screenplayBeats ?? [];
+  if (!Number.isInteger(beatIndex) || beatIndex < 0 || beatIndex >= screenplayBeats.length) {
+    res.status(400).json({ error: "Not a valid beat." });
+    return;
+  }
+
+  screenplayBeats[beatIndex] = { ...screenplayBeats[beatIndex], status: "approved" };
+  await saveAiMovieBackfillField(projectId, "screenplayBeats", screenplayBeats);
+
+  const allApproved = screenplayBeats.every((b) => b.status === "approved");
+  if (allApproved) {
+    await db.query(
+      "UPDATE ai_movie_projects SET stage_status = stage_status || $1::jsonb, updated_at = now() WHERE id = $2",
+      [JSON.stringify({ screenplay: { status: "approved", feedback: null } }), projectId]
+    );
+  } else {
+    fillAiMovieScreenplayBuffer(projectId);
+  }
+
+  res.json({ beatIndex, allApproved });
+});
+
+// Regenerates one beat's scenes -- with feedback (a real Request Changes)
+// or without (a plain retry after that beat's status came back "error").
+// Small enough (one beat, not 46) to stay a normal synchronous call.
+app.post("/api/ai-movie/stages/screenplay/beats/:index/request-changes", requireRole("admin"), async (req, res) => {
+  const beatIndex = Number(req.params.index);
+  const { projectId, feedback } = req.body;
+  if (!projectId) {
+    res.status(400).json({ error: "No project to regenerate into." });
+    return;
+  }
+
+  const projectResult = await db.query("SELECT pasted_text, backfill FROM ai_movie_projects WHERE id = $1", [projectId]);
+  const project = projectResult.rows[0];
+  if (!project) {
+    res.status(404).json({ error: "Project not found." });
+    return;
+  }
+
+  const beats = project.backfill?.plot ?? [];
+  const screenplayBeats = project.backfill?.screenplayBeats ?? [];
+  if (!Number.isInteger(beatIndex) || beatIndex < 0 || beatIndex >= beats.length) {
+    res.status(400).json({ error: "Not a valid beat." });
+    return;
+  }
+
+  try {
+    const referenceMaterialText = await getAiMovieReferenceMaterialText(projectId);
+    const priorContextText = flattenAiMovieContentForExtraction(project.pasted_text, project.backfill);
+    const scenesSoFarText = flattenAiMovieScreenplayScenesSoFar(screenplayBeats, beatIndex);
+    const scenes = await generateAiMovieScreenplayBeat(priorContextText, referenceMaterialText, scenesSoFarText, beats[beatIndex], feedback || null);
+
+    const latest = (await db.query("SELECT backfill FROM ai_movie_projects WHERE id = $1", [projectId])).rows[0].backfill;
+    const latestBeats = latest.screenplayBeats ?? screenplayBeats;
+    latestBeats[beatIndex] = { scenes, status: "pending", feedback: feedback || null };
+    await saveAiMovieBackfillField(projectId, "screenplayBeats", latestBeats);
+
+    res.json({ beatIndex, scenes });
+  } catch (error) {
+    console.error(`Screenplay beat ${beatIndex} regeneration failed:`, error.message);
+    res.status(502).json({ error: error.message });
+  }
 });
 
 app.post("/api/ai-movie/stages/:stage/approve", requireRole("admin"), async (req, res) => {
@@ -3600,10 +3721,10 @@ app.post("/api/ai-movie/projects/seed-akhada", requireRole("admin"), async (req,
 async function translateAkhadaFixedContent(englishPayload, responseSchema, maxOutputTokens) {
   return generateJsonContent({
     model: GEMINI_MODEL_NAME,
-    contents: `This is finished English story-bible content for a film — already final, nothing to change. Add a faithful Odia (or) and Hindi (hi) translation to every field. Keep the English exactly as given; do not shorten, add to, or otherwise alter its meaning:\n\n${JSON.stringify(englishPayload)}`,
+    contents: `This is finished English story-bible content for a film — already final, nothing to change. Add a faithful Hindi (hi) translation to every field. Keep the English exactly as given; do not shorten, add to, or otherwise alter its meaning:\n\n${JSON.stringify(englishPayload)}`,
     config: {
       systemInstruction:
-        "You are a professional Odia and Hindi translator working on a finished film story bible. You never alter, invent, or edit the given English content — you only add faithful translations of it, matching the required schema exactly.",
+        "You are a professional Hindi translator working on a finished film story bible. You never alter, invent, or edit the given English content — you only add a faithful translation of it, matching the required schema exactly.",
       responseMimeType: "application/json",
       maxOutputTokens,
       responseSchema,

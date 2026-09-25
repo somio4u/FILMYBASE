@@ -233,6 +233,12 @@ const LABELS = {
     noContactsFound: 'No matching contacts.',
     importButtonLabel: 'Import Project',
     importInvalidFile: "This doesn't look like a valid exported project file.",
+    projectInstructionsButton: 'Project Instructions',
+    projectInstructionsHint: "Extra creative direction for THIS project only — genre conventions, tone, character voice notes, anything specific to this story. Added on top of the agent's normal behavior, not a replacement for it. Other projects are never affected.",
+    projectInstructionsPlaceholder: 'e.g. "Keep the tone lighter and more comedic than usual" or "This family speaks mostly Sadhu Bhasha, not colloquial Odia"…',
+    saveProjectInstructionsButton: 'Save Instructions',
+    savingProjectInstructionsLabel: 'Saving…',
+    projectInstructionsSetBadge: 'Custom instructions active for this project',
     pinIconTitle: 'Pin project',
     unpinIconTitle: 'Unpin project',
     deleteIconTitle: 'Delete project',
@@ -741,6 +747,12 @@ const LABELS = {
     noContactsFound: 'କୌଣସି ମେଳ ଖାଉଥିବା ଯୋଗାଯୋଗ ନାହିଁ।',
     importButtonLabel: 'ପ୍ରୋଜେକ୍ଟ ଇମ୍ପୋର୍ଟ କରନ୍ତୁ',
     importInvalidFile: 'ଏହା ଏକ ବୈଧ ଏକ୍ସପୋର୍ଟ ହୋଇଥିବା ପ୍ରୋଜେକ୍ଟ ଫାଇଲ ପରି ଦେଖାଯାଉ ନାହିଁ।',
+    projectInstructionsButton: 'ପ୍ରୋଜେକ୍ଟ ନିର୍ଦ୍ଦେଶାବଳୀ',
+    projectInstructionsHint: 'କେବଳ ଏହି ପ୍ରୋଜେକ୍ଟ ପାଇଁ ଅତିରିକ୍ତ ସୃଜନାତ୍ମକ ନିର୍ଦ୍ଦେଶ — ଧାରା, ଟୋନ୍, ଚରିତ୍ର ସ୍ୱର ସମ୍ବନ୍ଧୀୟ ମନ୍ତବ୍ୟ, କିମ୍ବା ଏହି କାହାଣୀ ପାଇଁ ନିର୍ଦ୍ଦିଷ୍ଟ କିଛି। ଏଜେଣ୍ଟର ସାଧାରଣ ବ୍ୟବହାର ଉପରେ ଯୋଡ଼ାଯାଏ, ତାହା ବଦଳରେ ନୁହେଁ। ଅନ୍ୟ ପ୍ରୋଜେକ୍ଟଗୁଡ଼ିକ କେବେ ପ୍ରଭାବିତ ହୁଅନ୍ତି ନାହିଁ।',
+    projectInstructionsPlaceholder: 'ଯଥା "ଟୋନ୍‌କୁ ସାଧାରଣ ଠାରୁ ଅଧିକ ହାଲୁକା ଓ ହାସ୍ୟରସାତ୍ମକ ରଖନ୍ତୁ" କିମ୍ବା "ଏହି ପରିବାର ଅଧିକାଂଶ ସମୟରେ ସାଧୁ ଭାଷାରେ କଥାବାର୍ତ୍ତା କରନ୍ତି, ପ୍ରାକୃତିକ ଓଡ଼ିଆ ନୁହେଁ"…',
+    saveProjectInstructionsButton: 'ନିର୍ଦ୍ଦେଶାବଳୀ ସେଭ୍ କରନ୍ତୁ',
+    savingProjectInstructionsLabel: 'ସେଭ୍ ହେଉଛି…',
+    projectInstructionsSetBadge: 'ଏହି ପ୍ରୋଜେକ୍ଟ ପାଇଁ କଷ୍ଟମ୍ ନିର୍ଦ୍ଦେଶାବଳୀ ସକ୍ରିୟ ଅଛି',
     pinIconTitle: 'ପ୍ରୋଜେକ୍ଟ ପିନ୍ କରନ୍ତୁ',
     unpinIconTitle: 'ପିନ୍ ହଟାନ୍ତୁ',
     deleteIconTitle: 'ପ୍ରୋଜେକ୍ଟ ଡିଲିଟ୍ କରନ୍ତୁ',
@@ -3986,6 +3998,10 @@ function App() {
   const [concept, setConcept] = useState('')
   const [conceptId, setConceptId] = useState(null)
   const [projectTitle, setProjectTitle] = useState(null)
+  const [customInstructions, setCustomInstructions] = useState(null)
+  const [customInstructionsDraft, setCustomInstructionsDraft] = useState('')
+  const [showCustomInstructions, setShowCustomInstructions] = useState(false)
+  const [isSavingCustomInstructions, setIsSavingCustomInstructions] = useState(false)
   const [projectHistory, setProjectHistory] = useState([])
   const [startStage, setStartStage] = useState('idea')
   const [skipPastedText, setSkipPastedText] = useState('')
@@ -4470,6 +4486,38 @@ function App() {
     }
   }
 
+  // Admin-only, per-project creative direction — layered on top of the
+  // Story & Screenplay agent's existing prompts for THIS project only (see
+  // withCustomInstructions on the backend), never replacing them, and never
+  // touching any other project.
+  async function handleSaveCustomInstructionsClick() {
+    if (!conceptId) return
+    setIsSavingCustomInstructions(true)
+    setErrorMessage(null)
+
+    try {
+      const response = await fetch(`${BACKEND_URL}/api/concepts/${conceptId}/custom-instructions`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ customInstructions: customInstructionsDraft }),
+      })
+      const data = await response.json()
+
+      if (!response.ok) {
+        setErrorMessage(data.error || t.genericError)
+        setIsSavingCustomInstructions(false)
+        return
+      }
+
+      setCustomInstructions(data.customInstructions ?? null)
+      setCustomInstructionsDraft(data.customInstructions ?? '')
+    } catch {
+      setErrorMessage(t.genericError)
+    }
+
+    setIsSavingCustomInstructions(false)
+  }
+
   // Loads exactly one project's full chain by its concept id — never "whatever's newest
   // anywhere," which was the root cause of the app appearing to randomly jump projects.
   async function loadProject(id) {
@@ -4481,6 +4529,9 @@ function App() {
     setConceptId(data.conceptId)
     setConcept(data.concept)
     setProjectTitle(data.title)
+    setCustomInstructions(data.customInstructions ?? null)
+    setCustomInstructionsDraft(data.customInstructions ?? '')
+    setShowCustomInstructions(false)
     setStorylines(data.storylines)
     setPendingStoryline(null)
     setRegenerateFeedback('')
@@ -7461,6 +7512,36 @@ function App() {
           onChange={handleImportFileSelected}
           style={{ display: 'none' }}
         />
+
+        {currentUser.role === 'admin' && conceptId && (
+          <div className="project-instructions-panel">
+            <button
+              className="project-instructions-toggle"
+              onClick={() => setShowCustomInstructions((v) => !v)}
+            >
+              {t.projectInstructionsButton}
+              {customInstructions && <span className="project-instructions-active-dot" title={t.projectInstructionsSetBadge} />}
+            </button>
+            {showCustomInstructions && (
+              <div className="project-instructions-body">
+                <p className="sidebar-section-note">{t.projectInstructionsHint}</p>
+                <MicTextarea
+                  value={customInstructionsDraft}
+                  onChange={(e) => setCustomInstructionsDraft(e.target.value)}
+                  placeholder={t.projectInstructionsPlaceholder}
+                  rows={4}
+                />
+                <button
+                  className="choose-button"
+                  onClick={handleSaveCustomInstructionsClick}
+                  disabled={isSavingCustomInstructions || customInstructionsDraft === (customInstructions ?? '')}
+                >
+                  {isSavingCustomInstructions ? t.savingProjectInstructionsLabel : t.saveProjectInstructionsButton}
+                </button>
+              </div>
+            )}
+          </div>
+        )}
 
         <div className="sidebar-lang-toggle">
           <select

@@ -675,9 +675,19 @@ BOLCHAAL KI HINDI, NOT SHUDDH/SANSKRITIZED HINDI — this is the single most imp
 IMPORTANT — script, not Romanization: dialogue must always be written in actual Hindi (Devanagari) script, never Romanized/transliterated Hindi (Latin letters, e.g. "Kya kar rahe ho"). Code-switching means an occasional English word or short phrase embedded naturally INSIDE a Devanagari sentence — it does not mean writing whole sentences in Latin letters.`,
 };
 
-function buildScreenplaySystemPrompt(dialogueLanguage) {
+// Layers a project's own admin-set creative direction on top of an agent's
+// base prompt — never a replacement for it, so the underlying structure
+// (JSON schema, formatting rules) the rest of the app depends on always
+// stays intact. Every project defaults to no custom instructions at all,
+// which is exactly today's existing behavior, unchanged.
+function withCustomInstructions(basePrompt, customInstructions) {
+  if (!customInstructions?.trim()) return basePrompt;
+  return `${basePrompt}\n\nPROJECT-SPECIFIC DIRECTION for this particular story (set by the production admin — follow it alongside everything above, not instead of it):\n${customInstructions.trim()}`;
+}
+
+function buildScreenplaySystemPrompt(dialogueLanguage, customInstructions) {
   const craft = SCREENPLAY_DIALOGUE_CRAFT[dialogueLanguage] ?? SCREENPLAY_DIALOGUE_CRAFT.en;
-  return `${SCREENPLAY_BASE_PROMPT}\n\n${craft}`;
+  return withCustomInstructions(`${SCREENPLAY_BASE_PROMPT}\n\n${craft}`, customInstructions);
 }
 
 const SCRIPT_BREAKDOWN_SYSTEM_PROMPT = `You are an experienced Assistant Director / Script Supervisor performing a professional SCRIPT BREAKDOWN — the standard pre-scheduling analysis every production does once a script is locked, reading it closely for everything the production team needs to plan for. You are precise and thorough, not creative — extract what's actually in the script, don't invent story content.
@@ -1370,6 +1380,27 @@ app.delete("/api/concepts/:id", requireRole("admin"), async (req, res) => {
   res.json({ id: result.rows[0].id });
 });
 
+// Admin-only, per-project creative direction layered on top of the Story &
+// Screenplay agent's existing prompts for THIS project only (see
+// withCustomInstructions) — every other project keeps behaving exactly as
+// it does today, since this only ever gets read back out by this one
+// project's own concept id.
+app.patch("/api/concepts/:id/custom-instructions", requireRole("admin"), async (req, res) => {
+  const { customInstructions } = req.body;
+
+  const result = await db.query("UPDATE concepts SET custom_instructions = $1 WHERE id = $2 RETURNING id, custom_instructions", [
+    customInstructions?.trim() || null,
+    req.params.id,
+  ]);
+
+  if (result.rows.length === 0) {
+    res.status(404).json({ error: "Project not found" });
+    return;
+  }
+
+  res.json({ id: result.rows[0].id, customInstructions: result.rows[0].custom_instructions });
+});
+
 // Tracks breakdown ids currently being auto-backfilled so a burst of page
 // loads/polls doesn't kick off the same expensive classification pass
 // several times at once. Reset on every deploy/restart — worst case after
@@ -1460,7 +1491,7 @@ app.get("/api/concepts/:id/full", requireLogin, async (req, res) => {
   }
 
   const conceptResult = await db.query(
-    "SELECT id, concept_text, storylines, title, project_type, clapboard_banner_path FROM concepts WHERE id = $1",
+    "SELECT id, concept_text, storylines, title, project_type, clapboard_banner_path, custom_instructions FROM concepts WHERE id = $1",
     [req.params.id]
   );
 
@@ -1476,6 +1507,7 @@ app.get("/api/concepts/:id/full", requireLogin, async (req, res) => {
     storylines: conceptRow.storylines,
     title: conceptRow.title,
     projectType: conceptRow.project_type,
+    customInstructions: conceptRow.custom_instructions,
     clapboardBannerUrl: photoUrlFor(conceptRow.clapboard_banner_path),
     pitchDeck: null,
     characterSheet: null,
@@ -5716,7 +5748,7 @@ async function generateScreenplaySceneContent(deck, allScenes, sceneIndex, previ
       model: GEMINI_MODEL_NAME,
       contents: promptContents,
       config: {
-        systemInstruction: buildScreenplaySystemPrompt(dialogueLanguage),
+        systemInstruction: buildScreenplaySystemPrompt(dialogueLanguage, deck.customInstructions),
         responseMimeType: "application/json",
         maxOutputTokens: Math.min(16384, Math.max(4096, suggestedWords * 4)),
         responseSchema: {
@@ -5761,15 +5793,22 @@ async function fetchLatestScreenplayScene(sceneListId, episodeIndex, sceneIndex)
 
 async function fetchSceneListContext(sceneListId) {
   const result = await db.query(
-    `SELECT sl.content AS scene_list_content, sl.status AS scene_list_status, pd.content AS pitch_deck_content
+    `SELECT sl.content AS scene_list_content, sl.status AS scene_list_status, pd.content AS pitch_deck_content,
+            c.custom_instructions
      FROM scene_lists sl
      JOIN bit_sheets bs ON bs.id = sl.bit_sheet_id
      JOIN three_act_structures tas ON tas.id = bs.three_act_structure_id
      JOIN pitch_decks pd ON pd.id = tas.pitch_deck_id
+     JOIN concepts c ON c.id = pd.concept_id
      WHERE sl.id = $1`,
     [sceneListId]
   );
-  return result.rows[0] || null;
+  const row = result.rows[0];
+  if (!row) return null;
+  // Attached onto the deck object itself (rather than threading a whole new
+  // parameter through every generateScreenplaySceneContent call site) so
+  // existing callers need no changes beyond this one place.
+  return { ...row, pitch_deck_content: { ...row.pitch_deck_content, customInstructions: row.custom_instructions } };
 }
 
 app.post("/api/screenplay/scene", requireRole("admin"), async (req, res) => {

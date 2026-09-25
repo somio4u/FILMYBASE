@@ -297,12 +297,18 @@ const LABELS = {
     aiMovieGeneratingFromReferenceLabel: 'Generating…',
     aiMovieStageLabelStory: 'Story',
     aiMovieStageLabelSynopsis: 'Synopsis',
-    aiMovieStageLabelPlot: 'Plot',
-    aiMovieStageLabelCharacterArc: 'Character Arc',
+    aiMovieStageLabelCharacterArc: 'Characters',
+    aiMovieStageLabelThreeAct: 'Three-Act Structure',
+    aiMovieStageLabelPlot: 'Beat Sheet',
     aiMovieStageLabelScreenplay: 'Screenplay',
     aiMovieGenerateStageButton: (label) => `Generate ${label}`,
     aiMovieGeneratingStageLabel: 'Generating…',
-    aiMovieAllStagesLockedNote: 'Everything is locked in — Story, Synopsis, Plot, Character Arc, and Screenplay are all approved.',
+    aiMovieAllStagesLockedNote: 'Everything is locked in — Story, Synopsis, Characters, Three-Act Structure, Beat Sheet, and Screenplay are all approved.',
+    aiMovieThreeActTurningPointLabel: 'Turning point',
+    aiMovieDeleteProjectButton: 'Delete',
+    aiMovieDeleteProjectConfirm: 'Delete this AI Movie project for good? This cannot be undone.',
+    aiMovieSeedAkhadaButton: 'New Story: Akhada (from uploaded files)',
+    aiMovieSeedingAkhadaLabel: 'Creating…',
     formatQuestion: 'Is this a film, a web series, or a vertical drama?',
     filmOption: 'Film',
     seriesOption: 'Web Series',
@@ -847,12 +853,18 @@ const LABELS = {
     aiMovieGeneratingFromReferenceLabel: 'ତିଆରି ହେଉଛି…',
     aiMovieStageLabelStory: 'ଷ୍ଟୋରୀ',
     aiMovieStageLabelSynopsis: 'ସିନୋପସିସ୍',
-    aiMovieStageLabelPlot: 'ପ୍ଲଟ୍',
-    aiMovieStageLabelCharacterArc: 'ଚରିତ୍ର ଯାତ୍ରା',
+    aiMovieStageLabelCharacterArc: 'ଚରିତ୍ରମାନେ',
+    aiMovieStageLabelThreeAct: 'ତିନି-ଅଙ୍କ ଗଠନ',
+    aiMovieStageLabelPlot: 'ବିଟ୍ ସିଟ୍',
     aiMovieStageLabelScreenplay: 'ସ୍କ୍ରିନପ୍ଲେ',
     aiMovieGenerateStageButton: (label) => `${label} ତିଆରି କରନ୍ତୁ`,
     aiMovieGeneratingStageLabel: 'ତିଆରି ହେଉଛି…',
-    aiMovieAllStagesLockedNote: 'ସବୁକିଛି ଲକ୍ ହୋଇଗଲା — ଷ୍ଟୋରୀ, ସିନୋପସିସ୍, ପ୍ଲଟ୍, ଚରିତ୍ର ଯାତ୍ରା, ଏବଂ ସ୍କ୍ରିନପ୍ଲେ ସବୁ ଅନୁମୋଦିତ।',
+    aiMovieAllStagesLockedNote: 'ସବୁକିଛି ଲକ୍ ହୋଇଗଲା — ଷ୍ଟୋରୀ, ସିନୋପସିସ୍, ଚରିତ୍ରମାନେ, ତିନି-ଅଙ୍କ ଗଠନ, ବିଟ୍ ସିଟ୍, ଏବଂ ସ୍କ୍ରିନପ୍ଲେ ସବୁ ଅନୁମୋଦିତ।',
+    aiMovieThreeActTurningPointLabel: 'ମୋଡ଼ ବିନ୍ଦୁ',
+    aiMovieDeleteProjectButton: 'ଡିଲିଟ୍ କରନ୍ତୁ',
+    aiMovieDeleteProjectConfirm: 'ଏହି AI Movie ପ୍ରୋଜେକ୍ଟକୁ ସବୁଦିନ ପାଇଁ ଡିଲିଟ୍ କରିବେ? ଏହା ପୂର୍ବବତ୍ ହୋଇପାରିବ ନାହିଁ।',
+    aiMovieSeedAkhadaButton: 'ନୂଆ ଷ୍ଟୋରୀ: Akhada (ଅପଲୋଡ୍ ହୋଇଥିବା ଫାଇଲ୍‌ରୁ)',
+    aiMovieSeedingAkhadaLabel: 'ତିଆରି ହେଉଛି…',
     formatQuestion: 'ଏହା ଏକ ଚଳଚ୍ଚିତ୍ର, ୱେବ ସିରିଜ୍ କିମ୍ବା ଭର୍ଟିକାଲ୍ ଡ୍ରାମା?',
     filmOption: 'ଚଳଚ୍ଚିତ୍ର',
     seriesOption: 'ୱେବ ସିରିଜ୍',
@@ -4062,9 +4074,9 @@ function InlineCastAttachment({
 
 // Mirrors the backend's AI_MOVIE_STAGE_ORDER — 'story' is always
 // pre-approved by the time the review chain matters, so the UI only ever
-// actively generates/reviews the other four.
-const AI_MOVIE_STAGE_ORDER = ['story', 'synopsis', 'plot', 'characterArc', 'screenplay']
-const AI_MOVIE_FORWARD_STAGES = ['synopsis', 'plot', 'characterArc', 'screenplay']
+// actively generates/reviews the other five.
+const AI_MOVIE_STAGE_ORDER = ['story', 'synopsis', 'characterArc', 'threeAct', 'plot', 'screenplay']
+const AI_MOVIE_FORWARD_STAGES = ['synopsis', 'characterArc', 'threeAct', 'plot', 'screenplay']
 
 // Walks the chain in order and returns the first stage that still needs
 // attention: 'generate' (no content yet) or 'review' (pending approval).
@@ -4249,6 +4261,7 @@ function App() {
   const [aiMovieView, setAiMovieView] = useState('editor') // 'editor' | 'allProjects'
   const [aiMovieProjectList, setAiMovieProjectList] = useState([])
   const [isLoadingAiMovieProjects, setIsLoadingAiMovieProjects] = useState(false)
+  const [isSeedingAkhadaProject, setIsSeedingAkhadaProject] = useState(false)
   const [isExportingAiMovieProject, setIsExportingAiMovieProject] = useState(false)
   const aiMovieImportFileInputRef = useRef(null)
 
@@ -4866,6 +4879,32 @@ function App() {
       // worth a whole error banner over.
     }
     setIsLoadingAiMovieProjects(false)
+  }
+
+  async function handleDeleteAiMovieProjectClick(project) {
+    if (!window.confirm(t.aiMovieDeleteProjectConfirm)) return
+
+    await fetch(`${BACKEND_URL}/api/ai-movie/projects/${project.id}`, { method: 'DELETE' })
+
+    if (project.id === aiMovieProjectId) {
+      resetAiMovieEditorState()
+    }
+    loadAiMovieProjectList()
+  }
+
+  async function handleSeedAkhadaProjectClick() {
+    setIsSeedingAkhadaProject(true)
+    try {
+      const response = await fetch(`${BACKEND_URL}/api/ai-movie/projects/seed-akhada`, { method: 'POST' })
+      const data = await response.json()
+      if (response.ok) {
+        await loadAiMovieProject(data.projectId)
+      }
+    } catch {
+      // Same non-fatal pattern as the rest of this list — the button stays
+      // clickable to try again rather than a whole error banner.
+    }
+    setIsSeedingAkhadaProject(false)
   }
 
   function handleAiMovieAllProjectsClick() {
@@ -8017,8 +8056,9 @@ function App() {
                     const label =
                       stageKey === 'story' ? t.aiMovieStageLabelStory :
                       stageKey === 'synopsis' ? t.aiMovieStageLabelSynopsis :
-                      stageKey === 'plot' ? t.aiMovieStageLabelPlot :
                       stageKey === 'characterArc' ? t.aiMovieStageLabelCharacterArc :
+                      stageKey === 'threeAct' ? t.aiMovieStageLabelThreeAct :
+                      stageKey === 'plot' ? t.aiMovieStageLabelPlot :
                       t.aiMovieStageLabelScreenplay
                     return (
                       <button
@@ -8055,6 +8095,14 @@ function App() {
               {!isLoadingAiMovieProjects && aiMovieProjectList.length === 0 && (
                 <p className="sidebar-section-note">{t.sidebarHistoryNote}</p>
               )}
+              <button
+                type="button"
+                className="choose-button ai-movie-generate-from-reference-button"
+                onClick={handleSeedAkhadaProjectClick}
+                disabled={isSeedingAkhadaProject}
+              >
+                {isSeedingAkhadaProject ? t.aiMovieSeedingAkhadaLabel : t.aiMovieSeedAkhadaButton}
+              </button>
               <div className="master-list-grid">
                 {aiMovieProjectList.map((project) => (
                   <div key={project.id} className="master-list-card">
@@ -8062,6 +8110,15 @@ function App() {
                       <strong>{project.title || project.pastedText?.slice(0, 40)}</strong>
                       <span className="breakdown-item-meta">{project.detectedStage}</span>
                     </button>
+                    <div className="master-list-card-actions">
+                      <button
+                        className="sidebar-history-icon-button"
+                        onClick={() => handleDeleteAiMovieProjectClick(project)}
+                        title={t.aiMovieDeleteProjectButton}
+                      >
+                        {ICONS.trash}
+                      </button>
+                    </div>
                   </div>
                 ))}
               </div>
@@ -8132,8 +8189,9 @@ function App() {
                       const isCurrent = current?.key === stageKey
                       const stageLabel =
                         stageKey === 'synopsis' ? t.aiMovieStageLabelSynopsis :
-                        stageKey === 'plot' ? t.aiMovieStageLabelPlot :
                         stageKey === 'characterArc' ? t.aiMovieStageLabelCharacterArc :
+                        stageKey === 'threeAct' ? t.aiMovieStageLabelThreeAct :
+                        stageKey === 'plot' ? t.aiMovieStageLabelPlot :
                         t.aiMovieStageLabelScreenplay
 
                       // Not reached yet — don't reveal it before its turn.
@@ -8162,6 +8220,14 @@ function App() {
                               <p>{content.targetAudience[language]}</p>
                             </>
                           )}
+
+                          {content && stageKey === 'threeAct' && content.map((act, index) => (
+                            <div key={index} className="bit-row">
+                              <p className="bit-heading">{act.actName[language]}</p>
+                              <p>{act.description[language]}</p>
+                              <p><em>{t.aiMovieThreeActTurningPointLabel}:</em> {act.turningPoint[language]}</p>
+                            </div>
+                          ))}
 
                           {content && stageKey === 'plot' && content.map((beat, index) => (
                             <div key={index} className="bit-row">

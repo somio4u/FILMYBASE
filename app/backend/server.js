@@ -2895,6 +2895,21 @@ const AI_MOVIE_CHARACTER_ARC_SCHEMA = {
   required: ["name", "want", "need", "arc"],
 };
 
+// The macro shape (Act 1 / Act 2 / Act 3, plus any others a story genuinely
+// needs — an Indian-interval film often reads better as four: Act 1, Act
+// 2A, Act 2B, Act 3) with the turning point that ends each one. Sits
+// between Characters and Beat Sheet: this is the big-picture container the
+// detailed beats below get organized inside, not a beat-by-beat list itself.
+const AI_MOVIE_THREE_ACT_SCHEMA = {
+  type: Type.OBJECT,
+  properties: {
+    actName: BILINGUAL_TEXT_SCHEMA,
+    description: BILINGUAL_TEXT_SCHEMA,
+    turningPoint: BILINGUAL_TEXT_SCHEMA,
+  },
+  required: ["actName", "description", "turningPoint"],
+};
+
 // Which earlier layers each detected stage needs filled in behind it.
 // 'concept' and 'story' are already the earliest layer (nothing behind
 // them); 'other' is too uncertain to safely backfill from at all.
@@ -2902,8 +2917,8 @@ const AI_MOVIE_BACKFILL_LAYERS_NEEDED = {
   concept: [],
   story: [],
   synopsis: ["story"],
-  bitsheet: ["story", "synopsis", "characterArc"],
-  screenplay: ["story", "synopsis", "plot", "characterArc"],
+  bitsheet: ["story", "synopsis", "characterArc", "threeAct"],
+  screenplay: ["story", "synopsis", "characterArc", "threeAct", "plot"],
   other: [],
 };
 
@@ -2928,6 +2943,10 @@ async function generateAiMovieBackfill(pastedText, stage, referenceMaterialText)
   if (needed.includes("characterArc")) {
     properties.characterArc = { type: Type.ARRAY, items: AI_MOVIE_CHARACTER_ARC_SCHEMA };
     required.push("characterArc");
+  }
+  if (needed.includes("threeAct")) {
+    properties.threeAct = { type: Type.ARRAY, items: AI_MOVIE_THREE_ACT_SCHEMA };
+    required.push("threeAct");
   }
 
   const referenceBlock = referenceMaterialText
@@ -3008,12 +3027,19 @@ function flattenAiMovieContentForExtraction(pastedText, backfill) {
       `Synopsis: ${backfill.synopsis.logline.en}\n${backfill.synopsis.premise.en}\n${backfill.synopsis.toneGenre.en}\n${backfill.synopsis.targetAudience.en}`
     );
   }
-  if (backfill?.plot) parts.push(`Plot:\n${backfill.plot.map((beat) => `${beat.title.en}: ${beat.description.en}`).join("\n")}`);
   if (backfill?.characterArc) {
     parts.push(
       `Character Arc:\n${backfill.characterArc.map((c) => `${c.name} — wants ${c.want.en}, needs ${c.need.en}, arc: ${c.arc.en}`).join("\n")}`
     );
   }
+  if (backfill?.threeAct) {
+    parts.push(
+      `Three-Act Structure:\n${backfill.threeAct
+        .map((act) => `${act.actName.en}: ${act.description.en} (turning point: ${act.turningPoint.en})`)
+        .join("\n")}`
+    );
+  }
+  if (backfill?.plot) parts.push(`Beat Sheet:\n${backfill.plot.map((beat) => `${beat.title.en}: ${beat.description.en}`).join("\n")}`);
   if (backfill?.screenplay) {
     parts.push(
       `Screenplay:\n${backfill.screenplay
@@ -3027,20 +3053,23 @@ function flattenAiMovieContentForExtraction(pastedText, backfill) {
   return parts.join("\n\n");
 }
 
-// The step-by-step review chain this whole pipeline now follows, mirroring
-// the shooting pipeline's Idea -> Synopsis -> Characters -> Bit Sheet ->
-// Screenplay chain. 'story' is always covered by whatever the paste/
-// backfill/reference-generation step already produced (auto-approved,
-// never separately reviewed); everything after it is generated ONE layer
-// at a time, only once the layer before it has been approved.
-const AI_MOVIE_STAGE_ORDER = ["story", "synopsis", "plot", "characterArc", "screenplay"];
+// The step-by-step review chain this whole pipeline now follows: Story ->
+// Synopsis -> Characters -> Three-Act Structure -> Beat Sheet ('plot') ->
+// Screenplay. Matches standard screenwriting order (cast the wants/needs
+// before plotting beats around them) and mirrors the shooting pipeline's
+// own Idea -> Synopsis -> Characters -> Bit Sheet chain. 'story' is always
+// covered by whatever the paste/backfill/reference-generation step already
+// produced (auto-approved, never separately reviewed); everything after it
+// is generated ONE layer at a time, only once the layer before it has been
+// approved.
+const AI_MOVIE_STAGE_ORDER = ["story", "synopsis", "characterArc", "threeAct", "plot", "screenplay"];
 
 // How far into AI_MOVIE_STAGE_ORDER a given Analyze result already covers,
 // so that prefix can be auto-approved the moment Proceed finishes — the
 // pasted material (plus whatever backfill invented behind it) is already
 // "final and authoritative," never something to second-guess with a
 // review step. -1 ('other') means nothing is confidently covered.
-const AI_MOVIE_DETECTED_STAGE_COVERED_INDEX = { concept: 0, story: 0, synopsis: 1, bitsheet: 2, screenplay: 4, other: -1 };
+const AI_MOVIE_DETECTED_STAGE_COVERED_INDEX = { concept: 0, story: 0, synopsis: 1, bitsheet: 4, screenplay: 5, other: -1 };
 
 function approvedStageStatusUpTo(index) {
   const status = {};
@@ -3226,8 +3255,9 @@ const AI_MOVIE_SCREENPLAY_SCENE_SCHEMA = {
 
 const AI_MOVIE_FORWARD_STAGE_SCHEMAS = {
   synopsis: AI_MOVIE_SYNOPSIS_LAYER_SCHEMA,
-  plot: { type: Type.ARRAY, items: AI_MOVIE_PLOT_BEAT_SCHEMA },
   characterArc: { type: Type.ARRAY, items: AI_MOVIE_CHARACTER_ARC_SCHEMA },
+  threeAct: { type: Type.ARRAY, items: AI_MOVIE_THREE_ACT_SCHEMA },
+  plot: { type: Type.ARRAY, items: AI_MOVIE_PLOT_BEAT_SCHEMA },
   screenplay: { type: Type.ARRAY, items: AI_MOVIE_SCREENPLAY_SCENE_SCHEMA },
 };
 
@@ -3364,6 +3394,18 @@ app.get("/api/ai-movie/projects/:id", requireRole("admin"), async (req, res) => 
   });
 });
 
+// Deleting a project also removes its reference files — the
+// ai_movie_reference_files.project_id foreign key is ON DELETE CASCADE, so
+// one row delete here is enough.
+app.delete("/api/ai-movie/projects/:id", requireRole("admin"), async (req, res) => {
+  const result = await db.query("DELETE FROM ai_movie_projects WHERE id = $1", [req.params.id]);
+  if (result.rowCount === 0) {
+    res.status(404).json({ error: "Project not found." });
+    return;
+  }
+  res.json({ ok: true });
+});
+
 app.post("/api/ai-movie/projects/import", requireRole("admin"), async (req, res) => {
   const { project } = req.body;
 
@@ -3386,6 +3428,40 @@ app.post("/api/ai-movie/projects/import", requireRole("admin"), async (req, res)
   );
 
   res.json({ id: inserted.rows[0].id });
+});
+
+// One-off, purpose-built: creates a brand-new AI Movie project named
+// "Akhada" and attaches the real story bible files the user handed off
+// (agent task + 46-beat plot/characters/world lore, the full scenic
+// breakdown of those 46 beats, and the two extra project rules) as
+// Reference Material, auto-categorized the same way any other upload is.
+// Nothing here is invented — these are the user's own already-written
+// files, read straight off disk. Once seeded, the normal Generate-from-
+// Reference / per-stage Generate buttons take it from there.
+const AI_MOVIE_AKHADA_SEED_DIR = path.join(import.meta.dirname, "reference-material", "akhada");
+const AI_MOVIE_AKHADA_SEED_FILES = [
+  { file: "1_agent_handoff.md", label: "Akhada Agent Handoff (task, 46-beat plot, characters, world lore)" },
+  { file: "2_scenic_breakdown.md", label: "Akhada Scenic Breakdown (46 beats, full visual description)" },
+  { file: "3_rules_addendum.md", label: "Akhada Project Rules Addendum (interval cliffhanger, simple English)" },
+];
+
+app.post("/api/ai-movie/projects/seed-akhada", requireRole("admin"), async (req, res) => {
+  const inserted = await db.query(
+    "INSERT INTO ai_movie_projects (title, pasted_text, created_by) VALUES ('Akhada', '', $1) RETURNING id",
+    [req.user.id]
+  );
+  const projectId = inserted.rows[0].id;
+
+  for (const { file, label } of AI_MOVIE_AKHADA_SEED_FILES) {
+    const content = fs.readFileSync(path.join(AI_MOVIE_AKHADA_SEED_DIR, file), "utf8");
+    const category = await classifyAiMovieReferenceCategory(content);
+    await db.query(
+      "INSERT INTO ai_movie_reference_files (project_id, category, label, content) VALUES ($1, $2, $3, $4)",
+      [projectId, category, label, content]
+    );
+  }
+
+  res.json({ projectId });
 });
 
 // Fourth AI Movie piece: reference/grounding material the user hands the

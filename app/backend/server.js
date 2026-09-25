@@ -20,6 +20,12 @@ import AdmZip from "adm-zip";
 import crypto from "crypto";
 import cookieParser from "cookie-parser";
 import { createClient } from "@supabase/supabase-js";
+import {
+  AKHADA_FIXED_SYNOPSIS,
+  AKHADA_FIXED_CHARACTERS,
+  AKHADA_FIXED_THREE_ACT,
+  AKHADA_FIXED_BEATS,
+} from "./reference-material/akhada/fixed-stage-content.js";
 
 const app = express();
 // Render (and most hosts) assign the port dynamically via $PORT — 4000
@@ -3462,6 +3468,89 @@ app.post("/api/ai-movie/projects/seed-akhada", requireRole("admin"), async (req,
   }
 
   res.json({ projectId });
+});
+
+// One-off, purpose-built companion to seed-akhada: the Akhada story bible
+// already has its Synopsis, Characters, Three-Act Structure, and Beat
+// Sheet fully written (see fixed-stage-content.js) — there is nothing for
+// an AI to invent at these stages, only English content that needs a
+// faithful Odia/Hindi translation to fit the app's bilingual schema. This
+// skips the normal one-stage-at-a-time Generate/Approve chain for exactly
+// those four layers and fills + auto-approves them all in one call, so the
+// project lands ready for the Screenplay stage without four redundant
+// review steps over content that was never going to change.
+async function translateAkhadaFixedContent(englishPayload, responseSchema, maxOutputTokens) {
+  return generateJsonContent({
+    model: GEMINI_MODEL_NAME,
+    contents: `This is finished English story-bible content for a film — already final, nothing to change. Add a faithful Odia (or) and Hindi (hi) translation to every field. Keep the English exactly as given; do not shorten, add to, or otherwise alter its meaning:\n\n${JSON.stringify(englishPayload)}`,
+    config: {
+      systemInstruction:
+        "You are a professional Odia and Hindi translator working on a finished film story bible. You never alter, invent, or edit the given English content — you only add faithful translations of it, matching the required schema exactly.",
+      responseMimeType: "application/json",
+      maxOutputTokens,
+      responseSchema,
+    },
+  });
+}
+
+app.post("/api/ai-movie/projects/:id/fill-akhada-stages", requireRole("admin"), async (req, res) => {
+  const projectId = req.params.id;
+  const projectResult = await db.query("SELECT backfill FROM ai_movie_projects WHERE id = $1", [projectId]);
+  const project = projectResult.rows[0];
+  if (!project) {
+    res.status(404).json({ error: "Project not found." });
+    return;
+  }
+  if (!project.backfill?.story) {
+    res.status(400).json({ error: "Generate the Story first." });
+    return;
+  }
+
+  try {
+    const synopsis = await translateAkhadaFixedContent(AKHADA_FIXED_SYNOPSIS, AI_MOVIE_SYNOPSIS_LAYER_SCHEMA, 2048);
+    const characterArc = await translateAkhadaFixedContent(
+      AKHADA_FIXED_CHARACTERS,
+      { type: Type.ARRAY, items: AI_MOVIE_CHARACTER_ARC_SCHEMA },
+      4096
+    );
+    const threeAct = await translateAkhadaFixedContent(
+      AKHADA_FIXED_THREE_ACT,
+      { type: Type.ARRAY, items: AI_MOVIE_THREE_ACT_SCHEMA },
+      4096
+    );
+    // Split into two batches for reliability — a single 46-beat call
+    // produces enough output text (title + description, times three
+    // languages, times 46) to risk the response getting cut off mid-JSON
+    // before it finishes, the same failure mode hit earlier with a large
+    // script analysis. Two smaller batches stay well within budget.
+    const beatsMid = Math.ceil(AKHADA_FIXED_BEATS.length / 2);
+    const plotPart1 = await translateAkhadaFixedContent(
+      AKHADA_FIXED_BEATS.slice(0, beatsMid),
+      { type: Type.ARRAY, items: AI_MOVIE_PLOT_BEAT_SCHEMA },
+      16384
+    );
+    const plotPart2 = await translateAkhadaFixedContent(
+      AKHADA_FIXED_BEATS.slice(beatsMid),
+      { type: Type.ARRAY, items: AI_MOVIE_PLOT_BEAT_SCHEMA },
+      16384
+    );
+    const plot = [...plotPart1, ...plotPart2];
+
+    const backfill = { ...project.backfill, synopsis, characterArc, threeAct, plot };
+    // story(0), synopsis(1), characterArc(2), threeAct(3), plot(4) all
+    // approved — screenplay(5) is deliberately left for later.
+    const stageStatus = approvedStageStatusUpTo(4);
+
+    await db.query(
+      "UPDATE ai_movie_projects SET backfill = $1, stage_status = $2, updated_at = now() WHERE id = $3",
+      [JSON.stringify(backfill), JSON.stringify(stageStatus), projectId]
+    );
+
+    res.json({ backfill, stageStatus });
+  } catch (error) {
+    console.error("Akhada fixed-stage fill failed:", error.message);
+    res.status(502).json({ error: error.message });
+  }
 });
 
 // Fourth AI Movie piece: reference/grounding material the user hands the

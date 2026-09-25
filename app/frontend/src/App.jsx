@@ -309,6 +309,8 @@ const LABELS = {
     aiMovieDeleteProjectConfirm: 'Delete this AI Movie project for good? This cannot be undone.',
     aiMovieSeedAkhadaButton: 'New Story: Akhada (from uploaded files)',
     aiMovieSeedingAkhadaLabel: 'Creating…',
+    aiMovieFillAkhadaStagesButton: 'Fill Synopsis → Beat Sheet from your files (skip re-review)',
+    aiMovieFillingAkhadaStagesLabel: 'Filling in…',
     formatQuestion: 'Is this a film, a web series, or a vertical drama?',
     filmOption: 'Film',
     seriesOption: 'Web Series',
@@ -865,6 +867,8 @@ const LABELS = {
     aiMovieDeleteProjectConfirm: 'ଏହି AI Movie ପ୍ରୋଜେକ୍ଟକୁ ସବୁଦିନ ପାଇଁ ଡିଲିଟ୍ କରିବେ? ଏହା ପୂର୍ବବତ୍ ହୋଇପାରିବ ନାହିଁ।',
     aiMovieSeedAkhadaButton: 'ନୂଆ ଷ୍ଟୋରୀ: Akhada (ଅପଲୋଡ୍ ହୋଇଥିବା ଫାଇଲ୍‌ରୁ)',
     aiMovieSeedingAkhadaLabel: 'ତିଆରି ହେଉଛି…',
+    aiMovieFillAkhadaStagesButton: 'ଆପଣଙ୍କ ଫାଇଲ୍‌ରୁ ସିନୋପସିସ୍ → ବିଟ୍ ସିଟ୍ ପୂରଣ କରନ୍ତୁ (ପୁନଃ-ସମୀକ୍ଷା ଛାଡ଼ନ୍ତୁ)',
+    aiMovieFillingAkhadaStagesLabel: 'ପୂରଣ ହେଉଛି…',
     formatQuestion: 'ଏହା ଏକ ଚଳଚ୍ଚିତ୍ର, ୱେବ ସିରିଜ୍ କିମ୍ବା ଭର୍ଟିକାଲ୍ ଡ୍ରାମା?',
     filmOption: 'ଚଳଚ୍ଚିତ୍ର',
     seriesOption: 'ୱେବ ସିରିଜ୍',
@@ -4262,6 +4266,7 @@ function App() {
   const [aiMovieProjectList, setAiMovieProjectList] = useState([])
   const [isLoadingAiMovieProjects, setIsLoadingAiMovieProjects] = useState(false)
   const [isSeedingAkhadaProject, setIsSeedingAkhadaProject] = useState(false)
+  const [isFillingAkhadaStages, setIsFillingAkhadaStages] = useState(false)
   const [isExportingAiMovieProject, setIsExportingAiMovieProject] = useState(false)
   const aiMovieImportFileInputRef = useRef(null)
 
@@ -5057,6 +5062,29 @@ function App() {
       setAiMovieReferenceError(t.genericError)
     }
     setIsGeneratingAiMovieFromReference(false)
+  }
+
+  async function handleFillAkhadaStagesClick() {
+    if (!aiMovieProjectId) return
+
+    setIsFillingAkhadaStages(true)
+    setAiMovieStageError(null)
+    try {
+      const response = await fetch(`${BACKEND_URL}/api/ai-movie/projects/${aiMovieProjectId}/fill-akhada-stages`, {
+        method: 'POST',
+      })
+      const data = await response.json()
+
+      if (!response.ok) {
+        setAiMovieStageError(data.error || t.genericError)
+      } else {
+        setAiMovieBackfillResult(data.backfill)
+        setAiMovieStageStatus(data.stageStatus ?? {})
+      }
+    } catch {
+      setAiMovieStageError(t.genericError)
+    }
+    setIsFillingAkhadaStages(false)
   }
 
   async function handleGenerateAiMovieStageClick(stageKey) {
@@ -8179,6 +8207,17 @@ function App() {
                       <p>{aiMovieBackfillResult.story.summary[language]}</p>
                       <span className="approved-badge">{t.approvedBadge}</span>
                     </div>
+                  )}
+
+                  {aiMovieProjectTitle === 'Akhada' && !aiMovieStageStatus?.plot && (
+                    <button
+                      type="button"
+                      className="choose-button ai-movie-generate-from-reference-button"
+                      onClick={handleFillAkhadaStagesClick}
+                      disabled={isFillingAkhadaStages}
+                    >
+                      {isFillingAkhadaStages ? t.aiMovieFillingAkhadaStagesLabel : t.aiMovieFillAkhadaStagesButton}
+                    </button>
                   )}
 
                   {(() => {

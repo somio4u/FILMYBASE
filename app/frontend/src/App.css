@@ -552,6 +552,32 @@ button, input, textarea, select {
   color: var(--text-primary);
 }
 
+/* Reference Material's attached-file list — same row shape as the sidebar
+   history list above, but this one lives in the wide main content area and
+   its labels (a filename, sometimes with a category tag) can run long, so
+   unlike the sidebar version it wraps instead of single-line-ellipsizing;
+   ellipsis there hid every attached file behind the same few identical
+   characters. */
+.ai-movie-reference-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 4px;
+  padding: 8px 10px;
+  border-radius: 8px;
+}
+
+.ai-movie-reference-row:hover {
+  background: var(--bg-surface-raised);
+}
+
+.ai-movie-reference-label {
+  flex: 1;
+  min-width: 0;
+  font-size: 13px;
+  color: var(--text-secondary);
+  overflow-wrap: anywhere;
+}
+
 .sidebar-history-icon-button svg {
   width: 13px;
   height: 13px;

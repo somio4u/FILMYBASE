@@ -8003,8 +8003,8 @@ function App() {
                 <p className="sidebar-section-note">{t.aiMovieReferenceEmptyNote}</p>
               ) : (
                 aiMovieReferenceFileList.map((file) => (
-                  <div key={file.id} className="sidebar-history-row">
-                    <span className="sidebar-history-item">
+                  <div key={file.id} className="ai-movie-reference-row">
+                    <span className="ai-movie-reference-label">
                       [{file.category}] {file.label || t.aiMovieReferenceUntitledLabel}
                     </span>
                     <button

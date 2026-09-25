@@ -3194,7 +3194,10 @@ app.post(
 
         for (const item of readable) {
           const category = await classifyAiMovieReferenceCategory(item.content);
-          const label = ext === ".zip" ? `${file.originalname} → ${item.label}` : item.label;
+          // Just the file's own name — repeating the zip's filename on
+          // every single row it contained made long lists unreadable
+          // (every label started with the same long, identical prefix).
+          const label = ext === ".zip" ? path.basename(item.label) : item.label;
           const inserted = await db.query(
             "INSERT INTO ai_movie_reference_files (project_id, category, label, content) VALUES ($1, $2, $3, $4) RETURNING id",
             [id, category, label, item.content]

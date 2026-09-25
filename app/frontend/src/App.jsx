@@ -311,6 +311,7 @@ const LABELS = {
     aiMovieSeedingAkhadaLabel: 'Creating…',
     aiMovieFillAkhadaStagesButton: 'Fill Synopsis → Beat Sheet from your files (skip re-review)',
     aiMovieFillingAkhadaStagesLabel: 'Filling in…',
+    aiMovieScreenplayProgressLabel: (completed, total) => `Writing scenes — beat ${completed} of ${total}…`,
     formatQuestion: 'Is this a film, a web series, or a vertical drama?',
     filmOption: 'Film',
     seriesOption: 'Web Series',
@@ -869,6 +870,7 @@ const LABELS = {
     aiMovieSeedingAkhadaLabel: 'ତିଆରି ହେଉଛି…',
     aiMovieFillAkhadaStagesButton: 'ଆପଣଙ୍କ ଫାଇଲ୍‌ରୁ ସିନୋପସିସ୍ → ବିଟ୍ ସିଟ୍ ପୂରଣ କରନ୍ତୁ (ପୁନଃ-ସମୀକ୍ଷା ଛାଡ଼ନ୍ତୁ)',
     aiMovieFillingAkhadaStagesLabel: 'ପୂରଣ ହେଉଛି…',
+    aiMovieScreenplayProgressLabel: (completed, total) => `ଦୃଶ୍ୟ ଲେଖାଯାଉଛି — ବିଟ୍ ${completed} / ${total}…`,
     formatQuestion: 'ଏହା ଏକ ଚଳଚ୍ଚିତ୍ର, ୱେବ ସିରିଜ୍ କିମ୍ବା ଭର୍ଟିକାଲ୍ ଡ୍ରାମା?',
     filmOption: 'ଚଳଚ୍ଚିତ୍ର',
     seriesOption: 'ୱେବ ସିରିଜ୍',
@@ -4267,6 +4269,7 @@ function App() {
   const [isLoadingAiMovieProjects, setIsLoadingAiMovieProjects] = useState(false)
   const [isSeedingAkhadaProject, setIsSeedingAkhadaProject] = useState(false)
   const [isFillingAkhadaStages, setIsFillingAkhadaStages] = useState(false)
+  const [aiMovieScreenplayProgress, setAiMovieScreenplayProgress] = useState(null)
   const [isExportingAiMovieProject, setIsExportingAiMovieProject] = useState(false)
   const aiMovieImportFileInputRef = useRef(null)
 
@@ -5114,58 +5117,81 @@ function App() {
     setTimeout(pollFillStatus, 4000)
   }
 
-  async function handleGenerateAiMovieStageClick(stageKey) {
+  // Screenplay writes one beat at a time in the background (a 46-beat sheet
+  // has to expand into ~120-150 scenes -- far too much for one request to
+  // hold open), so its generate call is polled instead of awaited directly.
+  // Every other stage is small enough to stay a single synchronous call.
+  async function runGenerateAiMovieStage(stageKey, feedback) {
     if (!aiMovieProjectId) return
+    const projectId = aiMovieProjectId
 
     setIsGeneratingAiMovieStage(true)
     setAiMovieStageError(null)
+    setAiMovieScreenplayProgress(null)
     try {
       const response = await fetch(`${BACKEND_URL}/api/ai-movie/stages/${stageKey}/generate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ projectId: aiMovieProjectId }),
+        body: JSON.stringify(feedback ? { projectId, feedback } : { projectId }),
       })
       const data = await response.json()
 
       if (!response.ok) {
         setAiMovieStageError(data.error || t.genericError)
-      } else {
+        setIsGeneratingAiMovieStage(false)
+        return
+      }
+
+      if (stageKey !== 'screenplay') {
         setAiMovieBackfillResult((prev) => ({ ...(prev ?? {}), [stageKey]: data.content }))
-        setAiMovieStageStatus((prev) => ({ ...prev, [stageKey]: { status: 'pending', feedback: null } }))
+        setAiMovieStageStatus((prev) => ({ ...prev, [stageKey]: { status: 'pending', feedback: feedback ?? null } }))
         setShowAiMovieStageFeedbackForm(false)
         setAiMovieStageFeedbackText('')
+        setIsGeneratingAiMovieStage(false)
+        return
       }
     } catch {
       setAiMovieStageError(t.genericError)
+      setIsGeneratingAiMovieStage(false)
+      return
     }
-    setIsGeneratingAiMovieStage(false)
+
+    const pollScreenplayStatus = async () => {
+      try {
+        const statusResponse = await fetch(`${BACKEND_URL}/api/ai-movie/stages/screenplay/status?projectId=${projectId}`)
+        const statusData = await statusResponse.json()
+        if (statusData.status === 'done') {
+          await loadAiMovieProject(projectId)
+          setShowAiMovieStageFeedbackForm(false)
+          setAiMovieStageFeedbackText('')
+          setAiMovieScreenplayProgress(null)
+          setIsGeneratingAiMovieStage(false)
+          return
+        }
+        if (statusData.status === 'error') {
+          setAiMovieStageError(statusData.error || t.genericError)
+          setAiMovieScreenplayProgress(null)
+          setIsGeneratingAiMovieStage(false)
+          return
+        }
+        setAiMovieScreenplayProgress({ completed: statusData.completed ?? 0, total: statusData.total ?? 0 })
+        setTimeout(pollScreenplayStatus, 4000)
+      } catch {
+        setAiMovieStageError(t.genericError)
+        setAiMovieScreenplayProgress(null)
+        setIsGeneratingAiMovieStage(false)
+      }
+    }
+    setTimeout(pollScreenplayStatus, 4000)
   }
 
-  async function handleSubmitAiMovieStageFeedbackClick(stageKey) {
-    if (!aiMovieProjectId || !aiMovieStageFeedbackText.trim()) return
+  function handleGenerateAiMovieStageClick(stageKey) {
+    runGenerateAiMovieStage(stageKey, null)
+  }
 
-    setIsGeneratingAiMovieStage(true)
-    setAiMovieStageError(null)
-    try {
-      const response = await fetch(`${BACKEND_URL}/api/ai-movie/stages/${stageKey}/generate`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ projectId: aiMovieProjectId, feedback: aiMovieStageFeedbackText }),
-      })
-      const data = await response.json()
-
-      if (!response.ok) {
-        setAiMovieStageError(data.error || t.genericError)
-      } else {
-        setAiMovieBackfillResult((prev) => ({ ...(prev ?? {}), [stageKey]: data.content }))
-        setAiMovieStageStatus((prev) => ({ ...prev, [stageKey]: { status: 'pending', feedback: aiMovieStageFeedbackText } }))
-        setShowAiMovieStageFeedbackForm(false)
-        setAiMovieStageFeedbackText('')
-      }
-    } catch {
-      setAiMovieStageError(t.genericError)
-    }
-    setIsGeneratingAiMovieStage(false)
+  function handleSubmitAiMovieStageFeedbackClick(stageKey) {
+    if (!aiMovieStageFeedbackText.trim()) return
+    runGenerateAiMovieStage(stageKey, aiMovieStageFeedbackText)
   }
 
   async function handleApproveAiMovieStageClick(stageKey) {
@@ -8276,6 +8302,12 @@ function App() {
                             >
                               {isGeneratingAiMovieStage ? t.aiMovieGeneratingStageLabel : t.aiMovieGenerateStageButton(stageLabel)}
                             </button>
+                          )}
+
+                          {stageKey === 'screenplay' && isGeneratingAiMovieStage && aiMovieScreenplayProgress && (
+                            <p className="sidebar-section-note">
+                              {t.aiMovieScreenplayProgressLabel(aiMovieScreenplayProgress.completed, aiMovieScreenplayProgress.total)}
+                            </p>
                           )}
 
                           {content && stageKey === 'synopsis' && (

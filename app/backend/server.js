@@ -3281,11 +3281,108 @@ async function generateAiMovieForwardStage(stageKey, priorContextText, reference
     config: {
       systemInstruction: AI_MOVIE_STAGE_GENERATION_SYSTEM_PROMPT,
       responseMimeType: "application/json",
-      maxOutputTokens: stageKey === "screenplay" ? 16384 : 8192,
+      maxOutputTokens: 8192,
       responseSchema: { type: Type.OBJECT, properties: { [stageKey]: AI_MOVIE_FORWARD_STAGE_SCHEMAS[stageKey] }, required: [stageKey] },
     },
   });
   return result[stageKey];
+}
+
+// Screenplay is uniquely large — the task is to expand a 46-beat sheet into
+// roughly 120-150 full scenes ("a beat is a pocket, not one scene"), which
+// no single Gemini call can hold regardless of token budget: a first
+// attempt at "the whole screenplay in one call" produced only 3 scenes
+// before running out of room. Screenplay generation now writes ONE beat's
+// scenes at a time, using every scene already written as context, so the
+// result reads as one continuous draft instead of 46 disconnected
+// fragments.
+const AI_MOVIE_SCREENPLAY_BEAT_SYSTEM_PROMPT = `You are working on an AI Movie — a film that will be entirely AI-generated, never physically shot. Because of that, never reason about budget, cast/crew/location availability, shoot schedules, or any real-world production constraint — anything that can be imagined can be included, with no limitation.
+
+You are given the story's already-approved, locked layers (Story, Synopsis, Characters, Three-Act Structure, full Beat Sheet) below, plus every screenplay scene already written so far. Write ONLY the scenes for the ONE beat named at the end — a beat is a pocket, not a single scene, so expand it into 2 to 4 full scenes with real action lines and dialogue. Continue directly from the last scene already written (same characters, same momentum, no repeats) — never jump ahead to a later beat.`;
+
+async function generateAiMovieScreenplayBeat(priorContextText, referenceMaterialText, scenesSoFarText, beat, feedback) {
+  const referenceBlock = referenceMaterialText
+    ? `\n\nThe user has also provided reference material below — treat it as authoritative grounding, stay faithful to it:\n\n${referenceMaterialText}`
+    : "";
+  const feedbackBlock = feedback
+    ? `\n\nThe user reviewed an earlier draft of the whole screenplay and asked for these changes — apply them here too, still fully consistent with the locked layers above:\n${feedback}`
+    : "";
+  const scenesBlock = scenesSoFarText ? `\n\nScreenplay scenes already written so far:\n\n${scenesSoFarText}` : "";
+
+  const result = await generateJsonContent({
+    model: GEMINI_MODEL_NAME,
+    contents: `The story's approved layers so far:\n\n${priorContextText}${referenceBlock}${feedbackBlock}${scenesBlock}\n\nNow write the scenes for this beat:\n${beat.title.en}: ${beat.description.en}`,
+    config: {
+      systemInstruction: AI_MOVIE_SCREENPLAY_BEAT_SYSTEM_PROMPT,
+      responseMimeType: "application/json",
+      maxOutputTokens: 8192,
+      responseSchema: {
+        type: Type.OBJECT,
+        properties: { scenes: { type: Type.ARRAY, items: AI_MOVIE_SCREENPLAY_SCENE_SCHEMA } },
+        required: ["scenes"],
+      },
+    },
+  });
+  return result.scenes;
+}
+
+// Updates just the backfill JSON for one stage, without touching
+// stage_status -- used while screenplay generation is still in progress, so
+// scenes already written are visible/saved without the stage looking
+// approved or even reviewable until the whole draft is done.
+async function saveAiMovieBackfillField(projectId, stageKey, content) {
+  const result = await db.query("SELECT backfill FROM ai_movie_projects WHERE id = $1", [projectId]);
+  const backfill = { ...(result.rows[0]?.backfill ?? {}), [stageKey]: content };
+  await db.query("UPDATE ai_movie_projects SET backfill = $1, updated_at = now() WHERE id = $2", [JSON.stringify(backfill), projectId]);
+}
+
+// In-memory only (same tradeoff as the Akhada fill status: fine for a job
+// that finishes in minutes, resets harmlessly on a redeploy since the
+// client just re-POSTs to restart it).
+const aiMovieScreenplayStatus = new Map();
+
+async function runAiMovieScreenplayGeneration(projectId, feedback) {
+  // Set before any await, so a status poll landing right after the kickoff
+  // response never sees a stale "none" while the first DB query is still
+  // in flight.
+  aiMovieScreenplayStatus.set(projectId, { status: "running", completed: 0, total: 0 });
+  try {
+    const projectResult = await db.query("SELECT pasted_text, backfill FROM ai_movie_projects WHERE id = $1", [projectId]);
+    const project = projectResult.rows[0];
+    const beats = project?.backfill?.plot ?? [];
+
+    const referenceMaterialText = await getAiMovieReferenceMaterialText(projectId);
+    const priorContextText = flattenAiMovieContentForExtraction(project.pasted_text, project.backfill);
+
+    // A retry (or a Request Changes resubmit) starts the draft over from
+    // scene one rather than trying to reconcile it with a half-finished
+    // previous attempt.
+    const scenes = [];
+    await saveAiMovieBackfillField(projectId, "screenplay", scenes);
+    aiMovieScreenplayStatus.set(projectId, { status: "running", completed: 0, total: beats.length });
+
+    for (let i = 0; i < beats.length; i++) {
+      const scenesSoFarText = scenes
+        .map(
+          (s) =>
+            `${s.sceneHeading.en}\n${s.action.en}\n${s.dialogue.map((d) => `${d.character}: ${d.line.en}`).join("\n")}`
+        )
+        .join("\n\n");
+      const beatScenes = await generateAiMovieScreenplayBeat(priorContextText, referenceMaterialText, scenesSoFarText, beats[i], feedback);
+      scenes.push(...beatScenes);
+      await saveAiMovieBackfillField(projectId, "screenplay", scenes);
+      aiMovieScreenplayStatus.set(projectId, { status: "running", completed: i + 1, total: beats.length });
+    }
+
+    await db.query(
+      "UPDATE ai_movie_projects SET stage_status = stage_status || $1::jsonb, updated_at = now() WHERE id = $2",
+      [JSON.stringify({ screenplay: { status: "pending", feedback: feedback ?? null } }), projectId]
+    );
+    aiMovieScreenplayStatus.set(projectId, { status: "done", completed: beats.length, total: beats.length });
+  } catch (error) {
+    console.error("Screenplay beat-by-beat generation failed:", error.message);
+    aiMovieScreenplayStatus.set(projectId, { status: "error", error: error.message });
+  }
 }
 
 app.post("/api/ai-movie/stages/:stage/generate", requireRole("admin"), async (req, res) => {
@@ -3308,6 +3405,21 @@ app.post("/api/ai-movie/stages/:stage/generate", requireRole("admin"), async (re
     return;
   }
 
+  if (stageKey === "screenplay") {
+    if (!project.backfill?.plot || project.backfill.plot.length === 0) {
+      res.status(400).json({ error: "Generate the Beat Sheet first." });
+      return;
+    }
+    // Respond immediately and keep writing beats afterward — see
+    // runAiMovieScreenplayGeneration for why this can't be one request.
+    // projectId is a number here (parsed from the JSON body) but a string
+    // when the status endpoint reads it from a query param — normalize so
+    // the same project doesn't produce two different Map keys.
+    res.json({ started: true });
+    runAiMovieScreenplayGeneration(String(projectId), feedback);
+    return;
+  }
+
   try {
     const referenceMaterialText = await getAiMovieReferenceMaterialText(projectId);
     const priorContextText = flattenAiMovieContentForExtraction(project.pasted_text, project.backfill);
@@ -3324,6 +3436,12 @@ app.post("/api/ai-movie/stages/:stage/generate", requireRole("admin"), async (re
     console.error("Gemini API call failed:", error.message);
     res.status(502).json({ error: error.message });
   }
+});
+
+app.get("/api/ai-movie/stages/screenplay/status", requireRole("admin"), (req, res) => {
+  const { projectId } = req.query;
+  const status = aiMovieScreenplayStatus.get(projectId) ?? { status: "none" };
+  res.json(status);
 });
 
 app.post("/api/ai-movie/stages/:stage/approve", requireRole("admin"), async (req, res) => {

@@ -276,6 +276,13 @@ const LABELS = {
     aiMovieStageResultScreenplay: 'This is at the Screenplay stage.',
     aiMovieStageResultOther: "Couldn't confidently place this in one of the usual stages.",
     aiMovieProceedButton: 'Proceed',
+    aiMovieBackfillingLabel: 'Filling in the earlier stages…',
+    aiMovieBackfillNoteEarliest: "This is already the earliest stage — nothing earlier to fill in.",
+    aiMovieBackfillNoteOther: "Couldn't confidently place a stage, so nothing was filled in automatically.",
+    aiMovieStoryLayerHeading: 'Story',
+    aiMovieSynopsisLayerHeading: 'Synopsis',
+    aiMoviePlotLayerHeading: 'Plot',
+    aiMovieCharacterArcLayerHeading: 'Character Arc',
     formatQuestion: 'Is this a film, a web series, or a vertical drama?',
     filmOption: 'Film',
     seriesOption: 'Web Series',
@@ -799,6 +806,13 @@ const LABELS = {
     aiMovieStageResultScreenplay: 'ଏହା ସ୍କ୍ରିନପ୍ଲେ ପର୍ଯ୍ୟାୟରେ ଅଛି।',
     aiMovieStageResultOther: 'ଏହାକୁ ସାଧାରଣ ପର୍ଯ୍ୟାୟଗୁଡ଼ିକ ମଧ୍ୟରୁ କୌଣସିଠାରେ ନିଶ୍ଚିତ ଭାବେ ରଖିହେଲା ନାହିଁ।',
     aiMovieProceedButton: 'ଆଗକୁ ବଢ଼ନ୍ତୁ',
+    aiMovieBackfillingLabel: 'ପୂର୍ବ ପର୍ଯ୍ୟାୟଗୁଡ଼ିକ ପୂରଣ ହେଉଛି…',
+    aiMovieBackfillNoteEarliest: 'ଏହା ପୂର୍ବରୁ ହିଁ ସବୁଠାରୁ ପ୍ରାରମ୍ଭିକ ପର୍ଯ୍ୟାୟ — ଏହା ପୂର୍ବରୁ ପୂରଣ କରିବାକୁ କିଛି ନାହିଁ।',
+    aiMovieBackfillNoteOther: 'ଏକ ପର୍ଯ୍ୟାୟ ନିଶ୍ଚିତ ଭାବେ ଚିହ୍ନଟ ହୋଇପାରିଲା ନାହିଁ, ତେଣୁ ସ୍ୱୟଂଚାଳିତ ଭାବରେ କିଛି ପୂରଣ ହୋଇନାହିଁ।',
+    aiMovieStoryLayerHeading: 'ଷ୍ଟୋରୀ',
+    aiMovieSynopsisLayerHeading: 'ସିନୋପସିସ୍',
+    aiMoviePlotLayerHeading: 'ପ୍ଲଟ୍',
+    aiMovieCharacterArcLayerHeading: 'ଚରିତ୍ର ଯାତ୍ରା',
     formatQuestion: 'ଏହା ଏକ ଚଳଚ୍ଚିତ୍ର, ୱେବ ସିରିଜ୍ କିମ୍ବା ଭର୍ଟିକାଲ୍ ଡ୍ରାମା?',
     filmOption: 'ଚଳଚ୍ଚିତ୍ର',
     seriesOption: 'ୱେବ ସିରିଜ୍',
@@ -4159,6 +4173,14 @@ function App() {
   const [isAnalyzingAiMovie, setIsAnalyzingAiMovie] = useState(false)
   const [aiMovieAnalyzeError, setAiMovieAnalyzeError] = useState(null)
 
+  // Second piece: "Proceed" works backward from the detected stage and
+  // invents whichever earlier layers are missing, never touching the
+  // pasted material itself.
+  const [aiMovieBackfillResult, setAiMovieBackfillResult] = useState(null)
+  const [isBackfillingAiMovie, setIsBackfillingAiMovie] = useState(false)
+  const [aiMovieBackfillError, setAiMovieBackfillError] = useState(null)
+  const [aiMovieBackfillNote, setAiMovieBackfillNote] = useState(null)
+
   const [showManageUsers, setShowManageUsers] = useState(false)
   const [users, setUsers] = useState([])
   const [newUserName, setNewUserName] = useState('')
@@ -4645,6 +4667,9 @@ function App() {
     setIsAnalyzingAiMovie(true)
     setAiMovieAnalyzeError(null)
     setAiMovieAnalyzeStage(null)
+    setAiMovieBackfillResult(null)
+    setAiMovieBackfillError(null)
+    setAiMovieBackfillNote(null)
 
     try {
       const response = await fetch(`${BACKEND_URL}/api/ai-movie/analyze-stage`, {
@@ -4664,6 +4689,42 @@ function App() {
     }
 
     setIsAnalyzingAiMovie(false)
+  }
+
+  async function handleAiMovieProceedClick() {
+    setAiMovieBackfillError(null)
+    setAiMovieBackfillNote(null)
+    setAiMovieBackfillResult(null)
+
+    if (aiMovieAnalyzeStage === 'other') {
+      setAiMovieBackfillNote(t.aiMovieBackfillNoteOther)
+      return
+    }
+    if (aiMovieAnalyzeStage === 'concept' || aiMovieAnalyzeStage === 'story') {
+      setAiMovieBackfillNote(t.aiMovieBackfillNoteEarliest)
+      return
+    }
+
+    setIsBackfillingAiMovie(true)
+
+    try {
+      const response = await fetch(`${BACKEND_URL}/api/ai-movie/backfill`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pastedText: aiMovieAnalyzeInput, stage: aiMovieAnalyzeStage }),
+      })
+      const data = await response.json()
+
+      if (!response.ok) {
+        setAiMovieBackfillError(data.error || t.genericError)
+      } else {
+        setAiMovieBackfillResult(data)
+      }
+    } catch {
+      setAiMovieBackfillError(t.genericError)
+    }
+
+    setIsBackfillingAiMovie(false)
   }
 
   async function loadUsers() {
@@ -7544,7 +7605,65 @@ function App() {
                     {aiMovieAnalyzeStage === 'screenplay' && t.aiMovieStageResultScreenplay}
                     {aiMovieAnalyzeStage === 'other' && t.aiMovieStageResultOther}
                   </p>
-                  <button type="button" className="choose-button">{t.aiMovieProceedButton}</button>
+                  <button
+                    type="button"
+                    className="choose-button"
+                    onClick={handleAiMovieProceedClick}
+                    disabled={isBackfillingAiMovie}
+                  >
+                    {isBackfillingAiMovie ? t.aiMovieBackfillingLabel : t.aiMovieProceedButton}
+                  </button>
+                </div>
+              )}
+
+              {aiMovieBackfillError && <p className="feedback-note">{aiMovieBackfillError}</p>}
+              {aiMovieBackfillNote && <p className="sidebar-section-note">{aiMovieBackfillNote}</p>}
+
+              {aiMovieBackfillResult && (
+                <div className="concept-result">
+                  {aiMovieBackfillResult.story && (
+                    <div className="three-act-structure">
+                      <h3>{t.aiMovieStoryLayerHeading}</h3>
+                      <h4>{aiMovieBackfillResult.story.title[language]}</h4>
+                      <p>{aiMovieBackfillResult.story.summary[language]}</p>
+                    </div>
+                  )}
+
+                  {aiMovieBackfillResult.synopsis && (
+                    <div className="three-act-structure">
+                      <h3>{t.aiMovieSynopsisLayerHeading}</h3>
+                      <p><em>{aiMovieBackfillResult.synopsis.logline[language]}</em></p>
+                      <p>{aiMovieBackfillResult.synopsis.premise[language]}</p>
+                      <p>{aiMovieBackfillResult.synopsis.toneGenre[language]}</p>
+                      <p>{aiMovieBackfillResult.synopsis.targetAudience[language]}</p>
+                    </div>
+                  )}
+
+                  {aiMovieBackfillResult.plot && (
+                    <div className="three-act-structure">
+                      <h3>{t.aiMoviePlotLayerHeading}</h3>
+                      {aiMovieBackfillResult.plot.map((beat, index) => (
+                        <div key={index} className="bit-row">
+                          <p className="bit-heading">{beat.title[language]}</p>
+                          <p>{beat.description[language]}</p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {aiMovieBackfillResult.characterArc && (
+                    <div className="three-act-structure">
+                      <h3>{t.aiMovieCharacterArcLayerHeading}</h3>
+                      {aiMovieBackfillResult.characterArc.map((character, index) => (
+                        <div key={index} className="character-card">
+                          <h4>{character.name}</h4>
+                          <p>{t.wantLabel}: {character.want[language]}</p>
+                          <p>{t.needLabel}: {character.need[language]}</p>
+                          <p>{t.arcLabel}: {character.arc[language]}</p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               )}
             </div>

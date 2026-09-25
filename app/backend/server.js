@@ -2777,6 +2777,126 @@ app.post("/api/ai-movie/analyze-stage", requireRole("admin"), async (req, res) =
   }
 });
 
+// Second AI Movie piece: once a stage is identified, work BACKWARD from it
+// and invent whichever earlier layers are missing — never touching the
+// pasted material itself, which stays exactly as given for its own detected
+// stage (no rewrite, no critique, no quality judgment). This is a
+// deliberately separate system prompt from the shooting-production agents
+// above — this pipeline is for a movie that is never physically shot, so
+// unlike every other generation prompt in this file, it must NOT reason
+// about budget, feasibility, or any real-world production constraint.
+const AI_MOVIE_BACKFILL_SYSTEM_PROMPT = `You are working on an AI Movie — a film that will be entirely AI-generated, never physically shot. Because of that, never reason about budget, cast/crew/location availability, shoot schedules, or any real-world production constraint — anything that can be imagined can be included, with no limitation.
+
+The user has pasted material below at a specific, already-identified stage of development. Treat that pasted material as final and authoritative for its own stage — never rewrite it, never critique or "improve" it, never second-guess it. Your only job is to invent the EARLIER, missing layers the schema below asks for, fully consistent with what was pasted (same story, same characters, same world — you are filling in what came before it, not changing it).`;
+
+const AI_MOVIE_STORY_LAYER_SCHEMA = {
+  type: Type.OBJECT,
+  properties: {
+    title: BILINGUAL_TEXT_SCHEMA,
+    summary: BILINGUAL_TEXT_SCHEMA,
+  },
+  required: ["title", "summary"],
+};
+
+const AI_MOVIE_SYNOPSIS_LAYER_SCHEMA = {
+  type: Type.OBJECT,
+  properties: {
+    logline: BILINGUAL_TEXT_SCHEMA,
+    premise: BILINGUAL_TEXT_SCHEMA,
+    toneGenre: BILINGUAL_TEXT_SCHEMA,
+    targetAudience: BILINGUAL_TEXT_SCHEMA,
+  },
+  required: ["logline", "premise", "toneGenre", "targetAudience"],
+};
+
+const AI_MOVIE_PLOT_BEAT_SCHEMA = {
+  type: Type.OBJECT,
+  properties: {
+    title: BILINGUAL_TEXT_SCHEMA,
+    description: BILINGUAL_TEXT_SCHEMA,
+  },
+  required: ["title", "description"],
+};
+
+const AI_MOVIE_CHARACTER_ARC_SCHEMA = {
+  type: Type.OBJECT,
+  properties: {
+    name: { type: Type.STRING },
+    want: BILINGUAL_TEXT_SCHEMA,
+    need: BILINGUAL_TEXT_SCHEMA,
+    arc: BILINGUAL_TEXT_SCHEMA,
+  },
+  required: ["name", "want", "need", "arc"],
+};
+
+// Which earlier layers each detected stage needs filled in behind it.
+// 'concept' and 'story' are already the earliest layer (nothing behind
+// them); 'other' is too uncertain to safely backfill from at all.
+const AI_MOVIE_BACKFILL_LAYERS_NEEDED = {
+  concept: [],
+  story: [],
+  synopsis: ["story"],
+  bitsheet: ["story", "synopsis", "characterArc"],
+  screenplay: ["story", "synopsis", "plot", "characterArc"],
+  other: [],
+};
+
+async function generateAiMovieBackfill(pastedText, stage) {
+  const needed = AI_MOVIE_BACKFILL_LAYERS_NEEDED[stage] ?? [];
+  if (needed.length === 0) return {};
+
+  const properties = {};
+  const required = [];
+  if (needed.includes("story")) {
+    properties.story = AI_MOVIE_STORY_LAYER_SCHEMA;
+    required.push("story");
+  }
+  if (needed.includes("synopsis")) {
+    properties.synopsis = AI_MOVIE_SYNOPSIS_LAYER_SCHEMA;
+    required.push("synopsis");
+  }
+  if (needed.includes("plot")) {
+    properties.plot = { type: Type.ARRAY, items: AI_MOVIE_PLOT_BEAT_SCHEMA };
+    required.push("plot");
+  }
+  if (needed.includes("characterArc")) {
+    properties.characterArc = { type: Type.ARRAY, items: AI_MOVIE_CHARACTER_ARC_SCHEMA };
+    required.push("characterArc");
+  }
+
+  return generateJsonContent({
+    model: GEMINI_MODEL_NAME,
+    contents: `The pasted material below was already identified as being at the "${stage}" stage. Invent only the earlier layers this schema asks for — nothing else — fully consistent with it:\n\n${pastedText}`,
+    config: {
+      systemInstruction: AI_MOVIE_BACKFILL_SYSTEM_PROMPT,
+      responseMimeType: "application/json",
+      maxOutputTokens: 8192,
+      responseSchema: { type: Type.OBJECT, properties, required },
+    },
+  });
+}
+
+app.post("/api/ai-movie/backfill", requireRole("admin"), async (req, res) => {
+  const { pastedText, stage } = req.body;
+
+  if (!pastedText || !pastedText.trim()) {
+    res.status(400).json({ error: "Paste some text first." });
+    return;
+  }
+  if (!stage) {
+    res.status(400).json({ error: "Analyze the text first." });
+    return;
+  }
+
+  try {
+    const result = await generateAiMovieBackfill(pastedText, stage);
+    res.json(result);
+  } catch (error) {
+    console.error("Gemini API call failed:", error.message);
+    res.status(502).json({ error: error.message });
+  }
+});
+
 // --- "Skip ahead" — start a project from a later stage by pasting your own
 // content, instead of typing an idea and working through every step. Each of
 // these does ONE Gemini call that both treats the pasted text as authoritative

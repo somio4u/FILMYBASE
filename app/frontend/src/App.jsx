@@ -264,6 +264,18 @@ const LABELS = {
     appModeQuestion: 'Movie or AI Movie?',
     appModeMovieOption: 'Movie',
     appModeAiMovieOption: 'AI Movie',
+    aiMovieProductionLabel: 'Production',
+    aiMovieAnalyzeIntro: 'Paste anything — a concept, story, synopsis, bit sheet, or screenplay — and this will tell you what stage it\'s at.',
+    aiMovieAnalyzePlaceholder: 'Paste anything here…',
+    aiMovieAnalyzeButton: 'Analyze',
+    aiMovieAnalyzingLabel: 'Analyzing…',
+    aiMovieStageResultConcept: 'This is at the Concept stage.',
+    aiMovieStageResultStory: 'This story is in the Story stage.',
+    aiMovieStageResultSynopsis: 'This story is in the Synopsis stage.',
+    aiMovieStageResultBitsheet: 'This story is in the Bit Sheet stage.',
+    aiMovieStageResultScreenplay: 'This is at the Screenplay stage.',
+    aiMovieStageResultOther: "Couldn't confidently place this in one of the usual stages.",
+    aiMovieProceedButton: 'Proceed',
     formatQuestion: 'Is this a film, a web series, or a vertical drama?',
     filmOption: 'Film',
     seriesOption: 'Web Series',
@@ -775,6 +787,18 @@ const LABELS = {
     appModeQuestion: 'ମୁଭି ନା AI ମୁଭି?',
     appModeMovieOption: 'ମୁଭି',
     appModeAiMovieOption: 'AI ମୁଭି',
+    aiMovieProductionLabel: 'ପ୍ରଡକ୍ସନ୍',
+    aiMovieAnalyzeIntro: 'ଯାହା ଚାହାଁନ୍ତି ପେଷ୍ଟ କରନ୍ତୁ — ଏକ କନସେପ୍ଟ, କାହାଣୀ, ସିନୋପସିସ୍, ବିଟ୍ ସିଟ୍, କିମ୍ବା ସ୍କ୍ରିନପ୍ଲେ — ଏହା ଆପଣଙ୍କୁ କହିବ ଏହା କେଉଁ ପର୍ଯ୍ୟାୟରେ ଅଛି।',
+    aiMovieAnalyzePlaceholder: 'ଏଠାରେ ଯାହା ଚାହାଁନ୍ତି ପେଷ୍ଟ କରନ୍ତୁ…',
+    aiMovieAnalyzeButton: 'ବିଶ୍ଳେଷଣ କରନ୍ତୁ',
+    aiMovieAnalyzingLabel: 'ବିଶ୍ଳେଷଣ ହେଉଛି…',
+    aiMovieStageResultConcept: 'ଏହା କନସେପ୍ଟ ପର୍ଯ୍ୟାୟରେ ଅଛି।',
+    aiMovieStageResultStory: 'ଏହି କାହାଣୀ ଷ୍ଟୋରୀ ପର୍ଯ୍ୟାୟରେ ଅଛି।',
+    aiMovieStageResultSynopsis: 'ଏହି କାହାଣୀ ସିନୋପସିସ୍ ପର୍ଯ୍ୟାୟରେ ଅଛି।',
+    aiMovieStageResultBitsheet: 'ଏହି କାହାଣୀ ବିଟ୍ ସିଟ୍ ପର୍ଯ୍ୟାୟରେ ଅଛି।',
+    aiMovieStageResultScreenplay: 'ଏହା ସ୍କ୍ରିନପ୍ଲେ ପର୍ଯ୍ୟାୟରେ ଅଛି।',
+    aiMovieStageResultOther: 'ଏହାକୁ ସାଧାରଣ ପର୍ଯ୍ୟାୟଗୁଡ଼ିକ ମଧ୍ୟରୁ କୌଣସିଠାରେ ନିଶ୍ଚିତ ଭାବେ ରଖିହେଲା ନାହିଁ।',
+    aiMovieProceedButton: 'ଆଗକୁ ବଢ଼ନ୍ତୁ',
     formatQuestion: 'ଏହା ଏକ ଚଳଚ୍ଚିତ୍ର, ୱେବ ସିରିଜ୍ କିମ୍ବା ଭର୍ଟିକାଲ୍ ଡ୍ରାମା?',
     filmOption: 'ଚଳଚ୍ଚିତ୍ର',
     seriesOption: 'ୱେବ ସିରିଜ୍',
@@ -4121,11 +4145,19 @@ function App() {
   const [isLoggingIn, setIsLoggingIn] = useState(false)
 
   // Asked once right after login. null = not answered yet (shows the
-  // picker). 'movie' = today's existing platform, unchanged. 'ai' = a
-  // deliberately blank panel — its own separate UI, built out step by step
-  // on later instruction. Not persisted on purpose: a page reload resets
-  // this to null, so the picker is always reachable again.
+  // picker). 'movie' = today's existing platform, unchanged. 'ai' = the
+  // AI Movie pipeline's own separate UI, built out step by step on later
+  // instruction. Not persisted on purpose: a page reload resets this to
+  // null, so the picker is always reachable again.
   const [appMode, setAppMode] = useState(null)
+
+  // AI Movie pipeline's first piece: paste anything, one agent identifies
+  // which stage of development it represents. Nothing past that is wired
+  // up yet — no other sidebar item here does anything.
+  const [aiMovieAnalyzeInput, setAiMovieAnalyzeInput] = useState('')
+  const [aiMovieAnalyzeStage, setAiMovieAnalyzeStage] = useState(null)
+  const [isAnalyzingAiMovie, setIsAnalyzingAiMovie] = useState(false)
+  const [aiMovieAnalyzeError, setAiMovieAnalyzeError] = useState(null)
 
   const [showManageUsers, setShowManageUsers] = useState(false)
   const [users, setUsers] = useState([])
@@ -4607,6 +4639,31 @@ function App() {
     await fetch(`${BACKEND_URL}/api/auth/logout`, { method: 'POST' })
     setCurrentUser(null)
     localStorage.removeItem(CURRENT_CONCEPT_STORAGE_KEY)
+  }
+
+  async function handleAnalyzeAiMovieClick() {
+    setIsAnalyzingAiMovie(true)
+    setAiMovieAnalyzeError(null)
+    setAiMovieAnalyzeStage(null)
+
+    try {
+      const response = await fetch(`${BACKEND_URL}/api/ai-movie/analyze-stage`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pastedText: aiMovieAnalyzeInput }),
+      })
+      const data = await response.json()
+
+      if (!response.ok) {
+        setAiMovieAnalyzeError(data.error || t.genericError)
+      } else {
+        setAiMovieAnalyzeStage(data.stage)
+      }
+    } catch {
+      setAiMovieAnalyzeError(t.genericError)
+    }
+
+    setIsAnalyzingAiMovie(false)
   }
 
   async function loadUsers() {
@@ -7373,7 +7430,128 @@ function App() {
   }
 
   if (appMode === 'ai') {
-    return <div className="app-shell" />
+    return (
+      <div className="app-shell">
+        <div className="mobile-topbar">
+          <button className="mobile-menu-button" onClick={() => setIsSidebarOpen(true)} aria-label={t.openMenuLabel}>
+            ☰
+          </button>
+          <span className="mobile-topbar-title">{t.heading}</span>
+        </div>
+
+        {isSidebarOpen && <div className="sidebar-overlay" onClick={() => setIsSidebarOpen(false)} />}
+
+        <aside className={`sidebar ${isSidebarOpen ? 'sidebar-open' : ''}`}>
+          <div className="sidebar-header">
+            <span className="sidebar-home-button">
+              <span className="sidebar-logo">{ICONS.clapperboard}</span>
+              <span className="sidebar-title">{t.heading}</span>
+            </span>
+            <button className="sidebar-close-button" onClick={() => setIsSidebarOpen(false)} aria-label={t.closeMenuLabel}>
+              ✕
+            </button>
+          </div>
+
+          <div className="current-user-row">
+            <span className="current-user-name">{currentUser.name}</span>
+            <button className="logout-button" onClick={handleLogoutClick}>{t.logoutButton}</button>
+          </div>
+
+          <div className="manage-users-panel">
+            <button className="import-export-button">{t.manageUsersButton}</button>
+          </div>
+
+          <button className="new-idea-button">
+            <span className="new-idea-icon">{ICONS.lightbulb}</span>
+            {t.newIdeaButton}
+          </button>
+
+          <div className="import-export-row">
+            <button className="import-export-button">
+              <span className="import-export-icon">{ICONS.upload}</span>
+              {t.importButtonLabel}
+            </button>
+            <button className="import-export-button">
+              <span className="import-export-icon">{ICONS.download}</span>
+              {t.exportButtonLabel}
+            </button>
+          </div>
+
+          <div className="sidebar-lang-toggle">
+            <select
+              className="lang-select"
+              value={language}
+              onChange={(e) => setLanguage(e.target.value)}
+            >
+              <option value="en">English</option>
+              <option value="or">ଓଡ଼ିଆ (Odia)</option>
+            </select>
+          </div>
+
+          <div className="sidebar-section">
+            <h4 className="sidebar-section-title">{t.agentsSectionTitle}</h4>
+            <div className="agent-list">
+              <button className="agent-header">
+                <span className="agent-expand-icon">▸</span>
+                {t.masterProjectListLabel}
+              </button>
+              <button className="agent-header">
+                <span className="agent-expand-icon">▸</span>
+                {t.storyAgentLabel}
+              </button>
+              <button className="agent-header">
+                <span className="agent-expand-icon">▸</span>
+                {t.aiMovieProductionLabel}
+              </button>
+            </div>
+          </div>
+
+          <div className="sidebar-section">
+            <h4 className="sidebar-section-title">{t.sidebarHistoryLabel}</h4>
+            <p className="sidebar-section-note">{t.sidebarHistoryNote}</p>
+            <div className="sidebar-history-item">{t.sidebarNewProject}</div>
+          </div>
+        </aside>
+
+        <main className="chat-viewport">
+          <div className="concept-page empty-state">
+            <div className="format-picker">
+              <p className="sidebar-section-note">{t.aiMovieAnalyzeIntro}</p>
+              <textarea
+                className="skip-ahead-textarea"
+                value={aiMovieAnalyzeInput}
+                onChange={(e) => setAiMovieAnalyzeInput(e.target.value)}
+                placeholder={t.aiMovieAnalyzePlaceholder}
+              />
+              <button
+                type="button"
+                className="choose-button"
+                onClick={handleAnalyzeAiMovieClick}
+                disabled={isAnalyzingAiMovie || !aiMovieAnalyzeInput.trim()}
+              >
+                {isAnalyzingAiMovie ? t.aiMovieAnalyzingLabel : t.aiMovieAnalyzeButton}
+              </button>
+
+              {aiMovieAnalyzeError && <p className="feedback-note">{aiMovieAnalyzeError}</p>}
+
+              {aiMovieAnalyzeStage && (
+                <div className="ai-bubble">
+                  <p>
+                    {aiMovieAnalyzeStage === 'concept' && t.aiMovieStageResultConcept}
+                    {aiMovieAnalyzeStage === 'story' && t.aiMovieStageResultStory}
+                    {aiMovieAnalyzeStage === 'synopsis' && t.aiMovieStageResultSynopsis}
+                    {aiMovieAnalyzeStage === 'bitsheet' && t.aiMovieStageResultBitsheet}
+                    {aiMovieAnalyzeStage === 'screenplay' && t.aiMovieStageResultScreenplay}
+                    {aiMovieAnalyzeStage === 'other' && t.aiMovieStageResultOther}
+                  </p>
+                  <button type="button" className="choose-button">{t.aiMovieProceedButton}</button>
+                </div>
+              )}
+            </div>
+          </div>
+        </main>
+      </div>
+    )
   }
 
   return (

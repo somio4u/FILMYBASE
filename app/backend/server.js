@@ -2727,6 +2727,56 @@ app.post("/api/concepts/import", requireRole("admin"), async (req, res) => {
   }
 });
 
+// --- AI Movie pipeline (separate from the shooting-production pipeline
+// above). This is its first, deliberately small piece: given ANY pasted
+// text of unknown type, identify which stage of development it represents.
+// Nothing downstream is built yet — the frontend just shows the detected
+// stage back to the user and stops there.
+const AI_MOVIE_STAGE_ANALYSIS_SYSTEM_PROMPT = `You read a piece of pasted filmmaking material and identify which single stage of story development it represents, without being told in advance which stage it is. Pick exactly one:
+- "concept": a short raw idea or premise, not yet developed into a full story.
+- "story": a fuller prose telling of the story, not yet shaped into a formal pitch document and not broken into scenes.
+- "synopsis": a structured pitch-style summary (premise, characters, tone/genre, target audience).
+- "bitsheet": an ordered list of story beats/plot points (a beat sheet).
+- "screenplay": formatted script pages — scene headings, action lines, dialogue.
+- "other": doesn't clearly match any of the above, or isn't filmmaking material at all.
+Judge by the actual shape and content of the text itself, not by any label the user may have put on it.`;
+
+async function analyzeAiMovieStage(pastedText) {
+  return generateJsonContent({
+    model: GEMINI_MODEL_NAME,
+    contents: `Identify which stage this pasted material represents:\n\n${pastedText}`,
+    config: {
+      systemInstruction: AI_MOVIE_STAGE_ANALYSIS_SYSTEM_PROMPT,
+      responseMimeType: "application/json",
+      maxOutputTokens: 256,
+      responseSchema: {
+        type: Type.OBJECT,
+        properties: {
+          stage: { type: Type.STRING, enum: ["concept", "story", "synopsis", "bitsheet", "screenplay", "other"] },
+        },
+        required: ["stage"],
+      },
+    },
+  });
+}
+
+app.post("/api/ai-movie/analyze-stage", requireRole("admin"), async (req, res) => {
+  const { pastedText } = req.body;
+
+  if (!pastedText || !pastedText.trim()) {
+    res.status(400).json({ error: "Paste some text first." });
+    return;
+  }
+
+  try {
+    const result = await analyzeAiMovieStage(pastedText);
+    res.json(result);
+  } catch (error) {
+    console.error("Gemini API call failed:", error.message);
+    res.status(502).json({ error: error.message });
+  }
+});
+
 // --- "Skip ahead" — start a project from a later stage by pasting your own
 // content, instead of typing an idea and working through every step. Each of
 // these does ONE Gemini call that both treats the pasted text as authoritative

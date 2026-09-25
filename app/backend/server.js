@@ -3017,6 +3017,72 @@ app.post("/api/ai-movie/backfill", requireRole("admin"), async (req, res) => {
   }
 });
 
+// Fifth AI Movie piece: originate a story straight from Reference Material
+// alone, for when the user hasn't pasted anything into the main box yet.
+// Unlike the backfill agent above (which protects whatever was pasted and
+// only invents the layers BEHIND it), this one has nothing to protect — it
+// generates the whole chain (Story, Synopsis, Plot, Character Arc) in one
+// pass, faithfully built from the reference material.
+const AI_MOVIE_SEED_FROM_REFERENCE_SYSTEM_PROMPT = `You are working on an AI Movie — a film that will be entirely AI-generated, never physically shot. Because of that, never reason about budget, cast/crew/location availability, shoot schedules, or any real-world production constraint — anything that can be imagined can be included, with no limitation.
+
+The user hasn't written any story text yet. Below is reference material they've provided (a real book/source, and/or character/property/art details) — read it closely and originate a genuine, original story from it: a Story (title + summary), a Synopsis (logline/premise/tone-genre/target audience), a Plot (an ordered list of story beats), and a Character Arc (major characters with what they want, need, and how they change). Stay faithful to the reference material — you are building a real story out of it, not inventing something unrelated to it.`;
+
+async function generateAiMovieSeedFromReference(referenceMaterialText) {
+  return generateJsonContent({
+    model: GEMINI_MODEL_NAME,
+    contents: `Reference material:\n\n${referenceMaterialText}`,
+    config: {
+      systemInstruction: AI_MOVIE_SEED_FROM_REFERENCE_SYSTEM_PROMPT,
+      responseMimeType: "application/json",
+      maxOutputTokens: 8192,
+      responseSchema: {
+        type: Type.OBJECT,
+        properties: {
+          story: AI_MOVIE_STORY_LAYER_SCHEMA,
+          synopsis: AI_MOVIE_SYNOPSIS_LAYER_SCHEMA,
+          plot: { type: Type.ARRAY, items: AI_MOVIE_PLOT_BEAT_SCHEMA },
+          characterArc: { type: Type.ARRAY, items: AI_MOVIE_CHARACTER_ARC_SCHEMA },
+        },
+        required: ["story", "synopsis", "plot", "characterArc"],
+      },
+    },
+  });
+}
+
+app.post("/api/ai-movie/generate-from-reference", requireRole("admin"), async (req, res) => {
+  const { projectId } = req.body;
+
+  if (!projectId) {
+    res.status(400).json({ error: "Attach some reference material first." });
+    return;
+  }
+
+  const referenceMaterialText = await getAiMovieReferenceMaterialText(projectId);
+  if (!referenceMaterialText) {
+    res.status(400).json({ error: "Attach some reference material first." });
+    return;
+  }
+
+  try {
+    const backfill = await generateAiMovieSeedFromReference(referenceMaterialText);
+    const pastedText = `${backfill.story.title.en}\n\n${backfill.story.summary.en}`;
+    const assets = await generateAiMovieAssetExtraction(
+      flattenAiMovieContentForExtraction(pastedText, backfill),
+      referenceMaterialText
+    );
+
+    await db.query(
+      "UPDATE ai_movie_projects SET pasted_text = $1, detected_stage = 'story', backfill = $2, assets = $3, title = COALESCE(title, $4), updated_at = now() WHERE id = $5",
+      [pastedText, JSON.stringify(backfill), JSON.stringify(assets), backfill.story.title.en, projectId]
+    );
+
+    res.json({ pastedText, stage: "story", backfill, assets });
+  } catch (error) {
+    console.error("Gemini API call failed:", error.message);
+    res.status(502).json({ error: error.message });
+  }
+});
+
 app.get("/api/ai-movie/projects", requireRole("admin"), async (req, res) => {
   const result = await db.query(
     "SELECT id, title, pasted_text, detected_stage, updated_at FROM ai_movie_projects ORDER BY updated_at DESC"

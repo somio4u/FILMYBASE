@@ -293,6 +293,8 @@ const LABELS = {
     aiMovieReferenceEmptyNote: 'Nothing attached yet.',
     aiMovieReferenceRemoveTitle: 'Remove',
     aiMovieReferenceUntitledLabel: 'Untitled',
+    aiMovieGenerateFromReferenceButton: 'Generate Story from Reference Material',
+    aiMovieGeneratingFromReferenceLabel: 'Generating…',
     formatQuestion: 'Is this a film, a web series, or a vertical drama?',
     filmOption: 'Film',
     seriesOption: 'Web Series',
@@ -833,6 +835,8 @@ const LABELS = {
     aiMovieReferenceEmptyNote: 'ଏପର୍ଯ୍ୟନ୍ତ କିଛି ଯୋଡ଼ା ହୋଇନାହିଁ।',
     aiMovieReferenceRemoveTitle: 'ହଟାନ୍ତୁ',
     aiMovieReferenceUntitledLabel: 'ନାମହୀନ',
+    aiMovieGenerateFromReferenceButton: 'ରେଫରେନ୍ସ ସାମଗ୍ରୀରୁ କାହାଣୀ ତିଆରି କରନ୍ତୁ',
+    aiMovieGeneratingFromReferenceLabel: 'ତିଆରି ହେଉଛି…',
     formatQuestion: 'ଏହା ଏକ ଚଳଚ୍ଚିତ୍ର, ୱେବ ସିରିଜ୍ କିମ୍ବା ଭର୍ଟିକାଲ୍ ଡ୍ରାମା?',
     filmOption: 'ଚଳଚ୍ଚିତ୍ର',
     seriesOption: 'ୱେବ ସିରିଜ୍',
@@ -4225,6 +4229,9 @@ function App() {
   const [isUploadingAiMovieReferenceFile, setIsUploadingAiMovieReferenceFile] = useState(false)
   const [aiMovieReferenceError, setAiMovieReferenceError] = useState(null)
   const aiMovieReferenceFileInputRef = useRef(null)
+  // Originates a story straight from Reference Material alone, for when
+  // nothing's been pasted into the main box yet.
+  const [isGeneratingAiMovieFromReference, setIsGeneratingAiMovieFromReference] = useState(false)
 
   const [showManageUsers, setShowManageUsers] = useState(false)
   const [users, setUsers] = useState([])
@@ -4924,6 +4931,37 @@ function App() {
     } catch {
       setAiMovieReferenceError(t.genericError)
     }
+  }
+
+  async function handleGenerateAiMovieFromReferenceClick() {
+    if (!aiMovieProjectId) return
+
+    setIsGeneratingAiMovieFromReference(true)
+    setAiMovieReferenceError(null)
+    try {
+      const response = await fetch(`${BACKEND_URL}/api/ai-movie/generate-from-reference`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ projectId: aiMovieProjectId }),
+      })
+      const data = await response.json()
+
+      if (!response.ok) {
+        setAiMovieReferenceError(data.error || t.genericError)
+      } else {
+        setAiMovieAnalyzeInput(data.pastedText)
+        setAiMovieAnalyzeStage(data.stage)
+        setAiMovieAnalyzeError(null)
+        setAiMovieBackfillResult(data.backfill)
+        setAiMovieBackfillError(null)
+        setAiMovieBackfillNote(null)
+        setAiMovieAssets(data.assets)
+        if (data.backfill?.story?.title) setAiMovieProjectTitle(data.backfill.story.title.en)
+      }
+    } catch {
+      setAiMovieReferenceError(t.genericError)
+    }
+    setIsGeneratingAiMovieFromReference(false)
   }
 
   function handleAiMovieExportClick() {
@@ -8016,6 +8054,17 @@ function App() {
                     </button>
                   </div>
                 ))
+              )}
+
+              {aiMovieReferenceFileList.length > 0 && !aiMovieAnalyzeInput.trim() && (
+                <button
+                  type="button"
+                  className="choose-button"
+                  onClick={handleGenerateAiMovieFromReferenceClick}
+                  disabled={isGeneratingAiMovieFromReference}
+                >
+                  {isGeneratingAiMovieFromReference ? t.aiMovieGeneratingFromReferenceLabel : t.aiMovieGenerateFromReferenceButton}
+                </button>
               )}
             </div>
           </div>

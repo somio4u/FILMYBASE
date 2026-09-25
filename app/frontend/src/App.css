@@ -1091,6 +1091,21 @@ button, input, textarea, select {
   cursor: default;
 }
 
+/* The one action that matters most once reference material is attached but
+   nothing's been pasted yet — filled instead of outlined, and placed above
+   the attached-files list (which can run long) so it's never buried below
+   a scroll. */
+.ai-movie-generate-from-reference-button {
+  display: block;
+  width: 100%;
+  margin-bottom: 10px;
+  padding: 10px 14px;
+  background: var(--accent-gradient-soft), var(--bg-surface-raised);
+  border-color: var(--glass-border);
+  font-size: 14px;
+  font-weight: 500;
+}
+
 .format-form {
   margin-top: 16px;
   padding: 16px;

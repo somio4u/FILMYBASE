@@ -8037,6 +8037,17 @@ function App() {
 
               {aiMovieReferenceError && <p className="feedback-note">{aiMovieReferenceError}</p>}
 
+              {aiMovieReferenceFileList.length > 0 && !aiMovieAnalyzeInput.trim() && (
+                <button
+                  type="button"
+                  className="choose-button ai-movie-generate-from-reference-button"
+                  onClick={handleGenerateAiMovieFromReferenceClick}
+                  disabled={isGeneratingAiMovieFromReference}
+                >
+                  {isGeneratingAiMovieFromReference ? t.aiMovieGeneratingFromReferenceLabel : t.aiMovieGenerateFromReferenceButton}
+                </button>
+              )}
+
               {aiMovieReferenceFileList.length === 0 ? (
                 <p className="sidebar-section-note">{t.aiMovieReferenceEmptyNote}</p>
               ) : (
@@ -8054,17 +8065,6 @@ function App() {
                     </button>
                   </div>
                 ))
-              )}
-
-              {aiMovieReferenceFileList.length > 0 && !aiMovieAnalyzeInput.trim() && (
-                <button
-                  type="button"
-                  className="choose-button"
-                  onClick={handleGenerateAiMovieFromReferenceClick}
-                  disabled={isGeneratingAiMovieFromReference}
-                >
-                  {isGeneratingAiMovieFromReference ? t.aiMovieGeneratingFromReferenceLabel : t.aiMovieGenerateFromReferenceButton}
-                </button>
               )}
             </div>
           </div>

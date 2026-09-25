@@ -458,50 +458,6 @@ button, input, textarea, select {
   color: var(--text-primary);
 }
 
-.project-instructions-panel {
-  margin-bottom: 24px;
-}
-
-.project-instructions-toggle {
-  width: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  padding: 7px 8px;
-  border: 1px solid var(--border-subtle);
-  border-radius: 16px;
-  background: transparent;
-  color: var(--text-secondary);
-  font-size: 12px;
-  cursor: pointer;
-}
-
-.project-instructions-toggle:hover {
-  background: var(--bg-surface-raised);
-  color: var(--text-primary);
-}
-
-.project-instructions-active-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: #7c5cff;
-  display: inline-block;
-}
-
-.project-instructions-body {
-  margin-top: 8px;
-  padding: 10px;
-  border: 1px solid var(--border-subtle);
-  border-radius: 8px;
-}
-
-.project-instructions-body textarea {
-  width: 100%;
-  margin-bottom: 8px;
-}
-
 .import-export-button:disabled {
   opacity: 0.4;
   cursor: default;

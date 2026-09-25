@@ -15,13 +15,6 @@ CREATE TABLE concepts (
   -- production banner) — a plain uploads/ path like crew_members.photo_path,
   -- not JSONB, since it's a single mutable value with no revision history.
   clapboard_banner_path TEXT,
-  -- Admin-editable creative direction specific to THIS project (genre
-  -- conventions, tone, dos/don'ts, character voice notes) — appended to the
-  -- Story & Screenplay agent's existing prompts for this project only, on
-  -- top of the base agent behavior rather than replacing it. NULL/empty
-  -- means "no project-specific direction," which is every project's
-  -- default and leaves the agent behaving exactly as it does today.
-  custom_instructions TEXT,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 

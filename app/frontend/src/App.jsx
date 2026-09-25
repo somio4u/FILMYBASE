@@ -284,16 +284,11 @@ const LABELS = {
     aiMoviePlotLayerHeading: 'Plot',
     aiMovieCharacterArcLayerHeading: 'Character Arc',
     aiMovieReferenceHeading: 'Reference Material',
-    aiMovieReferenceIntro: "Give the agents extra source material to work from — a real book your story draws from, or your own character/property/art details — and they'll treat it as authoritative rather than inventing their own.",
-    aiMovieReferenceCategoryBook: 'Book',
-    aiMovieReferenceCategoryCharacters: 'Characters',
-    aiMovieReferenceCategoryProperties: 'Properties',
-    aiMovieReferenceCategoryArt: 'Art',
-    aiMovieReferenceCategoryOther: 'Other',
+    aiMovieReferenceIntro: "Give the agents extra source material to work from — a real book your story draws from, or your own character/property/art details — and they'll treat it as authoritative rather than inventing their own. Whatever you add is read and sorted automatically, nothing to label by hand.",
     aiMovieReferencePastePlaceholder: 'Paste text here…',
     aiMovieReferenceAddButton: 'Add',
     aiMovieReferenceAddingLabel: 'Adding…',
-    aiMovieReferenceUploadButton: 'Upload PDF or Word file',
+    aiMovieReferenceUploadButton: 'Upload files (PDF, Word, text, markdown, or a .zip of several)',
     aiMovieReferenceUploadingLabel: 'Uploading…',
     aiMovieReferenceEmptyNote: 'Nothing attached yet.',
     aiMovieReferenceRemoveTitle: 'Remove',
@@ -829,16 +824,11 @@ const LABELS = {
     aiMoviePlotLayerHeading: 'ପ୍ଲଟ୍',
     aiMovieCharacterArcLayerHeading: 'ଚରିତ୍ର ଯାତ୍ରା',
     aiMovieReferenceHeading: 'ରେଫରେନ୍ସ ସାମଗ୍ରୀ',
-    aiMovieReferenceIntro: 'ଏଜେଣ୍ଟମାନଙ୍କୁ କାମ କରିବା ପାଇଁ ଅତିରିକ୍ତ ସୋର୍ସ ସାମଗ୍ରୀ ଦିଅନ୍ତୁ — ଆପଣଙ୍କ କାହାଣୀ ଆଧାରିତ ଏକ ପ୍ରକୃତ ବହି, କିମ୍ବା ଆପଣଙ୍କ ନିଜସ୍ୱ ଚରିତ୍ର/ସମ୍ପତ୍ତି/କଳା ବିବରଣୀ — ଏବଂ ସେମାନେ ନିଜେ କିଛି ଉଦ୍ଭାବନ କରିବା ପରିବର୍ତ୍ତେ ଏହାକୁ ପ୍ରାମାଣିକ ଭାବେ ଗ୍ରହଣ କରିବେ।',
-    aiMovieReferenceCategoryBook: 'ବହି',
-    aiMovieReferenceCategoryCharacters: 'ଚରିତ୍ରମାନେ',
-    aiMovieReferenceCategoryProperties: 'ସମ୍ପତ୍ତି',
-    aiMovieReferenceCategoryArt: 'କଳା',
-    aiMovieReferenceCategoryOther: 'ଅନ୍ୟାନ୍ୟ',
+    aiMovieReferenceIntro: 'ଏଜେଣ୍ଟମାନଙ୍କୁ କାମ କରିବା ପାଇଁ ଅତିରିକ୍ତ ସୋର୍ସ ସାମଗ୍ରୀ ଦିଅନ୍ତୁ — ଆପଣଙ୍କ କାହାଣୀ ଆଧାରିତ ଏକ ପ୍ରକୃତ ବହି, କିମ୍ବା ଆପଣଙ୍କ ନିଜସ୍ୱ ଚରିତ୍ର/ସମ୍ପତ୍ତି/କଳା ବିବରଣୀ — ଏବଂ ସେମାନେ ନିଜେ କିଛି ଉଦ୍ଭାବନ କରିବା ପରିବର୍ତ୍ତେ ଏହାକୁ ପ୍ରାମାଣିକ ଭାବେ ଗ୍ରହଣ କରିବେ। ଆପଣ ଯାହା ଯୋଡ଼ନ୍ତି ତାହା ସ୍ୱୟଂଚାଳିତ ଭାବରେ ପଢ଼ି ସଜାଯାଏ, ହାତରେ ଲେବଲ୍ କରିବାକୁ କିଛି ନାହିଁ।',
     aiMovieReferencePastePlaceholder: 'ଏଠାରେ ପାଠ୍ୟ ପେଷ୍ଟ କରନ୍ତୁ…',
     aiMovieReferenceAddButton: 'ଯୋଡ଼ନ୍ତୁ',
     aiMovieReferenceAddingLabel: 'ଯୋଡ଼ୁଛି…',
-    aiMovieReferenceUploadButton: 'PDF କିମ୍ବା Word ଫାଇଲ୍ ଅପଲୋଡ୍ କରନ୍ତୁ',
+    aiMovieReferenceUploadButton: 'ଫାଇଲ୍ ଅପଲୋଡ୍ କରନ୍ତୁ (PDF, Word, text, markdown, କିମ୍ବା ଏକାଧିକର .zip)',
     aiMovieReferenceUploadingLabel: 'ଅପଲୋଡ୍ ହେଉଛି…',
     aiMovieReferenceEmptyNote: 'ଏପର୍ଯ୍ୟନ୍ତ କିଛି ଯୋଡ଼ା ହୋଇନାହିଁ।',
     aiMovieReferenceRemoveTitle: 'ହଟାନ୍ତୁ',
@@ -4227,9 +4217,9 @@ function App() {
   // Reference material: source content the user hands the agents directly
   // (a real book, or their own character/property/art details) so the
   // backfill and asset-extraction agents stay faithful to it instead of
-  // inventing their own.
+  // inventing their own. No category picker — a silent agent reads and
+  // sorts each piece itself.
   const [aiMovieReferenceFileList, setAiMovieReferenceFileList] = useState([])
-  const [aiMovieReferenceCategory, setAiMovieReferenceCategory] = useState('book')
   const [aiMovieReferenceText, setAiMovieReferenceText] = useState('')
   const [isAddingAiMovieReferenceText, setIsAddingAiMovieReferenceText] = useState(false)
   const [isUploadingAiMovieReferenceFile, setIsUploadingAiMovieReferenceFile] = useState(false)
@@ -4875,7 +4865,6 @@ function App() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           projectId: aiMovieProjectId,
-          category: aiMovieReferenceCategory,
           label: aiMovieReferenceText.slice(0, 40),
           content: aiMovieReferenceText,
         }),
@@ -4896,16 +4885,15 @@ function App() {
   }
 
   async function handleAiMovieReferenceFileSelected(event) {
-    const file = event.target.files[0]
+    const files = Array.from(event.target.files)
     event.target.value = ''
-    if (!file) return
+    if (files.length === 0) return
 
     setIsUploadingAiMovieReferenceFile(true)
     setAiMovieReferenceError(null)
     try {
       const formData = new FormData()
-      formData.append('file', file)
-      formData.append('category', aiMovieReferenceCategory)
+      files.forEach((file) => formData.append('files', file))
       if (aiMovieProjectId) formData.append('projectId', aiMovieProjectId)
 
       const response = await fetch(`${BACKEND_URL}/api/ai-movie/reference-files/upload`, {
@@ -4918,6 +4906,9 @@ function App() {
         setAiMovieReferenceError(data.error || t.genericError)
       } else {
         if (!aiMovieProjectId) setAiMovieProjectId(data.projectId)
+        if (data.errors?.length > 0) {
+          setAiMovieReferenceError(data.errors.map((e) => `${e.filename}: ${e.error}`).join(' · '))
+        }
         await loadAiMovieReferenceFiles(data.projectId)
       }
     } catch {
@@ -7971,18 +7962,6 @@ function App() {
               <h4 className="format-picker-title">{t.aiMovieReferenceHeading}</h4>
               <p className="sidebar-section-note">{t.aiMovieReferenceIntro}</p>
 
-              <select
-                className="lang-select"
-                value={aiMovieReferenceCategory}
-                onChange={(e) => setAiMovieReferenceCategory(e.target.value)}
-              >
-                <option value="book">{t.aiMovieReferenceCategoryBook}</option>
-                <option value="characters">{t.aiMovieReferenceCategoryCharacters}</option>
-                <option value="properties">{t.aiMovieReferenceCategoryProperties}</option>
-                <option value="art">{t.aiMovieReferenceCategoryArt}</option>
-                <option value="other">{t.aiMovieReferenceCategoryOther}</option>
-              </select>
-
               <textarea
                 className="skip-ahead-textarea"
                 value={aiMovieReferenceText}
@@ -8011,7 +7990,8 @@ function App() {
               </div>
               <input
                 type="file"
-                accept=".pdf,.doc,.docx,.txt"
+                accept=".pdf,.doc,.docx,.txt,.md,.markdown,.zip"
+                multiple
                 ref={aiMovieReferenceFileInputRef}
                 onChange={handleAiMovieReferenceFileSelected}
                 style={{ display: 'none' }}

@@ -16,6 +16,7 @@ import { PDFParse } from "pdf-parse";
 import mammoth from "mammoth";
 import WordExtractor from "word-extractor";
 import { XMLParser } from "fast-xml-parser";
+import AdmZip from "adm-zip";
 import crypto from "crypto";
 import cookieParser from "cookie-parser";
 import { createClient } from "@supabase/supabase-js";
@@ -3086,8 +3087,44 @@ async function ensureAiMovieProjectId(projectId, userId) {
 
 const AI_MOVIE_REFERENCE_FILE_CATEGORIES = ["book", "characters", "properties", "art", "other"];
 
+// The user doesn't pick a category by hand — whatever they paste or upload
+// gets silently read and sorted into one of these by itself. Falls back to
+// "other" on any classification failure rather than blocking the save;
+// getting the reference material saved matters more than labeling it
+// perfectly.
+const AI_MOVIE_REFERENCE_CATEGORY_SYSTEM_PROMPT = `You read a piece of reference material a filmmaker is attaching to their AI Movie project and classify what kind of material it is. Pick exactly one:
+- "book": material from or about a real book/novel/published work the story draws from (an excerpt, a summary, plot events).
+- "characters": details specifically about one or more characters (appearance, personality, backstory).
+- "properties": details about physical objects/props.
+- "art": details about visual/art direction, environments, locations, mood, or style.
+- "other": doesn't clearly match any of the above.
+Judge by the actual content, not by any filename or label.`;
+
+async function classifyAiMovieReferenceCategory(content) {
+  try {
+    const result = await generateJsonContent({
+      model: GEMINI_MODEL_NAME,
+      contents: `Classify this reference material:\n\n${content.slice(0, 8000)}`,
+      config: {
+        systemInstruction: AI_MOVIE_REFERENCE_CATEGORY_SYSTEM_PROMPT,
+        responseMimeType: "application/json",
+        maxOutputTokens: 128,
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: { category: { type: Type.STRING, enum: AI_MOVIE_REFERENCE_FILE_CATEGORIES } },
+          required: ["category"],
+        },
+      },
+    });
+    return result.category;
+  } catch (error) {
+    console.error("Reference material auto-categorize failed, defaulting to 'other':", error.message);
+    return "other";
+  }
+}
+
 app.post("/api/ai-movie/reference-files", requireRole("admin"), async (req, res) => {
-  const { projectId, category, label, content } = req.body;
+  const { projectId, label, content } = req.body;
 
   if (!content || !content.trim()) {
     res.status(400).json({ error: "Paste some content first." });
@@ -3095,47 +3132,81 @@ app.post("/api/ai-movie/reference-files", requireRole("admin"), async (req, res)
   }
 
   const id = await ensureAiMovieProjectId(projectId, req.user.id);
-  const safeCategory = AI_MOVIE_REFERENCE_FILE_CATEGORIES.includes(category) ? category : "other";
+  const category = await classifyAiMovieReferenceCategory(content);
 
   const inserted = await db.query(
     "INSERT INTO ai_movie_reference_files (project_id, category, label, content) VALUES ($1, $2, $3, $4) RETURNING id",
-    [id, safeCategory, label || null, content]
+    [id, category, label || null, content]
   );
 
   res.json({ id: inserted.rows[0].id, projectId: id });
 });
+
+// Reference Material uploads can be a .zip containing several documents —
+// each supported file inside becomes its own reference entry (so it can be
+// labeled, listed, and removed individually, same as if it had been
+// uploaded on its own). Unsupported/unreadable entries inside are skipped
+// rather than failing the whole zip.
+async function extractFilesFromZip(buffer) {
+  const zip = new AdmZip(buffer);
+  const results = [];
+  for (const entry of zip.getEntries()) {
+    if (entry.isDirectory) continue;
+    try {
+      const content = await extractTextFromUploadedScreenplay({ originalname: entry.entryName, buffer: entry.getData() });
+      if (content && content.trim()) results.push({ label: entry.entryName, content });
+    } catch {
+      // Unsupported or unreadable entry inside the zip — skip it, don't fail the whole zip.
+    }
+  }
+  return results;
+}
 
 const aiMovieReferenceFileUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 25 * 1024 * 1024 } });
 
 app.post(
   "/api/ai-movie/reference-files/upload",
   requireRole("admin"),
-  aiMovieReferenceFileUpload.single("file"),
+  aiMovieReferenceFileUpload.array("files", 20),
   async (req, res) => {
-    if (!req.file) {
+    if (!req.files || req.files.length === 0) {
       res.status(400).json({ error: "No file uploaded." });
       return;
     }
 
-    try {
-      const content = await extractTextFromUploadedScreenplay(req.file);
-      if (!content || !content.trim()) {
-        res.status(400).json({ error: "Couldn't read any text out of that file." });
-        return;
+    const id = await ensureAiMovieProjectId(req.body.projectId, req.user.id);
+    const created = [];
+    const errors = [];
+
+    for (const file of req.files) {
+      const ext = path.extname(file.originalname).toLowerCase();
+      try {
+        const items =
+          ext === ".zip"
+            ? await extractFilesFromZip(file.buffer)
+            : [{ label: file.originalname, content: await extractTextFromUploadedScreenplay(file) }];
+
+        const readable = items.filter((item) => item.content && item.content.trim());
+        if (readable.length === 0) {
+          errors.push({ filename: file.originalname, error: "Couldn't read any text out of that file." });
+          continue;
+        }
+
+        for (const item of readable) {
+          const category = await classifyAiMovieReferenceCategory(item.content);
+          const label = ext === ".zip" ? `${file.originalname} → ${item.label}` : item.label;
+          const inserted = await db.query(
+            "INSERT INTO ai_movie_reference_files (project_id, category, label, content) VALUES ($1, $2, $3, $4) RETURNING id",
+            [id, category, label, item.content]
+          );
+          created.push(inserted.rows[0].id);
+        }
+      } catch (error) {
+        errors.push({ filename: file.originalname, error: error.message });
       }
-
-      const id = await ensureAiMovieProjectId(req.body.projectId, req.user.id);
-      const safeCategory = AI_MOVIE_REFERENCE_FILE_CATEGORIES.includes(req.body.category) ? req.body.category : "other";
-
-      const inserted = await db.query(
-        "INSERT INTO ai_movie_reference_files (project_id, category, label, content) VALUES ($1, $2, $3, $4) RETURNING id",
-        [id, safeCategory, req.file.originalname, content]
-      );
-
-      res.json({ id: inserted.rows[0].id, projectId: id });
-    } catch (error) {
-      res.status(400).json({ error: error.message });
     }
+
+    res.json({ projectId: id, created, errors });
   }
 );
 
@@ -3819,7 +3890,7 @@ function extractTextFromScrite(jsonText) {
 async function extractTextFromUploadedScreenplay(file) {
   const ext = path.extname(file.originalname).toLowerCase();
 
-  if (ext === ".txt" || ext === ".fountain") {
+  if (ext === ".txt" || ext === ".fountain" || ext === ".md" || ext === ".markdown") {
     return file.buffer.toString("utf-8");
   }
   if (ext === ".pdf") {
@@ -3843,7 +3914,7 @@ async function extractTextFromUploadedScreenplay(file) {
     return extractTextFromScrite(file.buffer.toString("utf-8"));
   }
 
-  throw new Error(`Unsupported file type "${ext}". Try .txt, .pdf, .docx, .doc, .fdx, or .scrite.`);
+  throw new Error(`Unsupported file type "${ext}". Try .txt, .md, .pdf, .docx, .doc, .fdx, or .scrite.`);
 }
 
 app.post("/api/import-screenplay-for-production/file", requireRole("admin"), screenplayUpload.single("file"), async (req, res) => {

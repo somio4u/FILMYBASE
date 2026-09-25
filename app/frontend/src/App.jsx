@@ -295,6 +295,14 @@ const LABELS = {
     aiMovieReferenceUntitledLabel: 'Untitled',
     aiMovieGenerateFromReferenceButton: 'Generate Story from Reference Material',
     aiMovieGeneratingFromReferenceLabel: 'Generating…',
+    aiMovieStageLabelStory: 'Story',
+    aiMovieStageLabelSynopsis: 'Synopsis',
+    aiMovieStageLabelPlot: 'Plot',
+    aiMovieStageLabelCharacterArc: 'Character Arc',
+    aiMovieStageLabelScreenplay: 'Screenplay',
+    aiMovieGenerateStageButton: (label) => `Generate ${label}`,
+    aiMovieGeneratingStageLabel: 'Generating…',
+    aiMovieAllStagesLockedNote: 'Everything is locked in — Story, Synopsis, Plot, Character Arc, and Screenplay are all approved.',
     formatQuestion: 'Is this a film, a web series, or a vertical drama?',
     filmOption: 'Film',
     seriesOption: 'Web Series',
@@ -837,6 +845,14 @@ const LABELS = {
     aiMovieReferenceUntitledLabel: 'ନାମହୀନ',
     aiMovieGenerateFromReferenceButton: 'ରେଫରେନ୍ସ ସାମଗ୍ରୀରୁ କାହାଣୀ ତିଆରି କରନ୍ତୁ',
     aiMovieGeneratingFromReferenceLabel: 'ତିଆରି ହେଉଛି…',
+    aiMovieStageLabelStory: 'ଷ୍ଟୋରୀ',
+    aiMovieStageLabelSynopsis: 'ସିନୋପସିସ୍',
+    aiMovieStageLabelPlot: 'ପ୍ଲଟ୍',
+    aiMovieStageLabelCharacterArc: 'ଚରିତ୍ର ଯାତ୍ରା',
+    aiMovieStageLabelScreenplay: 'ସ୍କ୍ରିନପ୍ଲେ',
+    aiMovieGenerateStageButton: (label) => `${label} ତିଆରି କରନ୍ତୁ`,
+    aiMovieGeneratingStageLabel: 'ତିଆରି ହେଉଛି…',
+    aiMovieAllStagesLockedNote: 'ସବୁକିଛି ଲକ୍ ହୋଇଗଲା — ଷ୍ଟୋରୀ, ସିନୋପସିସ୍, ପ୍ଲଟ୍, ଚରିତ୍ର ଯାତ୍ରା, ଏବଂ ସ୍କ୍ରିନପ୍ଲେ ସବୁ ଅନୁମୋଦିତ।',
     formatQuestion: 'ଏହା ଏକ ଚଳଚ୍ଚିତ୍ର, ୱେବ ସିରିଜ୍ କିମ୍ବା ଭର୍ଟିକାଲ୍ ଡ୍ରାମା?',
     filmOption: 'ଚଳଚ୍ଚିତ୍ର',
     seriesOption: 'ୱେବ ସିରିଜ୍',
@@ -4044,6 +4060,24 @@ function InlineCastAttachment({
   )
 }
 
+// Mirrors the backend's AI_MOVIE_STAGE_ORDER — 'story' is always
+// pre-approved by the time the review chain matters, so the UI only ever
+// actively generates/reviews the other four.
+const AI_MOVIE_STAGE_ORDER = ['story', 'synopsis', 'plot', 'characterArc', 'screenplay']
+const AI_MOVIE_FORWARD_STAGES = ['synopsis', 'plot', 'characterArc', 'screenplay']
+
+// Walks the chain in order and returns the first stage that still needs
+// attention: 'generate' (no content yet) or 'review' (pending approval).
+// null once every stage is approved.
+function getAiMovieCurrentStage(stageStatus) {
+  for (const key of AI_MOVIE_STAGE_ORDER) {
+    const s = stageStatus[key]
+    if (!s) return { key, mode: 'generate' }
+    if (s.status === 'pending') return { key, mode: 'review' }
+  }
+  return null
+}
+
 function App() {
   const importFileInputRef = useRef(null)
   const screenplayFileInputRef = useRef(null)
@@ -4232,6 +4266,18 @@ function App() {
   // Originates a story straight from Reference Material alone, for when
   // nothing's been pasted into the main box yet.
   const [isGeneratingAiMovieFromReference, setIsGeneratingAiMovieFromReference] = useState(false)
+
+  // The step-by-step review chain: Story is always pre-approved by the
+  // time this matters (via paste+Proceed or Generate-from-Reference);
+  // Synopsis/Plot/Character Arc/Screenplay each generate one at a time,
+  // only once the layer before them is approved. Shape matches the
+  // backend: { story: {status, feedback}, synopsis: {...}, ... }.
+  const [aiMovieStageStatus, setAiMovieStageStatus] = useState({})
+  const [isGeneratingAiMovieStage, setIsGeneratingAiMovieStage] = useState(false)
+  const [isApprovingAiMovieStage, setIsApprovingAiMovieStage] = useState(false)
+  const [showAiMovieStageFeedbackForm, setShowAiMovieStageFeedbackForm] = useState(false)
+  const [aiMovieStageFeedbackText, setAiMovieStageFeedbackText] = useState('')
+  const [aiMovieStageError, setAiMovieStageError] = useState(null)
 
   const [showManageUsers, setShowManageUsers] = useState(false)
   const [users, setUsers] = useState([])
@@ -4776,6 +4822,7 @@ function App() {
         setAiMovieBackfillResult(data.backfill)
         // Saved silently alongside the project — never rendered here.
         setAiMovieAssets(data.assets)
+        setAiMovieStageStatus(data.stageStatus ?? {})
         if (data.backfill?.story?.title) setAiMovieProjectTitle(data.backfill.story.title.en)
       }
     } catch {
@@ -4798,6 +4845,10 @@ function App() {
     setAiMovieReferenceFileList([])
     setAiMovieReferenceText('')
     setAiMovieReferenceError(null)
+    setAiMovieStageStatus({})
+    setShowAiMovieStageFeedbackForm(false)
+    setAiMovieStageFeedbackText('')
+    setAiMovieStageError(null)
   }
 
   function handleAiMovieNewIdeaClick() {
@@ -4841,6 +4892,10 @@ function App() {
       setAiMovieProjectTitle(data.title)
       setAiMovieBackfillError(null)
       setAiMovieBackfillNote(null)
+      setAiMovieStageStatus(data.stageStatus ?? {})
+      setShowAiMovieStageFeedbackForm(false)
+      setAiMovieStageFeedbackText('')
+      setAiMovieStageError(null)
       setAiMovieView('editor')
       loadAiMovieReferenceFiles(data.id)
     } catch {
@@ -4956,12 +5011,97 @@ function App() {
         setAiMovieBackfillError(null)
         setAiMovieBackfillNote(null)
         setAiMovieAssets(data.assets)
+        setAiMovieStageStatus(data.stageStatus ?? {})
         if (data.backfill?.story?.title) setAiMovieProjectTitle(data.backfill.story.title.en)
       }
     } catch {
       setAiMovieReferenceError(t.genericError)
     }
     setIsGeneratingAiMovieFromReference(false)
+  }
+
+  async function handleGenerateAiMovieStageClick(stageKey) {
+    if (!aiMovieProjectId) return
+
+    setIsGeneratingAiMovieStage(true)
+    setAiMovieStageError(null)
+    try {
+      const response = await fetch(`${BACKEND_URL}/api/ai-movie/stages/${stageKey}/generate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ projectId: aiMovieProjectId }),
+      })
+      const data = await response.json()
+
+      if (!response.ok) {
+        setAiMovieStageError(data.error || t.genericError)
+      } else {
+        setAiMovieBackfillResult((prev) => ({ ...(prev ?? {}), [stageKey]: data.content }))
+        setAiMovieStageStatus((prev) => ({ ...prev, [stageKey]: { status: 'pending', feedback: null } }))
+        setShowAiMovieStageFeedbackForm(false)
+        setAiMovieStageFeedbackText('')
+      }
+    } catch {
+      setAiMovieStageError(t.genericError)
+    }
+    setIsGeneratingAiMovieStage(false)
+  }
+
+  async function handleSubmitAiMovieStageFeedbackClick(stageKey) {
+    if (!aiMovieProjectId || !aiMovieStageFeedbackText.trim()) return
+
+    setIsGeneratingAiMovieStage(true)
+    setAiMovieStageError(null)
+    try {
+      const response = await fetch(`${BACKEND_URL}/api/ai-movie/stages/${stageKey}/generate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ projectId: aiMovieProjectId, feedback: aiMovieStageFeedbackText }),
+      })
+      const data = await response.json()
+
+      if (!response.ok) {
+        setAiMovieStageError(data.error || t.genericError)
+      } else {
+        setAiMovieBackfillResult((prev) => ({ ...(prev ?? {}), [stageKey]: data.content }))
+        setAiMovieStageStatus((prev) => ({ ...prev, [stageKey]: { status: 'pending', feedback: aiMovieStageFeedbackText } }))
+        setShowAiMovieStageFeedbackForm(false)
+        setAiMovieStageFeedbackText('')
+      }
+    } catch {
+      setAiMovieStageError(t.genericError)
+    }
+    setIsGeneratingAiMovieStage(false)
+  }
+
+  async function handleApproveAiMovieStageClick(stageKey) {
+    if (!aiMovieProjectId) return
+
+    setIsApprovingAiMovieStage(true)
+    setAiMovieStageError(null)
+    try {
+      const response = await fetch(`${BACKEND_URL}/api/ai-movie/stages/${stageKey}/approve`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ projectId: aiMovieProjectId }),
+      })
+      const data = await response.json()
+
+      if (!response.ok) {
+        setAiMovieStageError(data.error || t.genericError)
+      } else {
+        setAiMovieStageStatus((prev) => ({ ...prev, [stageKey]: { status: 'approved', feedback: null } }))
+        if (data.assets) setAiMovieAssets(data.assets)
+      }
+    } catch {
+      setAiMovieStageError(t.genericError)
+    }
+    setIsApprovingAiMovieStage(false)
+  }
+
+  function handleAiMovieStageClick(anchorId) {
+    setIsSidebarOpen(false)
+    document.getElementById(anchorId)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
   }
 
   function handleAiMovieExportClick() {
@@ -4975,8 +5115,9 @@ function App() {
         detectedStage: aiMovieAnalyzeStage,
         backfill: aiMovieBackfillResult,
         assets: aiMovieAssets,
+        stageStatus: aiMovieStageStatus,
       }
-      const payload = { exportedFrom: 'filmmaking-app-ai-movie', version: 1, project }
+      const payload = { exportedFrom: 'filmmaking-app-ai-movie', version: 2, project }
 
       const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' })
       const url = URL.createObjectURL(blob)
@@ -7863,10 +8004,35 @@ function App() {
                 <span className="agent-expand-icon">▸</span>
                 {t.masterProjectListLabel}
               </button>
-              <button className="agent-header">
-                <span className="agent-expand-icon">▸</span>
+              <button className="agent-header active">
+                <span className="agent-expand-icon expanded">▸</span>
                 {t.storyAgentLabel}
               </button>
+              {aiMovieBackfillResult?.story && (
+                <div className="stage-progress agent-substages">
+                  {AI_MOVIE_STAGE_ORDER.map((stageKey) => {
+                    const entry = aiMovieStageStatus[stageKey]
+                    const current = getAiMovieCurrentStage(aiMovieStageStatus)
+                    const dotStatus = entry?.status === 'approved' ? 'done' : current?.key === stageKey ? 'current' : 'upcoming'
+                    const label =
+                      stageKey === 'story' ? t.aiMovieStageLabelStory :
+                      stageKey === 'synopsis' ? t.aiMovieStageLabelSynopsis :
+                      stageKey === 'plot' ? t.aiMovieStageLabelPlot :
+                      stageKey === 'characterArc' ? t.aiMovieStageLabelCharacterArc :
+                      t.aiMovieStageLabelScreenplay
+                    return (
+                      <button
+                        key={stageKey}
+                        className={`stage-progress-item stage-${dotStatus}`}
+                        onClick={() => handleAiMovieStageClick(`ai-movie-stage-${stageKey}`)}
+                      >
+                        <span className="stage-progress-dot" />
+                        {label}
+                      </button>
+                    )
+                  })}
+                </div>
+              )}
               <button className="agent-header">
                 <span className="agent-expand-icon">▸</span>
                 {t.aiMovieProductionLabel}
@@ -7950,47 +8116,136 @@ function App() {
               {aiMovieBackfillResult && (
                 <div className="concept-result">
                   {aiMovieBackfillResult.story && (
-                    <div className="three-act-structure">
+                    <div className="three-act-structure" id="ai-movie-stage-story">
                       <h3>{t.aiMovieStoryLayerHeading}</h3>
                       <h4>{aiMovieBackfillResult.story.title[language]}</h4>
                       <p>{aiMovieBackfillResult.story.summary[language]}</p>
+                      <span className="approved-badge">{t.approvedBadge}</span>
                     </div>
                   )}
 
-                  {aiMovieBackfillResult.synopsis && (
-                    <div className="three-act-structure">
-                      <h3>{t.aiMovieSynopsisLayerHeading}</h3>
-                      <p><em>{aiMovieBackfillResult.synopsis.logline[language]}</em></p>
-                      <p>{aiMovieBackfillResult.synopsis.premise[language]}</p>
-                      <p>{aiMovieBackfillResult.synopsis.toneGenre[language]}</p>
-                      <p>{aiMovieBackfillResult.synopsis.targetAudience[language]}</p>
-                    </div>
-                  )}
+                  {(() => {
+                    const current = getAiMovieCurrentStage(aiMovieStageStatus)
+                    return AI_MOVIE_FORWARD_STAGES.map((stageKey) => {
+                      const stageStatusEntry = aiMovieStageStatus[stageKey]
+                      const content = aiMovieBackfillResult[stageKey]
+                      const isCurrent = current?.key === stageKey
+                      const stageLabel =
+                        stageKey === 'synopsis' ? t.aiMovieStageLabelSynopsis :
+                        stageKey === 'plot' ? t.aiMovieStageLabelPlot :
+                        stageKey === 'characterArc' ? t.aiMovieStageLabelCharacterArc :
+                        t.aiMovieStageLabelScreenplay
 
-                  {aiMovieBackfillResult.plot && (
-                    <div className="three-act-structure">
-                      <h3>{t.aiMoviePlotLayerHeading}</h3>
-                      {aiMovieBackfillResult.plot.map((beat, index) => (
-                        <div key={index} className="bit-row">
-                          <p className="bit-heading">{beat.title[language]}</p>
-                          <p>{beat.description[language]}</p>
+                      // Not reached yet — don't reveal it before its turn.
+                      if (!isCurrent && !stageStatusEntry) return null
+
+                      return (
+                        <div key={stageKey} className="three-act-structure" id={`ai-movie-stage-${stageKey}`}>
+                          <h3>{stageLabel}</h3>
+
+                          {!content && isCurrent && current.mode === 'generate' && (
+                            <button
+                              type="button"
+                              className="choose-button"
+                              onClick={() => handleGenerateAiMovieStageClick(stageKey)}
+                              disabled={isGeneratingAiMovieStage}
+                            >
+                              {isGeneratingAiMovieStage ? t.aiMovieGeneratingStageLabel : t.aiMovieGenerateStageButton(stageLabel)}
+                            </button>
+                          )}
+
+                          {content && stageKey === 'synopsis' && (
+                            <>
+                              <p><em>{content.logline[language]}</em></p>
+                              <p>{content.premise[language]}</p>
+                              <p>{content.toneGenre[language]}</p>
+                              <p>{content.targetAudience[language]}</p>
+                            </>
+                          )}
+
+                          {content && stageKey === 'plot' && content.map((beat, index) => (
+                            <div key={index} className="bit-row">
+                              <p className="bit-heading">{beat.title[language]}</p>
+                              <p>{beat.description[language]}</p>
+                            </div>
+                          ))}
+
+                          {content && stageKey === 'characterArc' && content.map((character, index) => (
+                            <div key={index} className="character-card">
+                              <h4>{character.name}</h4>
+                              <p>{t.wantLabel}: {character.want[language]}</p>
+                              <p>{t.needLabel}: {character.need[language]}</p>
+                              <p>{t.arcLabel}: {character.arc[language]}</p>
+                            </div>
+                          ))}
+
+                          {content && stageKey === 'screenplay' && content.map((scene, index) => (
+                            <div key={index} className="bit-row">
+                              <p className="bit-heading">{scene.sceneHeading[language]}</p>
+                              <p>{scene.action[language]}</p>
+                              {scene.dialogue.map((line, lineIndex) => (
+                                <p key={lineIndex}><strong>{line.character}:</strong> {line.line[language]}</p>
+                              ))}
+                            </div>
+                          ))}
+
+                          {content && stageStatusEntry?.feedback && (
+                            <p className="feedback-note">
+                              <strong>{t.changesRequestedBadge}</strong> "{stageStatusEntry.feedback}"
+                            </p>
+                          )}
+
+                          {content && (
+                            <div className="approval-section">
+                              {stageStatusEntry?.status === 'approved' ? (
+                                <span className="approved-badge">{t.approvedBadge}</span>
+                              ) : (
+                                <>
+                                  <div className="approval-buttons">
+                                    <button
+                                      className="approve-button"
+                                      onClick={() => handleApproveAiMovieStageClick(stageKey)}
+                                      disabled={isApprovingAiMovieStage}
+                                    >
+                                      {t.approveButton}
+                                    </button>
+                                    <button
+                                      className="cancel-button"
+                                      onClick={() => setShowAiMovieStageFeedbackForm(!showAiMovieStageFeedbackForm)}
+                                    >
+                                      {t.requestChangesButton}
+                                    </button>
+                                  </div>
+
+                                  {showAiMovieStageFeedbackForm && (
+                                    <div className="feedback-form">
+                                      <textarea
+                                        className="feedback-textarea"
+                                        value={aiMovieStageFeedbackText}
+                                        onChange={(e) => setAiMovieStageFeedbackText(e.target.value)}
+                                        placeholder={t.feedbackPlaceholder}
+                                      />
+                                      <button
+                                        className="choose-button"
+                                        onClick={() => handleSubmitAiMovieStageFeedbackClick(stageKey)}
+                                        disabled={isGeneratingAiMovieStage || !aiMovieStageFeedbackText.trim()}
+                                      >
+                                        {isGeneratingAiMovieStage ? t.submittingFeedback : t.submitFeedback}
+                                      </button>
+                                    </div>
+                                  )}
+                                </>
+                              )}
+                            </div>
+                          )}
                         </div>
-                      ))}
-                    </div>
-                  )}
+                      )
+                    })
+                  })()}
 
-                  {aiMovieBackfillResult.characterArc && (
-                    <div className="three-act-structure">
-                      <h3>{t.aiMovieCharacterArcLayerHeading}</h3>
-                      {aiMovieBackfillResult.characterArc.map((character, index) => (
-                        <div key={index} className="character-card">
-                          <h4>{character.name}</h4>
-                          <p>{t.wantLabel}: {character.want[language]}</p>
-                          <p>{t.needLabel}: {character.need[language]}</p>
-                          <p>{t.arcLabel}: {character.arc[language]}</p>
-                        </div>
-                      ))}
-                    </div>
+                  {aiMovieStageError && <p className="feedback-note">{aiMovieStageError}</p>}
+                  {!getAiMovieCurrentStage(aiMovieStageStatus) && (
+                    <p className="sidebar-section-note">{t.aiMovieAllStagesLockedNote}</p>
                   )}
                 </div>
               )}

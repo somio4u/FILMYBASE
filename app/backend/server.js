@@ -2950,8 +2950,10 @@ async function generateAiMovieAssetExtraction(fullText, referenceMaterialText) {
 }
 
 // Flattens whatever backfill produced into plain text, alongside the
-// original pasted material, so the asset-extraction agent above has
-// everything gathered so far to read through in one pass.
+// original pasted material — used both by the silent asset-extraction
+// agent (reading everything gathered so far) and, further below, as the
+// "approved story so far" context handed to each forward stage's own
+// generation call.
 function flattenAiMovieContentForExtraction(pastedText, backfill) {
   const parts = [pastedText];
   if (backfill?.story) parts.push(`Story: ${backfill.story.title.en}\n${backfill.story.summary.en}`);
@@ -2966,7 +2968,38 @@ function flattenAiMovieContentForExtraction(pastedText, backfill) {
       `Character Arc:\n${backfill.characterArc.map((c) => `${c.name} — wants ${c.want.en}, needs ${c.need.en}, arc: ${c.arc.en}`).join("\n")}`
     );
   }
+  if (backfill?.screenplay) {
+    parts.push(
+      `Screenplay:\n${backfill.screenplay
+        .map(
+          (scene) =>
+            `${scene.sceneHeading.en}\n${scene.action.en}\n${scene.dialogue.map((d) => `${d.character}: ${d.line.en}`).join("\n")}`
+        )
+        .join("\n\n")}`
+    );
+  }
   return parts.join("\n\n");
+}
+
+// The step-by-step review chain this whole pipeline now follows, mirroring
+// the shooting pipeline's Idea -> Synopsis -> Characters -> Bit Sheet ->
+// Screenplay chain. 'story' is always covered by whatever the paste/
+// backfill/reference-generation step already produced (auto-approved,
+// never separately reviewed); everything after it is generated ONE layer
+// at a time, only once the layer before it has been approved.
+const AI_MOVIE_STAGE_ORDER = ["story", "synopsis", "plot", "characterArc", "screenplay"];
+
+// How far into AI_MOVIE_STAGE_ORDER a given Analyze result already covers,
+// so that prefix can be auto-approved the moment Proceed finishes — the
+// pasted material (plus whatever backfill invented behind it) is already
+// "final and authoritative," never something to second-guess with a
+// review step. -1 ('other') means nothing is confidently covered.
+const AI_MOVIE_DETECTED_STAGE_COVERED_INDEX = { concept: 0, story: 0, synopsis: 1, bitsheet: 2, screenplay: 4, other: -1 };
+
+function approvedStageStatusUpTo(index) {
+  const status = {};
+  for (let i = 0; i <= index; i++) status[AI_MOVIE_STAGE_ORDER[i]] = { status: "approved", feedback: null };
+  return status;
 }
 
 // One text blob of everything the user has attached for a project via the
@@ -3029,52 +3062,56 @@ app.post("/api/ai-movie/backfill", requireRole("admin"), async (req, res) => {
       flattenAiMovieContentForExtraction(pastedText, backfill),
       referenceMaterialText
     );
+    // Whatever the paste already covers (plus anything backfill just
+    // invented behind it) is auto-approved — that's the whole point of
+    // "final and authoritative, never rewritten." The step-by-step review
+    // chain only kicks in for layers still ahead of it.
+    const coveredIndex = AI_MOVIE_DETECTED_STAGE_COVERED_INDEX[stage] ?? -1;
+    const stageStatus = approvedStageStatusUpTo(coveredIndex);
 
     if (projectId) {
       const title = backfill.story?.title?.en ?? null;
       await db.query(
-        "UPDATE ai_movie_projects SET backfill = $1, assets = $2, title = COALESCE(title, $3), updated_at = now() WHERE id = $4",
-        [JSON.stringify(backfill), JSON.stringify(assets), title, projectId]
+        "UPDATE ai_movie_projects SET backfill = $1, assets = $2, stage_status = $3, title = COALESCE(title, $4), updated_at = now() WHERE id = $5",
+        [JSON.stringify(backfill), JSON.stringify(assets), JSON.stringify(stageStatus), title, projectId]
       );
     }
 
-    res.json({ backfill, assets });
+    res.json({ backfill, assets, stageStatus });
   } catch (error) {
     console.error("Gemini API call failed:", error.message);
     res.status(502).json({ error: error.message });
   }
 });
 
-// Fifth AI Movie piece: originate a story straight from Reference Material
+// Fifth AI Movie piece: originate a Story straight from Reference Material
 // alone, for when the user hasn't pasted anything into the main box yet.
 // Unlike the backfill agent above (which protects whatever was pasted and
-// only invents the layers BEHIND it), this one has nothing to protect — it
-// generates the whole chain (Story, Synopsis, Plot, Character Arc) in one
-// pass, faithfully built from the reference material.
+// only invents the layers BEHIND it), this one has nothing to protect — but
+// it now only originates the Story layer, auto-approved, same as a plain
+// 'story'-stage paste would be — Synopsis/Plot/Character Arc/Screenplay
+// still go through the real step-by-step review chain from there, rather
+// than arriving pre-generated with nothing to review.
 const AI_MOVIE_SEED_FROM_REFERENCE_SYSTEM_PROMPT = `You are working on an AI Movie — a film that will be entirely AI-generated, never physically shot. Because of that, never reason about budget, cast/crew/location availability, shoot schedules, or any real-world production constraint — anything that can be imagined can be included, with no limitation.
 
-The user hasn't written any story text yet. Below is reference material they've provided (a real book/source, and/or character/property/art details) — read it closely and originate a genuine, original story from it: a Story (title + summary), a Synopsis (logline/premise/tone-genre/target audience), a Plot (an ordered list of story beats), and a Character Arc (major characters with what they want, need, and how they change). Stay faithful to the reference material — you are building a real story out of it, not inventing something unrelated to it.`;
+The user hasn't written any story text yet. Below is reference material they've provided (a real book/source, and/or character/property/art details) — read it closely and originate a genuine, original Story (title + summary) from it. Stay faithful to the reference material — you are building a real story out of it, not inventing something unrelated to it.`;
 
 async function generateAiMovieSeedFromReference(referenceMaterialText) {
-  return generateJsonContent({
+  const result = await generateJsonContent({
     model: GEMINI_MODEL_NAME,
     contents: `Reference material:\n\n${referenceMaterialText}`,
     config: {
       systemInstruction: AI_MOVIE_SEED_FROM_REFERENCE_SYSTEM_PROMPT,
       responseMimeType: "application/json",
-      maxOutputTokens: 8192,
+      maxOutputTokens: 4096,
       responseSchema: {
         type: Type.OBJECT,
-        properties: {
-          story: AI_MOVIE_STORY_LAYER_SCHEMA,
-          synopsis: AI_MOVIE_SYNOPSIS_LAYER_SCHEMA,
-          plot: { type: Type.ARRAY, items: AI_MOVIE_PLOT_BEAT_SCHEMA },
-          characterArc: { type: Type.ARRAY, items: AI_MOVIE_CHARACTER_ARC_SCHEMA },
-        },
-        required: ["story", "synopsis", "plot", "characterArc"],
+        properties: { story: AI_MOVIE_STORY_LAYER_SCHEMA },
+        required: ["story"],
       },
     },
   });
+  return result.story;
 }
 
 app.post("/api/ai-movie/generate-from-reference", requireRole("admin"), async (req, res) => {
@@ -3092,22 +3129,154 @@ app.post("/api/ai-movie/generate-from-reference", requireRole("admin"), async (r
   }
 
   try {
-    const backfill = await generateAiMovieSeedFromReference(referenceMaterialText);
-    const pastedText = `${backfill.story.title.en}\n\n${backfill.story.summary.en}`;
+    const story = await generateAiMovieSeedFromReference(referenceMaterialText);
+    const backfill = { story };
+    const pastedText = `${story.title.en}\n\n${story.summary.en}`;
     const assets = await generateAiMovieAssetExtraction(
       flattenAiMovieContentForExtraction(pastedText, backfill),
       referenceMaterialText
     );
+    const stageStatus = approvedStageStatusUpTo(0); // 'story' only
 
     await db.query(
-      "UPDATE ai_movie_projects SET pasted_text = $1, detected_stage = 'story', backfill = $2, assets = $3, title = COALESCE(title, $4), updated_at = now() WHERE id = $5",
-      [pastedText, JSON.stringify(backfill), JSON.stringify(assets), backfill.story.title.en, projectId]
+      "UPDATE ai_movie_projects SET pasted_text = $1, detected_stage = 'story', backfill = $2, assets = $3, stage_status = $4, title = COALESCE(title, $5), updated_at = now() WHERE id = $6",
+      [pastedText, JSON.stringify(backfill), JSON.stringify(assets), JSON.stringify(stageStatus), story.title.en, projectId]
     );
 
-    res.json({ pastedText, stage: "story", backfill, assets });
+    res.json({ pastedText, stage: "story", backfill, assets, stageStatus });
   } catch (error) {
     console.error("Gemini API call failed:", error.message);
     res.status(502).json({ error: error.message });
+  }
+});
+
+// Sixth AI Movie piece: the step-by-step review chain itself. Once Story is
+// approved (by whichever path got it there), each later layer —
+// Synopsis, Plot, Character Arc, Screenplay — is generated ONE AT A TIME,
+// using only the already-approved layers before it as fixed context, and
+// sits as "pending" until the user reviews it: either Approve (locks it,
+// unlocking the next layer) or Request Changes (regenerates just this
+// layer with the user's feedback folded in, still pending after).
+const AI_MOVIE_STAGE_GENERATION_SYSTEM_PROMPT = `You are working on an AI Movie — a film that will be entirely AI-generated, never physically shot. Because of that, never reason about budget, cast/crew/location availability, shoot schedules, or any real-world production constraint — anything that can be imagined can be included, with no limitation.
+
+You are given the story's already-approved, locked earlier layers below — treat them as fixed and fully consistent, never contradict or rewrite them. Generate ONLY the one new layer the schema asks for, as a natural continuation of everything already locked in.`;
+
+const AI_MOVIE_SCREENPLAY_SCENE_SCHEMA = {
+  type: Type.OBJECT,
+  properties: {
+    sceneHeading: BILINGUAL_TEXT_SCHEMA,
+    action: BILINGUAL_TEXT_SCHEMA,
+    dialogue: {
+      type: Type.ARRAY,
+      items: {
+        type: Type.OBJECT,
+        properties: { character: { type: Type.STRING }, line: BILINGUAL_TEXT_SCHEMA },
+        required: ["character", "line"],
+      },
+    },
+  },
+  required: ["sceneHeading", "action", "dialogue"],
+};
+
+const AI_MOVIE_FORWARD_STAGE_SCHEMAS = {
+  synopsis: AI_MOVIE_SYNOPSIS_LAYER_SCHEMA,
+  plot: { type: Type.ARRAY, items: AI_MOVIE_PLOT_BEAT_SCHEMA },
+  characterArc: { type: Type.ARRAY, items: AI_MOVIE_CHARACTER_ARC_SCHEMA },
+  screenplay: { type: Type.ARRAY, items: AI_MOVIE_SCREENPLAY_SCENE_SCHEMA },
+};
+
+async function generateAiMovieForwardStage(stageKey, priorContextText, referenceMaterialText, feedback) {
+  const referenceBlock = referenceMaterialText
+    ? `\n\nThe user has also provided reference material below — treat it as authoritative grounding, stay faithful to it:\n\n${referenceMaterialText}`
+    : "";
+  const feedbackBlock = feedback
+    ? `\n\nThe user reviewed an earlier draft of this exact layer and asked for these changes — revise accordingly, still fully consistent with the locked layers above:\n${feedback}`
+    : "";
+
+  const result = await generateJsonContent({
+    model: GEMINI_MODEL_NAME,
+    contents: `The story's approved layers so far:\n\n${priorContextText}${referenceBlock}${feedbackBlock}\n\nNow generate the "${stageKey}" layer.`,
+    config: {
+      systemInstruction: AI_MOVIE_STAGE_GENERATION_SYSTEM_PROMPT,
+      responseMimeType: "application/json",
+      maxOutputTokens: stageKey === "screenplay" ? 16384 : 8192,
+      responseSchema: { type: Type.OBJECT, properties: { [stageKey]: AI_MOVIE_FORWARD_STAGE_SCHEMAS[stageKey] }, required: [stageKey] },
+    },
+  });
+  return result[stageKey];
+}
+
+app.post("/api/ai-movie/stages/:stage/generate", requireRole("admin"), async (req, res) => {
+  const stageKey = req.params.stage;
+  const { projectId, feedback } = req.body;
+
+  if (!AI_MOVIE_FORWARD_STAGE_SCHEMAS[stageKey]) {
+    res.status(400).json({ error: "Not a valid stage to generate." });
+    return;
+  }
+  if (!projectId) {
+    res.status(400).json({ error: "No project to generate into." });
+    return;
+  }
+
+  const projectResult = await db.query("SELECT pasted_text, backfill FROM ai_movie_projects WHERE id = $1", [projectId]);
+  const project = projectResult.rows[0];
+  if (!project) {
+    res.status(404).json({ error: "Project not found." });
+    return;
+  }
+
+  try {
+    const referenceMaterialText = await getAiMovieReferenceMaterialText(projectId);
+    const priorContextText = flattenAiMovieContentForExtraction(project.pasted_text, project.backfill);
+    const content = await generateAiMovieForwardStage(stageKey, priorContextText, referenceMaterialText, feedback);
+
+    const backfill = { ...(project.backfill ?? {}), [stageKey]: content };
+    await db.query(
+      "UPDATE ai_movie_projects SET backfill = $1, stage_status = stage_status || $2::jsonb, updated_at = now() WHERE id = $3",
+      [JSON.stringify(backfill), JSON.stringify({ [stageKey]: { status: "pending", feedback: feedback ?? null } }), projectId]
+    );
+
+    res.json({ stageKey, content });
+  } catch (error) {
+    console.error("Gemini API call failed:", error.message);
+    res.status(502).json({ error: error.message });
+  }
+});
+
+app.post("/api/ai-movie/stages/:stage/approve", requireRole("admin"), async (req, res) => {
+  const stageKey = req.params.stage;
+  const { projectId } = req.body;
+
+  if (!AI_MOVIE_STAGE_ORDER.includes(stageKey)) {
+    res.status(400).json({ error: "Not a valid stage." });
+    return;
+  }
+  if (!projectId) {
+    res.status(400).json({ error: "No project to approve." });
+    return;
+  }
+
+  await db.query(
+    "UPDATE ai_movie_projects SET stage_status = stage_status || $1::jsonb, updated_at = now() WHERE id = $2",
+    [JSON.stringify({ [stageKey]: { status: "approved", feedback: null } }), projectId]
+  );
+
+  // Refresh the silent asset list with whatever's newly locked in — best
+  // effort: approval itself must still succeed even if this call fails.
+  try {
+    const projectResult = await db.query("SELECT pasted_text, backfill FROM ai_movie_projects WHERE id = $1", [projectId]);
+    const project = projectResult.rows[0];
+    const referenceMaterialText = await getAiMovieReferenceMaterialText(projectId);
+    const assets = await generateAiMovieAssetExtraction(
+      flattenAiMovieContentForExtraction(project.pasted_text, project.backfill),
+      referenceMaterialText
+    );
+    await db.query("UPDATE ai_movie_projects SET assets = $1, updated_at = now() WHERE id = $2", [JSON.stringify(assets), projectId]);
+    res.json({ ok: true, assets });
+  } catch (error) {
+    console.error("Silent asset refresh failed after approval (approval itself still succeeded):", error.message);
+    res.json({ ok: true, assets: null });
   }
 });
 
@@ -3138,6 +3307,14 @@ app.get("/api/ai-movie/projects/:id", requireRole("admin"), async (req, res) => 
     detectedStage: row.detected_stage,
     backfill: row.backfill,
     assets: row.assets,
+    // A project saved before the step-by-step review chain existed has no
+    // stage_status at all — treat everything already present in its
+    // backfill as approved, same as this pipeline always treated it,
+    // rather than suddenly asking for a review pass on old work.
+    stageStatus:
+      row.stage_status && Object.keys(row.stage_status).length > 0
+        ? row.stage_status
+        : Object.fromEntries(Object.keys(row.backfill ?? {}).map((key) => [key, { status: "approved", feedback: null }])),
   });
 });
 
@@ -3150,13 +3327,14 @@ app.post("/api/ai-movie/projects/import", requireRole("admin"), async (req, res)
   }
 
   const inserted = await db.query(
-    "INSERT INTO ai_movie_projects (title, pasted_text, detected_stage, backfill, assets, created_by) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id",
+    "INSERT INTO ai_movie_projects (title, pasted_text, detected_stage, backfill, assets, stage_status, created_by) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id",
     [
       project.title ?? null,
       project.pastedText,
       project.detectedStage ?? null,
       JSON.stringify(project.backfill ?? {}),
       JSON.stringify(project.assets ?? {}),
+      JSON.stringify(project.stageStatus ?? {}),
       req.user.id,
     ]
   );

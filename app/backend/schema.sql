@@ -250,6 +250,15 @@ CREATE TABLE ai_movie_projects (
   detected_stage TEXT,
   backfill JSONB,
   assets JSONB,
+  -- Per-layer review state, mirroring the shooting pipeline's stage-by-
+  -- stage approve/request-changes chain: {"story": {"status": "approved",
+  -- "feedback": null}, "synopsis": {"status": "pending", "feedback": null},
+  -- ...}. A layer with no key here hasn't been reached yet. Layers covered
+  -- by the pasted material itself (or invented behind it by the backfill
+  -- agent) are auto-approved — only layers generated FORWARD from there
+  -- (Synopsis/Plot/Character Arc/Screenplay, whichever come after whatever
+  -- was pasted) go through real review.
+  stage_status JSONB NOT NULL DEFAULT '{}',
   created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()

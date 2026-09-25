@@ -5550,7 +5550,7 @@ function App() {
       // now kicks it off and responds right away instead of holding the
       // request open, so pick up the finished result by polling the
       // project's own data instead of waiting on this one response.
-      await pollForScriptBreakdown(conceptId)
+      await pollForScriptBreakdown(conceptId, null, setIsGeneratingBreakdown)
     } catch {
       setErrorMessage(t.genericError)
       setIsGeneratingBreakdown(false)
@@ -5560,9 +5560,14 @@ function App() {
   function handleCancelBreakdownPollClick() {
     breakdownPollCancelRef.current = true
     setIsGeneratingBreakdown(false)
+    setIsGeneratingAdSheet(false)
   }
 
-  async function pollForScriptBreakdown(pollConceptId) {
+  // Shared by both "Analyze Script" (afterBreakdownId=null — any breakdown
+  // showing up is the new one) and "Generate AD Sheet" (a breakdown already
+  // exists, so this waits for a NEWER row specifically, since otherwise
+  // it'd resolve instantly against the one already there).
+  async function pollForScriptBreakdown(pollConceptId, afterBreakdownId, setIsBusy) {
     const pollIntervalMs = 5000
     const maxAttempts = 240 // 20 minutes
 
@@ -5574,9 +5579,9 @@ function App() {
         const response = await fetch(`${BACKEND_URL}/api/concepts/${pollConceptId}/full`)
         if (response.ok) {
           const data = await response.json()
-          if (data.scriptBreakdown) {
+          if (data.scriptBreakdown && (afterBreakdownId == null || data.scriptBreakdown.id !== afterBreakdownId)) {
             setScriptBreakdown(data.scriptBreakdown)
-            setIsGeneratingBreakdown(false)
+            setIsBusy(false)
             return
           }
         }
@@ -5586,10 +5591,16 @@ function App() {
     }
 
     setErrorMessage(t.breakdownTimedOutError)
-    setIsGeneratingBreakdown(false)
+    setIsBusy(false)
   }
 
   async function handleGenerateAdSheetClick() {
+    if (!conceptId) {
+      setErrorMessage(t.genericError)
+      return
+    }
+
+    breakdownPollCancelRef.current = false
     setIsGeneratingAdSheet(true)
     setErrorMessage(null)
 
@@ -5605,12 +5616,14 @@ function App() {
         return
       }
 
-      setScriptBreakdown(data)
+      // Same batched-and-sequential background job as Analyze Script — see
+      // that handler's comment — so this also polls for the new row
+      // instead of waiting on one long-lived request.
+      await pollForScriptBreakdown(conceptId, scriptBreakdown.id, setIsGeneratingAdSheet)
     } catch {
       setErrorMessage(t.genericError)
+      setIsGeneratingAdSheet(false)
     }
-
-    setIsGeneratingAdSheet(false)
   }
 
   async function handleApproveBreakdownClick() {
@@ -8872,6 +8885,11 @@ function App() {
                     disabled={isGeneratingAdSheet}
                   >
                     {isGeneratingAdSheet ? t.generatingAdSheetLabel : t.generateAdSheetButton}
+                  </button>
+                )}
+                {isGeneratingAdSheet && (
+                  <button className="cancel-button" onClick={handleCancelBreakdownPollClick}>
+                    {t.cancelBreakdownButton}
                   </button>
                 )}
                 <AnalyzingProgressBar active={isGeneratingAdSheet} label={t.generatingAdSheetLabel} estimatedSeconds={30} />

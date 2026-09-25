@@ -95,7 +95,19 @@ function parseRetryDelayMs(errorMessage) {
 // frontend poll waiting on it) hangs until it gives up on its own. This
 // bounds every attempt to GEMINI_CALL_TIMEOUT_MS and treats a timeout the
 // same as a 429/503 — worth retrying, not a reason to give up immediately.
-const GEMINI_CALL_TIMEOUT_MS = 90_000;
+//
+// 90s turned out to be too tight: a real 166KB/13-episode script's own
+// first-pass breakdown call (the whole script, all 5 categories,
+// trilingual) legitimately runs past 90s on its own, with no stall at all
+// — so EVERY attempt (and every retry, since a retry repeats the exact
+// same call) kept getting killed by this timeout before Gemini could ever
+// actually finish, which is a big part of why analysis never completed.
+// withTimeout also can't cancel the underlying request, so a premature
+// timeout doesn't even free up the in-flight call — it just piles a
+// redundant one on top, making the rate-limit exhaustion worse, not
+// better. Raised with real margin above the observed range instead of
+// nudged up incrementally, to actually stop recurring.
+const GEMINI_CALL_TIMEOUT_MS = 240_000;
 
 function withTimeout(promise, ms) {
   return new Promise((resolve, reject) => {
@@ -111,6 +123,20 @@ function withTimeout(promise, ms) {
       }
     );
   });
+}
+
+// Every Gemini/Vertex call already retries a 429 several times (see
+// generateContentWithRetry above), but a SUSTAINED quota exhaustion — the
+// whole Google Cloud project out of budget, not just one burst — outlasts
+// that retry budget and the raw error (a nested JSON blob with a Google
+// Cloud docs URL) ends up on screen verbatim, which reads as the app being
+// broken rather than what it actually is: a real, external quota limit
+// that needs to be checked/raised in Google Cloud Console, not a bug here.
+function friendlyGeminiErrorMessage(rawMessage) {
+  if (/RESOURCE_EXHAUSTED|"code":\s*429/.test(rawMessage ?? "")) {
+    return "The AI service's usage quota is temporarily exhausted (this is a Google Cloud limit, not an app bug). This usually clears on its own within a few minutes to an hour — please try again shortly. If it keeps happening, the project's Vertex AI quota may need to be raised in Google Cloud Console.";
+  }
+  return rawMessage;
 }
 
 async function generateContentWithRetry(params, { retries = 4, fallbackDelayMs = 2000 } = {}) {
@@ -6008,39 +6034,40 @@ async function buildBreakdownSourceText(sceneList, sceneListId) {
   return flattenScenesForScheduling(sceneList);
 }
 
+// One category at a time across the WHOLE script, not all 5 in one call.
+// A real 166KB/13-episode script proved this matters: asking for all 5
+// categories together (90+ scenes' worth of artists/locations/props/
+// costumes/art, each with trilingual notes) produced a response that hit
+// the MODEL's own actual output ceiling — not a maxOutputTokens config
+// value (already left uncapped), an intrinsic limit — and got cut off
+// mid-string on every one of 4 retry attempts in a row, since a retry
+// asks for the exact same amount of content and hits the same wall again.
+// One category's worth of content comfortably fits well under that
+// ceiling on its own.
 async function generateScriptBreakdownContent(sourceText, revision) {
-  let contents = `The script material:\n${sourceText}`;
+  const results = await mapWithConcurrency(BREAKDOWN_CATEGORY_KEYS, 1, async (category) => {
+    let contents = `The script material:\n${sourceText}\n\nProduce the "${category}" list — ${BREAKDOWN_CATEGORY_DESCRIPTIONS[category]}. Be thorough but only include things actually implied by the material.`;
+    if (revision) {
+      contents += `\n\nThis is a REVISION of a previous breakdown. Feedback: "${revision.feedback}"\nRevise this category's list to address the feedback directly, where relevant.`;
+    }
 
-  if (revision) {
-    contents += `\n\nThis is a REVISION of a previous breakdown. Feedback: "${revision.feedback}"\nRevise the breakdown to address the feedback directly.`;
-  }
-
-  return sanitizeBilingualContent(
-    await generateJsonContent({
+    const parsed = await generateJsonContent({
       model: GEMINI_MODEL_NAME,
       contents,
       config: {
         systemInstruction: SCRIPT_BREAKDOWN_SYSTEM_PROMPT,
         responseMimeType: "application/json",
-        // No cap — a real script truncated a 12288, then a 32768 budget in
-        // a row ("Unterminated string..."). This is the core analysis this
-        // whole app is built around, so it's left to the model's own
-        // maximum rather than another fixed number we'd have to keep
-        // raising for the next big script.
         responseSchema: {
           type: Type.OBJECT,
-          properties: {
-            artistList: { type: Type.ARRAY, items: BREAKDOWN_ARTIST_SCHEMA },
-            locationList: { type: Type.ARRAY, items: BREAKDOWN_LOCATION_SCHEMA },
-            props: { type: Type.ARRAY, items: BREAKDOWN_ITEM_SCHEMA },
-            costumes: { type: Type.ARRAY, items: BREAKDOWN_COSTUME_SCHEMA },
-            art: { type: Type.ARRAY, items: BREAKDOWN_ITEM_SCHEMA },
-          },
-          required: ["artistList", "locationList", "props", "costumes", "art"],
+          properties: { [category]: { type: Type.ARRAY, items: BREAKDOWN_CATEGORY_ITEM_SCHEMAS[category] } },
+          required: [category],
         },
       },
-    })
-  );
+    });
+    return [category, parsed[category]];
+  });
+
+  return sanitizeBilingualContent(Object.fromEntries(results));
 }
 
 // Runs the initial breakdown, then immediately re-verifies every category
@@ -6446,21 +6473,32 @@ async function classifyEpisodeNumbersForCategory(sourceText, category, labels) {
   return result;
 }
 
-// Runs across all 5 categories, one small call each. Skipped entirely for
-// a single-episode film/short (splitScreenplayIntoEpisodes returns just
-// one chunk) — there's only ever one "episode" there, not worth tagging.
+// Runs across all 5 categories, one small call each — but "small" is only
+// the RESPONSE; each call below still re-sends the WHOLE sourceText as
+// context (same as every other breakdown call), so 3 of these at once hits
+// the exact same Vertex AI RESOURCE_EXHAUSTED confirmed elsewhere in this
+// file. Sequential, and a category that still fails after retries just
+// skips episode-tagging for that one category instead of losing the
+// breakdown that's otherwise already complete at this point.
+// Skipped entirely for a single-episode film/short
+// (splitScreenplayIntoEpisodes returns just one chunk) — there's only ever
+// one "episode" there, not worth tagging.
 async function classifyEpisodeNumbers(sourceText, breakdownContent) {
   if (splitScreenplayIntoEpisodes(sourceText).length <= 1) return breakdownContent;
 
   const updated = { ...breakdownContent };
-  await mapWithConcurrency(BREAKDOWN_CATEGORY_KEYS, 3, async (category) => {
+  await mapWithConcurrency(BREAKDOWN_CATEGORY_KEYS, 1, async (category) => {
     const items = breakdownContent[category] ?? [];
     const labels = items.map((item) => breakdownItemDisplayLabel(category, item));
-    const episodeNumbersList = await classifyEpisodeNumbersForCategory(sourceText, category, labels);
-    updated[category] = items.map((item, i) => ({
-      ...item,
-      episodeNumbers: episodeNumbersList[i] ?? item.episodeNumbers ?? [],
-    }));
+    try {
+      const episodeNumbersList = await classifyEpisodeNumbersForCategory(sourceText, category, labels);
+      updated[category] = items.map((item, i) => ({
+        ...item,
+        episodeNumbers: episodeNumbersList[i] ?? item.episodeNumbers ?? [],
+      }));
+    } catch (error) {
+      console.error(`Episode-number tagging failed for "${category}", leaving it untagged:`, error.message);
+    }
   });
   return updated;
 }
@@ -6734,9 +6772,21 @@ async function generateAdSheetDetails(sceneEntries, breakdownContent, sourceText
     batches.push({ start: i, entries: sceneEntries.slice(i, i + AD_SHEET_BATCH_SIZE) });
   }
 
-  const batchResults = await mapWithConcurrency(batches, 3, (batch) =>
-    generateAdSheetDetailsForBatch(batch.entries, batch.start, breakdownContent, sourceText)
-  );
+  // Same lesson as generateDeepScriptBreakdownContent: each batch re-sends
+  // the WHOLE script, so several of these at once reliably trips Vertex
+  // AI's own rate limit (a real 166KB script + several batches confirmed
+  // it) — sequential is slower but actually finishes. A batch that still
+  // fails after retries falls back to blank rows for just that batch
+  // instead of losing the whole AD sheet.
+  const blankRow = { mainCharacters: [], extras: { en: "", or: "" }, property: { en: "", or: "" }, costumeRemarks: { en: "", or: "" } };
+  const batchResults = await mapWithConcurrency(batches, 1, async (batch) => {
+    try {
+      return await generateAdSheetDetailsForBatch(batch.entries, batch.start, breakdownContent, sourceText);
+    } catch (error) {
+      console.error(`AD sheet batch starting at scene ${batch.start} failed, filling with blank rows:`, error.message);
+      return batch.entries.map(() => blankRow);
+    }
+  });
 
   return batchResults.flat();
 }
@@ -7416,6 +7466,13 @@ app.post("/api/script-breakdown/:id/generate-ad-sheet", requireRole("admin", "pr
     return;
   }
 
+  // Same reasoning as /api/script-breakdown: one batch per ~15 scenes, each
+  // re-sending the whole script, run sequentially now for rate-limit
+  // safety — a real script easily pushes this past Render's own request
+  // timeout. Respond immediately and let the frontend poll for the new
+  // row instead of holding this request open.
+  res.json({ status: "processing" });
+
   try {
     const sceneListResult = await db.query("SELECT content FROM scene_lists WHERE id = $1", [sceneListId]);
     const sceneList = sceneListResult.rows[0].content;
@@ -7430,15 +7487,12 @@ app.post("/api/script-breakdown/:id/generate-ad-sheet", requireRole("admin", "pr
     // approval as an operational step) — carries the previous approval
     // status forward instead of silently reverting to pending, which
     // would hide the Shoot Schedule (it only shows once approved).
-    const insertResult = await db.query(
-      "INSERT INTO script_breakdowns (scene_list_id, content, status, feedback) VALUES ($1, $2, $3, $4) RETURNING id, status, feedback",
+    await db.query(
+      "INSERT INTO script_breakdowns (scene_list_id, content, status, feedback) VALUES ($1, $2, $3, $4)",
       [sceneListId, JSON.stringify(updatedContent), latest.rows[0].status, "Generated AD Scene Breakdown Sheet"]
     );
-
-    res.json({ ...insertResult.rows[0], sceneListId, ...updatedContent });
   } catch (error) {
     console.error("AD sheet generation failed:", error.message);
-    res.status(502).json({ error: error.message });
   }
 });
 
@@ -11606,7 +11660,7 @@ async function runAutoPipeline(runId, conceptText, format, dialogueLanguage, res
     await updateAutoPipelineRun(runId, { status: "completed", progress_stage: "done" });
   } catch (error) {
     console.error("Auto-pipeline run failed:", runId, error);
-    await updateAutoPipelineRun(runId, { status: "failed", error: error.message }).catch(() => {});
+    await updateAutoPipelineRun(runId, { status: "failed", error: friendlyGeminiErrorMessage(error.message) }).catch(() => {});
   }
 }
 

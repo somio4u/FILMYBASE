@@ -3493,6 +3493,24 @@ async function translateAkhadaFixedContent(englishPayload, responseSchema, maxOu
   });
 }
 
+// Saves one stage's translated content and marks it approved in the same
+// query the rest of the app already uses for approval, so a stage filled
+// in here is indistinguishable from one approved the normal way.
+async function saveAiMovieFilledStage(projectId, stageKey, content) {
+  const result = await db.query("SELECT backfill FROM ai_movie_projects WHERE id = $1", [projectId]);
+  const backfill = { ...(result.rows[0]?.backfill ?? {}), [stageKey]: content };
+  await db.query(
+    "UPDATE ai_movie_projects SET backfill = $1, stage_status = stage_status || $2::jsonb, updated_at = now() WHERE id = $3",
+    [JSON.stringify(backfill), JSON.stringify({ [stageKey]: { status: "approved", feedback: null } }), projectId]
+  );
+}
+
+// In-memory only (fine for a job that finishes in a couple of minutes, and
+// resets harmlessly on a redeploy — the client just re-POSTs to restart
+// it). Lets the client tell "still working" apart from "failed" without
+// keeping one HTTP request open the whole time.
+const akhadaFillStatus = new Map();
+
 app.post("/api/ai-movie/projects/:id/fill-akhada-stages", requireRole("admin"), async (req, res) => {
   const projectId = req.params.id;
   const projectResult = await db.query("SELECT backfill FROM ai_movie_projects WHERE id = $1", [projectId]);
@@ -3506,18 +3524,35 @@ app.post("/api/ai-movie/projects/:id/fill-akhada-stages", requireRole("admin"), 
     return;
   }
 
+  // Respond immediately and keep working after — five sequential Gemini
+  // calls held open in one request/response was reliably hitting a
+  // network-level timeout before it could ever finish (the same
+  // "something went wrong" shape as the earlier oversized-reference-
+  // material bug, just caused by call COUNT this time instead of text
+  // size). Each stage is saved to the database the moment it's translated,
+  // so progress survives even if a later stage fails, and the client polls
+  // fill-akhada-status instead of waiting on one long-lived response.
+  akhadaFillStatus.set(projectId, "running");
+  res.json({ started: true });
+
   try {
     const synopsis = await translateAkhadaFixedContent(AKHADA_FIXED_SYNOPSIS, AI_MOVIE_SYNOPSIS_LAYER_SCHEMA, 2048);
+    await saveAiMovieFilledStage(projectId, "synopsis", synopsis);
+
     const characterArc = await translateAkhadaFixedContent(
       AKHADA_FIXED_CHARACTERS,
       { type: Type.ARRAY, items: AI_MOVIE_CHARACTER_ARC_SCHEMA },
       4096
     );
+    await saveAiMovieFilledStage(projectId, "characterArc", characterArc);
+
     const threeAct = await translateAkhadaFixedContent(
       AKHADA_FIXED_THREE_ACT,
       { type: Type.ARRAY, items: AI_MOVIE_THREE_ACT_SCHEMA },
       4096
     );
+    await saveAiMovieFilledStage(projectId, "threeAct", threeAct);
+
     // Split into two batches for reliability — a single 46-beat call
     // produces enough output text (title + description, times three
     // languages, times 46) to risk the response getting cut off mid-JSON
@@ -3534,23 +3569,22 @@ app.post("/api/ai-movie/projects/:id/fill-akhada-stages", requireRole("admin"), 
       { type: Type.ARRAY, items: AI_MOVIE_PLOT_BEAT_SCHEMA },
       16384
     );
-    const plot = [...plotPart1, ...plotPart2];
+    await saveAiMovieFilledStage(projectId, "plot", [...plotPart1, ...plotPart2]);
 
-    const backfill = { ...project.backfill, synopsis, characterArc, threeAct, plot };
-    // story(0), synopsis(1), characterArc(2), threeAct(3), plot(4) all
-    // approved — screenplay(5) is deliberately left for later.
-    const stageStatus = approvedStageStatusUpTo(4);
-
-    await db.query(
-      "UPDATE ai_movie_projects SET backfill = $1, stage_status = $2, updated_at = now() WHERE id = $3",
-      [JSON.stringify(backfill), JSON.stringify(stageStatus), projectId]
-    );
-
-    res.json({ backfill, stageStatus });
+    akhadaFillStatus.set(projectId, "done");
   } catch (error) {
     console.error("Akhada fixed-stage fill failed:", error.message);
-    res.status(502).json({ error: error.message });
+    akhadaFillStatus.set(projectId, { error: error.message });
   }
+});
+
+app.get("/api/ai-movie/projects/:id/fill-akhada-status", requireRole("admin"), (req, res) => {
+  const status = akhadaFillStatus.get(req.params.id) ?? "none";
+  if (status === "running" || status === "done" || status === "none") {
+    res.json({ status });
+    return;
+  }
+  res.json({ status: "error", error: status.error });
 });
 
 // Fourth AI Movie piece: reference/grounding material the user hands the

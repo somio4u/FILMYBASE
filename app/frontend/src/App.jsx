@@ -5064,27 +5064,54 @@ function App() {
     setIsGeneratingAiMovieFromReference(false)
   }
 
+  // Kicks the fill off, then polls status instead of waiting on one
+  // long-lived request — the backend does 5 sequential Gemini calls for
+  // this (synopsis, characters, three-act, and 46 beats in two batches),
+  // which reliably took long enough to hit a network-level timeout when
+  // held open in a single response.
   async function handleFillAkhadaStagesClick() {
     if (!aiMovieProjectId) return
+    const projectId = aiMovieProjectId
 
     setIsFillingAkhadaStages(true)
     setAiMovieStageError(null)
     try {
-      const response = await fetch(`${BACKEND_URL}/api/ai-movie/projects/${aiMovieProjectId}/fill-akhada-stages`, {
+      const response = await fetch(`${BACKEND_URL}/api/ai-movie/projects/${projectId}/fill-akhada-stages`, {
         method: 'POST',
       })
       const data = await response.json()
-
       if (!response.ok) {
         setAiMovieStageError(data.error || t.genericError)
-      } else {
-        setAiMovieBackfillResult(data.backfill)
-        setAiMovieStageStatus(data.stageStatus ?? {})
+        setIsFillingAkhadaStages(false)
+        return
       }
     } catch {
       setAiMovieStageError(t.genericError)
+      setIsFillingAkhadaStages(false)
+      return
     }
-    setIsFillingAkhadaStages(false)
+
+    const pollFillStatus = async () => {
+      try {
+        const statusResponse = await fetch(`${BACKEND_URL}/api/ai-movie/projects/${projectId}/fill-akhada-status`)
+        const statusData = await statusResponse.json()
+        if (statusData.status === 'done') {
+          await loadAiMovieProject(projectId)
+          setIsFillingAkhadaStages(false)
+          return
+        }
+        if (statusData.status === 'error') {
+          setAiMovieStageError(statusData.error || t.genericError)
+          setIsFillingAkhadaStages(false)
+          return
+        }
+        setTimeout(pollFillStatus, 4000)
+      } catch {
+        setAiMovieStageError(t.genericError)
+        setIsFillingAkhadaStages(false)
+      }
+    }
+    setTimeout(pollFillStatus, 4000)
   }
 
   async function handleGenerateAiMovieStageClick(stageKey) {

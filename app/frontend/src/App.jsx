@@ -318,6 +318,11 @@ const LABELS = {
     aiMovieScreenplayRetryButton: 'Retry',
     aiMovieScreenplayBeatOfLabel: (index, total) => `Beat ${index} of ${total}`,
     aiMovieScreenplayAllApprovedNote: 'Full screenplay draft complete — every beat approved.',
+    aiMovieExtendSceneButton: 'Extend this scene',
+    aiMovieExtendSceneCancelButton: 'Cancel',
+    aiMovieExtendScenePlaceholder: 'Optional — say how to extend it, e.g. "slow this down, let the moment breathe" (leave blank to just make it longer)',
+    aiMovieExtendSceneSubmitButton: 'Extend Scene',
+    aiMovieExtendingSceneLabel: 'Extending…',
     formatQuestion: 'Is this a film, a web series, or a vertical drama?',
     filmOption: 'Film',
     seriesOption: 'Web Series',
@@ -883,6 +888,11 @@ const LABELS = {
     aiMovieScreenplayRetryButton: 'ପୁଣି ଚେଷ୍ଟା କରନ୍ତୁ',
     aiMovieScreenplayBeatOfLabel: (index, total) => `ବିଟ୍ ${index} / ${total}`,
     aiMovieScreenplayAllApprovedNote: 'ସମ୍ପୂର୍ଣ୍ଣ ସ୍କ୍ରିନପ୍ଲେ ଡ୍ରାଫ୍ଟ ସରିଲା — ପ୍ରତ୍ୟେକ ବିଟ୍ ଅନୁମୋଦିତ।',
+    aiMovieExtendSceneButton: 'ଏହି ଦୃଶ୍ୟକୁ ବଢ଼ାନ୍ତୁ',
+    aiMovieExtendSceneCancelButton: 'ବାତିଲ୍',
+    aiMovieExtendScenePlaceholder: 'ଇଚ୍ଛାଧୀନ — କେମିତି ବଢ଼ାଇବେ କୁହନ୍ତୁ, ଯଥା "ଏହାକୁ ଧୀର କରନ୍ତୁ" (ଖାଲି ଛାଡ଼ିଲେ ସାଧାରଣ ଭାବେ ବଡ଼ ହେବ)',
+    aiMovieExtendSceneSubmitButton: 'ଦୃଶ୍ୟ ବଢ଼ାନ୍ତୁ',
+    aiMovieExtendingSceneLabel: 'ବଢ଼ାଯାଉଛି…',
     formatQuestion: 'ଏହା ଏକ ଚଳଚ୍ଚିତ୍ର, ୱେବ ସିରିଜ୍ କିମ୍ବା ଭର୍ଟିକାଲ୍ ଡ୍ରାମା?',
     filmOption: 'ଚଳଚ୍ଚିତ୍ର',
     seriesOption: 'ୱେବ ସିରିଜ୍',
@@ -4288,6 +4298,9 @@ function App() {
   const [aiMovieScreenplayBeatFeedbackText, setAiMovieScreenplayBeatFeedbackText] = useState('')
   const [showAiMovieScreenplayBeatFeedbackForm, setShowAiMovieScreenplayBeatFeedbackForm] = useState(false)
   const [aiMovieScreenplayViewIndex, setAiMovieScreenplayViewIndex] = useState(0)
+  const [isExtendingAiMovieScreenplayScene, setIsExtendingAiMovieScreenplayScene] = useState(false)
+  const [aiMovieExtendingSceneIndex, setAiMovieExtendingSceneIndex] = useState(null)
+  const [aiMovieExtendSceneText, setAiMovieExtendSceneText] = useState('')
   const [isExportingAiMovieProject, setIsExportingAiMovieProject] = useState(false)
   const aiMovieImportFileInputRef = useRef(null)
 
@@ -5371,7 +5384,11 @@ function App() {
         setAiMovieBackfillResult((prev) => {
           const beats = [...(prev?.screenplayBeats ?? [])]
           beats[beatIndex] = { scenes: data.scenes, status: 'pending', feedback: feedback || null }
-          return { ...(prev ?? {}), screenplayBeats: beats }
+          const plot = [...(prev?.plot ?? [])]
+          if (plot[beatIndex] && typeof data.runtimeMinutes === 'number') {
+            plot[beatIndex] = { ...plot[beatIndex], runtimeMinutes: data.runtimeMinutes }
+          }
+          return { ...(prev ?? {}), screenplayBeats: beats, plot }
         })
         setShowAiMovieScreenplayBeatFeedbackForm(false)
         setAiMovieScreenplayBeatFeedbackText('')
@@ -5380,6 +5397,48 @@ function App() {
       setAiMovieStageError(t.genericError)
     }
     setIsGeneratingAiMovieScreenplayBeat(false)
+  }
+
+  // Lets the user pick any one scene (approved beat or not) and ask for it
+  // specifically to be longer -- the beat's own runtimeMinutes target is
+  // then raised to match, so the story is allowed to genuinely grow rather
+  // than the new length being flagged as a mismatch afterward.
+  async function handleExtendAiMovieScreenplaySceneClick(beatIndex, sceneIndex, instruction) {
+    if (!aiMovieProjectId) return
+    const projectId = aiMovieProjectId
+
+    setIsExtendingAiMovieScreenplayScene(true)
+    setAiMovieStageError(null)
+    try {
+      const response = await fetch(
+        `${BACKEND_URL}/api/ai-movie/stages/screenplay/beats/${beatIndex}/scenes/${sceneIndex}/extend`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ projectId, instruction: instruction || undefined }),
+        }
+      )
+      const data = await response.json()
+      if (!response.ok) {
+        setAiMovieStageError(data.error || t.genericError)
+      } else {
+        setAiMovieBackfillResult((prev) => {
+          const beats = [...(prev?.screenplayBeats ?? [])]
+          const existing = beats[beatIndex] ?? {}
+          beats[beatIndex] = { ...existing, scenes: data.scenes, status: 'pending' }
+          const plot = [...(prev?.plot ?? [])]
+          if (plot[beatIndex] && typeof data.runtimeMinutes === 'number') {
+            plot[beatIndex] = { ...plot[beatIndex], runtimeMinutes: data.runtimeMinutes }
+          }
+          return { ...(prev ?? {}), screenplayBeats: beats, plot }
+        })
+        setAiMovieExtendingSceneIndex(null)
+        setAiMovieExtendSceneText('')
+      }
+    } catch {
+      setAiMovieStageError(t.genericError)
+    }
+    setIsExtendingAiMovieScreenplayScene(false)
   }
 
   // Collapsed by default once a stage is approved (so the page reads as a
@@ -8709,15 +8768,48 @@ function App() {
                                       t={t}
                                     />
 
-                                    {beat.scenes?.map((scene, sceneIndex) => (
-                                      <div key={sceneIndex} className="bit-row">
-                                        <p className="bit-heading">
-                                          {scene.sceneHeading[aiMovieLanguage]}
-                                          {typeof scene.estimatedMinutes === 'number' ? ` (${t.approxMinutesUnit(scene.estimatedMinutes)})` : ''}
-                                        </p>
-                                        <p>{scene.action[aiMovieLanguage]}</p>
-                                      </div>
-                                    ))}
+                                    {beat.scenes?.map((scene, sceneIndex) => {
+                                      const extendKey = `${viewIndex}-${sceneIndex}`
+                                      const isExtendFormOpen = aiMovieExtendingSceneIndex === extendKey
+                                      return (
+                                        <div key={sceneIndex} className="bit-row">
+                                          <p className="bit-heading">
+                                            {scene.sceneHeading[aiMovieLanguage]}
+                                            {typeof scene.estimatedMinutes === 'number' ? ` (${t.approxMinutesUnit(scene.estimatedMinutes)})` : ''}
+                                          </p>
+                                          <p>{scene.action[aiMovieLanguage]}</p>
+                                          <button
+                                            type="button"
+                                            className="cancel-button ai-movie-extend-scene-button"
+                                            onClick={() => {
+                                              setAiMovieExtendingSceneIndex(isExtendFormOpen ? null : extendKey)
+                                              setAiMovieExtendSceneText('')
+                                            }}
+                                            disabled={isExtendingAiMovieScreenplayScene}
+                                          >
+                                            {isExtendFormOpen ? t.aiMovieExtendSceneCancelButton : t.aiMovieExtendSceneButton}
+                                          </button>
+                                          {isExtendFormOpen && (
+                                            <div className="feedback-form">
+                                              <textarea
+                                                className="feedback-textarea"
+                                                value={aiMovieExtendSceneText}
+                                                onChange={(e) => setAiMovieExtendSceneText(e.target.value)}
+                                                placeholder={t.aiMovieExtendScenePlaceholder}
+                                              />
+                                              <button
+                                                type="button"
+                                                className="choose-button"
+                                                onClick={() => handleExtendAiMovieScreenplaySceneClick(viewIndex, sceneIndex, aiMovieExtendSceneText)}
+                                                disabled={isExtendingAiMovieScreenplayScene}
+                                              >
+                                                {isExtendingAiMovieScreenplayScene ? t.aiMovieExtendingSceneLabel : t.aiMovieExtendSceneSubmitButton}
+                                              </button>
+                                            </div>
+                                          )}
+                                        </div>
+                                      )
+                                    })}
 
                                     {beat.feedback && (
                                       <p className="feedback-note">

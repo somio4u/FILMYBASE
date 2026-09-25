@@ -3333,7 +3333,7 @@ const AI_MOVIE_SCREENPLAY_BUFFER_SIZE = 4;
 
 const AI_MOVIE_SCREENPLAY_BEAT_SYSTEM_PROMPT = `You are working on an AI Movie — a film that will be entirely AI-generated, never physically shot. Because of that, never reason about budget, cast/crew/location availability, shoot schedules, or any real-world production constraint — anything that can be imagined can be included, with no limitation.
 
-You are given the story's already-approved, locked layers (Story, Synopsis, Characters, Three-Act Structure, full Beat Sheet) below, plus every screenplay scene already written so far. Write ONLY the scenes for the ONE beat named at the end — a beat is a pocket, not a single scene, so expand it into however many full scenes this ONE beat genuinely needs to be properly established: never fewer than 2, but no upper limit either — a simple beat might need only 2, a dense or eventful one might need 7 or more. The beat comes with its own target screen-time in minutes — use the standard screenwriting rule of thumb that one screenplay page equals about one minute of screen time to translate that target into an implied page count, and let the scene count AND each scene's own length follow from that: a beat with a small target should stay tight (fewer/shorter scenes), a beat with a large target earns more room (more and/or longer scenes). Give each scene its own honest "estimatedMinutes" estimate, and keep the sum of those estimates close to the beat's target — never pad or compress scenes just to hit the number exactly, but treat the target as the real guide for scope, not a suggestion to ignore. Each scene needs a scene heading and a vivid action/visual description. Do NOT write any dialogue — that is a separate, later pass; describe what happens and what's said only in action-line terms (e.g. "she pleads with him"), never as quoted lines. Continue directly from the last scene already written (same characters, same momentum, no repeats) — never jump ahead to a later beat.`;
+You are given the story's already-approved, locked layers (Story, Synopsis, Characters, Three-Act Structure, full Beat Sheet) below, plus every screenplay scene already written so far. Write ONLY the scenes for the ONE beat named at the end — a beat is a pocket, not a single scene, so expand it into however many full scenes this ONE beat genuinely needs to be properly established: never fewer than 2, but no upper limit either — a simple beat might need only 2, a dense or eventful one might need 7 or more. The beat comes with its own target screen-time in minutes — use the standard screenwriting rule of thumb that one screenplay page equals about one minute of screen time to translate that target into an implied page count, and let the scene count AND each scene's own length follow from that: a beat with a small target should stay tight (fewer/shorter scenes), a beat with a large target earns more room (more and/or longer scenes). Give each scene its own honest "estimatedMinutes" estimate, and keep the sum of those estimates close to the beat's target — never pad or compress scenes just to hit the number exactly, but treat the target as the real guide for scope, not a suggestion to ignore. That target is a starting guide, not a hard ceiling: if the user's own feedback below explicitly asks for this beat (or a scene in it) to be longer, slower, or more detailed, honor that even if it pushes the total well past the original target — the user is always free to make the story longer, and a later regeneration of this same beat can simply carry forward a bigger target next time. Each scene needs a scene heading and a vivid action/visual description. Do NOT write any dialogue — that is a separate, later pass; describe what happens and what's said only in action-line terms (e.g. "she pleads with him"), never as quoted lines. Continue directly from the last scene already written (same characters, same momentum, no repeats) — never jump ahead to a later beat.`;
 
 async function generateAiMovieScreenplayBeat(priorContextText, referenceMaterialText, scenesSoFarText, beat, feedback) {
   const referenceBlock = referenceMaterialText
@@ -3385,6 +3385,73 @@ async function saveAiMovieBackfillField(projectId, stageKey, content) {
   const result = await db.query("SELECT backfill FROM ai_movie_projects WHERE id = $1", [projectId]);
   const backfill = { ...(result.rows[0]?.backfill ?? {}), [stageKey]: content };
   await db.query("UPDATE ai_movie_projects SET backfill = $1, updated_at = now() WHERE id = $2", [JSON.stringify(backfill), projectId]);
+}
+
+// Whenever a beat's scenes are rewritten (a full Request Changes redo, or a
+// single scene extended -- see below), the beat's own runtimeMinutes target
+// is kept honest by resetting it to whatever the new scenes actually add up
+// to. Without this, an intentionally-elongated beat would permanently show
+// as "off from target" even though the new length was exactly what was
+// asked for, and later context (other beats' own generation, the overall
+// runtime) would keep citing a stale number.
+async function syncAiMovieBeatRuntimeToScenes(projectId, beatIndex, scenes) {
+  const result = await db.query("SELECT backfill FROM ai_movie_projects WHERE id = $1", [projectId]);
+  const backfill = result.rows[0]?.backfill ?? {};
+  const beats = backfill.plot ?? [];
+  if (!beats[beatIndex]) return;
+  const total = scenes.reduce((sum, scene) => sum + (typeof scene.estimatedMinutes === "number" ? scene.estimatedMinutes : 0), 0);
+  beats[beatIndex] = { ...beats[beatIndex], runtimeMinutes: Math.round(total * 10) / 10 };
+  await saveAiMovieBackfillField(projectId, "plot", beats);
+}
+
+// Extending one scene (the user asking to slow down/elongate a specific
+// moment) never touches its siblings -- only the beat's OTHER scenes are
+// given as fixed, unchangeable context, alongside every scene written in
+// earlier beats. Allowed to return more than one scene: if the added
+// material genuinely earns a scene break (e.g. a location or time change
+// mid-expansion), splitting is fine, but it should stay one scene whenever
+// the expansion is really just "more of the same scene."
+const AI_MOVIE_SCREENPLAY_SCENE_EXTEND_SYSTEM_PROMPT = `You are working on an AI Movie — a film that will be entirely AI-generated, never physically shot. Because of that, never reason about budget, cast/crew/location availability, shoot schedules, or any real-world production constraint — anything that can be imagined can be included, with no limitation.
+
+You are given the story's already-approved, locked layers below, every screenplay scene already written in earlier beats, and the current beat's own other scenes (fixed context — do not rewrite them). The user has deliberately chosen to extend or elongate ONE specific scene, named at the end, because it currently feels too short or rushed — making the story longer is always allowed and expected here, never resist it or try to stay close to any earlier length target. Rewrite that one scene with more visual/action detail, more beats of business, a slower and richer sense of time passing — genuinely more screen time, not padding with repetition. If the added material naturally needs a scene break (a real change of location, time, or focus partway through), it is fine to return two or more scenes in its place instead of one longer scene — otherwise keep it as a single scene. Do NOT write any dialogue — that is a separate, later pass; describe what happens and what's said only in action-line terms, never as quoted lines. Keep full continuity with the fixed scenes around it (same characters, same momentum) — this is a deeper version of the same moment, not a new direction. Give each returned scene its own honest, updated "estimatedMinutes."`;
+
+async function generateAiMovieScreenplaySceneExtension(
+  priorContextText,
+  referenceMaterialText,
+  scenesSoFarText,
+  beatSiblingScenesText,
+  beat,
+  targetSceneText,
+  instruction
+) {
+  const referenceBlock = referenceMaterialText
+    ? `\n\nThe user has also provided reference material below — treat it as authoritative grounding, stay faithful to it:\n\n${referenceMaterialText}`
+    : "";
+  const scenesBlock = scenesSoFarText ? `\n\nScreenplay scenes already written in earlier beats:\n\n${scenesSoFarText}` : "";
+  const siblingBlock = beatSiblingScenesText
+    ? `\n\nThis scene's own beat (${beat.title.en}: ${beat.description.en}) also has these other scenes, unchanged, around it:\n\n${beatSiblingScenesText}`
+    : "";
+  const instructionBlock = instruction
+    ? ` The user specifically asked for: ${instruction}`
+    : "";
+
+  const result = await generateJsonContent({
+    model: GEMINI_MODEL_NAME,
+    contents: `The story's approved layers so far:\n\n${priorContextText}${referenceBlock}${scenesBlock}${siblingBlock}\n\nExtend this one scene, making it genuinely longer:\n\n${targetSceneText}${instructionBlock}`,
+    config: {
+      systemInstruction: AI_MOVIE_SCREENPLAY_SCENE_EXTEND_SYSTEM_PROMPT,
+      responseMimeType: "application/json",
+      maxOutputTokens: 4096,
+      responseSchema: {
+        type: Type.OBJECT,
+        properties: {
+          scenes: { type: Type.ARRAY, items: AI_MOVIE_SCREENPLAY_SCENE_SCHEMA, minItems: "1" },
+        },
+        required: ["scenes"],
+      },
+    },
+  });
+  return result.scenes;
 }
 
 // Builds the "scenes already written" context text out of every beat before
@@ -3608,10 +3675,94 @@ app.post("/api/ai-movie/stages/screenplay/beats/:index/request-changes", require
     const latestBeats = latest.screenplayBeats ?? screenplayBeats;
     latestBeats[beatIndex] = { scenes, status: "pending", feedback: feedback || null };
     await saveAiMovieBackfillField(projectId, "screenplayBeats", latestBeats);
+    // Keeps the beat's own runtimeMinutes target honest with whatever the
+    // feedback actually produced -- e.g. explicit "make it longer" feedback
+    // is meant to permanently raise the target, not leave it looking like a
+    // still-unresolved mismatch.
+    await syncAiMovieBeatRuntimeToScenes(projectId, beatIndex, scenes);
 
-    res.json({ beatIndex, scenes });
+    res.json({ beatIndex, scenes, runtimeMinutes: Math.round(scenes.reduce((sum, s) => sum + (s.estimatedMinutes || 0), 0) * 10) / 10 });
   } catch (error) {
     console.error(`Screenplay beat ${beatIndex} regeneration failed:`, error.message);
+    res.status(502).json({ error: error.message });
+  }
+});
+
+// Extends ONE scene within an already-written beat -- the user is free to
+// decide any scene came out too short/rushed and ask for more screen time,
+// even well after the beat itself was approved. Splices the result (usually
+// one scene, occasionally more if the expansion earns a real scene break)
+// back into that beat's scenes in place, leaving every other scene in the
+// beat untouched, and puts the beat back to "pending" since its content has
+// genuinely changed and deserves one more look before being final again.
+app.post("/api/ai-movie/stages/screenplay/beats/:beatIndex/scenes/:sceneIndex/extend", requireRole("admin"), async (req, res) => {
+  const beatIndex = Number(req.params.beatIndex);
+  const sceneIndex = Number(req.params.sceneIndex);
+  const { projectId, instruction } = req.body;
+  if (!projectId) {
+    res.status(400).json({ error: "No project to extend into." });
+    return;
+  }
+
+  const projectResult = await db.query("SELECT pasted_text, backfill FROM ai_movie_projects WHERE id = $1", [projectId]);
+  const project = projectResult.rows[0];
+  if (!project) {
+    res.status(404).json({ error: "Project not found." });
+    return;
+  }
+
+  const beats = project.backfill?.plot ?? [];
+  const screenplayBeats = project.backfill?.screenplayBeats ?? [];
+  if (!Number.isInteger(beatIndex) || beatIndex < 0 || beatIndex >= beats.length) {
+    res.status(400).json({ error: "Not a valid beat." });
+    return;
+  }
+  const beat = screenplayBeats[beatIndex];
+  if (!beat || (beat.status !== "pending" && beat.status !== "approved") || !Array.isArray(beat.scenes)) {
+    res.status(400).json({ error: "This beat has no written scenes to extend yet." });
+    return;
+  }
+  if (!Number.isInteger(sceneIndex) || sceneIndex < 0 || sceneIndex >= beat.scenes.length) {
+    res.status(400).json({ error: "Not a valid scene." });
+    return;
+  }
+
+  try {
+    const referenceMaterialText = await getAiMovieReferenceMaterialText(projectId);
+    const priorContextText = flattenAiMovieContentForExtraction(project.pasted_text, project.backfill);
+    const scenesSoFarText = flattenAiMovieScreenplayScenesSoFar(screenplayBeats, beatIndex);
+    const beatSiblingScenesText = beat.scenes
+      .filter((_, i) => i !== sceneIndex)
+      .map((s) => `${s.sceneHeading.en}\n${s.action.en}`)
+      .join("\n\n");
+    const targetScene = beat.scenes[sceneIndex];
+    const targetSceneText = `${targetScene.sceneHeading.en}\n${targetScene.action.en}`;
+
+    const replacementScenes = await generateAiMovieScreenplaySceneExtension(
+      priorContextText,
+      referenceMaterialText,
+      scenesSoFarText,
+      beatSiblingScenesText,
+      beats[beatIndex],
+      targetSceneText,
+      instruction || null
+    );
+
+    const latest = (await db.query("SELECT backfill FROM ai_movie_projects WHERE id = $1", [projectId])).rows[0].backfill;
+    const latestBeats = latest.screenplayBeats ?? screenplayBeats;
+    const latestScenes = latestBeats[beatIndex]?.scenes ?? beat.scenes;
+    const newScenes = [...latestScenes.slice(0, sceneIndex), ...replacementScenes, ...latestScenes.slice(sceneIndex + 1)];
+    latestBeats[beatIndex] = { ...latestBeats[beatIndex], scenes: newScenes, status: "pending" };
+    await saveAiMovieBackfillField(projectId, "screenplayBeats", latestBeats);
+    await syncAiMovieBeatRuntimeToScenes(projectId, beatIndex, newScenes);
+
+    res.json({
+      beatIndex,
+      scenes: newScenes,
+      runtimeMinutes: Math.round(newScenes.reduce((sum, s) => sum + (s.estimatedMinutes || 0), 0) * 10) / 10,
+    });
+  } catch (error) {
+    console.error(`Screenplay beat ${beatIndex} scene ${sceneIndex} extension failed:`, error.message);
     res.status(502).json({ error: error.message });
   }
 });

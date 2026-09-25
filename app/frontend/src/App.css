@@ -1709,6 +1709,12 @@ button, input, textarea, select {
   color: var(--text-primary);
 }
 
+.ai-movie-extend-scene-button {
+  margin-top: 6px;
+  font-size: 12px;
+  padding: 3px 10px;
+}
+
 .bit-type-badge {
   display: inline-block;
   padding: 1px 8px;

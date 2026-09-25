@@ -254,3 +254,20 @@ CREATE TABLE ai_movie_projects (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+-- Reference/grounding material the user hands the AI Movie agents directly
+-- — a real book their story draws from, character/property/art details
+-- they want to specify themselves, or anything else — uploaded as a file
+-- (PDF/Word/text, converted to plain text on the way in) or pasted
+-- directly. Every backfill/asset-extraction call for a project reads
+-- everything here and is told to treat it as authoritative grounding, not
+-- something to override or invent around. One project can have several of
+-- these, hence its own table rather than another column on ai_movie_projects.
+CREATE TABLE ai_movie_reference_files (
+  id SERIAL PRIMARY KEY,
+  project_id INTEGER NOT NULL REFERENCES ai_movie_projects(id) ON DELETE CASCADE,
+  category TEXT NOT NULL DEFAULT 'other', -- 'book' | 'characters' | 'properties' | 'art' | 'other'
+  label TEXT,
+  content TEXT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);

@@ -283,6 +283,21 @@ const LABELS = {
     aiMovieSynopsisLayerHeading: 'Synopsis',
     aiMoviePlotLayerHeading: 'Plot',
     aiMovieCharacterArcLayerHeading: 'Character Arc',
+    aiMovieReferenceHeading: 'Reference Material',
+    aiMovieReferenceIntro: "Give the agents extra source material to work from — a real book your story draws from, or your own character/property/art details — and they'll treat it as authoritative rather than inventing their own.",
+    aiMovieReferenceCategoryBook: 'Book',
+    aiMovieReferenceCategoryCharacters: 'Characters',
+    aiMovieReferenceCategoryProperties: 'Properties',
+    aiMovieReferenceCategoryArt: 'Art',
+    aiMovieReferenceCategoryOther: 'Other',
+    aiMovieReferencePastePlaceholder: 'Paste text here…',
+    aiMovieReferenceAddButton: 'Add',
+    aiMovieReferenceAddingLabel: 'Adding…',
+    aiMovieReferenceUploadButton: 'Upload PDF or Word file',
+    aiMovieReferenceUploadingLabel: 'Uploading…',
+    aiMovieReferenceEmptyNote: 'Nothing attached yet.',
+    aiMovieReferenceRemoveTitle: 'Remove',
+    aiMovieReferenceUntitledLabel: 'Untitled',
     formatQuestion: 'Is this a film, a web series, or a vertical drama?',
     filmOption: 'Film',
     seriesOption: 'Web Series',
@@ -813,6 +828,21 @@ const LABELS = {
     aiMovieSynopsisLayerHeading: 'ସିନୋପସିସ୍',
     aiMoviePlotLayerHeading: 'ପ୍ଲଟ୍',
     aiMovieCharacterArcLayerHeading: 'ଚରିତ୍ର ଯାତ୍ରା',
+    aiMovieReferenceHeading: 'ରେଫରେନ୍ସ ସାମଗ୍ରୀ',
+    aiMovieReferenceIntro: 'ଏଜେଣ୍ଟମାନଙ୍କୁ କାମ କରିବା ପାଇଁ ଅତିରିକ୍ତ ସୋର୍ସ ସାମଗ୍ରୀ ଦିଅନ୍ତୁ — ଆପଣଙ୍କ କାହାଣୀ ଆଧାରିତ ଏକ ପ୍ରକୃତ ବହି, କିମ୍ବା ଆପଣଙ୍କ ନିଜସ୍ୱ ଚରିତ୍ର/ସମ୍ପତ୍ତି/କଳା ବିବରଣୀ — ଏବଂ ସେମାନେ ନିଜେ କିଛି ଉଦ୍ଭାବନ କରିବା ପରିବର୍ତ୍ତେ ଏହାକୁ ପ୍ରାମାଣିକ ଭାବେ ଗ୍ରହଣ କରିବେ।',
+    aiMovieReferenceCategoryBook: 'ବହି',
+    aiMovieReferenceCategoryCharacters: 'ଚରିତ୍ରମାନେ',
+    aiMovieReferenceCategoryProperties: 'ସମ୍ପତ୍ତି',
+    aiMovieReferenceCategoryArt: 'କଳା',
+    aiMovieReferenceCategoryOther: 'ଅନ୍ୟାନ୍ୟ',
+    aiMovieReferencePastePlaceholder: 'ଏଠାରେ ପାଠ୍ୟ ପେଷ୍ଟ କରନ୍ତୁ…',
+    aiMovieReferenceAddButton: 'ଯୋଡ଼ନ୍ତୁ',
+    aiMovieReferenceAddingLabel: 'ଯୋଡ଼ୁଛି…',
+    aiMovieReferenceUploadButton: 'PDF କିମ୍ବା Word ଫାଇଲ୍ ଅପଲୋଡ୍ କରନ୍ତୁ',
+    aiMovieReferenceUploadingLabel: 'ଅପଲୋଡ୍ ହେଉଛି…',
+    aiMovieReferenceEmptyNote: 'ଏପର୍ଯ୍ୟନ୍ତ କିଛି ଯୋଡ଼ା ହୋଇନାହିଁ।',
+    aiMovieReferenceRemoveTitle: 'ହଟାନ୍ତୁ',
+    aiMovieReferenceUntitledLabel: 'ନାମହୀନ',
     formatQuestion: 'ଏହା ଏକ ଚଳଚ୍ଚିତ୍ର, ୱେବ ସିରିଜ୍ କିମ୍ବା ଭର୍ଟିକାଲ୍ ଡ୍ରାମା?',
     filmOption: 'ଚଳଚ୍ଚିତ୍ର',
     seriesOption: 'ୱେବ ସିରିଜ୍',
@@ -4194,6 +4224,18 @@ function App() {
   const [isExportingAiMovieProject, setIsExportingAiMovieProject] = useState(false)
   const aiMovieImportFileInputRef = useRef(null)
 
+  // Reference material: source content the user hands the agents directly
+  // (a real book, or their own character/property/art details) so the
+  // backfill and asset-extraction agents stay faithful to it instead of
+  // inventing their own.
+  const [aiMovieReferenceFileList, setAiMovieReferenceFileList] = useState([])
+  const [aiMovieReferenceCategory, setAiMovieReferenceCategory] = useState('book')
+  const [aiMovieReferenceText, setAiMovieReferenceText] = useState('')
+  const [isAddingAiMovieReferenceText, setIsAddingAiMovieReferenceText] = useState(false)
+  const [isUploadingAiMovieReferenceFile, setIsUploadingAiMovieReferenceFile] = useState(false)
+  const [aiMovieReferenceError, setAiMovieReferenceError] = useState(null)
+  const aiMovieReferenceFileInputRef = useRef(null)
+
   const [showManageUsers, setShowManageUsers] = useState(false)
   const [users, setUsers] = useState([])
   const [newUserName, setNewUserName] = useState('')
@@ -4756,6 +4798,9 @@ function App() {
     setAiMovieAssets(null)
     setAiMovieProjectId(null)
     setAiMovieProjectTitle(null)
+    setAiMovieReferenceFileList([])
+    setAiMovieReferenceText('')
+    setAiMovieReferenceError(null)
   }
 
   function handleAiMovieNewIdeaClick() {
@@ -4800,8 +4845,93 @@ function App() {
       setAiMovieBackfillError(null)
       setAiMovieBackfillNote(null)
       setAiMovieView('editor')
+      loadAiMovieReferenceFiles(data.id)
     } catch {
       setAiMovieAnalyzeError(t.genericError)
+    }
+  }
+
+  async function loadAiMovieReferenceFiles(projectId) {
+    if (!projectId) {
+      setAiMovieReferenceFileList([])
+      return
+    }
+    try {
+      const response = await fetch(`${BACKEND_URL}/api/ai-movie/reference-files?projectId=${projectId}`)
+      if (response.ok) setAiMovieReferenceFileList(await response.json())
+    } catch {
+      // Same as the project list — staying stale here isn't worth an error banner.
+    }
+  }
+
+  async function handleAddAiMovieReferenceTextClick() {
+    if (!aiMovieReferenceText.trim()) return
+
+    setIsAddingAiMovieReferenceText(true)
+    setAiMovieReferenceError(null)
+    try {
+      const response = await fetch(`${BACKEND_URL}/api/ai-movie/reference-files`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          projectId: aiMovieProjectId,
+          category: aiMovieReferenceCategory,
+          label: aiMovieReferenceText.slice(0, 40),
+          content: aiMovieReferenceText,
+        }),
+      })
+      const data = await response.json()
+
+      if (!response.ok) {
+        setAiMovieReferenceError(data.error || t.genericError)
+      } else {
+        if (!aiMovieProjectId) setAiMovieProjectId(data.projectId)
+        setAiMovieReferenceText('')
+        await loadAiMovieReferenceFiles(data.projectId)
+      }
+    } catch {
+      setAiMovieReferenceError(t.genericError)
+    }
+    setIsAddingAiMovieReferenceText(false)
+  }
+
+  async function handleAiMovieReferenceFileSelected(event) {
+    const file = event.target.files[0]
+    event.target.value = ''
+    if (!file) return
+
+    setIsUploadingAiMovieReferenceFile(true)
+    setAiMovieReferenceError(null)
+    try {
+      const formData = new FormData()
+      formData.append('file', file)
+      formData.append('category', aiMovieReferenceCategory)
+      if (aiMovieProjectId) formData.append('projectId', aiMovieProjectId)
+
+      const response = await fetch(`${BACKEND_URL}/api/ai-movie/reference-files/upload`, {
+        method: 'POST',
+        body: formData,
+      })
+      const data = await response.json()
+
+      if (!response.ok) {
+        setAiMovieReferenceError(data.error || t.genericError)
+      } else {
+        if (!aiMovieProjectId) setAiMovieProjectId(data.projectId)
+        await loadAiMovieReferenceFiles(data.projectId)
+      }
+    } catch {
+      setAiMovieReferenceError(t.genericError)
+    }
+    setIsUploadingAiMovieReferenceFile(false)
+  }
+
+  async function handleDeleteAiMovieReferenceFileClick(id) {
+    try {
+      await fetch(`${BACKEND_URL}/api/ai-movie/reference-files/${id}`, { method: 'DELETE' })
+      setAiMovieReferenceFileList((list) => list.filter((f) => f.id !== id))
+    } catch {
+      setAiMovieReferenceError(t.genericError)
     }
   }
 
@@ -7834,6 +7964,78 @@ function App() {
                     </div>
                   )}
                 </div>
+              )}
+            </div>
+
+            <div className="format-picker">
+              <h4 className="format-picker-title">{t.aiMovieReferenceHeading}</h4>
+              <p className="sidebar-section-note">{t.aiMovieReferenceIntro}</p>
+
+              <select
+                className="lang-select"
+                value={aiMovieReferenceCategory}
+                onChange={(e) => setAiMovieReferenceCategory(e.target.value)}
+              >
+                <option value="book">{t.aiMovieReferenceCategoryBook}</option>
+                <option value="characters">{t.aiMovieReferenceCategoryCharacters}</option>
+                <option value="properties">{t.aiMovieReferenceCategoryProperties}</option>
+                <option value="art">{t.aiMovieReferenceCategoryArt}</option>
+                <option value="other">{t.aiMovieReferenceCategoryOther}</option>
+              </select>
+
+              <textarea
+                className="skip-ahead-textarea"
+                value={aiMovieReferenceText}
+                onChange={(e) => setAiMovieReferenceText(e.target.value)}
+                placeholder={t.aiMovieReferencePastePlaceholder}
+              />
+
+              <div className="import-export-row">
+                <button
+                  type="button"
+                  className="choose-button"
+                  onClick={handleAddAiMovieReferenceTextClick}
+                  disabled={isAddingAiMovieReferenceText || !aiMovieReferenceText.trim()}
+                >
+                  {isAddingAiMovieReferenceText ? t.aiMovieReferenceAddingLabel : t.aiMovieReferenceAddButton}
+                </button>
+                <button
+                  type="button"
+                  className="import-export-button"
+                  onClick={() => aiMovieReferenceFileInputRef.current?.click()}
+                  disabled={isUploadingAiMovieReferenceFile}
+                >
+                  <span className="import-export-icon">{ICONS.upload}</span>
+                  {isUploadingAiMovieReferenceFile ? t.aiMovieReferenceUploadingLabel : t.aiMovieReferenceUploadButton}
+                </button>
+              </div>
+              <input
+                type="file"
+                accept=".pdf,.doc,.docx,.txt"
+                ref={aiMovieReferenceFileInputRef}
+                onChange={handleAiMovieReferenceFileSelected}
+                style={{ display: 'none' }}
+              />
+
+              {aiMovieReferenceError && <p className="feedback-note">{aiMovieReferenceError}</p>}
+
+              {aiMovieReferenceFileList.length === 0 ? (
+                <p className="sidebar-section-note">{t.aiMovieReferenceEmptyNote}</p>
+              ) : (
+                aiMovieReferenceFileList.map((file) => (
+                  <div key={file.id} className="sidebar-history-row">
+                    <span className="sidebar-history-item">
+                      [{file.category}] {file.label || t.aiMovieReferenceUntitledLabel}
+                    </span>
+                    <button
+                      className="sidebar-history-icon-button"
+                      onClick={() => handleDeleteAiMovieReferenceFileClick(file.id)}
+                      title={t.aiMovieReferenceRemoveTitle}
+                    >
+                      ✕
+                    </button>
+                  </div>
+                ))
               )}
             </div>
           </div>

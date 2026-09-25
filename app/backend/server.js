@@ -2860,7 +2860,7 @@ const AI_MOVIE_BACKFILL_LAYERS_NEEDED = {
   other: [],
 };
 
-async function generateAiMovieBackfill(pastedText, stage) {
+async function generateAiMovieBackfill(pastedText, stage, referenceMaterialText) {
   const needed = AI_MOVIE_BACKFILL_LAYERS_NEEDED[stage] ?? [];
   if (needed.length === 0) return {};
 
@@ -2883,9 +2883,13 @@ async function generateAiMovieBackfill(pastedText, stage) {
     required.push("characterArc");
   }
 
+  const referenceBlock = referenceMaterialText
+    ? `\n\nThe user has also provided reference material below (a real book/source it draws from, and/or manually-specified character/property/art details). Treat it as authoritative grounding — stay faithful to it rather than inventing conflicting details:\n\n${referenceMaterialText}`
+    : "";
+
   return generateJsonContent({
     model: GEMINI_MODEL_NAME,
-    contents: `The pasted material below was already identified as being at the "${stage}" stage. Invent only the earlier layers this schema asks for — nothing else — fully consistent with it:\n\n${pastedText}`,
+    contents: `The pasted material below was already identified as being at the "${stage}" stage. Invent only the earlier layers this schema asks for — nothing else — fully consistent with it:\n\n${pastedText}${referenceBlock}`,
     config: {
       systemInstruction: AI_MOVIE_BACKFILL_SYSTEM_PROMPT,
       responseMimeType: "application/json",
@@ -2919,10 +2923,14 @@ const AI_MOVIE_ASSET_ENTRY_SCHEMA = {
   required: ["name", "visualDescription"],
 };
 
-async function generateAiMovieAssetExtraction(fullText) {
+async function generateAiMovieAssetExtraction(fullText, referenceMaterialText) {
+  const referenceBlock = referenceMaterialText
+    ? `\n\nThe user also provided reference material below (a real book/source, and/or manually-specified character/property/art details) — treat it as authoritative and prefer its details over anything you'd otherwise guess:\n\n${referenceMaterialText}`
+    : "";
+
   return generateJsonContent({
     model: GEMINI_MODEL_NAME,
-    contents: `Extract the characters, properties, and environments from this story material:\n\n${fullText}`,
+    contents: `Extract the characters, properties, and environments from this story material:\n\n${fullText}${referenceBlock}`,
     config: {
       systemInstruction: AI_MOVIE_ASSET_EXTRACTION_SYSTEM_PROMPT,
       responseMimeType: "application/json",
@@ -2960,6 +2968,19 @@ function flattenAiMovieContentForExtraction(pastedText, backfill) {
   return parts.join("\n\n");
 }
 
+// One text blob of everything the user has attached for a project via the
+// Reference Material section (a real book/source, manually-specified
+// character/property/art details, or anything else) — fed into both
+// generation calls below as grounding they must stay faithful to.
+async function getAiMovieReferenceMaterialText(projectId) {
+  if (!projectId) return "";
+  const result = await db.query(
+    "SELECT category, label, content FROM ai_movie_reference_files WHERE project_id = $1 ORDER BY created_at",
+    [projectId]
+  );
+  return result.rows.map((row) => `[${row.category}] ${row.label ?? ""}\n${row.content}`).join("\n\n---\n\n");
+}
+
 app.post("/api/ai-movie/backfill", requireRole("admin"), async (req, res) => {
   const { pastedText, stage, projectId } = req.body;
 
@@ -2973,8 +2994,12 @@ app.post("/api/ai-movie/backfill", requireRole("admin"), async (req, res) => {
   }
 
   try {
-    const backfill = await generateAiMovieBackfill(pastedText, stage);
-    const assets = await generateAiMovieAssetExtraction(flattenAiMovieContentForExtraction(pastedText, backfill));
+    const referenceMaterialText = await getAiMovieReferenceMaterialText(projectId);
+    const backfill = await generateAiMovieBackfill(pastedText, stage, referenceMaterialText);
+    const assets = await generateAiMovieAssetExtraction(
+      flattenAiMovieContentForExtraction(pastedText, backfill),
+      referenceMaterialText
+    );
 
     if (projectId) {
       const title = backfill.story?.title?.en ?? null;
@@ -3042,6 +3067,95 @@ app.post("/api/ai-movie/projects/import", requireRole("admin"), async (req, res)
   );
 
   res.json({ id: inserted.rows[0].id });
+});
+
+// Fourth AI Movie piece: reference/grounding material the user hands the
+// agents directly (a real book their story draws from, character/property/
+// art details they want to specify themselves) rather than leaving
+// everything to invention. Creates the project row on the fly (same lazy-
+// create as analyze-stage) so attaching a reference file can be the very
+// first thing a user does, before pasting any story text at all.
+async function ensureAiMovieProjectId(projectId, userId) {
+  if (projectId) return projectId;
+  const inserted = await db.query(
+    "INSERT INTO ai_movie_projects (pasted_text, created_by) VALUES ('', $1) RETURNING id",
+    [userId]
+  );
+  return inserted.rows[0].id;
+}
+
+const AI_MOVIE_REFERENCE_FILE_CATEGORIES = ["book", "characters", "properties", "art", "other"];
+
+app.post("/api/ai-movie/reference-files", requireRole("admin"), async (req, res) => {
+  const { projectId, category, label, content } = req.body;
+
+  if (!content || !content.trim()) {
+    res.status(400).json({ error: "Paste some content first." });
+    return;
+  }
+
+  const id = await ensureAiMovieProjectId(projectId, req.user.id);
+  const safeCategory = AI_MOVIE_REFERENCE_FILE_CATEGORIES.includes(category) ? category : "other";
+
+  const inserted = await db.query(
+    "INSERT INTO ai_movie_reference_files (project_id, category, label, content) VALUES ($1, $2, $3, $4) RETURNING id",
+    [id, safeCategory, label || null, content]
+  );
+
+  res.json({ id: inserted.rows[0].id, projectId: id });
+});
+
+const aiMovieReferenceFileUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 25 * 1024 * 1024 } });
+
+app.post(
+  "/api/ai-movie/reference-files/upload",
+  requireRole("admin"),
+  aiMovieReferenceFileUpload.single("file"),
+  async (req, res) => {
+    if (!req.file) {
+      res.status(400).json({ error: "No file uploaded." });
+      return;
+    }
+
+    try {
+      const content = await extractTextFromUploadedScreenplay(req.file);
+      if (!content || !content.trim()) {
+        res.status(400).json({ error: "Couldn't read any text out of that file." });
+        return;
+      }
+
+      const id = await ensureAiMovieProjectId(req.body.projectId, req.user.id);
+      const safeCategory = AI_MOVIE_REFERENCE_FILE_CATEGORIES.includes(req.body.category) ? req.body.category : "other";
+
+      const inserted = await db.query(
+        "INSERT INTO ai_movie_reference_files (project_id, category, label, content) VALUES ($1, $2, $3, $4) RETURNING id",
+        [id, safeCategory, req.file.originalname, content]
+      );
+
+      res.json({ id: inserted.rows[0].id, projectId: id });
+    } catch (error) {
+      res.status(400).json({ error: error.message });
+    }
+  }
+);
+
+app.get("/api/ai-movie/reference-files", requireRole("admin"), async (req, res) => {
+  const { projectId } = req.query;
+  if (!projectId) {
+    res.json([]);
+    return;
+  }
+
+  const result = await db.query(
+    "SELECT id, category, label, created_at FROM ai_movie_reference_files WHERE project_id = $1 ORDER BY created_at",
+    [projectId]
+  );
+  res.json(result.rows.map((row) => ({ id: row.id, category: row.category, label: row.label, createdAt: row.created_at })));
+});
+
+app.delete("/api/ai-movie/reference-files/:id", requireRole("admin"), async (req, res) => {
+  await db.query("DELETE FROM ai_movie_reference_files WHERE id = $1", [req.params.id]);
+  res.json({ ok: true });
 });
 
 // --- "Skip ahead" — start a project from a later stage by pasting your own

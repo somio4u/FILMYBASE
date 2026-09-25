@@ -77,6 +77,52 @@ db.on("connect", (client) => {
   client.query("SET search_path TO public").catch(() => {});
 });
 
+// Self-healing schema check for the AI Movie tables, run automatically on
+// every server start (which Render does on every deploy). This exists
+// because this sandbox has no network access to the live Supabase
+// database — every AI Movie table/column added here mid-session needed a
+// separate manual "run this SQL in Supabase" step from the user, and it
+// kept recurring on each new feature. From here on, an AI Movie schema
+// change shipped in code takes effect on the live database automatically
+// the moment it deploys — every statement below is idempotent (IF NOT
+// EXISTS), safe to run on every single startup. When a future change adds
+// another AI Movie column/table, add its statement here too, not just to
+// schema.sql, so this keeps actually being the fix.
+async function ensureAiMovieSchema() {
+  const statements = [
+    `CREATE TABLE IF NOT EXISTS ai_movie_projects (
+      id SERIAL PRIMARY KEY,
+      title TEXT,
+      pasted_text TEXT NOT NULL,
+      detected_stage TEXT,
+      backfill JSONB,
+      assets JSONB,
+      stage_status JSONB NOT NULL DEFAULT '{}',
+      created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    )`,
+    `ALTER TABLE ai_movie_projects ADD COLUMN IF NOT EXISTS stage_status JSONB NOT NULL DEFAULT '{}'`,
+    `CREATE TABLE IF NOT EXISTS ai_movie_reference_files (
+      id SERIAL PRIMARY KEY,
+      project_id INTEGER NOT NULL REFERENCES ai_movie_projects(id) ON DELETE CASCADE,
+      category TEXT NOT NULL DEFAULT 'other',
+      label TEXT,
+      content TEXT NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    )`,
+  ];
+
+  for (const statement of statements) {
+    try {
+      await db.query(statement);
+    } catch (error) {
+      console.error("AI Movie schema self-heal step failed (server will still start):", error.message);
+    }
+  }
+  console.log("AI Movie schema check complete.");
+}
+
 // The free tier's actual cap is a strict 15 requests/minute for the
 // flash-lite model — a burst of parallel calls (a 5-category script
 // breakdown re-check, a 14-episode import) can blow through that on its
@@ -13078,8 +13124,13 @@ app.use((err, req, res, next) => {
 process.on("unhandledRejection", (err) => console.error("Unhandled rejection:", err));
 process.on("uncaughtException", (err) => console.error("Uncaught exception:", err));
 
-app.listen(PORT, () => {
-  console.log(`Backend server running at http://localhost:${PORT}`);
+// Schema self-heal runs before the server starts accepting traffic — worst
+// case (the database is briefly unreachable) it logs and the server still
+// starts, rather than blocking startup entirely.
+ensureAiMovieSchema().finally(() => {
+  app.listen(PORT, () => {
+    console.log(`Backend server running at http://localhost:${PORT}`);
+  });
 });
 
 // Runs once on every process start (catches anything left stale from a

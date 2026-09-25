@@ -5443,6 +5443,39 @@ function App() {
     setIsExtendingAiMovieScreenplayScene(false)
   }
 
+  // Fallback duration for a beat or scene written before runtimeMinutes/
+  // estimatedMinutes existed on its own -- older projects (and beats/
+  // scenes generated before that field shipped) have no stored duration at
+  // all, so without this they'd simply show nothing. A rough, deterministic
+  // word-count estimate (roughly the standard "1 page / ~1 minute" rule,
+  // at an action-line-sparse ~180 words per page) beats no number, and
+  // fresh generations already ask the AI directly for a real estimate via
+  // the schema -- this only ever fills a genuine gap.
+  function estimateAiMovieMinutesFromText(text) {
+    if (!text) return 0.5
+    const wordCount = text.trim().split(/\s+/).filter(Boolean).length
+    const minutes = Math.round((wordCount / 180) * 2) / 2
+    return Math.max(0.5, minutes)
+  }
+
+  // A beat's own real, already-written scenes are a better duration signal
+  // than its description text once any exist -- falls back to estimating
+  // from the beat's own description only for a beat with no scenes yet.
+  function effectiveAiMovieBeatMinutes(beat, screenplayBeatEntry) {
+    if (typeof beat?.runtimeMinutes === 'number') return beat.runtimeMinutes
+    const scenes = screenplayBeatEntry?.scenes
+    if (Array.isArray(scenes) && scenes.length > 0) {
+      const total = scenes.reduce((sum, scene) => sum + effectiveAiMovieSceneMinutes(scene), 0)
+      return Math.round(total * 10) / 10
+    }
+    return estimateAiMovieMinutesFromText(beat?.description?.en)
+  }
+
+  function effectiveAiMovieSceneMinutes(scene) {
+    if (typeof scene?.estimatedMinutes === 'number') return scene.estimatedMinutes
+    return estimateAiMovieMinutesFromText(scene?.action?.en)
+  }
+
   // Collapsed by default once a stage is approved (so the page reads as a
   // compact list of "done" headers instead of a long scroll), expanded
   // while it's still the one being worked on. An explicit click always
@@ -8606,9 +8639,11 @@ function App() {
 
                               {content && stageKey === 'plot' && content.map((beat, index) => (
                                 <div key={index} className="bit-row">
-                                  <p className="bit-heading">
-                                    {beat.title[aiMovieLanguage]}
-                                    {typeof beat.runtimeMinutes === 'number' ? ` (${t.approxMinutesUnit(beat.runtimeMinutes)})` : ''}
+                                  <p className="bit-heading">{beat.title[aiMovieLanguage]}</p>
+                                  <p className="ai-movie-scene-duration">
+                                    {t.aiMovieSceneDurationLabel(
+                                      effectiveAiMovieBeatMinutes(beat, aiMovieBackfillResult?.screenplayBeats?.[index])
+                                    )}
                                   </p>
                                   <p>{beat.description[aiMovieLanguage]}</p>
                                 </div>
@@ -8772,8 +8807,12 @@ function App() {
                                 {(beat.status === 'pending' || beat.status === 'approved') && (
                                   <>
                                     <RuntimeSummary
-                                      total={beat.scenes?.reduce((sum, scene) => sum + (scene.estimatedMinutes || 0), 0)}
-                                      target={beatMeta?.runtimeMinutes}
+                                      total={
+                                        beat.scenes && Math.round(
+                                          beat.scenes.reduce((sum, scene) => sum + effectiveAiMovieSceneMinutes(scene), 0) * 10
+                                        ) / 10
+                                      }
+                                      target={effectiveAiMovieBeatMinutes(beatMeta, beat)}
                                       t={t}
                                     />
 
@@ -8783,9 +8822,9 @@ function App() {
                                       return (
                                         <div key={sceneIndex} className="bit-row">
                                           <p className="bit-heading">{scene.sceneHeading[aiMovieLanguage]}</p>
-                                          {typeof scene.estimatedMinutes === 'number' && (
-                                            <p className="ai-movie-scene-duration">{t.aiMovieSceneDurationLabel(scene.estimatedMinutes)}</p>
-                                          )}
+                                          <p className="ai-movie-scene-duration">
+                                            {t.aiMovieSceneDurationLabel(effectiveAiMovieSceneMinutes(scene))}
+                                          </p>
                                           <p>{scene.action[aiMovieLanguage]}</p>
                                           <button
                                             type="button"

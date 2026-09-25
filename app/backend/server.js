@@ -3515,6 +3515,23 @@ app.post("/api/ai-movie/stages/screenplay/beats/:index/approve", requireRole("ad
       "UPDATE ai_movie_projects SET stage_status = stage_status || $1::jsonb, updated_at = now() WHERE id = $2",
       [JSON.stringify({ screenplay: { status: "approved", feedback: null } }), projectId]
     );
+
+    // Same silent asset-list refresh every other stage's approval already
+    // does on completion -- screenplay scenes are exactly where brand-new
+    // props/characters/locations tend to show up first, so this stage
+    // needs it as much as any other. Best-effort: approval itself must
+    // still succeed even if this fails.
+    try {
+      const latest = (await db.query("SELECT pasted_text, backfill FROM ai_movie_projects WHERE id = $1", [projectId])).rows[0];
+      const referenceMaterialText = await getAiMovieReferenceMaterialText(projectId);
+      const assets = await generateAiMovieAssetExtraction(
+        flattenAiMovieContentForExtraction(latest.pasted_text, latest.backfill),
+        referenceMaterialText
+      );
+      await db.query("UPDATE ai_movie_projects SET assets = $1, updated_at = now() WHERE id = $2", [JSON.stringify(assets), projectId]);
+    } catch (error) {
+      console.error("Silent asset refresh failed after full screenplay approval (approval itself still succeeded):", error.message);
+    }
   } else {
     fillAiMovieScreenplayBuffer(projectId);
   }

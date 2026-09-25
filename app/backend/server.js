@@ -3010,7 +3010,9 @@ const AI_MOVIE_ASSET_ENTRY_SCHEMA = {
   type: Type.OBJECT,
   properties: {
     name: { type: Type.STRING },
-    visualDescription: BILINGUAL_TEXT_SCHEMA,
+    // AI Movie is English/Hindi only, never Odia -- unlike the Movie/shooting
+    // side, which still uses the shared en/or/hi BILINGUAL_TEXT_SCHEMA.
+    visualDescription: AI_MOVIE_BILINGUAL_TEXT_SCHEMA,
   },
   required: ["name", "visualDescription"],
 };

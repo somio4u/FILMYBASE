@@ -8281,6 +8281,13 @@ function App() {
   }
 
   if (appMode === 'ai') {
+    // AI Movie's own UI chrome (button labels, headings) is English/Hindi
+    // only, never Odia -- shadow the general en/or `t` with a fixed English
+    // one here so it can't leak Odia in from the Movie-side language
+    // dropdown (whose choice is a separate, persistent state that survives
+    // switching into AI Movie mode). Content itself already uses its own
+    // separate `aiMovieLanguage` (en/hi) toggle, untouched by this.
+    const t = LABELS.en
     return (
       <div className="app-shell">
         <div className="mobile-topbar">

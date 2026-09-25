@@ -64,6 +64,7 @@ function AnalyzingProgressBar({ active, label, estimatedSeconds = 30 }) {
 // deployed Render backend in production (set VITE_BACKEND_URL at build time).
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:4000'
 const CURRENT_CONCEPT_STORAGE_KEY = 'filmmaking-app:currentConceptId'
+const CURRENT_AI_MOVIE_PROJECT_STORAGE_KEY = 'filmmaking-app:currentAiMovieProjectId'
 
 // Every fetch() in this file targets our own backend — patched once here so
 // the session cookie (set by /api/auth/login) rides along on every request
@@ -4837,6 +4838,7 @@ function App() {
       } else {
         setAiMovieAnalyzeStage(data.stage)
         setAiMovieProjectId(data.projectId)
+        localStorage.setItem(CURRENT_AI_MOVIE_PROJECT_STORAGE_KEY, String(data.projectId))
       }
     } catch {
       setAiMovieAnalyzeError(t.genericError)
@@ -4895,6 +4897,7 @@ function App() {
     setAiMovieBackfillNote(null)
     setAiMovieAssets(null)
     setAiMovieProjectId(null)
+    localStorage.removeItem(CURRENT_AI_MOVIE_PROJECT_STORAGE_KEY)
     setAiMovieProjectTitle(null)
     setAiMovieReferenceFileList([])
     setAiMovieReferenceText('')
@@ -4964,6 +4967,18 @@ function App() {
     setAiMovieView((prev) => (prev === 'reference' ? 'editor' : 'reference'))
   }
 
+  // Picking "AI Movie" off the Movie/AI Movie picker used to always land on
+  // a blank editor or the All Projects list, even if you'd been mid-way
+  // through a real project last time -- resume it directly instead, same
+  // as the Movie side already does for its own last-loaded project.
+  function handleChooseAiMovieMode() {
+    setAppMode('ai')
+    const savedProjectId = localStorage.getItem(CURRENT_AI_MOVIE_PROJECT_STORAGE_KEY)
+    if (savedProjectId) {
+      loadAiMovieProject(savedProjectId)
+    }
+  }
+
   async function loadAiMovieProject(id) {
     setAiMovieAnalyzeError(null)
     try {
@@ -4972,6 +4987,11 @@ function App() {
 
       if (!response.ok) {
         setAiMovieAnalyzeError(data.error || t.genericError)
+        // A saved project id that no longer resolves (deleted, or from
+        // another environment's data) shouldn't keep silently failing to
+        // resume on every future visit -- forget it and fall back to the
+        // normal blank editor.
+        localStorage.removeItem(CURRENT_AI_MOVIE_PROJECT_STORAGE_KEY)
         return
       }
 
@@ -4980,6 +5000,7 @@ function App() {
       setAiMovieBackfillResult(data.backfill && Object.keys(data.backfill).length > 0 ? data.backfill : null)
       setAiMovieAssets(data.assets)
       setAiMovieProjectId(data.id)
+      localStorage.setItem(CURRENT_AI_MOVIE_PROJECT_STORAGE_KEY, String(data.id))
       setAiMovieProjectTitle(data.title)
       setAiMovieBackfillError(null)
       setAiMovieBackfillNote(null)
@@ -5042,7 +5063,10 @@ function App() {
       if (!response.ok) {
         setAiMovieReferenceError(data.error || t.genericError)
       } else {
-        if (!aiMovieProjectId) setAiMovieProjectId(data.projectId)
+        if (!aiMovieProjectId) {
+          setAiMovieProjectId(data.projectId)
+          localStorage.setItem(CURRENT_AI_MOVIE_PROJECT_STORAGE_KEY, String(data.projectId))
+        }
         setAiMovieReferenceText('')
         await loadAiMovieReferenceFiles(data.projectId)
       }
@@ -5073,7 +5097,10 @@ function App() {
       if (!response.ok) {
         setAiMovieReferenceError(data.error || t.genericError)
       } else {
-        if (!aiMovieProjectId) setAiMovieProjectId(data.projectId)
+        if (!aiMovieProjectId) {
+          setAiMovieProjectId(data.projectId)
+          localStorage.setItem(CURRENT_AI_MOVIE_PROJECT_STORAGE_KEY, String(data.projectId))
+        }
         if (data.errors?.length > 0) {
           setAiMovieReferenceError(data.errors.map((e) => `${e.filename}: ${e.error}`).join(' · '))
         }
@@ -8306,7 +8333,7 @@ function App() {
             <button type="button" className="choose-button" onClick={() => setAppMode('movie')}>
               {t.appModeMovieOption}
             </button>
-            <button type="button" className="choose-button" onClick={() => setAppMode('ai')}>
+            <button type="button" className="choose-button" onClick={handleChooseAiMovieMode}>
               {t.appModeAiMovieOption}
             </button>
           </div>

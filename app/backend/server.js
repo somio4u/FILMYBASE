@@ -2761,7 +2761,7 @@ async function analyzeAiMovieStage(pastedText) {
 }
 
 app.post("/api/ai-movie/analyze-stage", requireRole("admin"), async (req, res) => {
-  const { pastedText } = req.body;
+  const { pastedText, projectId } = req.body;
 
   if (!pastedText || !pastedText.trim()) {
     res.status(400).json({ error: "Paste some text first." });
@@ -2770,7 +2770,26 @@ app.post("/api/ai-movie/analyze-stage", requireRole("admin"), async (req, res) =
 
   try {
     const result = await analyzeAiMovieStage(pastedText);
-    res.json(result);
+
+    // Persist as we go, same as every other stage of this app — a fresh
+    // paste creates its own project row (returned so the frontend can keep
+    // sending it back on every later call for this same project); re-
+    // analyzing an already-saved project just updates that row in place.
+    let id = projectId;
+    if (id) {
+      await db.query(
+        "UPDATE ai_movie_projects SET pasted_text = $1, detected_stage = $2, updated_at = now() WHERE id = $3",
+        [pastedText, result.stage, id]
+      );
+    } else {
+      const inserted = await db.query(
+        "INSERT INTO ai_movie_projects (pasted_text, detected_stage, created_by) VALUES ($1, $2, $3) RETURNING id",
+        [pastedText, result.stage, req.user.id]
+      );
+      id = inserted.rows[0].id;
+    }
+
+    res.json({ ...result, projectId: id });
   } catch (error) {
     console.error("Gemini API call failed:", error.message);
     res.status(502).json({ error: error.message });
@@ -2876,8 +2895,73 @@ async function generateAiMovieBackfill(pastedText, stage) {
   });
 }
 
+// Third AI Movie piece: a SILENT agent — never a visible chat participant,
+// never shown anywhere while the story is being worked on — that reads
+// everything gathered so far (the pasted material plus whatever backfill
+// just invented) and extracts structured lists of the characters,
+// properties (props/objects), and environments (locations) it finds, each
+// with a visual description detailed enough to later become an actual
+// image-generation prompt once the Production side exists. That later step
+// — turning these into real prompts, and generating images from them — is
+// deliberately NOT built here.
+const AI_MOVIE_ASSET_EXTRACTION_SYSTEM_PROMPT = `You are working on an AI Movie — a film that will be entirely AI-generated, never physically shot. Read through the whole story material given to you and extract three structured lists that will later be used to generate reference images:
+- "characters": every named character who appears, with a vivid visual description (appearance, build, age, distinguishing features, typical wardrobe) detailed enough that an image generator could draw them consistently every time.
+- "properties": physical objects/props that matter to the story, each with a vivid visual description.
+- "environments": distinct locations/settings the story takes place in, each with a vivid visual description (architecture, era, mood, lighting, color palette).
+Since this is never physically shot, describe everything as vividly and imaginatively as the story calls for — never limit any description by real-world budget or production feasibility.`;
+
+const AI_MOVIE_ASSET_ENTRY_SCHEMA = {
+  type: Type.OBJECT,
+  properties: {
+    name: { type: Type.STRING },
+    visualDescription: BILINGUAL_TEXT_SCHEMA,
+  },
+  required: ["name", "visualDescription"],
+};
+
+async function generateAiMovieAssetExtraction(fullText) {
+  return generateJsonContent({
+    model: GEMINI_MODEL_NAME,
+    contents: `Extract the characters, properties, and environments from this story material:\n\n${fullText}`,
+    config: {
+      systemInstruction: AI_MOVIE_ASSET_EXTRACTION_SYSTEM_PROMPT,
+      responseMimeType: "application/json",
+      maxOutputTokens: 8192,
+      responseSchema: {
+        type: Type.OBJECT,
+        properties: {
+          characters: { type: Type.ARRAY, items: AI_MOVIE_ASSET_ENTRY_SCHEMA },
+          properties: { type: Type.ARRAY, items: AI_MOVIE_ASSET_ENTRY_SCHEMA },
+          environments: { type: Type.ARRAY, items: AI_MOVIE_ASSET_ENTRY_SCHEMA },
+        },
+        required: ["characters", "properties", "environments"],
+      },
+    },
+  });
+}
+
+// Flattens whatever backfill produced into plain text, alongside the
+// original pasted material, so the asset-extraction agent above has
+// everything gathered so far to read through in one pass.
+function flattenAiMovieContentForExtraction(pastedText, backfill) {
+  const parts = [pastedText];
+  if (backfill?.story) parts.push(`Story: ${backfill.story.title.en}\n${backfill.story.summary.en}`);
+  if (backfill?.synopsis) {
+    parts.push(
+      `Synopsis: ${backfill.synopsis.logline.en}\n${backfill.synopsis.premise.en}\n${backfill.synopsis.toneGenre.en}\n${backfill.synopsis.targetAudience.en}`
+    );
+  }
+  if (backfill?.plot) parts.push(`Plot:\n${backfill.plot.map((beat) => `${beat.title.en}: ${beat.description.en}`).join("\n")}`);
+  if (backfill?.characterArc) {
+    parts.push(
+      `Character Arc:\n${backfill.characterArc.map((c) => `${c.name} — wants ${c.want.en}, needs ${c.need.en}, arc: ${c.arc.en}`).join("\n")}`
+    );
+  }
+  return parts.join("\n\n");
+}
+
 app.post("/api/ai-movie/backfill", requireRole("admin"), async (req, res) => {
-  const { pastedText, stage } = req.body;
+  const { pastedText, stage, projectId } = req.body;
 
   if (!pastedText || !pastedText.trim()) {
     res.status(400).json({ error: "Paste some text first." });
@@ -2889,12 +2973,75 @@ app.post("/api/ai-movie/backfill", requireRole("admin"), async (req, res) => {
   }
 
   try {
-    const result = await generateAiMovieBackfill(pastedText, stage);
-    res.json(result);
+    const backfill = await generateAiMovieBackfill(pastedText, stage);
+    const assets = await generateAiMovieAssetExtraction(flattenAiMovieContentForExtraction(pastedText, backfill));
+
+    if (projectId) {
+      const title = backfill.story?.title?.en ?? null;
+      await db.query(
+        "UPDATE ai_movie_projects SET backfill = $1, assets = $2, title = COALESCE(title, $3), updated_at = now() WHERE id = $4",
+        [JSON.stringify(backfill), JSON.stringify(assets), title, projectId]
+      );
+    }
+
+    res.json({ backfill, assets });
   } catch (error) {
     console.error("Gemini API call failed:", error.message);
     res.status(502).json({ error: error.message });
   }
+});
+
+app.get("/api/ai-movie/projects", requireRole("admin"), async (req, res) => {
+  const result = await db.query(
+    "SELECT id, title, pasted_text, detected_stage, updated_at FROM ai_movie_projects ORDER BY updated_at DESC"
+  );
+  res.json(result.rows.map((row) => ({
+    id: row.id,
+    title: row.title,
+    pastedText: row.pasted_text,
+    detectedStage: row.detected_stage,
+    updatedAt: row.updated_at,
+  })));
+});
+
+app.get("/api/ai-movie/projects/:id", requireRole("admin"), async (req, res) => {
+  const result = await db.query("SELECT * FROM ai_movie_projects WHERE id = $1", [req.params.id]);
+  const row = result.rows[0];
+  if (!row) {
+    res.status(404).json({ error: "Project not found." });
+    return;
+  }
+  res.json({
+    id: row.id,
+    title: row.title,
+    pastedText: row.pasted_text,
+    detectedStage: row.detected_stage,
+    backfill: row.backfill,
+    assets: row.assets,
+  });
+});
+
+app.post("/api/ai-movie/projects/import", requireRole("admin"), async (req, res) => {
+  const { project } = req.body;
+
+  if (!project || !project.pastedText || !project.pastedText.trim()) {
+    res.status(400).json({ error: "This file doesn't look like an AI Movie project export." });
+    return;
+  }
+
+  const inserted = await db.query(
+    "INSERT INTO ai_movie_projects (title, pasted_text, detected_stage, backfill, assets, created_by) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id",
+    [
+      project.title ?? null,
+      project.pastedText,
+      project.detectedStage ?? null,
+      JSON.stringify(project.backfill ?? {}),
+      JSON.stringify(project.assets ?? {}),
+      req.user.id,
+    ]
+  );
+
+  res.json({ id: inserted.rows[0].id });
 });
 
 // --- "Skip ahead" — start a project from a later stage by pasting your own

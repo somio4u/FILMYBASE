@@ -4180,6 +4180,19 @@ function App() {
   const [isBackfillingAiMovie, setIsBackfillingAiMovie] = useState(false)
   const [aiMovieBackfillError, setAiMovieBackfillError] = useState(null)
   const [aiMovieBackfillNote, setAiMovieBackfillNote] = useState(null)
+  // The silent asset-extraction agent's output (characters/properties/
+  // environments) — saved alongside the project but never rendered here.
+  const [aiMovieAssets, setAiMovieAssets] = useState(null)
+
+  // Persistence: every AI Movie project is saved to its own database row as
+  // you go. null = not saved yet (a fresh, un-analyzed paste).
+  const [aiMovieProjectId, setAiMovieProjectId] = useState(null)
+  const [aiMovieProjectTitle, setAiMovieProjectTitle] = useState(null)
+  const [aiMovieView, setAiMovieView] = useState('editor') // 'editor' | 'allProjects'
+  const [aiMovieProjectList, setAiMovieProjectList] = useState([])
+  const [isLoadingAiMovieProjects, setIsLoadingAiMovieProjects] = useState(false)
+  const [isExportingAiMovieProject, setIsExportingAiMovieProject] = useState(false)
+  const aiMovieImportFileInputRef = useRef(null)
 
   const [showManageUsers, setShowManageUsers] = useState(false)
   const [users, setUsers] = useState([])
@@ -4670,12 +4683,13 @@ function App() {
     setAiMovieBackfillResult(null)
     setAiMovieBackfillError(null)
     setAiMovieBackfillNote(null)
+    setAiMovieAssets(null)
 
     try {
       const response = await fetch(`${BACKEND_URL}/api/ai-movie/analyze-stage`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ pastedText: aiMovieAnalyzeInput }),
+        body: JSON.stringify({ pastedText: aiMovieAnalyzeInput, projectId: aiMovieProjectId }),
       })
       const data = await response.json()
 
@@ -4683,6 +4697,7 @@ function App() {
         setAiMovieAnalyzeError(data.error || t.genericError)
       } else {
         setAiMovieAnalyzeStage(data.stage)
+        setAiMovieProjectId(data.projectId)
       }
     } catch {
       setAiMovieAnalyzeError(t.genericError)
@@ -4695,6 +4710,7 @@ function App() {
     setAiMovieBackfillError(null)
     setAiMovieBackfillNote(null)
     setAiMovieBackfillResult(null)
+    setAiMovieAssets(null)
 
     if (aiMovieAnalyzeStage === 'other') {
       setAiMovieBackfillNote(t.aiMovieBackfillNoteOther)
@@ -4711,20 +4727,138 @@ function App() {
       const response = await fetch(`${BACKEND_URL}/api/ai-movie/backfill`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ pastedText: aiMovieAnalyzeInput, stage: aiMovieAnalyzeStage }),
+        body: JSON.stringify({ pastedText: aiMovieAnalyzeInput, stage: aiMovieAnalyzeStage, projectId: aiMovieProjectId }),
       })
       const data = await response.json()
 
       if (!response.ok) {
         setAiMovieBackfillError(data.error || t.genericError)
       } else {
-        setAiMovieBackfillResult(data)
+        setAiMovieBackfillResult(data.backfill)
+        // Saved silently alongside the project — never rendered here.
+        setAiMovieAssets(data.assets)
+        if (data.backfill?.story?.title) setAiMovieProjectTitle(data.backfill.story.title.en)
       }
     } catch {
       setAiMovieBackfillError(t.genericError)
     }
 
     setIsBackfillingAiMovie(false)
+  }
+
+  function resetAiMovieEditorState() {
+    setAiMovieAnalyzeInput('')
+    setAiMovieAnalyzeStage(null)
+    setAiMovieAnalyzeError(null)
+    setAiMovieBackfillResult(null)
+    setAiMovieBackfillError(null)
+    setAiMovieBackfillNote(null)
+    setAiMovieAssets(null)
+    setAiMovieProjectId(null)
+    setAiMovieProjectTitle(null)
+  }
+
+  function handleAiMovieNewIdeaClick() {
+    resetAiMovieEditorState()
+    setAiMovieView('editor')
+  }
+
+  async function loadAiMovieProjectList() {
+    setIsLoadingAiMovieProjects(true)
+    try {
+      const response = await fetch(`${BACKEND_URL}/api/ai-movie/projects`)
+      if (response.ok) setAiMovieProjectList(await response.json())
+    } catch {
+      // The list staying empty/stale here is a minor inconvenience, not
+      // worth a whole error banner over.
+    }
+    setIsLoadingAiMovieProjects(false)
+  }
+
+  function handleAiMovieAllProjectsClick() {
+    setAiMovieView('allProjects')
+    loadAiMovieProjectList()
+  }
+
+  async function loadAiMovieProject(id) {
+    setAiMovieAnalyzeError(null)
+    try {
+      const response = await fetch(`${BACKEND_URL}/api/ai-movie/projects/${id}`)
+      const data = await response.json()
+
+      if (!response.ok) {
+        setAiMovieAnalyzeError(data.error || t.genericError)
+        return
+      }
+
+      setAiMovieAnalyzeInput(data.pastedText)
+      setAiMovieAnalyzeStage(data.detectedStage)
+      setAiMovieBackfillResult(data.backfill && Object.keys(data.backfill).length > 0 ? data.backfill : null)
+      setAiMovieAssets(data.assets)
+      setAiMovieProjectId(data.id)
+      setAiMovieProjectTitle(data.title)
+      setAiMovieBackfillError(null)
+      setAiMovieBackfillNote(null)
+      setAiMovieView('editor')
+    } catch {
+      setAiMovieAnalyzeError(t.genericError)
+    }
+  }
+
+  function handleAiMovieExportClick() {
+    if (!aiMovieProjectId) return
+
+    setIsExportingAiMovieProject(true)
+    try {
+      const project = {
+        title: aiMovieProjectTitle,
+        pastedText: aiMovieAnalyzeInput,
+        detectedStage: aiMovieAnalyzeStage,
+        backfill: aiMovieBackfillResult,
+        assets: aiMovieAssets,
+      }
+      const payload = { exportedFrom: 'filmmaking-app-ai-movie', version: 1, project }
+
+      const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' })
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      const nameBase = (aiMovieProjectTitle || aiMovieAnalyzeInput || 'ai-movie-project').slice(0, 40).replace(/[^\w\- ]/g, '').trim() || 'ai-movie-project'
+      link.href = url
+      link.download = `${nameBase}-${formatExportTimestamp()}.json`
+      link.click()
+      URL.revokeObjectURL(url)
+    } catch {
+      setAiMovieAnalyzeError(t.genericError)
+    }
+    setIsExportingAiMovieProject(false)
+  }
+
+  async function handleAiMovieImportFileSelected(event) {
+    const file = event.target.files[0]
+    event.target.value = ''
+    if (!file) return
+
+    setAiMovieAnalyzeError(null)
+    try {
+      const text = await file.text()
+      const parsed = JSON.parse(text)
+
+      const response = await fetch(`${BACKEND_URL}/api/ai-movie/projects/import`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ project: parsed.project }),
+      })
+      const data = await response.json()
+
+      if (!response.ok) {
+        setAiMovieAnalyzeError(data.error || t.genericError)
+        return
+      }
+
+      await loadAiMovieProject(data.id)
+    } catch {
+      setAiMovieAnalyzeError(t.importInvalidFile)
+    }
   }
 
   async function loadUsers() {
@@ -7522,21 +7656,32 @@ function App() {
             <button className="import-export-button">{t.manageUsersButton}</button>
           </div>
 
-          <button className="new-idea-button">
+          <button className="new-idea-button" onClick={handleAiMovieNewIdeaClick}>
             <span className="new-idea-icon">{ICONS.lightbulb}</span>
             {t.newIdeaButton}
           </button>
 
           <div className="import-export-row">
-            <button className="import-export-button">
+            <button className="import-export-button" onClick={() => aiMovieImportFileInputRef.current?.click()}>
               <span className="import-export-icon">{ICONS.upload}</span>
               {t.importButtonLabel}
             </button>
-            <button className="import-export-button">
+            <button
+              className="import-export-button"
+              onClick={handleAiMovieExportClick}
+              disabled={!aiMovieProjectId || isExportingAiMovieProject}
+            >
               <span className="import-export-icon">{ICONS.download}</span>
               {t.exportButtonLabel}
             </button>
           </div>
+          <input
+            type="file"
+            accept="application/json"
+            ref={aiMovieImportFileInputRef}
+            onChange={handleAiMovieImportFileSelected}
+            style={{ display: 'none' }}
+          />
 
           <div className="sidebar-lang-toggle">
             <select
@@ -7552,7 +7697,10 @@ function App() {
           <div className="sidebar-section">
             <h4 className="sidebar-section-title">{t.agentsSectionTitle}</h4>
             <div className="agent-list">
-              <button className="agent-header">
+              <button
+                className={aiMovieView === 'allProjects' ? 'agent-header active' : 'agent-header'}
+                onClick={handleAiMovieAllProjectsClick}
+              >
                 <span className="agent-expand-icon">▸</span>
                 {t.masterProjectListLabel}
               </button>
@@ -7575,6 +7723,27 @@ function App() {
         </aside>
 
         <main className="chat-viewport">
+          {aiMovieView === 'allProjects' && (
+            <div className="concept-page" id="stage-master-list">
+              <h2>{t.masterProjectListLabel}</h2>
+              {isLoadingAiMovieProjects && <p className="sidebar-section-note">{t.loadingLabel}</p>}
+              {!isLoadingAiMovieProjects && aiMovieProjectList.length === 0 && (
+                <p className="sidebar-section-note">{t.sidebarHistoryNote}</p>
+              )}
+              <div className="master-list-grid">
+                {aiMovieProjectList.map((project) => (
+                  <div key={project.id} className="master-list-card">
+                    <button className="master-list-card-open" onClick={() => loadAiMovieProject(project.id)}>
+                      <strong>{project.title || project.pastedText?.slice(0, 40)}</strong>
+                      <span className="breakdown-item-meta">{project.detectedStage}</span>
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {aiMovieView === 'editor' && (
           <div className="concept-page empty-state">
             <div className="format-picker">
               <p className="sidebar-section-note">{t.aiMovieAnalyzeIntro}</p>
@@ -7668,6 +7837,7 @@ function App() {
               )}
             </div>
           </div>
+          )}
         </main>
       </div>
     )

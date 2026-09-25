@@ -230,3 +230,27 @@ CREATE TABLE auto_pipeline_runs (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+-- The AI Movie pipeline's own project record — deliberately one flat table
+-- (pasted_text + detected_stage + backfill + assets, all just JSONB/text
+-- blobs) rather than the shooting pipeline's chain of approval-gated
+-- tables above, since this pipeline works completely differently: no
+-- per-stage approve/request-changes cycle, just one pasted piece of
+-- material that everything else gets filled in around.
+-- backfill holds whichever earlier layers (story/synopsis/plot/
+-- characterArc) got invented behind the pasted material.
+-- assets holds the silent extraction agent's output (characters/
+-- properties/environments, each with a visual description) — never shown
+-- while the story is being worked on, only meant to be used later once
+-- the Production side (image/audio/video generation) is built.
+CREATE TABLE ai_movie_projects (
+  id SERIAL PRIMARY KEY,
+  title TEXT,
+  pasted_text TEXT NOT NULL,
+  detected_stage TEXT,
+  backfill JSONB,
+  assets JSONB,
+  created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);

@@ -312,6 +312,9 @@ const LABELS = {
     aiMovieSeedingAkhadaLabel: 'Creating…',
     aiMovieFillAkhadaStagesButton: 'Fill Synopsis → Beat Sheet from your files (skip re-review)',
     aiMovieFillingAkhadaStagesLabel: 'Filling in…',
+    aiMovieFillBeatDurationsButton: 'Sync exact beat durations from your files',
+    aiMovieFillingBeatDurationsLabel: 'Syncing…',
+    aiMovieFillBeatDurationsResultNote: (updated, total) => `Updated ${updated} of ${total} beats with their exact duration.`,
     aiMovieScreenplayGenerateButton: 'Generate Screenplay',
     aiMovieScreenplayStartingLabel: 'Starting…',
     aiMovieScreenplayBeatWritingLabel: "Writing this beat's scenes…",
@@ -883,6 +886,9 @@ const LABELS = {
     aiMovieSeedingAkhadaLabel: 'ତିଆରି ହେଉଛି…',
     aiMovieFillAkhadaStagesButton: 'ଆପଣଙ୍କ ଫାଇଲ୍‌ରୁ ସିନୋପସିସ୍ → ବିଟ୍ ସିଟ୍ ପୂରଣ କରନ୍ତୁ (ପୁନଃ-ସମୀକ୍ଷା ଛାଡ଼ନ୍ତୁ)',
     aiMovieFillingAkhadaStagesLabel: 'ପୂରଣ ହେଉଛି…',
+    aiMovieFillBeatDurationsButton: 'ଆପଣଙ୍କ ଫାଇଲ୍‌ରୁ ସଠିକ୍ ବିଟ୍ ଅବଧି ସିଙ୍କ୍ କରନ୍ତୁ',
+    aiMovieFillingBeatDurationsLabel: 'ସିଙ୍କ୍ ହେଉଛି…',
+    aiMovieFillBeatDurationsResultNote: (updated, total) => `${total} ବିଟ୍‌ ମଧ୍ୟରୁ ${updated}ଟି ଅବଧି ସଠିକ୍ କରାଗଲା।`,
     aiMovieScreenplayGenerateButton: 'ସ୍କ୍ରିନପ୍ଲେ ତିଆରି କରନ୍ତୁ',
     aiMovieScreenplayStartingLabel: 'ଆରମ୍ଭ ହେଉଛି…',
     aiMovieScreenplayBeatWritingLabel: 'ଏହି ବିଟ୍‌ର ଦୃଶ୍ୟ ଲେଖାଯାଉଛି…',
@@ -4294,6 +4300,8 @@ function App() {
   const [isLoadingAiMovieProjects, setIsLoadingAiMovieProjects] = useState(false)
   const [isSeedingAkhadaProject, setIsSeedingAkhadaProject] = useState(false)
   const [isFillingAkhadaStages, setIsFillingAkhadaStages] = useState(false)
+  const [isFillingAkhadaBeatDurations, setIsFillingAkhadaBeatDurations] = useState(false)
+  const [aiMovieFillBeatDurationsNote, setAiMovieFillBeatDurationsNote] = useState(null)
   const [aiMovieLanguage, setAiMovieLanguage] = useState('en')
   const [aiMovieExpandedStages, setAiMovieExpandedStages] = useState({})
   const [isGeneratingAiMovieScreenplayBeat, setIsGeneratingAiMovieScreenplayBeat] = useState(false)
@@ -5201,6 +5209,32 @@ function App() {
       }
     }
     setTimeout(pollFillStatus, 4000)
+  }
+
+  // Purely numeric and instant (no Gemini call) -- a plain synchronous
+  // request/response, unlike the multi-Gemini-call fill above.
+  async function handleFillAkhadaBeatDurationsClick() {
+    if (!aiMovieProjectId) return
+    const projectId = aiMovieProjectId
+
+    setIsFillingAkhadaBeatDurations(true)
+    setAiMovieStageError(null)
+    setAiMovieFillBeatDurationsNote(null)
+    try {
+      const response = await fetch(`${BACKEND_URL}/api/ai-movie/projects/${projectId}/fill-akhada-beat-durations`, {
+        method: 'POST',
+      })
+      const data = await response.json()
+      if (!response.ok) {
+        setAiMovieStageError(data.error || t.genericError)
+      } else {
+        await loadAiMovieProject(projectId)
+        setAiMovieFillBeatDurationsNote(t.aiMovieFillBeatDurationsResultNote(data.updated, data.total))
+      }
+    } catch {
+      setAiMovieStageError(t.genericError)
+    }
+    setIsFillingAkhadaBeatDurations(false)
   }
 
   // Screenplay writes one beat at a time in the background (a 46-beat sheet
@@ -8602,6 +8636,20 @@ function App() {
                     >
                       {isFillingAkhadaStages ? t.aiMovieFillingAkhadaStagesLabel : t.aiMovieFillAkhadaStagesButton}
                     </button>
+                  )}
+
+                  {aiMovieProjectTitle === 'Akhada' && aiMovieStageStatus?.plot && (
+                    <>
+                      <button
+                        type="button"
+                        className="choose-button ai-movie-generate-from-reference-button"
+                        onClick={handleFillAkhadaBeatDurationsClick}
+                        disabled={isFillingAkhadaBeatDurations}
+                      >
+                        {isFillingAkhadaBeatDurations ? t.aiMovieFillingBeatDurationsLabel : t.aiMovieFillBeatDurationsButton}
+                      </button>
+                      {aiMovieFillBeatDurationsNote && <p className="sidebar-section-note">{aiMovieFillBeatDurationsNote}</p>}
+                    </>
                   )}
 
                   {(() => {

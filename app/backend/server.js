@@ -4030,6 +4030,51 @@ app.get("/api/ai-movie/projects/:id/fill-akhada-status", requireRole("admin"), (
   res.json({ status: "error", error: status.error });
 });
 
+// One-off, purpose-built companion to fill-akhada-stages: a Beat Sheet
+// filled in (or generated) before runtimeMinutes existed on the schema has
+// no duration on any beat at all. Rather than re-translate/regenerate the
+// whole Beat Sheet again, this patches ONLY the runtimeMinutes number on
+// each beat, matched positionally against AKHADA_FIXED_BEATS (the same
+// exact, user-supplied figures used to seed a fresh Akhada project) --
+// title/description text, already-written screenplay scenes, and every
+// other stage are left completely untouched. Purely numeric and instant
+// (no Gemini call), so no background-job/polling pattern is needed here.
+app.post("/api/ai-movie/projects/:id/fill-akhada-beat-durations", requireRole("admin"), async (req, res) => {
+  const projectId = req.params.id;
+  const projectResult = await db.query("SELECT title, backfill FROM ai_movie_projects WHERE id = $1", [projectId]);
+  const project = projectResult.rows[0];
+  if (!project) {
+    res.status(404).json({ error: "Project not found." });
+    return;
+  }
+  const beats = project.backfill?.plot;
+  if (!Array.isArray(beats) || beats.length === 0) {
+    res.status(400).json({ error: "Generate the Beat Sheet first." });
+    return;
+  }
+
+  // A safety check, not a hard requirement -- flags any beat whose title
+  // doesn't closely match the expected one at that position (translation
+  // drift, or a Beat Sheet that was edited/regenerated away from the fixed
+  // content) rather than silently applying a number to the wrong beat.
+  const normalize = (s) => (s ?? "").trim().toLowerCase();
+  let updated = 0;
+  const mismatches = [];
+  const newBeats = beats.map((beat, index) => {
+    const fixedBeat = AKHADA_FIXED_BEATS[index];
+    if (!fixedBeat) return beat;
+    if (normalize(beat.title?.en) !== normalize(fixedBeat.title)) {
+      mismatches.push({ index, expected: fixedBeat.title, found: beat.title?.en ?? null });
+      return beat;
+    }
+    updated += 1;
+    return { ...beat, runtimeMinutes: fixedBeat.runtimeMinutes };
+  });
+
+  await saveAiMovieBackfillField(projectId, "plot", newBeats);
+  res.json({ ok: true, updated, total: beats.length, mismatches });
+});
+
 // Fourth AI Movie piece: reference/grounding material the user hands the
 // agents directly (a real book their story draws from, character/property/
 // art details they want to specify themselves) rather than leaving

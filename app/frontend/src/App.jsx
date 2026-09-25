@@ -323,6 +323,7 @@ const LABELS = {
     aiMovieExtendScenePlaceholder: 'Optional — say how to extend it, e.g. "slow this down, let the moment breathe" (leave blank to just make it longer)',
     aiMovieExtendSceneSubmitButton: 'Extend Scene',
     aiMovieExtendingSceneLabel: 'Extending…',
+    aiMovieSceneDurationLabel: (minutes) => `Duration: ~${minutes} min`,
     formatQuestion: 'Is this a film, a web series, or a vertical drama?',
     filmOption: 'Film',
     seriesOption: 'Web Series',
@@ -893,6 +894,7 @@ const LABELS = {
     aiMovieExtendScenePlaceholder: 'ଇଚ୍ଛାଧୀନ — କେମିତି ବଢ଼ାଇବେ କୁହନ୍ତୁ, ଯଥା "ଏହାକୁ ଧୀର କରନ୍ତୁ" (ଖାଲି ଛାଡ଼ିଲେ ସାଧାରଣ ଭାବେ ବଡ଼ ହେବ)',
     aiMovieExtendSceneSubmitButton: 'ଦୃଶ୍ୟ ବଢ଼ାନ୍ତୁ',
     aiMovieExtendingSceneLabel: 'ବଢ଼ାଯାଉଛି…',
+    aiMovieSceneDurationLabel: (minutes) => `ଅବଧି: ~${minutes} ମିନିଟ୍`,
     formatQuestion: 'ଏହା ଏକ ଚଳଚ୍ଚିତ୍ର, ୱେବ ସିରିଜ୍ କିମ୍ବା ଭର୍ଟିକାଲ୍ ଡ୍ରାମା?',
     filmOption: 'ଚଳଚ୍ଚିତ୍ର',
     seriesOption: 'ୱେବ ସିରିଜ୍',
@@ -8780,10 +8782,10 @@ function App() {
                                       const isExtendFormOpen = aiMovieExtendingSceneIndex === extendKey
                                       return (
                                         <div key={sceneIndex} className="bit-row">
-                                          <p className="bit-heading">
-                                            {scene.sceneHeading[aiMovieLanguage]}
-                                            {typeof scene.estimatedMinutes === 'number' ? ` (${t.approxMinutesUnit(scene.estimatedMinutes)})` : ''}
-                                          </p>
+                                          <p className="bit-heading">{scene.sceneHeading[aiMovieLanguage]}</p>
+                                          {typeof scene.estimatedMinutes === 'number' && (
+                                            <p className="ai-movie-scene-duration">{t.aiMovieSceneDurationLabel(scene.estimatedMinutes)}</p>
+                                          )}
                                           <p>{scene.action[aiMovieLanguage]}</p>
                                           <button
                                             type="button"

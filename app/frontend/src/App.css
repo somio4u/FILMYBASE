@@ -1432,19 +1432,6 @@ button, input, textarea, select {
   font-size: 14px;
 }
 
-.ai-movie-screenplay-approved-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  padding: 10px 14px;
-  margin-bottom: 8px;
-  background: var(--bg-surface-raised);
-  border: 1px solid var(--border-subtle);
-  border-radius: 10px;
-  font-size: 14px;
-}
-
 .ai-movie-screenplay-current-card {
   margin-top: 12px;
   padding: 20px;
@@ -1453,10 +1440,43 @@ button, input, textarea, select {
   background: var(--bg-surface-raised);
 }
 
-.ai-movie-screenplay-queue-note {
-  margin: 10px 0 0;
-  font-size: 13px;
-  color: var(--text-muted);
+.ai-movie-screenplay-nav {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.ai-movie-screenplay-nav-title {
+  flex: 1;
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.ai-movie-screenplay-nav-badge {
+  font-size: 12px;
+  padding: 3px 10px;
+}
+
+.ai-movie-screenplay-nav-button {
+  flex-shrink: 0;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.ai-movie-screenplay-nav-button:disabled {
+  opacity: 0.35;
+  cursor: default;
 }
 
 .feedback-form {

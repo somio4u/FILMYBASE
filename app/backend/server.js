@@ -3316,7 +3316,7 @@ const AI_MOVIE_SCREENPLAY_BUFFER_SIZE = 4;
 
 const AI_MOVIE_SCREENPLAY_BEAT_SYSTEM_PROMPT = `You are working on an AI Movie — a film that will be entirely AI-generated, never physically shot. Because of that, never reason about budget, cast/crew/location availability, shoot schedules, or any real-world production constraint — anything that can be imagined can be included, with no limitation.
 
-You are given the story's already-approved, locked layers (Story, Synopsis, Characters, Three-Act Structure, full Beat Sheet) below, plus every screenplay scene already written so far. Write ONLY the scenes for the ONE beat named at the end — a beat is a pocket, not a single scene, so expand it into 2 to 4 full scenes with a scene heading and a vivid action/visual description each. Do NOT write any dialogue — that is a separate, later pass; describe what happens and what's said only in action-line terms (e.g. "she pleads with him"), never as quoted lines. Continue directly from the last scene already written (same characters, same momentum, no repeats) — never jump ahead to a later beat.`;
+You are given the story's already-approved, locked layers (Story, Synopsis, Characters, Three-Act Structure, full Beat Sheet) below, plus every screenplay scene already written so far. Write ONLY the scenes for the ONE beat named at the end — a beat is a pocket, not a single scene, so expand it into however many full scenes this ONE beat genuinely needs to be properly established: never fewer than 2, but no upper limit either — a simple beat might need only 2, a dense or eventful one might need 7 or more. Let the beat's own content decide the count; never force a fixed number just to hit a target. Each scene needs a scene heading and a vivid action/visual description. Do NOT write any dialogue — that is a separate, later pass; describe what happens and what's said only in action-line terms (e.g. "she pleads with him"), never as quoted lines. Continue directly from the last scene already written (same characters, same momentum, no repeats) — never jump ahead to a later beat.`;
 
 async function generateAiMovieScreenplayBeat(priorContextText, referenceMaterialText, scenesSoFarText, beat, feedback) {
   const referenceBlock = referenceMaterialText
@@ -3333,10 +3333,20 @@ async function generateAiMovieScreenplayBeat(priorContextText, referenceMaterial
     config: {
       systemInstruction: AI_MOVIE_SCREENPLAY_BEAT_SYSTEM_PROMPT,
       responseMimeType: "application/json",
-      maxOutputTokens: 8192,
+      // A beat with a genuinely open-ended scene count (no maxItems cap —
+      // some beats need well more than 4) needs more headroom than a
+      // fixed-small-count beat would.
+      maxOutputTokens: 16384,
       responseSchema: {
         type: Type.OBJECT,
-        properties: { scenes: { type: Type.ARRAY, items: AI_MOVIE_SCREENPLAY_SCENE_SCHEMA } },
+        properties: {
+          // minItems only -- deliberately no maxItems. A hard ceiling was
+          // tried and rejected: the scene count should be driven by what
+          // the beat actually needs, not forced toward a target range. The
+          // floor exists only to rule out the earlier real bug (beats
+          // reliably coming back with just 1 scene).
+          scenes: { type: Type.ARRAY, items: AI_MOVIE_SCREENPLAY_SCENE_SCHEMA, minItems: "2" },
+        },
         required: ["scenes"],
       },
     },

@@ -317,8 +317,6 @@ const LABELS = {
     aiMovieScreenplayBeatErrorLabel: 'Something went wrong generating this beat.',
     aiMovieScreenplayRetryButton: 'Retry',
     aiMovieScreenplayBeatOfLabel: (index, total) => `Beat ${index} of ${total}`,
-    aiMovieScreenplayApprovedRowLabel: (index, title) => `✅ Beat ${index}: ${title} — approved`,
-    aiMovieScreenplayQueueNote: (count) => (count === 1 ? '1 more beat ready ahead' : `${count} more beats ready ahead`),
     aiMovieScreenplayAllApprovedNote: 'Full screenplay draft complete — every beat approved.',
     formatQuestion: 'Is this a film, a web series, or a vertical drama?',
     filmOption: 'Film',
@@ -884,8 +882,6 @@ const LABELS = {
     aiMovieScreenplayBeatErrorLabel: 'ଏହି ବିଟ୍ ତିଆରି କରିବାରେ କିଛି ଭୁଲ ହେଲା।',
     aiMovieScreenplayRetryButton: 'ପୁଣି ଚେଷ୍ଟା କରନ୍ତୁ',
     aiMovieScreenplayBeatOfLabel: (index, total) => `ବିଟ୍ ${index} / ${total}`,
-    aiMovieScreenplayApprovedRowLabel: (index, title) => `✅ ବିଟ୍ ${index}: ${title} — ଅନୁମୋଦିତ`,
-    aiMovieScreenplayQueueNote: (count) => `${count} ଅଧିକ ବିଟ୍ ପ୍ରସ୍ତୁତ`,
     aiMovieScreenplayAllApprovedNote: 'ସମ୍ପୂର୍ଣ୍ଣ ସ୍କ୍ରିନପ୍ଲେ ଡ୍ରାଫ୍ଟ ସରିଲା — ପ୍ରତ୍ୟେକ ବିଟ୍ ଅନୁମୋଦିତ।',
     formatQuestion: 'ଏହା ଏକ ଚଳଚ୍ଚିତ୍ର, ୱେବ ସିରିଜ୍ କିମ୍ବା ଭର୍ଟିକାଲ୍ ଡ୍ରାମା?',
     filmOption: 'ଚଳଚ୍ଚିତ୍ର',
@@ -4291,6 +4287,7 @@ function App() {
   const [isApprovingAiMovieScreenplayBeat, setIsApprovingAiMovieScreenplayBeat] = useState(false)
   const [aiMovieScreenplayBeatFeedbackText, setAiMovieScreenplayBeatFeedbackText] = useState('')
   const [showAiMovieScreenplayBeatFeedbackForm, setShowAiMovieScreenplayBeatFeedbackForm] = useState(false)
+  const [aiMovieScreenplayViewIndex, setAiMovieScreenplayViewIndex] = useState(0)
   const [isExportingAiMovieProject, setIsExportingAiMovieProject] = useState(false)
   const aiMovieImportFileInputRef = useRef(null)
 
@@ -4894,6 +4891,7 @@ function App() {
     setAiMovieExpandedStages({})
     setShowAiMovieScreenplayBeatFeedbackForm(false)
     setAiMovieScreenplayBeatFeedbackText('')
+    setAiMovieScreenplayViewIndex(0)
   }
 
   function handleAiMovieNewIdeaClick() {
@@ -4945,7 +4943,10 @@ function App() {
   }
 
   function handleAiMovieReferenceViewClick() {
-    setAiMovieView('reference')
+    // Toggle: click again to go straight back to the project you were on,
+    // instead of dead-ending into a screen only reachable back out through
+    // All Projects.
+    setAiMovieView((prev) => (prev === 'reference' ? 'editor' : 'reference'))
   }
 
   async function loadAiMovieProject(id) {
@@ -4983,6 +4984,8 @@ function App() {
       // something.
       const screenplayBeats = data.backfill?.screenplayBeats ?? []
       const currentBeat = screenplayBeats.find((b) => b.status !== 'approved')
+      const firstUnfinishedIndex = screenplayBeats.findIndex((b) => b.status !== 'approved')
+      setAiMovieScreenplayViewIndex(firstUnfinishedIndex === -1 ? 0 : firstUnfinishedIndex)
       if (currentBeat && (currentBeat.status === 'generating' || currentBeat.status === 'not_started')) {
         pollAiMovieScreenplayUntilReady(data.id)
       }
@@ -5291,6 +5294,7 @@ function App() {
     if (!aiMovieProjectId) return
     const projectId = aiMovieProjectId
 
+    setAiMovieScreenplayViewIndex(0)
     setIsGeneratingAiMovieScreenplayBeat(true)
     setAiMovieStageError(null)
     try {
@@ -5334,6 +5338,9 @@ function App() {
       }
       setShowAiMovieScreenplayBeatFeedbackForm(false)
       setAiMovieScreenplayBeatFeedbackText('')
+      // Slide forward to the next beat -- still just a default position;
+      // Prev/Next stay free to move anywhere from here.
+      setAiMovieScreenplayViewIndex((i) => i + 1)
     } catch {
       setAiMovieStageError(t.genericError)
       setIsApprovingAiMovieScreenplayBeat(false)
@@ -8605,9 +8612,10 @@ function App() {
                     const screenplayBeats = aiMovieBackfillResult.screenplayBeats ?? []
                     const beatsPlot = aiMovieBackfillResult.plot ?? []
                     const screenplayApproved = aiMovieStageStatus?.screenplay?.status === 'approved'
-                    const currentIndex = screenplayBeats.findIndex((b) => b.status !== 'approved')
-                    const readyAhead = screenplayBeats.filter((b, i) => i > currentIndex && b.status === 'pending').length
                     const collapsed = isAiMovieStageCollapsed('screenplay', screenplayApproved)
+                    const viewIndex = Math.min(aiMovieScreenplayViewIndex, Math.max(screenplayBeats.length - 1, 0))
+                    const beat = screenplayBeats[viewIndex]
+                    const beatMeta = beatsPlot[viewIndex]
 
                     return (
                       <div className="three-act-structure" id="ai-movie-stage-screenplay">
@@ -8634,63 +8642,83 @@ function App() {
                               </button>
                             )}
 
-                            {screenplayBeats.filter((b) => b.status === 'approved').map((b, i) => (
-                              <div key={i} className="ai-movie-screenplay-approved-row">
-                                <span>{t.aiMovieScreenplayApprovedRowLabel(i + 1, beatsPlot[i]?.title?.[aiMovieLanguage] ?? '')}</span>
-                              </div>
-                            ))}
-
                             {screenplayApproved && (
                               <p className="sidebar-section-note">{t.aiMovieScreenplayAllApprovedNote}</p>
                             )}
 
-                            {!screenplayApproved && currentIndex !== -1 && (() => {
-                              const beat = screenplayBeats[currentIndex]
-                              const beatMeta = beatsPlot[currentIndex]
-                              return (
-                                <div className="ai-movie-screenplay-current-card">
-                                  <p className="bit-heading">
-                                    {t.aiMovieScreenplayBeatOfLabel(currentIndex + 1, screenplayBeats.length)}: {beatMeta?.title?.[aiMovieLanguage]}
+                            {/* One beat's card at a time, navigated with Prev/Next rather than
+                                a stacked list -- approving one auto-advances to the next, but
+                                Prev/Next also lets you freely browse back to an already-approved
+                                beat (it just shows read-only, badge and all) or ahead to
+                                whatever's already sitting generated in the buffer. */}
+                            {screenplayBeats.length > 0 && beat && (
+                              <div className="ai-movie-screenplay-current-card">
+                                <div className="ai-movie-screenplay-nav">
+                                  <button
+                                    type="button"
+                                    className="ai-movie-screenplay-nav-button"
+                                    onClick={() => setAiMovieScreenplayViewIndex((i) => Math.max(0, Math.min(i, screenplayBeats.length - 1) - 1))}
+                                    disabled={viewIndex === 0}
+                                    aria-label="Previous beat"
+                                  >
+                                    ‹
+                                  </button>
+                                  <p className="bit-heading ai-movie-screenplay-nav-title">
+                                    {t.aiMovieScreenplayBeatOfLabel(viewIndex + 1, screenplayBeats.length)}: {beatMeta?.title?.[aiMovieLanguage]}
+                                    {beat.status === 'approved' && (
+                                      <span className="approved-badge ai-movie-screenplay-nav-badge">{t.approvedBadge}</span>
+                                    )}
                                   </p>
+                                  <button
+                                    type="button"
+                                    className="ai-movie-screenplay-nav-button"
+                                    onClick={() => setAiMovieScreenplayViewIndex((i) => Math.min(screenplayBeats.length - 1, Math.min(i, screenplayBeats.length - 1) + 1))}
+                                    disabled={viewIndex === screenplayBeats.length - 1}
+                                    aria-label="Next beat"
+                                  >
+                                    ›
+                                  </button>
+                                </div>
 
-                                  {(beat.status === 'not_started' || beat.status === 'generating') && (
-                                    <p className="sidebar-section-note">{t.aiMovieScreenplayBeatWritingLabel}</p>
-                                  )}
+                                {(beat.status === 'not_started' || beat.status === 'generating') && (
+                                  <p className="sidebar-section-note">{t.aiMovieScreenplayBeatWritingLabel}</p>
+                                )}
 
-                                  {beat.status === 'error' && (
-                                    <>
-                                      <p className="feedback-note">{beat.feedback || t.aiMovieScreenplayBeatErrorLabel}</p>
-                                      <button
-                                        type="button"
-                                        className="choose-button"
-                                        onClick={() => handleRegenerateAiMovieScreenplayBeatClick(currentIndex, null)}
-                                        disabled={isGeneratingAiMovieScreenplayBeat}
-                                      >
-                                        {isGeneratingAiMovieScreenplayBeat ? t.aiMovieGeneratingStageLabel : t.aiMovieScreenplayRetryButton}
-                                      </button>
-                                    </>
-                                  )}
+                                {beat.status === 'error' && (
+                                  <>
+                                    <p className="feedback-note">{beat.feedback || t.aiMovieScreenplayBeatErrorLabel}</p>
+                                    <button
+                                      type="button"
+                                      className="choose-button"
+                                      onClick={() => handleRegenerateAiMovieScreenplayBeatClick(viewIndex, null)}
+                                      disabled={isGeneratingAiMovieScreenplayBeat}
+                                    >
+                                      {isGeneratingAiMovieScreenplayBeat ? t.aiMovieGeneratingStageLabel : t.aiMovieScreenplayRetryButton}
+                                    </button>
+                                  </>
+                                )}
 
-                                  {beat.status === 'pending' && (
-                                    <>
-                                      {beat.scenes?.map((scene, sceneIndex) => (
-                                        <div key={sceneIndex} className="bit-row">
-                                          <p className="bit-heading">{scene.sceneHeading[aiMovieLanguage]}</p>
-                                          <p>{scene.action[aiMovieLanguage]}</p>
-                                        </div>
-                                      ))}
+                                {(beat.status === 'pending' || beat.status === 'approved') && (
+                                  <>
+                                    {beat.scenes?.map((scene, sceneIndex) => (
+                                      <div key={sceneIndex} className="bit-row">
+                                        <p className="bit-heading">{scene.sceneHeading[aiMovieLanguage]}</p>
+                                        <p>{scene.action[aiMovieLanguage]}</p>
+                                      </div>
+                                    ))}
 
-                                      {beat.feedback && (
-                                        <p className="feedback-note">
-                                          <strong>{t.changesRequestedBadge}</strong> "{beat.feedback}"
-                                        </p>
-                                      )}
+                                    {beat.feedback && (
+                                      <p className="feedback-note">
+                                        <strong>{t.changesRequestedBadge}</strong> "{beat.feedback}"
+                                      </p>
+                                    )}
 
+                                    {beat.status === 'pending' && (
                                       <div className="approval-section">
                                         <div className="approval-buttons">
                                           <button
                                             className="approve-button"
-                                            onClick={() => handleApproveAiMovieScreenplayBeatClick(currentIndex)}
+                                            onClick={() => handleApproveAiMovieScreenplayBeatClick(viewIndex)}
                                             disabled={isApprovingAiMovieScreenplayBeat}
                                           >
                                             {t.approveButton}
@@ -8713,7 +8741,7 @@ function App() {
                                             />
                                             <button
                                               className="choose-button"
-                                              onClick={() => handleRegenerateAiMovieScreenplayBeatClick(currentIndex, aiMovieScreenplayBeatFeedbackText)}
+                                              onClick={() => handleRegenerateAiMovieScreenplayBeatClick(viewIndex, aiMovieScreenplayBeatFeedbackText)}
                                               disabled={isGeneratingAiMovieScreenplayBeat || !aiMovieScreenplayBeatFeedbackText.trim()}
                                             >
                                               {isGeneratingAiMovieScreenplayBeat ? t.submittingFeedback : t.submitFeedback}
@@ -8721,15 +8749,11 @@ function App() {
                                           </div>
                                         )}
                                       </div>
-
-                                      {readyAhead > 0 && (
-                                        <p className="ai-movie-screenplay-queue-note">{t.aiMovieScreenplayQueueNote(readyAhead)}</p>
-                                      )}
-                                    </>
-                                  )}
-                                </div>
-                              )
-                            })()}
+                                    )}
+                                  </>
+                                )}
+                              </div>
+                            )}
                           </>
                         )}
                       </div>

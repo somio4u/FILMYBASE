@@ -4944,6 +4944,10 @@ function App() {
     loadAiMovieProjectList()
   }
 
+  function handleAiMovieReferenceViewClick() {
+    setAiMovieView('reference')
+  }
+
   async function loadAiMovieProject(id) {
     setAiMovieAnalyzeError(null)
     try {
@@ -8290,6 +8294,15 @@ function App() {
                 <span className="agent-expand-icon">▸</span>
                 {t.masterProjectListLabel}
               </button>
+              {aiMovieProjectId && (
+                <button
+                  className={aiMovieView === 'reference' ? 'agent-header active' : 'agent-header'}
+                  onClick={handleAiMovieReferenceViewClick}
+                >
+                  <span className="agent-expand-icon">▸</span>
+                  {t.aiMovieReferenceHeading}
+                </button>
+              )}
               <button className="agent-header active">
                 <span className="agent-expand-icon expanded">▸</span>
                 {t.storyAgentLabel}
@@ -8374,6 +8387,7 @@ function App() {
 
           {aiMovieView === 'editor' && (
           <div className="concept-page empty-state">
+            {!aiMovieBackfillResult?.story && (
             <div className="format-picker">
               <p className="sidebar-section-note">{t.aiMovieAnalyzeIntro}</p>
               <textarea
@@ -8416,6 +8430,8 @@ function App() {
 
               {aiMovieBackfillError && <p className="feedback-note">{aiMovieBackfillError}</p>}
               {aiMovieBackfillNote && <p className="sidebar-section-note">{aiMovieBackfillNote}</p>}
+            </div>
+            )}
 
               {aiMovieBackfillResult && (
                 <div className="concept-result">
@@ -8727,7 +8743,10 @@ function App() {
                 </div>
               )}
             </div>
+          )}
 
+          {aiMovieView === 'reference' && (
+          <div className="concept-page">
             <div className="format-picker">
               <h4 className="format-picker-title">{t.aiMovieReferenceHeading}</h4>
               <p className="sidebar-section-note">{t.aiMovieReferenceIntro}</p>

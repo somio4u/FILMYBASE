@@ -2902,8 +2902,12 @@ const AI_MOVIE_PLOT_BEAT_SCHEMA = {
   properties: {
     title: AI_MOVIE_BILINGUAL_TEXT_SCHEMA,
     description: AI_MOVIE_BILINGUAL_TEXT_SCHEMA,
+    // Estimated screen-time this beat needs, in minutes -- drives how many
+    // scenes (and how long each) the Screenplay stage writes for it later,
+    // instead of picking a scene count in isolation.
+    runtimeMinutes: { type: Type.NUMBER },
   },
-  required: ["title", "description"],
+  required: ["title", "description", "runtimeMinutes"],
 };
 
 const AI_MOVIE_CHARACTER_ARC_SCHEMA = {
@@ -3263,8 +3267,14 @@ const AI_MOVIE_SCREENPLAY_SCENE_SCHEMA = {
   properties: {
     sceneHeading: AI_MOVIE_BILINGUAL_TEXT_SCHEMA,
     action: AI_MOVIE_BILINGUAL_TEXT_SCHEMA,
+    // The model's own estimate of this one scene's screen time, using the
+    // standard page ≈ minute rule of thumb -- shown in the UI as a running
+    // total against the beat's own runtimeMinutes target, so the estimate
+    // that drove the scene count/lengths is actually checkable afterward,
+    // not just an invisible internal step.
+    estimatedMinutes: { type: Type.NUMBER },
   },
-  required: ["sceneHeading", "action"],
+  required: ["sceneHeading", "action", "estimatedMinutes"],
 };
 
 const AI_MOVIE_FORWARD_STAGE_SCHEMAS = {
@@ -3282,10 +3292,17 @@ async function generateAiMovieForwardStage(stageKey, priorContextText, reference
   const feedbackBlock = feedback
     ? `\n\nThe user reviewed an earlier draft of this exact layer and asked for these changes — revise accordingly, still fully consistent with the locked layers above:\n${feedback}`
     : "";
+  // Beat Sheet entries also need an honest screen-time estimate -- this
+  // later drives how many scenes (and how long each) the Screenplay stage
+  // writes for that beat, instead of guessing a scene count in isolation.
+  const stageSpecificBlock =
+    stageKey === "plot"
+      ? `\n\nFor each beat, also estimate "runtimeMinutes" — roughly how many minutes of screen time this beat needs, based on its own scope and dramatic weight (a quick transitional or dialogue beat might be 1-2 minutes; a big action, song, or emotional set-piece might be 5+ minutes). Be honest and varied — most beats should NOT be the same length.`
+      : "";
 
   const result = await generateJsonContent({
     model: GEMINI_MODEL_NAME,
-    contents: `The story's approved layers so far:\n\n${priorContextText}${referenceBlock}${feedbackBlock}\n\nNow generate the "${stageKey}" layer.`,
+    contents: `The story's approved layers so far:\n\n${priorContextText}${referenceBlock}${feedbackBlock}${stageSpecificBlock}\n\nNow generate the "${stageKey}" layer.`,
     config: {
       systemInstruction: AI_MOVIE_STAGE_GENERATION_SYSTEM_PROMPT,
       responseMimeType: "application/json",
@@ -3316,7 +3333,7 @@ const AI_MOVIE_SCREENPLAY_BUFFER_SIZE = 4;
 
 const AI_MOVIE_SCREENPLAY_BEAT_SYSTEM_PROMPT = `You are working on an AI Movie — a film that will be entirely AI-generated, never physically shot. Because of that, never reason about budget, cast/crew/location availability, shoot schedules, or any real-world production constraint — anything that can be imagined can be included, with no limitation.
 
-You are given the story's already-approved, locked layers (Story, Synopsis, Characters, Three-Act Structure, full Beat Sheet) below, plus every screenplay scene already written so far. Write ONLY the scenes for the ONE beat named at the end — a beat is a pocket, not a single scene, so expand it into however many full scenes this ONE beat genuinely needs to be properly established: never fewer than 2, but no upper limit either — a simple beat might need only 2, a dense or eventful one might need 7 or more. Let the beat's own content decide the count; never force a fixed number just to hit a target. Each scene needs a scene heading and a vivid action/visual description. Do NOT write any dialogue — that is a separate, later pass; describe what happens and what's said only in action-line terms (e.g. "she pleads with him"), never as quoted lines. Continue directly from the last scene already written (same characters, same momentum, no repeats) — never jump ahead to a later beat.`;
+You are given the story's already-approved, locked layers (Story, Synopsis, Characters, Three-Act Structure, full Beat Sheet) below, plus every screenplay scene already written so far. Write ONLY the scenes for the ONE beat named at the end — a beat is a pocket, not a single scene, so expand it into however many full scenes this ONE beat genuinely needs to be properly established: never fewer than 2, but no upper limit either — a simple beat might need only 2, a dense or eventful one might need 7 or more. The beat comes with its own target screen-time in minutes — use the standard screenwriting rule of thumb that one screenplay page equals about one minute of screen time to translate that target into an implied page count, and let the scene count AND each scene's own length follow from that: a beat with a small target should stay tight (fewer/shorter scenes), a beat with a large target earns more room (more and/or longer scenes). Give each scene its own honest "estimatedMinutes" estimate, and keep the sum of those estimates close to the beat's target — never pad or compress scenes just to hit the number exactly, but treat the target as the real guide for scope, not a suggestion to ignore. Each scene needs a scene heading and a vivid action/visual description. Do NOT write any dialogue — that is a separate, later pass; describe what happens and what's said only in action-line terms (e.g. "she pleads with him"), never as quoted lines. Continue directly from the last scene already written (same characters, same momentum, no repeats) — never jump ahead to a later beat.`;
 
 async function generateAiMovieScreenplayBeat(priorContextText, referenceMaterialText, scenesSoFarText, beat, feedback) {
   const referenceBlock = referenceMaterialText
@@ -3326,10 +3343,17 @@ async function generateAiMovieScreenplayBeat(priorContextText, referenceMaterial
     ? `\n\nThe user reviewed an earlier draft of this exact beat's scenes and asked for these changes — revise accordingly, still fully consistent with the locked layers above:\n${feedback}`
     : "";
   const scenesBlock = scenesSoFarText ? `\n\nScreenplay scenes already written so far:\n\n${scenesSoFarText}` : "";
+  // Older beats (generated before runtimeMinutes was added to the schema) may
+  // not carry a target -- fall back to letting the beat's own content decide,
+  // same as before this feature existed.
+  const runtimeBlock =
+    typeof beat.runtimeMinutes === "number" && beat.runtimeMinutes > 0
+      ? ` Target roughly ${beat.runtimeMinutes} minutes of screen time for this beat (about ${beat.runtimeMinutes} screenplay pages, by the page-equals-minute rule of thumb) — let that drive how many scenes you write and how long each one is.`
+      : "";
 
   const result = await generateJsonContent({
     model: GEMINI_MODEL_NAME,
-    contents: `The story's approved layers so far:\n\n${priorContextText}${referenceBlock}${feedbackBlock}${scenesBlock}\n\nNow write the scenes for this beat:\n${beat.title.en}: ${beat.description.en}`,
+    contents: `The story's approved layers so far:\n\n${priorContextText}${referenceBlock}${feedbackBlock}${scenesBlock}\n\nNow write the scenes for this beat:\n${beat.title.en}: ${beat.description.en}${runtimeBlock}`,
     config: {
       systemInstruction: AI_MOVIE_SCREENPLAY_BEAT_SYSTEM_PROMPT,
       responseMimeType: "application/json",
@@ -3748,7 +3772,7 @@ app.post("/api/ai-movie/projects/seed-akhada", requireRole("admin"), async (req,
 async function translateAkhadaFixedContent(englishPayload, responseSchema, maxOutputTokens) {
   return generateJsonContent({
     model: GEMINI_MODEL_NAME,
-    contents: `This is finished English story-bible content for a film — already final, nothing to change. Add a faithful Hindi (hi) translation to every field. Keep the English exactly as given; do not shorten, add to, or otherwise alter its meaning:\n\n${JSON.stringify(englishPayload)}`,
+    contents: `This is finished English story-bible content for a film — already final, nothing to change. Add a faithful Hindi (hi) translation to every bilingual text field. Keep the English exactly as given; do not shorten, add to, or otherwise alter its meaning. Any plain number field (e.g. runtimeMinutes) is not text to translate — copy it through completely unchanged:\n\n${JSON.stringify(englishPayload)}`,
     config: {
       systemInstruction:
         "You are a professional Hindi translator working on a finished film story bible. You never alter, invent, or edit the given English content — you only add a faithful translation of it, matching the required schema exactly.",

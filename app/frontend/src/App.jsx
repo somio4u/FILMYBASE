@@ -8538,7 +8538,10 @@ function App() {
 
                               {content && stageKey === 'plot' && content.map((beat, index) => (
                                 <div key={index} className="bit-row">
-                                  <p className="bit-heading">{beat.title[aiMovieLanguage]}</p>
+                                  <p className="bit-heading">
+                                    {beat.title[aiMovieLanguage]}
+                                    {typeof beat.runtimeMinutes === 'number' ? ` (${t.approxMinutesUnit(beat.runtimeMinutes)})` : ''}
+                                  </p>
                                   <p>{beat.description[aiMovieLanguage]}</p>
                                 </div>
                               ))}
@@ -8700,9 +8703,18 @@ function App() {
 
                                 {(beat.status === 'pending' || beat.status === 'approved') && (
                                   <>
+                                    <RuntimeSummary
+                                      total={beat.scenes?.reduce((sum, scene) => sum + (scene.estimatedMinutes || 0), 0)}
+                                      target={beatMeta?.runtimeMinutes}
+                                      t={t}
+                                    />
+
                                     {beat.scenes?.map((scene, sceneIndex) => (
                                       <div key={sceneIndex} className="bit-row">
-                                        <p className="bit-heading">{scene.sceneHeading[aiMovieLanguage]}</p>
+                                        <p className="bit-heading">
+                                          {scene.sceneHeading[aiMovieLanguage]}
+                                          {typeof scene.estimatedMinutes === 'number' ? ` (${t.approxMinutesUnit(scene.estimatedMinutes)})` : ''}
+                                        </p>
                                         <p>{scene.action[aiMovieLanguage]}</p>
                                       </div>
                                     ))}

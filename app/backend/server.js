@@ -3335,15 +3335,35 @@ const AI_MOVIE_FORWARD_STAGE_SCHEMAS = {
 // dialogue interleaved exactly as they happen (action, a line, more action,
 // a reply...), matching how a real screenplay reads -- never a separate
 // action paragraph followed by a stacked list of lines.
+// Standard screenplay transitions. A fixed list (enforced by the schema
+// AND by the cleanup below) so a transition can never come back garbled or
+// translated. Longest first, so "SMASH CUT TO:" is matched before "CUT TO:".
+const AI_MOVIE_TRANSITIONS = [
+  "SMASH CUT TO:",
+  "SHARP CUT TO:",
+  "MATCH CUT TO:",
+  "JUMP CUT TO:",
+  "DISSOLVE TO:",
+  "INTERCUT WITH:",
+  "FREEZE FRAME:",
+  "FADE TO BLACK.",
+  "TIME CUT:",
+  "FADE OUT.",
+  "CUT TO:",
+];
+
 const AI_MOVIE_SCENE_CONTENT_BLOCK_SCHEMA = {
   type: Type.OBJECT,
   properties: {
-    type: { type: Type.STRING, enum: ["action", "dialogue"] },
+    type: { type: Type.STRING, enum: ["action", "dialogue", "transition"] },
     text: AI_MOVIE_BILINGUAL_TEXT_SCHEMA,
+    // Only for type "transition" -- one of the standard terms, always in
+    // English (like the scene heading), printed on its own right-aligned line.
+    transition: { type: Type.STRING, enum: AI_MOVIE_TRANSITIONS },
     character: { type: Type.STRING },
     line: AI_MOVIE_BILINGUAL_TEXT_SCHEMA,
     // Standard screenplay dialogue extras, both optional (see
-    // AI_MOVIE_DIALOGUE_BLOCK_FORMAT_RULE): a short acting note under the
+    // AI_MOVIE_CONTENT_BLOCK_FORMAT_RULE): a short acting note under the
     // character name, and V.O./O.S. after it.
     parenthetical: AI_MOVIE_BILINGUAL_TEXT_SCHEMA,
     extension: { type: Type.STRING, enum: ["V.O.", "O.S."] },
@@ -3351,9 +3371,10 @@ const AI_MOVIE_SCENE_CONTENT_BLOCK_SCHEMA = {
   required: ["type"],
 };
 
-const AI_MOVIE_DIALOGUE_BLOCK_FORMAT_RULE = `DIALOGUE BLOCK EXTRAS (standard screenplay format, both optional on any dialogue block):
+const AI_MOVIE_CONTENT_BLOCK_FORMAT_RULE = `DIALOGUE BLOCK EXTRAS (standard screenplay format, both optional on any dialogue block):
 - "parenthetical": a very short acting note shown under the character name — 1 to 4 words, e.g. "quietly", "without looking up", "to Meera" — ONLY when how the line is said isn't already obvious from the line itself. Real scripts use these sparingly: most lines need none. No brackets, just the words; the "hi" version in Hindi.
-- "extension": "V.O." when the voice comes from someone NOT physically in the scene (voiceover, a memory, a voice on a broadcast); "O.S." when the speaker IS in the scene's place but off camera (behind a door, from the next room). The NARRATOR is always "V.O.". Leave it out for everyone speaking on camera.`;
+- "extension": "V.O." when the voice comes from someone NOT physically in the scene (voiceover, a memory, a voice on a broadcast); "O.S." when the speaker IS in the scene's place but off camera (behind a door, from the next room). The NARRATOR is always "V.O.". Leave it out for everyone speaking on camera.
+TRANSITIONS (CUT TO:, SHARP CUT TO:, SMASH CUT TO:, MATCH CUT TO:, DISSOLVE TO:, FREEZE FRAME:, FADE OUT., and the rest of the allowed list) are NEVER written inside action text — each one is its own block with "type": "transition" and the "transition" field set to exactly one allowed value. Use them sparingly: most scenes simply end with no transition at all. Use one only when the cut itself carries meaning — a shock, a jump in time, or the scene's final decisive beat.`;
 
 // Only "type" is actually required above (text/character/line all vary by
 // type), so a real Gemini response has come back missing one -- the screen
@@ -3399,8 +3420,10 @@ function normalizeAiMovieSceneFormat(scene) {
 
   const normalized = { ...scene, sceneHeading: { en: heading, hi: heading }, slugline: parseAiMovieSlugline(heading) };
   if (scene?.action) normalized.action = stripBilingual(scene.action);
-  if (Array.isArray(scene?.content) && scene.content.length > 0 && scene.content[0].type !== "dialogue") {
-    normalized.content = [{ ...scene.content[0], text: stripBilingual(scene.content[0].text) }, ...scene.content.slice(1)];
+  if (Array.isArray(scene?.content) && scene.content.length > 0) {
+    const [first, ...rest] = scene.content;
+    const trimmedFirst = first.type === "action" ? { ...first, text: stripBilingual(first.text) } : first;
+    normalized.content = splitAiMovieTrailingTransitions([trimmedFirst, ...rest]);
   }
   return normalized;
 }
@@ -3424,11 +3447,46 @@ function sanitizeAiMovieDialogueBlock(block) {
 
 function sanitizeAiMovieContentBlocks(blocks) {
   if (!Array.isArray(blocks)) return blocks;
-  return blocks.map((block) =>
-    block?.type === "dialogue"
-      ? sanitizeAiMovieDialogueBlock(block)
-      : { type: "action", text: ensureAiMovieBilingualText(block.text) }
-  );
+  return blocks
+    .map((block) => {
+      if (block?.type === "dialogue") return sanitizeAiMovieDialogueBlock(block);
+      // A transition block only survives if it's one of the standard terms
+      // -- anything else would print as a garbled "transition", so it's
+      // dropped rather than guessed at.
+      if (block?.type === "transition") {
+        const transition = typeof block.transition === "string" ? block.transition.trim().toUpperCase() : "";
+        return AI_MOVIE_TRANSITIONS.includes(transition) ? { type: "transition", transition } : null;
+      }
+      return { type: "action", text: ensureAiMovieBilingualText(block.text) };
+    })
+    .filter(Boolean);
+}
+
+// Scenes written before transitions had their own block type carry them
+// stuck onto the end of an action paragraph ("...he turns away. SHARP CUT
+// TO:") -- and the model may still slip one in there. Splits any such
+// trailing transition out into its own block, in both languages at once
+// (it's the same English term in the Hindi text too, per the script-
+// switching rule). Anything that isn't a clean trailing match is left
+// exactly as it was.
+function splitAiMovieTrailingTransitions(blocks) {
+  const result = [];
+  for (const block of blocks) {
+    const en = block.type === "action" ? block.text?.en ?? "" : "";
+    const transition = en && AI_MOVIE_TRANSITIONS.find((t) => en.trimEnd().toUpperCase().endsWith(t));
+    if (!transition) {
+      result.push(block);
+      continue;
+    }
+    const strip = (text) => {
+      const trimmed = (text ?? "").trimEnd();
+      return trimmed.toUpperCase().endsWith(transition) ? trimmed.slice(0, trimmed.length - transition.length).trimEnd() : text;
+    };
+    const remaining = { ...block, text: { en: strip(block.text.en), hi: strip(block.text.hi) } };
+    if (remaining.text.en) result.push(remaining);
+    result.push({ type: "transition", transition });
+  }
+  return result;
 }
 
 // Renders one scene as plain text for prompt context -- covers all three
@@ -3442,7 +3500,9 @@ function sceneToPromptText(scene) {
       .map((block) =>
         block.type === "dialogue"
           ? `${block.character}${block.extension ? ` (${block.extension})` : ""}\n${block.parenthetical?.en ? `(${block.parenthetical.en})\n` : ""}${block.line?.en ?? ""}`
-          : block.text?.en ?? ""
+          : block.type === "transition"
+            ? block.transition
+            : block.text?.en ?? ""
       )
       .join("\n\n");
     return `${heading}\n${body}`;
@@ -3510,6 +3570,8 @@ function countAiMovieScenePageLines(scene) {
   if (Array.isArray(scene.content) && scene.content.length > 0) {
     for (const block of scene.content) {
       if (block.type === "dialogue") addDialogue(block.line?.en, block.parenthetical?.en);
+      // A transition is one right-aligned line plus the blank line after it.
+      else if (block.type === "transition") lines += 2;
       else addAction(block.text?.en);
     }
   } else {
@@ -3935,7 +3997,7 @@ ${AI_MOVIE_SCREEN_ONLY_RULE}
 
 ${AI_MOVIE_HEADING_AND_NAMES_RULE}
 
-${AI_MOVIE_DIALOGUE_BLOCK_FORMAT_RULE}`;
+${AI_MOVIE_CONTENT_BLOCK_FORMAT_RULE}`;
 
 async function generateAiMovieScreenplaySceneRevision(
   priorContextText,
@@ -4022,11 +4084,11 @@ This is the FINAL on-screen text the audience actually hears, so both the dialog
 
 This pass also gives the scene its final cinematic shape, on top of the dialogue itself:
 - Character roster: also return "characters" — one line naming every character present in this scene, plus a short note on any background presence (e.g. "RUDRA, OM, plus a dozen temple worshippers in the background"). Names only, no new plot detail.
-- Camera direction: within the action blocks, reach for real screenplay camera-directive language where it earns its place — TIGHT CLOSE-UP ON, SLOW DOLLY IN ON, CAMERA HOLDS ON, FOCUS SHIFTS TO, CUT TO:, SHARP CUT TO: — guiding the reader's eye like an actual shot list, not just descriptive prose. These specific directive terms are conventionally English even in a Hindi script, exactly like the loanwords in the script-switching rule above — but that is NOT license to write the rest of the Hindi field in English: everything around those terms must still be genuine, natural Hindi.
+- Camera direction: within the action blocks, reach for real screenplay camera-directive language where it earns its place — TIGHT CLOSE-UP ON, SLOW DOLLY IN ON, CAMERA HOLDS ON, FOCUS SHIFTS TO — guiding the reader's eye like an actual shot list, not just descriptive prose. Cuts (CUT TO:, SHARP CUT TO: and the like) are never inside action text: they are their own "transition" blocks (see the transitions rule below). These specific directive terms are conventionally English even in a Hindi script, exactly like the loanwords in the script-switching rule above — but that is NOT license to write the rest of the Hindi field in English: everything around those terms must still be genuine, natural Hindi.
 - The held reaction: don't always cut to whoever's speaking or moving — sometimes the stronger choice is to hold on a silent face while everything else happens around or off-screen from them (a swallowed sob, a blank stare, a tightening jaw). Use it where the moment earns it, not in every scene.
 - Object symbolism: let tension or stillness show up in a tangible nearby detail (drifting smoke, spilled water, fallen ash, torn cloth) as well as in a face.
 - Subtext: let lines carry what a character is concealing, not only what they say outright — warm on the surface, colder underneath, when the story calls for it. Dead air (a character who deliberately doesn't answer) is a valid, often stronger choice than a line.
-- The button: end the scene on a decisive beat — a loaded look, an unanswered question, FREEZE FRAME:, or SHARP CUT TO: — never let it just trail off.
+- The button: end the scene on a decisive beat — a loaded look, an unanswered question, or a FREEZE FRAME: / SHARP CUT TO: as the final "transition" block — never let it just trail off.
 
 The "characters" field, and every "hi" field in every block above, still needs its own real, separately-written Hindi text — never the English copied over, left blank, or written in English. This matters even more now that there's more to juggle per scene: treat the Hindi field as just as important as the English one, for every single field, every time.
 
@@ -4034,7 +4096,7 @@ ${AI_MOVIE_SCREEN_ONLY_RULE}
 
 ${AI_MOVIE_HEADING_AND_NAMES_RULE}
 
-${AI_MOVIE_DIALOGUE_BLOCK_FORMAT_RULE}
+${AI_MOVIE_CONTENT_BLOCK_FORMAT_RULE}
 Also: this is the pass where speech gets written, so any speech the original action only DESCRIBES ("he asks for more information", "she pleads with him", "they argue") must become real dialogue lines in your output — never leave a spoken moment as a description, unless it is genuinely inaudible (background murmuring). And every character you list as present must visibly DO something in the scene (an action, a reaction, or a line) — otherwise leave them out of the list.`;
 
 async function generateAiMovieSceneDialogue(

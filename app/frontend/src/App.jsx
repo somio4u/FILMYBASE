@@ -9056,6 +9056,8 @@ function App() {
                                                   )}
                                                   <p>{block.line?.[aiMovieLanguage] ?? block.line?.en ?? ''}</p>
                                                 </div>
+                                              ) : block.type === 'transition' ? (
+                                                <p key={blockIndex} className="ai-movie-transition">{block.transition}</p>
                                               ) : (
                                                 <p key={blockIndex}>{block.text?.[aiMovieLanguage] ?? block.text?.en ?? ''}</p>
                                               )

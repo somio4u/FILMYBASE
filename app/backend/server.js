@@ -4568,12 +4568,176 @@ app.post("/api/ai-movie/stages/screenplay/beats/:index/request-changes", require
 
     const latest = (await db.query("SELECT backfill FROM ai_movie_projects WHERE id = $1", [projectId])).rows[0].backfill;
     const latestBeats = latest.screenplayBeats ?? screenplayBeats;
-    latestBeats[beatIndex] = { scenes, status: "pending", feedback: feedback || null };
+    // Keeps anything else on the beat (e.g. its song sheet) -- only the
+    // scenes are being redone here.
+    latestBeats[beatIndex] = { ...latestBeats[beatIndex], scenes, status: "pending", feedback: feedback || null };
     await saveAiMovieBackfillField(projectId, "screenplayBeats", latestBeats);
 
     res.json({ beatIndex, scenes, runtimeMinutes: Math.round(scenes.reduce((sum, s) => sum + (s.estimatedMinutes || 0), 0) * 10) / 10 });
   } catch (error) {
     console.error(`Screenplay beat ${beatIndex} regeneration failed:`, error.message);
+    res.status(502).json({ error: error.message });
+  }
+});
+
+// Song agent. Indian films carry songs as real story moments -- Akhada's
+// own beat sheet marks three ("The Pahandi (Song)", "Granthaloka Welcome
+// (Song)", "The Maha Guru's Secret (Song)"). A beat counts as a song beat
+// when its title or description says "song". The sheet covers everything
+// EXCEPT the lyrics -- the user's call: a real lyricist writes the words,
+// so the agent only hands them a short brief. Picturization (how the song
+// is filmed, section by section) follows the same screen-only rule as
+// every scene writer.
+function isAiMovieSongBeat(beatMeta) {
+  return /\bsongs?\b/i.test(`${beatMeta?.title?.en ?? ""} ${beatMeta?.description?.en ?? ""}`);
+}
+
+const AI_MOVIE_SONG_SHEET_SCHEMA = {
+  type: Type.OBJECT,
+  properties: {
+    workingTitle: AI_MOVIE_BILINGUAL_TEXT_SCHEMA,
+    situation: AI_MOVIE_BILINGUAL_TEXT_SCHEMA,
+    storyPurpose: AI_MOVIE_BILINGUAL_TEXT_SCHEMA,
+    mood: AI_MOVIE_BILINGUAL_TEXT_SCHEMA,
+    musicStyle: AI_MOVIE_BILINGUAL_TEXT_SCHEMA,
+    singers: AI_MOVIE_BILINGUAL_TEXT_SCHEMA,
+    durationMinutes: { type: Type.NUMBER },
+    lyricistBrief: AI_MOVIE_BILINGUAL_TEXT_SCHEMA,
+    picturization: {
+      type: Type.ARRAY,
+      items: {
+        type: Type.OBJECT,
+        properties: {
+          section: { type: Type.STRING },
+          visuals: AI_MOVIE_BILINGUAL_TEXT_SCHEMA,
+        },
+        required: ["section", "visuals"],
+      },
+    },
+  },
+  required: ["workingTitle", "situation", "storyPurpose", "mood", "musicStyle", "singers", "durationMinutes", "lyricistBrief", "picturization"],
+};
+
+const AI_MOVIE_SONG_SHEET_SYSTEM_PROMPT = `You are an Indian film song-situation writer and picturization planner, working on an AI Movie — a film that will be entirely AI-generated, never physically shot, so never limit anything by budget or real-world feasibility.
+
+You are given the story's locked layers, the reference material, and one beat that carries a song, with its scenes. Write the SONG SHEET for it:
+- "workingTitle": a short working title for the song.
+- "situation": where the song sits in the story and why a song belongs exactly here.
+- "storyPurpose": what has changed — in the story or in a character — by the time the song ends. A good film song moves the story or the feeling forward; it is never a pause.
+- "mood": the feeling of the song, in a few words.
+- "musicStyle": genre, tempo (slow / medium / fast, rough BPM) and the key instruments or sounds.
+- "singers": who sings — on screen and/or playback (e.g. "chorus of pilgrims, a lead female voice").
+- "durationMinutes": how long the song runs on screen (most film songs run 2.5 to 4 minutes).
+- "lyricistBrief": a short brief for the human lyricist — the theme, key images, the emotion of each part, words or ideas that belong to this world (names, places, rituals). DO NOT WRITE ANY LYRICS: not a single line, not a refrain, not a hook, not a sample verse, in any language. A real lyricist writes every word.
+- "picturization": how the song is filmed, section by section, in order — use section names like "Prelude", "Mukhda", "Interlude 1", "Antara 1", "Interlude 2", "Antara 2", "Final Mukhda", "Outro". For each, describe only what the camera sees: people, movement, places, light, camera moves, and the story moments that happen during that section.
+Write simple, easy English, and natural Hindi for every "hi" field.
+
+${AI_MOVIE_SCREEN_ONLY_RULE}
+
+${AI_MOVIE_HEADING_AND_NAMES_RULE}`;
+
+// Backstop for the no-lyrics rule: a quoted passage of 4+ words inside the
+// lyricist brief or the filming plan is almost certainly a sung line the
+// model slipped in anyway. It's swapped for a visible note rather than
+// silently deleted, so it's clear something was taken out.
+function removeAiMovieQuotedLyrics(text) {
+  return (text ?? "").replace(/["“]([^"“”]+)["”]/g, (whole, inner) =>
+    inner.trim().split(/\s+/).length >= 4 ? "(lyric removed — for the lyricist)" : whole
+  );
+}
+
+function removeAiMovieQuotedLyricsBilingual(value) {
+  return { en: removeAiMovieQuotedLyrics(value.en), hi: removeAiMovieQuotedLyrics(value.hi) };
+}
+
+async function generateAiMovieSongSheet(priorContextText, referenceMaterialText, beat, beatScenesText) {
+  const referenceBlock = referenceMaterialText
+    ? `\n\nThe user has also provided reference material below — treat it as authoritative grounding, stay faithful to it:\n\n${referenceMaterialText}`
+    : "";
+  const result = await generateJsonContent({
+    model: GEMINI_MODEL_NAME,
+    contents: `The story's approved layers so far:\n\n${priorContextText}${referenceBlock}\n\nThe song beat: ${beat.title.en}: ${beat.description.en}\n\nIts scenes:\n\n${beatScenesText}\n\nNow write the song sheet for this beat. No lyrics.`,
+    config: {
+      systemInstruction: AI_MOVIE_SONG_SHEET_SYSTEM_PROMPT,
+      responseMimeType: "application/json",
+      maxOutputTokens: 8192,
+      responseSchema: AI_MOVIE_SONG_SHEET_SCHEMA,
+    },
+  });
+  const duration = Number(result.durationMinutes);
+  return {
+    workingTitle: ensureAiMovieBilingualText(result.workingTitle),
+    situation: ensureAiMovieBilingualText(result.situation),
+    storyPurpose: ensureAiMovieBilingualText(result.storyPurpose),
+    mood: ensureAiMovieBilingualText(result.mood),
+    musicStyle: ensureAiMovieBilingualText(result.musicStyle),
+    singers: ensureAiMovieBilingualText(result.singers),
+    // Kept to a real film-song range, so one odd number can't swallow a
+    // beat's whole runtime.
+    durationMinutes: Math.min(6, Math.max(1, Math.round((Number.isFinite(duration) ? duration : 3) * 10) / 10)),
+    lyricistBrief: removeAiMovieQuotedLyricsBilingual(ensureAiMovieBilingualText(result.lyricistBrief)),
+    picturization: (Array.isArray(result.picturization) ? result.picturization : [])
+      .filter((part) => typeof part?.section === "string" && part.section.trim())
+      .map((part) => ({ section: part.section.trim(), visuals: removeAiMovieQuotedLyricsBilingual(ensureAiMovieBilingualText(part.visuals)) })),
+  };
+}
+
+// The song's own length counts toward its beat's total: on the page a song
+// is only a short paragraph, so the page-method estimate badly
+// under-measures a song beat, and Extend would otherwise pad it with
+// scenes it doesn't need. The beat's target itself never changes.
+function aiMovieBeatSongMinutes(screenplayBeat) {
+  const minutes = screenplayBeat?.song?.durationMinutes;
+  return typeof minutes === "number" && minutes > 0 ? minutes : 0;
+}
+
+app.post("/api/ai-movie/stages/screenplay/beats/:index/song", requireRole("admin"), async (req, res) => {
+  const beatIndex = Number(req.params.index);
+  const { projectId } = req.body;
+  if (!projectId) {
+    res.status(400).json({ error: "No project to write into." });
+    return;
+  }
+  const projectResult = await db.query("SELECT pasted_text, backfill FROM ai_movie_projects WHERE id = $1", [projectId]);
+  const project = projectResult.rows[0];
+  if (!project) {
+    res.status(404).json({ error: "Project not found." });
+    return;
+  }
+  const beats = project.backfill?.plot ?? [];
+  const screenplayBeats = project.backfill?.screenplayBeats ?? [];
+  const beat = screenplayBeats[beatIndex];
+  if (!Number.isInteger(beatIndex) || !beats[beatIndex] || !beat || !Array.isArray(beat.scenes)) {
+    res.status(400).json({ error: "This beat has no written scenes yet." });
+    return;
+  }
+  if (!isAiMovieSongBeat(beats[beatIndex])) {
+    res.status(400).json({ error: "This beat isn't marked as a song beat in the Beat Sheet." });
+    return;
+  }
+
+  try {
+    const referenceMaterialText = await getAiMovieReferenceMaterialText(projectId);
+    const priorContextText = withAiMovieIntervalNote(
+      flattenAiMovieContentForExtraction(project.pasted_text, project.backfill, { includeScreenplay: false }),
+      project.backfill,
+      beatIndex
+    );
+    const song = await generateAiMovieSongSheet(
+      priorContextText,
+      referenceMaterialText,
+      beats[beatIndex],
+      beat.scenes.map((scene) => sceneToPromptText(scene)).join("\n\n")
+    );
+    // One atomic update of just this beat's song -- can't clobber scenes
+    // saved at the same moment by background work.
+    await db.query(
+      "UPDATE ai_movie_projects SET backfill = jsonb_set(backfill, $2::text[], $3::jsonb), updated_at = now() WHERE id = $1",
+      [projectId, ["screenplayBeats", String(beatIndex), "song"], JSON.stringify(song)]
+    );
+    res.json({ beatIndex, song });
+  } catch (error) {
+    console.error(`Song sheet for beat ${beatIndex} failed:`, error.message);
     res.status(502).json({ error: error.message });
   }
 });
@@ -4636,7 +4800,7 @@ app.post("/api/ai-movie/stages/screenplay/beats/:index/extend-to-target", requir
     });
     const scenes = await fillAiMovieScreenplayBeatToTarget(
       measuredScenes,
-      targetMinutes,
+      Math.max(0, targetMinutes - aiMovieBeatSongMinutes(beat)),
       priorContextText,
       referenceMaterialText,
       scenesSoFarText,
@@ -4661,7 +4825,7 @@ app.post("/api/ai-movie/stages/screenplay/beats/:index/extend-to-target", requir
     latestBeats[beatIndex] = { ...latestBeats[beatIndex], scenes, status: "pending" };
     await saveAiMovieBackfillField(projectId, "screenplayBeats", latestBeats);
 
-    const totalMinutes = Math.round(scenes.reduce((sum, s) => sum + (s.estimatedMinutes || 0), 0) * 10) / 10;
+    const totalMinutes = Math.round((scenes.reduce((sum, s) => sum + (s.estimatedMinutes || 0), 0) + aiMovieBeatSongMinutes(beat)) * 10) / 10;
     res.json({ beatIndex, scenes, totalMinutes, targetMinutes });
   } catch (error) {
     console.error(`Screenplay beat ${beatIndex} extend-to-target failed:`, error.message);
@@ -5159,6 +5323,24 @@ function renderAiMovieScreenplayPdf(res, { title, scenes, lang }) {
       }
     }
 
+    // A song sheet prints as a SONG block after its beat's scenes: the
+    // working title, the situation, then the filming plan section by
+    // section. (No lyrics exist -- a lyricist writes those.)
+    if (scene.songAfter) {
+      const song = scene.songAfter;
+      keepLines(4);
+      write("Courier-Bold", `SONG — "${pick(song.workingTitle).toUpperCase()}" (${song.durationMinutes} MIN)`, P.pageLeft, doc.y, { width: P.pageRight - P.pageLeft });
+      blankLine();
+      writeAction(pick(song.situation));
+      for (const part of song.picturization ?? []) {
+        keepLines(3);
+        write("Courier-Bold", `${part.section.toUpperCase()}:`, P.pageLeft, doc.y, { width: P.pageRight - P.pageLeft });
+        writeAction(pick(part.visuals));
+      }
+      write("Courier", "END OF SONG.", P.pageLeft, doc.y, { width: P.pageRight - P.pageLeft, align: "right" });
+      blankLine();
+    }
+
     // Indian scripts mark the break with a centred INTERVAL line.
     if (scene.intervalAfter) {
       keepLines(3);
@@ -5190,10 +5372,14 @@ app.get("/api/ai-movie/projects/:id/screenplay.pdf", requireRole("admin"), async
   const intervalAfterBeat = row.backfill?.intervalAfterBeat;
   const scenes = (row.backfill?.screenplayBeats ?? []).flatMap((beat, beatIndex) =>
     Array.isArray(beat.scenes)
-      ? beat.scenes.map((scene, sceneIndex) => ({
-          ...normalizeAiMovieSceneFormat(scene),
-          intervalAfter: beatIndex === intervalAfterBeat && sceneIndex === beat.scenes.length - 1,
-        }))
+      ? beat.scenes.map((scene, sceneIndex) => {
+          const isLast = sceneIndex === beat.scenes.length - 1;
+          return {
+            ...normalizeAiMovieSceneFormat(scene),
+            songAfter: isLast ? beat.song ?? null : null,
+            intervalAfter: beatIndex === intervalAfterBeat && isLast,
+          };
+        })
       : []
   );
   if (scenes.length === 0) {

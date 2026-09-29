@@ -320,6 +320,17 @@ const LABELS = {
     aiMovieScreenplayBeatWritingLabel: "Writing this beat's scenes…",
     aiMovieScreenplayBeatErrorLabel: 'Something went wrong generating this beat.',
     aiMovieScreenplayRetryButton: 'Retry',
+    aiMovieSongSheetLabel: 'Song',
+    aiMovieWriteSongSheetButton: 'Write Song Sheet',
+    aiMovieRewriteSongSheetButton: 'Rewrite Song Sheet',
+    aiMovieWritingSongSheetLabel: 'Writing song sheet…',
+    aiMovieSongSituationLabel: 'Situation',
+    aiMovieSongPurposeLabel: 'What changes',
+    aiMovieSongMoodLabel: 'Mood',
+    aiMovieSongMusicLabel: 'Music',
+    aiMovieSongSingersLabel: 'Singers',
+    aiMovieSongLyricistBriefLabel: 'Brief for the lyricist',
+    aiMovieSongPicturizationLabel: 'How it is filmed',
     aiMovieSetIntervalButton: 'Interval goes after this beat',
     aiMovieRemoveIntervalButton: 'Remove interval',
     aiMovieIntervalMarker: '— INTERVAL after this beat —',
@@ -909,6 +920,17 @@ const LABELS = {
     aiMovieScreenplayBeatWritingLabel: 'ଏହି ବିଟ୍‌ର ଦୃଶ୍ୟ ଲେଖାଯାଉଛି…',
     aiMovieScreenplayBeatErrorLabel: 'ଏହି ବିଟ୍ ତିଆରି କରିବାରେ କିଛି ଭୁଲ ହେଲା।',
     aiMovieScreenplayRetryButton: 'ପୁଣି ଚେଷ୍ଟା କରନ୍ତୁ',
+    aiMovieSongSheetLabel: 'ଗୀତ',
+    aiMovieWriteSongSheetButton: 'ଗୀତ ସିଟ୍ ଲେଖନ୍ତୁ',
+    aiMovieRewriteSongSheetButton: 'ଗୀତ ସିଟ୍ ପୁଣି ଲେଖନ୍ତୁ',
+    aiMovieWritingSongSheetLabel: 'ଗୀତ ସିଟ୍ ଲେଖାଯାଉଛି…',
+    aiMovieSongSituationLabel: 'ପରିସ୍ଥିତି',
+    aiMovieSongPurposeLabel: 'କ’ଣ ବଦଳେ',
+    aiMovieSongMoodLabel: 'ମୁଡ୍',
+    aiMovieSongMusicLabel: 'ସଙ୍ଗୀତ',
+    aiMovieSongSingersLabel: 'ଗାୟକ',
+    aiMovieSongLyricistBriefLabel: 'ଗୀତିକାରଙ୍କ ପାଇଁ ବ୍ରିଫ୍',
+    aiMovieSongPicturizationLabel: 'କିପରି ଚିତ୍ରାୟିତ ହେବ',
     aiMovieSetIntervalButton: 'ଏହି ବିଟ୍ ପରେ ଇଣ୍ଟରଭାଲ୍',
     aiMovieRemoveIntervalButton: 'ଇଣ୍ଟରଭାଲ୍ ହଟାନ୍ତୁ',
     aiMovieIntervalMarker: '— ଏହି ବିଟ୍ ପରେ ଇଣ୍ଟରଭାଲ୍ —',
@@ -2285,6 +2307,19 @@ function aiMovieDialogueCharacterCue(blocks, blockIndex) {
     break
   }
   return cue
+}
+
+// Same rule as the backend's isAiMovieSongBeat: the Beat Sheet itself
+// says "song" in the beat's title or description.
+function isAiMovieSongBeat(beatMeta) {
+  return /\bsongs?\b/i.test(`${beatMeta?.title?.en ?? ''} ${beatMeta?.description?.en ?? ''}`)
+}
+
+// A song fills real screen time but is only a short paragraph on the page,
+// so its own length counts toward the beat's total (the target never moves).
+function aiMovieSongMinutes(screenplayBeat) {
+  const minutes = screenplayBeat?.song?.durationMinutes
+  return typeof minutes === 'number' && minutes > 0 ? minutes : 0
 }
 
 function RuntimeSummary({ total, target, t }) {
@@ -4342,6 +4377,7 @@ function App() {
   // environments) — saved alongside the project but never rendered here.
   const [aiMovieAssets, setAiMovieAssets] = useState(null)
   const [isSavingAiMovieInterval, setIsSavingAiMovieInterval] = useState(false)
+  const [isWritingAiMovieSongSheet, setIsWritingAiMovieSongSheet] = useState(false)
 
   // Persistence: every AI Movie project is saved to its own database row as
   // you go. null = not saved yet (a fresh, un-analyzed paste).
@@ -5479,6 +5515,32 @@ function App() {
     }
     await pollAiMovieScreenplayUntilReady(projectId)
     setIsApprovingAiMovieScreenplayBeat(false)
+  }
+
+  async function handleWriteAiMovieSongSheetClick(beatIndex) {
+    if (!aiMovieProjectId) return
+    setIsWritingAiMovieSongSheet(true)
+    setAiMovieStageError(null)
+    try {
+      const response = await fetch(`${BACKEND_URL}/api/ai-movie/stages/screenplay/beats/${beatIndex}/song`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ projectId: aiMovieProjectId }),
+      })
+      const data = await response.json()
+      if (!response.ok) {
+        setAiMovieStageError(data.error || t.genericError)
+      } else {
+        setAiMovieBackfillResult((prev) => {
+          const beats = [...(prev?.screenplayBeats ?? [])]
+          beats[beatIndex] = { ...(beats[beatIndex] ?? {}), song: data.song }
+          return { ...(prev ?? {}), screenplayBeats: beats }
+        })
+      }
+    } catch {
+      setAiMovieStageError(t.genericError)
+    }
+    setIsWritingAiMovieSongSheet(false)
   }
 
   // Places the INTERVAL after the given beat, or removes it (null).
@@ -9050,7 +9112,7 @@ function App() {
                                     <RuntimeSummary
                                       total={
                                         beat.scenes && Math.round(
-                                          beat.scenes.reduce((sum, scene) => sum + effectiveAiMovieSceneMinutes(scene), 0) * 10
+                                          (beat.scenes.reduce((sum, scene) => sum + effectiveAiMovieSceneMinutes(scene), 0) + aiMovieSongMinutes(beat)) * 10
                                         ) / 10
                                       }
                                       target={effectiveAiMovieBeatMinutes(beatMeta, beat)}
@@ -9059,7 +9121,7 @@ function App() {
 
                                     {(() => {
                                       const target = beatMeta?.runtimeMinutes
-                                      const total = (beat.scenes ?? []).reduce((sum, scene) => sum + effectiveAiMovieSceneMinutes(scene), 0)
+                                      const total = (beat.scenes ?? []).reduce((sum, scene) => sum + effectiveAiMovieSceneMinutes(scene), 0) + aiMovieSongMinutes(beat)
                                       if (typeof target !== 'number' || total >= target * 0.9) return null
                                       return (
                                         <div className="ai-movie-extend-to-target">
@@ -9211,6 +9273,50 @@ function App() {
                                         </div>
                                       )
                                     })}
+
+                                    {/* Song beats (the Beat Sheet says "song") get a song sheet:
+                                        everything except the lyrics, which a real lyricist writes. */}
+                                    {isAiMovieSongBeat(beatMeta) && Array.isArray(beat.scenes) && (
+                                      <div className="ai-movie-song-sheet">
+                                        {beat.song && (
+                                          <>
+                                            <p className="bit-heading">
+                                              {t.aiMovieSongSheetLabel}: "{beat.song.workingTitle?.[aiMovieLanguage] || beat.song.workingTitle?.en}" · {t.aiMovieSceneDurationLabel(beat.song.durationMinutes)}
+                                            </p>
+                                            {[
+                                              ['aiMovieSongSituationLabel', beat.song.situation],
+                                              ['aiMovieSongPurposeLabel', beat.song.storyPurpose],
+                                              ['aiMovieSongMoodLabel', beat.song.mood],
+                                              ['aiMovieSongMusicLabel', beat.song.musicStyle],
+                                              ['aiMovieSongSingersLabel', beat.song.singers],
+                                              ['aiMovieSongLyricistBriefLabel', beat.song.lyricistBrief],
+                                            ].map(([labelKey, value]) => (
+                                              <p key={labelKey}>
+                                                <strong>{t[labelKey]}:</strong> {value?.[aiMovieLanguage] || value?.en}
+                                              </p>
+                                            ))}
+                                            <p><strong>{t.aiMovieSongPicturizationLabel}:</strong></p>
+                                            {(beat.song.picturization ?? []).map((part, partIndex) => (
+                                              <p key={partIndex} className="ai-movie-song-part">
+                                                <strong>{part.section}</strong> — {part.visuals?.[aiMovieLanguage] || part.visuals?.en}
+                                              </p>
+                                            ))}
+                                          </>
+                                        )}
+                                        <button
+                                          type="button"
+                                          className="ai-movie-revise-scene-button"
+                                          onClick={() => handleWriteAiMovieSongSheetClick(viewIndex)}
+                                          disabled={isWritingAiMovieSongSheet}
+                                        >
+                                          {isWritingAiMovieSongSheet
+                                            ? t.aiMovieWritingSongSheetLabel
+                                            : beat.song
+                                              ? t.aiMovieRewriteSongSheetButton
+                                              : t.aiMovieWriteSongSheetButton}
+                                        </button>
+                                      </div>
+                                    )}
 
                                     {/* The INTERVAL is placed by hand (the user's choice), one per
                                         film -- placing it on another beat simply moves it. */}

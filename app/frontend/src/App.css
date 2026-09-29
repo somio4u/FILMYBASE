@@ -1749,6 +1749,18 @@ button, input, textarea, select {
   text-align: left;
 }
 
+/* Song sheet panel on a song beat. */
+.ai-movie-song-sheet {
+  margin: 12px 0;
+  padding: 10px 12px;
+  border-left: 3px solid var(--text-secondary);
+  text-align: left;
+}
+
+.ai-movie-song-part {
+  margin: 4px 0 4px 12px;
+}
+
 /* The INTERVAL marker on the beat it follows. */
 .ai-movie-interval-marker {
   display: flex;

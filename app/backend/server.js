@@ -3727,7 +3727,7 @@ async function generateAiMovieScreenplayBeatExpansion(
 
   const result = await generateJsonContent({
     model: GEMINI_MODEL_NAME,
-    contents: `The story's approved layers so far:\n\n${priorContextText}${referenceBlock}${scenesBlock}\n\nThis beat (${beat.title.en}: ${beat.description.en}) already has these scenes, fixed -- do not repeat them:\n\n${existingBeatScenesText}\n\nWrite additional new scenes only for this same beat, covering roughly ${remainingMinutes} more minutes of screen time.`,
+    contents: `The story's approved layers so far:\n\n${priorContextText}${referenceBlock}${scenesBlock}\n\nThis beat (${beat.title.en}: ${beat.description.en}) already has these scenes, fixed -- do not repeat them:\n\n${existingBeatScenesText}\n\nWrite additional new scenes only for this same beat, covering roughly ${remainingMinutes} more minutes of screen time — about ${remainingMinutes} standard screenplay pages (roughly ${Math.round(remainingMinutes * AI_MOVIE_LINES_PER_PAGE)} formatted lines), built from real on-screen moments (actions, reactions, events), never from extra descriptive words.`,
     config: {
       systemInstruction: AI_MOVIE_SCREENPLAY_BEAT_EXPAND_SYSTEM_PROMPT,
       responseMimeType: "application/json",
@@ -3759,7 +3759,10 @@ async function generateAiMovieScreenplayBeatExpansion(
 // bounded so a stubborn shortfall can never loop forever or burn unbounded
 // Gemini calls, and "close enough" (90% of target) avoids an endless chase
 // of the last few seconds.
-const AI_MOVIE_BEAT_EXPAND_MAX_ROUNDS = 2;
+// 3 rounds (was 2): once durations started being measured honestly (the
+// page method), freshly written beats come in shorter against their fixed
+// targets more often, so one extra round of new scenes is allowed.
+const AI_MOVIE_BEAT_EXPAND_MAX_ROUNDS = 3;
 const AI_MOVIE_BEAT_DIALOGUE_FILL_MAX_SCENES = 3;
 const AI_MOVIE_BEAT_SHORTFALL_TOLERANCE = 0.9;
 
@@ -4316,6 +4319,93 @@ app.post("/api/ai-movie/stages/screenplay/beats/:index/request-changes", require
     res.json({ beatIndex, scenes, runtimeMinutes: Math.round(scenes.reduce((sum, s) => sum + (s.estimatedMinutes || 0), 0) * 10) / 10 });
   } catch (error) {
     console.error(`Screenplay beat ${beatIndex} regeneration failed:`, error.message);
+    res.status(502).json({ error: error.message });
+  }
+});
+
+// Grows an already-written beat to its fixed Beat Sheet time WITHOUT
+// throwing anything away -- every existing scene, and any dialogue already
+// written for them, stays exactly as it is; only new material is added
+// (dialogue in scenes that have none yet, then new scenes continuing the
+// beat), using the same fill-to-target step new beats already get. Exists
+// because the beat's target never moves (it's the film's designed pacing,
+// per the user): once durations started being measured honestly, beats
+// written earlier showed up short, and the only fix before this was a full
+// Request Changes -- which regenerates the whole beat from scratch.
+app.post("/api/ai-movie/stages/screenplay/beats/:index/extend-to-target", requireRole("admin"), async (req, res) => {
+  const beatIndex = Number(req.params.index);
+  const { projectId } = req.body;
+  if (!projectId) {
+    res.status(400).json({ error: "No project to extend." });
+    return;
+  }
+
+  const projectResult = await db.query("SELECT pasted_text, backfill FROM ai_movie_projects WHERE id = $1", [projectId]);
+  const project = projectResult.rows[0];
+  if (!project) {
+    res.status(404).json({ error: "Project not found." });
+    return;
+  }
+
+  const beats = project.backfill?.plot ?? [];
+  const screenplayBeats = project.backfill?.screenplayBeats ?? [];
+  if (!Number.isInteger(beatIndex) || beatIndex < 0 || beatIndex >= beats.length) {
+    res.status(400).json({ error: "Not a valid beat." });
+    return;
+  }
+  const beat = screenplayBeats[beatIndex];
+  if (!beat || (beat.status !== "pending" && beat.status !== "approved") || !Array.isArray(beat.scenes)) {
+    res.status(400).json({ error: "This beat has no written scenes to extend yet." });
+    return;
+  }
+  const targetMinutes = beats[beatIndex].runtimeMinutes;
+  if (typeof targetMinutes !== "number" || targetMinutes <= 0) {
+    res.status(400).json({ error: "This beat has no target time in the Beat Sheet." });
+    return;
+  }
+
+  try {
+    const referenceMaterialText = await getAiMovieReferenceMaterialText(projectId);
+    const priorContextText = flattenAiMovieContentForExtraction(project.pasted_text, project.backfill, { includeScreenplay: false });
+    const scenesSoFarText = flattenAiMovieScreenplayScenesSoFar(screenplayBeats, beatIndex);
+    // Re-measure first: saved scenes may still carry durations from the
+    // older words/200 count, which would make the beat look closer to its
+    // target than it really is and stop the fill before it starts.
+    const measuredScenes = beat.scenes.map((scene) => {
+      const normalized = normalizeAiMovieSceneFormat(scene);
+      return { ...normalized, estimatedMinutes: computeAiMovieSceneMinutes(normalized) };
+    });
+    const scenes = await fillAiMovieScreenplayBeatToTarget(
+      measuredScenes,
+      targetMinutes,
+      priorContextText,
+      referenceMaterialText,
+      scenesSoFarText,
+      beats[beatIndex],
+      aiMovieCharacterDialogueBriefsText(project.backfill)
+    );
+
+    // The fill step deliberately swallows individual failed AI calls (so
+    // one bad call never loses the rest) -- which means a total failure
+    // would otherwise come back looking like success with nothing added.
+    // Say so plainly instead, and leave the beat exactly as it was.
+    const sumMinutes = (list) => list.reduce((sum, s) => sum + (s.estimatedMinutes || 0), 0);
+    if (sumMinutes(scenes) <= sumMinutes(measuredScenes)) {
+      res.status(502).json({ error: "Nothing could be added to this beat this time — please try again." });
+      return;
+    }
+
+    // Back to "pending": the beat genuinely has new material worth one
+    // more look before it's final again.
+    const latest = (await db.query("SELECT backfill FROM ai_movie_projects WHERE id = $1", [projectId])).rows[0].backfill;
+    const latestBeats = latest.screenplayBeats ?? screenplayBeats;
+    latestBeats[beatIndex] = { ...latestBeats[beatIndex], scenes, status: "pending" };
+    await saveAiMovieBackfillField(projectId, "screenplayBeats", latestBeats);
+
+    const totalMinutes = Math.round(scenes.reduce((sum, s) => sum + (s.estimatedMinutes || 0), 0) * 10) / 10;
+    res.json({ beatIndex, scenes, totalMinutes, targetMinutes });
+  } catch (error) {
+    console.error(`Screenplay beat ${beatIndex} extend-to-target failed:`, error.message);
     res.status(502).json({ error: error.message });
   }
 });

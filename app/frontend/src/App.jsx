@@ -320,6 +320,9 @@ const LABELS = {
     aiMovieScreenplayBeatWritingLabel: "Writing this beat's scenes…",
     aiMovieScreenplayBeatErrorLabel: 'Something went wrong generating this beat.',
     aiMovieScreenplayRetryButton: 'Retry',
+    aiMovieExtendToTargetButton: (target) => `Extend to ${target} min`,
+    aiMovieExtendingToTargetLabel: 'Extending this beat…',
+    aiMovieExtendToTargetNote: 'Keeps every scene and line already written — only adds more screenplay (dialogue first, then new scenes) until the beat reaches its Beat Sheet time.',
     aiMovieScreenplayBeatOfLabel: (index, total) => `Beat ${index} of ${total}`,
     aiMovieScreenplayAllApprovedNote: 'Full screenplay draft complete — every beat approved.',
     aiMovieReviseSceneButton: 'Request Changes',
@@ -901,6 +904,9 @@ const LABELS = {
     aiMovieScreenplayBeatWritingLabel: 'ଏହି ବିଟ୍‌ର ଦୃଶ୍ୟ ଲେଖାଯାଉଛି…',
     aiMovieScreenplayBeatErrorLabel: 'ଏହି ବିଟ୍ ତିଆରି କରିବାରେ କିଛି ଭୁଲ ହେଲା।',
     aiMovieScreenplayRetryButton: 'ପୁଣି ଚେଷ୍ଟା କରନ୍ତୁ',
+    aiMovieExtendToTargetButton: (target) => `${target} ମିନିଟ୍ ପର୍ଯ୍ୟନ୍ତ ବଢ଼ାନ୍ତୁ`,
+    aiMovieExtendingToTargetLabel: 'ଏହି ବିଟ୍ ବଢ଼ାଯାଉଛି…',
+    aiMovieExtendToTargetNote: "ଲେଖାଯାଇଥିବା ପ୍ରତ୍ୟେକ ଦୃଶ୍ୟ ଓ ସଂଳାପ ରହିବ — ବିଟ୍ ସିଟ୍‌ର ସମୟ ପର୍ଯ୍ୟନ୍ତ କେବଳ ଅଧିକ ସ୍କ୍ରିନପ୍ଲେ ଯୋଡ଼ାଯିବ (ପ୍ରଥମେ ସଂଳାପ, ତା'ପରେ ନୂଆ ଦୃଶ୍ୟ)।",
     aiMovieScreenplayBeatOfLabel: (index, total) => `ବିଟ୍ ${index} / ${total}`,
     aiMovieScreenplayAllApprovedNote: 'ସମ୍ପୂର୍ଣ୍ଣ ସ୍କ୍ରିନପ୍ଲେ ଡ୍ରାଫ୍ଟ ସରିଲା — ପ୍ରତ୍ୟେକ ବିଟ୍ ଅନୁମୋଦିତ।',
     aiMovieReviseSceneButton: 'ପରିବର୍ତ୍ତନ ପାଇଁ ଅନୁରୋଧ',
@@ -5443,6 +5449,38 @@ function App() {
     setIsApprovingAiMovieScreenplayBeat(false)
   }
 
+  // Grows a written-but-short beat to its fixed Beat Sheet time, keeping
+  // every existing scene and dialogue line -- the target itself never
+  // changes; only more screenplay is added. Shares the regenerate button's
+  // busy flag, since both are whole-beat AI operations.
+  async function handleExtendAiMovieScreenplayBeatClick(beatIndex) {
+    if (!aiMovieProjectId) return
+    const projectId = aiMovieProjectId
+
+    setIsGeneratingAiMovieScreenplayBeat(true)
+    setAiMovieStageError(null)
+    try {
+      const response = await fetch(`${BACKEND_URL}/api/ai-movie/stages/screenplay/beats/${beatIndex}/extend-to-target`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ projectId }),
+      })
+      const data = await response.json()
+      if (!response.ok) {
+        setAiMovieStageError(data.error || t.genericError)
+      } else {
+        setAiMovieBackfillResult((prev) => {
+          const beats = [...(prev?.screenplayBeats ?? [])]
+          beats[beatIndex] = { ...(beats[beatIndex] ?? {}), scenes: data.scenes, status: 'pending' }
+          return { ...(prev ?? {}), screenplayBeats: beats }
+        })
+      }
+    } catch {
+      setAiMovieStageError(t.genericError)
+    }
+    setIsGeneratingAiMovieScreenplayBeat(false)
+  }
+
   // Also used as a plain retry (no feedback text) when a beat's status
   // came back "error".
   async function handleRegenerateAiMovieScreenplayBeatClick(beatIndex, feedback) {
@@ -8945,6 +8983,25 @@ function App() {
                                       target={effectiveAiMovieBeatMinutes(beatMeta, beat)}
                                       t={t}
                                     />
+
+                                    {(() => {
+                                      const target = beatMeta?.runtimeMinutes
+                                      const total = (beat.scenes ?? []).reduce((sum, scene) => sum + effectiveAiMovieSceneMinutes(scene), 0)
+                                      if (typeof target !== 'number' || total >= target * 0.9) return null
+                                      return (
+                                        <div className="ai-movie-extend-to-target">
+                                          <button
+                                            type="button"
+                                            className="choose-button"
+                                            onClick={() => handleExtendAiMovieScreenplayBeatClick(viewIndex)}
+                                            disabled={isGeneratingAiMovieScreenplayBeat}
+                                          >
+                                            {isGeneratingAiMovieScreenplayBeat ? t.aiMovieExtendingToTargetLabel : t.aiMovieExtendToTargetButton(target)}
+                                          </button>
+                                          <p className="ai-movie-scene-duration">{t.aiMovieExtendToTargetNote}</p>
+                                        </div>
+                                      )
+                                    })()}
 
                                     {beat.scenes?.map((scene, sceneIndex) => {
                                       const reviseKey = `${viewIndex}-${sceneIndex}`

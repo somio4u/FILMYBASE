@@ -320,6 +320,8 @@ const LABELS = {
     aiMovieScreenplayBeatWritingLabel: "Writing this beat's scenes…",
     aiMovieScreenplayBeatErrorLabel: 'Something went wrong generating this beat.',
     aiMovieScreenplayRetryButton: 'Retry',
+    aiMovieBeatShortNote: 'This beat is shorter than its Beat Sheet time — use "Extend to target" below (it keeps everything already written).',
+    aiMovieBeatLongNote: 'This beat runs longer than its Beat Sheet time — use "Request Changes" on a scene to tighten it.',
     aiMovieDoctorButton: 'Script Doctor',
     aiMovieDoctorRerunButton: 'Run Script Doctor again',
     aiMovieDoctorRunningLabel: 'Reviewing this beat…',
@@ -936,6 +938,8 @@ const LABELS = {
     aiMovieScreenplayBeatWritingLabel: 'ଏହି ବିଟ୍‌ର ଦୃଶ୍ୟ ଲେଖାଯାଉଛି…',
     aiMovieScreenplayBeatErrorLabel: 'ଏହି ବିଟ୍ ତିଆରି କରିବାରେ କିଛି ଭୁଲ ହେଲା।',
     aiMovieScreenplayRetryButton: 'ପୁଣି ଚେଷ୍ଟା କରନ୍ତୁ',
+    aiMovieBeatShortNote: 'ଏହି ବିଟ୍ ବିଟ୍ ସିଟ୍‌ର ସମୟଠାରୁ ଛୋଟ — ତଳେ "ଲକ୍ଷ୍ୟ ପର୍ଯ୍ୟନ୍ତ ବଢ଼ାନ୍ତୁ" ବ୍ୟବହାର କରନ୍ତୁ (ଲେଖାଯାଇଥିବା ସବୁକିଛି ରହିବ)।',
+    aiMovieBeatLongNote: 'ଏହି ବିଟ୍ ବିଟ୍ ସିଟ୍‌ର ସମୟଠାରୁ ଲମ୍ବା — ଛୋଟ କରିବାକୁ ଏକ ଦୃଶ୍ୟରେ "ପରିବର୍ତ୍ତନ ପାଇଁ ଅନୁରୋଧ" ବ୍ୟବହାର କରନ୍ତୁ।',
     aiMovieDoctorButton: 'ସ୍କ୍ରିପ୍ଟ ଡକ୍ଟର',
     aiMovieDoctorRerunButton: 'ସ୍କ୍ରିପ୍ଟ ଡକ୍ଟର ପୁଣି ଚଲାନ୍ତୁ',
     aiMovieDoctorRunningLabel: 'ଏହି ବିଟ୍ ସମୀକ୍ଷା ହେଉଛି…',
@@ -2366,9 +2370,14 @@ function aiMovieSongMinutes(screenplayBeat) {
   return typeof minutes === 'number' && minutes > 0 ? minutes : 0
 }
 
-function RuntimeSummary({ total, target, t }) {
+// `mismatchNote` lets a screen say which tool actually fixes the gap -- the
+// AI Movie screen points to Extend (short) or a scene's Request Changes
+// (long) rather than the generic "Request Changes" advice, which there
+// would regenerate the whole beat and throw its dialogue away.
+function RuntimeSummary({ total, target, t, mismatchNote }) {
   if (typeof total !== 'number' || !target) return null
   const isMismatch = Math.abs(total - target) / target > 0.25
+  const note = typeof mismatchNote === 'function' ? mismatchNote(total < target) : t.runtimeMismatchNote
 
   return (
     <p className={isMismatch ? 'feedback-note' : 'runtime-summary'}>
@@ -2376,7 +2385,7 @@ function RuntimeSummary({ total, target, t }) {
       {isMismatch && (
         <>
           <br />
-          {t.runtimeMismatchNote}
+          {note}
         </>
       )}
     </p>
@@ -9192,6 +9201,7 @@ function App() {
                                       }
                                       target={effectiveAiMovieBeatMinutes(beatMeta, beat)}
                                       t={t}
+                                      mismatchNote={(isShort) => (isShort ? t.aiMovieBeatShortNote : t.aiMovieBeatLongNote)}
                                     />
 
                                     {(() => {

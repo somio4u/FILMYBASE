@@ -349,7 +349,7 @@ const LABELS = {
     aiMovieSongSingersLabel: 'Singers',
     aiMovieSongLyricistBriefLabel: 'Brief for the lyricist',
     aiMovieSongPicturizationLabel: 'How it is filmed',
-    aiMovieSetIntervalButton: 'Interval goes after this beat',
+    aiMovieSetIntervalButton: (minutes) => (minutes ? `Interval goes after this beat (at ${minutes} min)` : 'Interval goes after this beat'),
     aiMovieRemoveIntervalButton: 'Remove interval',
     aiMovieIntervalMarker: '— INTERVAL after this beat —',
     aiMovieScenePurposeLabels: { plot_advancing: 'Plot', character_revealing: 'Character', both: 'Plot + Character' },
@@ -967,7 +967,7 @@ const LABELS = {
     aiMovieSongSingersLabel: 'ଗାୟକ',
     aiMovieSongLyricistBriefLabel: 'ଗୀତିକାରଙ୍କ ପାଇଁ ବ୍ରିଫ୍',
     aiMovieSongPicturizationLabel: 'କିପରି ଚିତ୍ରାୟିତ ହେବ',
-    aiMovieSetIntervalButton: 'ଏହି ବିଟ୍ ପରେ ଇଣ୍ଟରଭାଲ୍',
+    aiMovieSetIntervalButton: (minutes) => (minutes ? `ଏହି ବିଟ୍ ପରେ ଇଣ୍ଟରଭାଲ୍ (${minutes} ମିନିଟ୍ ରେ)` : 'ଏହି ବିଟ୍ ପରେ ଇଣ୍ଟରଭାଲ୍'),
     aiMovieRemoveIntervalButton: 'ଇଣ୍ଟରଭାଲ୍ ହଟାନ୍ତୁ',
     aiMovieIntervalMarker: '— ଏହି ବିଟ୍ ପରେ ଇଣ୍ଟରଭାଲ୍ —',
     aiMovieScenePurposeLabels: { plot_advancing: 'କାହାଣୀ', character_revealing: 'ଚରିତ୍ର', both: 'କାହାଣୀ + ଚରିତ୍ର' },
@@ -1636,6 +1636,24 @@ function splitProjectTitleForSidebar(title) {
 
 // Every client-downloaded file gets the same "when was this generated"
 // stamp the server's own exports use, so a saved project file is dated too.
+// The interval button only appears once the film has run at least this
+// long (the user's call: an interval belongs roughly 50 minutes in, never
+// on Beat 1). Measured with the Beat Sheet's own fixed times, added up to
+// the end of each beat.
+const AI_MOVIE_EARLIEST_INTERVAL_MINUTES = 50
+
+function aiMovieMinutesAtEndOfBeat(beats, beatIndex) {
+  return beats.slice(0, beatIndex + 1).reduce((sum, beat) => sum + (Number(beat?.runtimeMinutes) || 0), 0)
+}
+
+// A Beat Sheet written before beats had times can't be measured, so there
+// the button stays on every beat, as before.
+function aiMovieIntervalAllowedAfterBeat(beats, beatIndex) {
+  if (beatIndex >= beats.length - 1) return false
+  if (!beats.some((beat) => Number(beat?.runtimeMinutes) > 0)) return true
+  return aiMovieMinutesAtEndOfBeat(beats, beatIndex) >= AI_MOVIE_EARLIEST_INTERVAL_MINUTES
+}
+
 function formatExportTimestamp(date = new Date()) {
   const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
   const day = date.getDate()
@@ -9507,14 +9525,14 @@ function App() {
                                         </button>
                                       </div>
                                     ) : (
-                                      viewIndex < beatsPlot.length - 1 && (
+                                      aiMovieIntervalAllowedAfterBeat(beatsPlot, viewIndex) && (
                                         <button
                                           type="button"
                                           className="ai-movie-revise-scene-button"
                                           onClick={() => handleSetAiMovieIntervalClick(viewIndex)}
                                           disabled={isSavingAiMovieInterval}
                                         >
-                                          {t.aiMovieSetIntervalButton}
+                                          {t.aiMovieSetIntervalButton(Math.round(aiMovieMinutesAtEndOfBeat(beatsPlot, viewIndex)) || null)}
                                         </button>
                                       )
                                     )}

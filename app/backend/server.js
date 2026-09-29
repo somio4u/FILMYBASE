@@ -3516,6 +3516,39 @@ async function generateAiMovieSceneDialogue(
   return result.dialogue;
 }
 
+// A beat's "generating" status is only ever meant to be transient, within
+// one continuous background fill loop -- but that loop runs detached from
+// any HTTP request, so a server restart or redeploy while a beat is
+// mid-flight (this app auto-deploys on every push to main) abandons it
+// there permanently: no error, no way to notice, no way to retry, since
+// the buffer-fill logic only ever looks for "not_started" beats and treats
+// "generating" as already-spoken-for. Self-heals by treating any beat
+// that's been sitting in "generating" longer than a real Gemini call
+// (with retries) ever legitimately takes as abandoned, resetting it back
+// to "not_started" so the normal fill logic picks it straight back up.
+// Older data with no generatingSince at all predates this fix entirely and
+// is always treated as abandoned, since a live one would already carry it.
+const AI_MOVIE_STUCK_GENERATING_THRESHOLD_MS = 10 * 60 * 1000;
+
+// Returns the (possibly-unchanged) beats array and whether anything was
+// revived -- the caller uses the returned array directly rather than
+// re-deriving which beats counted as stuck a second time.
+async function reviveStuckAiMovieScreenplayBeats(projectId, screenplayBeats) {
+  const now = Date.now();
+  let anyRevived = false;
+  const revived = screenplayBeats.map((beat) => {
+    if (beat.status !== "generating") return beat;
+    const startedAt = beat.generatingSince ? new Date(beat.generatingSince).getTime() : null;
+    const isStuck = !startedAt || now - startedAt > AI_MOVIE_STUCK_GENERATING_THRESHOLD_MS;
+    if (!isStuck) return beat;
+    anyRevived = true;
+    return { scenes: null, status: "not_started", feedback: null };
+  });
+  if (!anyRevived) return { beats: screenplayBeats, revived: false };
+  await saveAiMovieBackfillField(projectId, "screenplayBeats", revived);
+  return { beats: revived, revived: true };
+}
+
 // Builds the "scenes already written" context text out of every beat before
 // the given index that has scenes yet (regardless of approval status --
 // continuity only cares that a beat came before this one in the draft).
@@ -3543,7 +3576,7 @@ async function generateNextAiMovieScreenplayBeat(projectId) {
   const nextIndex = screenplayBeats.findIndex((b) => b.status === "not_started");
   if (nextIndex === -1) return "no_more";
 
-  screenplayBeats[nextIndex] = { ...screenplayBeats[nextIndex], status: "generating" };
+  screenplayBeats[nextIndex] = { ...screenplayBeats[nextIndex], status: "generating", generatingSince: new Date().toISOString() };
   await saveAiMovieBackfillField(projectId, "screenplayBeats", screenplayBeats);
 
   try {
@@ -3963,6 +3996,19 @@ app.get("/api/ai-movie/projects/:id", requireRole("admin"), async (req, res) => 
     res.status(404).json({ error: "Project not found." });
     return;
   }
+
+  // Self-heal any beat abandoned mid-generation by a server restart before
+  // the response reflects it, so simply opening the project is enough to
+  // get a permanently-stuck beat moving again -- no separate "unstick"
+  // button needed.
+  if (Array.isArray(row.backfill?.screenplayBeats)) {
+    const { beats, revived } = await reviveStuckAiMovieScreenplayBeats(row.id, row.backfill.screenplayBeats);
+    if (revived) {
+      row.backfill = { ...row.backfill, screenplayBeats: beats };
+      fillAiMovieScreenplayBuffer(row.id);
+    }
+  }
+
   res.json({
     id: row.id,
     title: row.title,

@@ -2256,6 +2256,27 @@ function SceneRows({ scenes, t, language, episodeIndex, screenplay }) {
   })
 }
 
+// The character-name line above a dialogue block, exactly as a real
+// screenplay prints it: the name, then (V.O.)/(O.S.) if set, then (CONT'D)
+// when the same character is picking up again after an action line
+// interrupted their speech -- standard format, worked out here rather than
+// asked of the AI.
+function aiMovieDialogueCharacterCue(blocks, blockIndex) {
+  const block = blocks[blockIndex]
+  let cue = block.character ?? ''
+  if (block.extension) cue += ` (${block.extension})`
+  let sawActionBetween = false
+  for (let i = blockIndex - 1; i >= 0; i--) {
+    if (blocks[i].type !== 'dialogue') {
+      sawActionBetween = true
+      continue
+    }
+    if (blocks[i].character === block.character && sawActionBetween) cue += " (CONT'D)"
+    break
+  }
+  return cue
+}
+
 function RuntimeSummary({ total, target, t }) {
   if (typeof total !== 'number' || !target) return null
   const isMismatch = Math.abs(total - target) / target > 0.25
@@ -9027,7 +9048,12 @@ function App() {
                                             scene.content.map((block, blockIndex) =>
                                               block.type === 'dialogue' ? (
                                                 <div key={blockIndex} className="ai-movie-dialogue-line">
-                                                  <p className="ai-movie-dialogue-character">{block.character}</p>
+                                                  <p className="ai-movie-dialogue-character">{aiMovieDialogueCharacterCue(scene.content, blockIndex)}</p>
+                                                  {block.parenthetical?.en && (
+                                                    <p className="ai-movie-dialogue-parenthetical">
+                                                      ({block.parenthetical[aiMovieLanguage] || block.parenthetical.en})
+                                                    </p>
+                                                  )}
                                                   <p>{block.line?.[aiMovieLanguage] ?? block.line?.en ?? ''}</p>
                                                 </div>
                                               ) : (

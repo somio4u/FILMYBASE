@@ -1749,6 +1749,15 @@ button, input, textarea, select {
   text-align: left;
 }
 
+/* Short acting note under the character name, e.g. "(quietly)" -- set in
+   a touch from the name, the way a screenplay indents it. */
+.ai-movie-dialogue-parenthetical {
+  margin: 0 0 2px 12px;
+  font-size: 12px;
+  font-style: italic;
+  color: var(--text-secondary);
+}
+
 .bit-type-badge {
   display: inline-block;
   padding: 1px 8px;

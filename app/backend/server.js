@@ -3342,9 +3342,18 @@ const AI_MOVIE_SCENE_CONTENT_BLOCK_SCHEMA = {
     text: AI_MOVIE_BILINGUAL_TEXT_SCHEMA,
     character: { type: Type.STRING },
     line: AI_MOVIE_BILINGUAL_TEXT_SCHEMA,
+    // Standard screenplay dialogue extras, both optional (see
+    // AI_MOVIE_DIALOGUE_BLOCK_FORMAT_RULE): a short acting note under the
+    // character name, and V.O./O.S. after it.
+    parenthetical: AI_MOVIE_BILINGUAL_TEXT_SCHEMA,
+    extension: { type: Type.STRING, enum: ["V.O.", "O.S."] },
   },
   required: ["type"],
 };
+
+const AI_MOVIE_DIALOGUE_BLOCK_FORMAT_RULE = `DIALOGUE BLOCK EXTRAS (standard screenplay format, both optional on any dialogue block):
+- "parenthetical": a very short acting note shown under the character name — 1 to 4 words, e.g. "quietly", "without looking up", "to Meera" — ONLY when how the line is said isn't already obvious from the line itself. Real scripts use these sparingly: most lines need none. No brackets, just the words; the "hi" version in Hindi.
+- "extension": "V.O." when the voice comes from someone NOT physically in the scene (voiceover, a memory, a voice on a broadcast); "O.S." when the speaker IS in the scene's place but off camera (behind a door, from the next room). The NARRATOR is always "V.O.". Leave it out for everyone speaking on camera.`;
 
 // Only "type" is actually required above (text/character/line all vary by
 // type), so a real Gemini response has come back missing one -- the screen
@@ -3396,11 +3405,28 @@ function normalizeAiMovieSceneFormat(scene) {
   return normalized;
 }
 
+// The parenthetical/extension extras only survive when they're real: an
+// empty parenthetical is dropped, the extension must be exactly V.O./O.S.,
+// and the NARRATOR is forced to V.O. (it's never on screen) whatever the
+// model sent.
+function sanitizeAiMovieDialogueBlock(block) {
+  const character = typeof block.character === "string" ? block.character : "";
+  const cleaned = { type: "dialogue", character, line: ensureAiMovieBilingualText(block.line) };
+  if (typeof block.parenthetical?.en === "string" && block.parenthetical.en.trim()) {
+    const parenthetical = ensureAiMovieBilingualText(block.parenthetical);
+    const unwrap = (text) => text.trim().replace(/^\(\s*/, "").replace(/\s*\)$/, "");
+    cleaned.parenthetical = { en: unwrap(parenthetical.en), hi: unwrap(parenthetical.hi) };
+  }
+  const extension = character.trim().toUpperCase() === "NARRATOR" ? "V.O." : block.extension;
+  if (extension === "V.O." || extension === "O.S.") cleaned.extension = extension;
+  return cleaned;
+}
+
 function sanitizeAiMovieContentBlocks(blocks) {
   if (!Array.isArray(blocks)) return blocks;
   return blocks.map((block) =>
     block?.type === "dialogue"
-      ? { type: "dialogue", character: typeof block.character === "string" ? block.character : "", line: ensureAiMovieBilingualText(block.line) }
+      ? sanitizeAiMovieDialogueBlock(block)
       : { type: "action", text: ensureAiMovieBilingualText(block.text) }
   );
 }
@@ -3413,7 +3439,11 @@ function sceneToPromptText(scene) {
   const heading = scene.sceneHeading?.en ?? "";
   if (Array.isArray(scene.content) && scene.content.length > 0) {
     const body = scene.content
-      .map((block) => (block.type === "dialogue" ? `${block.character}\n${block.line?.en ?? ""}` : block.text?.en ?? ""))
+      .map((block) =>
+        block.type === "dialogue"
+          ? `${block.character}${block.extension ? ` (${block.extension})` : ""}\n${block.parenthetical?.en ? `(${block.parenthetical.en})\n` : ""}${block.line?.en ?? ""}`
+          : block.text?.en ?? ""
+      )
       .join("\n\n");
     return `${heading}\n${body}`;
   }
@@ -3440,6 +3470,7 @@ function sceneToPromptText(scene) {
 const AI_MOVIE_LINES_PER_PAGE = 55;
 const AI_MOVIE_ACTION_CHARS_PER_LINE = 60;
 const AI_MOVIE_DIALOGUE_CHARS_PER_LINE = 35;
+const AI_MOVIE_PARENTHETICAL_CHARS_PER_LINE = 25;
 
 // How many printed lines this text takes when wrapped at `width`
 // characters, one paragraph per line break -- whole words only, like a
@@ -3470,13 +3501,15 @@ function countAiMovieScenePageLines(scene) {
     const n = countAiMovieWrappedLines(text, AI_MOVIE_ACTION_CHARS_PER_LINE);
     if (n > 0) lines += n + 1;
   };
-  const addDialogue = (text) => {
-    // Character name line + the wrapped line itself + a blank line.
-    lines += 1 + Math.max(1, countAiMovieWrappedLines(text, AI_MOVIE_DIALOGUE_CHARS_PER_LINE)) + 1;
+  const addDialogue = (text, parenthetical) => {
+    // Character name line + an optional parenthetical (its own narrower
+    // ~25-character column) + the wrapped line itself + a blank line.
+    const parentheticalLines = parenthetical ? countAiMovieWrappedLines(`(${parenthetical})`, AI_MOVIE_PARENTHETICAL_CHARS_PER_LINE) : 0;
+    lines += 1 + parentheticalLines + Math.max(1, countAiMovieWrappedLines(text, AI_MOVIE_DIALOGUE_CHARS_PER_LINE)) + 1;
   };
   if (Array.isArray(scene.content) && scene.content.length > 0) {
     for (const block of scene.content) {
-      if (block.type === "dialogue") addDialogue(block.line?.en);
+      if (block.type === "dialogue") addDialogue(block.line?.en, block.parenthetical?.en);
       else addAction(block.text?.en);
     }
   } else {
@@ -3900,7 +3933,9 @@ By default, still write plain action only in the "action" field, no dialogue —
 
 ${AI_MOVIE_SCREEN_ONLY_RULE}
 
-${AI_MOVIE_HEADING_AND_NAMES_RULE}`;
+${AI_MOVIE_HEADING_AND_NAMES_RULE}
+
+${AI_MOVIE_DIALOGUE_BLOCK_FORMAT_RULE}`;
 
 async function generateAiMovieScreenplaySceneRevision(
   priorContextText,
@@ -3998,6 +4033,8 @@ The "characters" field, and every "hi" field in every block above, still needs i
 ${AI_MOVIE_SCREEN_ONLY_RULE}
 
 ${AI_MOVIE_HEADING_AND_NAMES_RULE}
+
+${AI_MOVIE_DIALOGUE_BLOCK_FORMAT_RULE}
 Also: this is the pass where speech gets written, so any speech the original action only DESCRIBES ("he asks for more information", "she pleads with him", "they argue") must become real dialogue lines in your output — never leave a spoken moment as a description, unless it is genuinely inaudible (background murmuring). And every character you list as present must visibly DO something in the scene (an action, a reaction, or a line) — otherwise leave them out of the list.`;
 
 async function generateAiMovieSceneDialogue(

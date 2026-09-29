@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&family=Courier+Prime:ital,wght@0,400;0,700;1,400&family=Noto+Sans+Devanagari:wght@400;600&display=swap');
 
 :root {
   --bg-app: #131314;
@@ -4514,4 +4514,217 @@ button, input, textarea, select {
 .floating-agent-download {
   text-align: center;
   text-decoration: none;
+}
+
+
+/* ============================================================
+   Screenplay page -- the centre of the AI Movie Screenplay stage,
+   laid out like Final Draft / StudioBinder: a paper page in a
+   typewriter font, measured in characters (Courier is 10 characters
+   per inch, so 1in = 10ch) the same way the PDF export is.
+   Action runs the full 6in text width; the character name sits at
+   2.2in in from the action, the acting note at 1.6in, the dialogue
+   column at 1in, 3.5in wide; transitions on the right. Two page
+   colours -- white paper or black -- like Final Draft's backdrops.
+   ============================================================ */
+.script-page {
+  --script-paper: #ffffff;
+  --script-ink: #141414;
+  --script-ink-soft: #6b6b6b;
+  --script-rule: rgba(0, 0, 0, 0.08);
+  --script-shadow: 0 1px 2px rgba(0, 0, 0, 0.35), 0 18px 48px rgba(0, 0, 0, 0.45);
+  position: relative;
+  box-sizing: border-box;
+  width: 100%;
+  max-width: calc(60ch + 25ch);
+  margin: 16px auto 8px;
+  padding: 8ch 10ch 8ch 15ch;
+  background: var(--script-paper);
+  color: var(--script-ink);
+  border-radius: 3px;
+  box-shadow: var(--script-shadow);
+  font-family: 'Courier Prime', 'Courier New', Courier, 'Noto Sans Devanagari', monospace;
+  font-size: 15px;
+  line-height: 1.5;
+  text-align: left;
+  transition: background-color 0.45s var(--ease-spring), color 0.45s var(--ease-spring), box-shadow 0.45s var(--ease-spring);
+}
+
+.script-page-dark {
+  --script-paper: #151517;
+  --script-ink: #e9e7e2;
+  --script-ink-soft: #8d8b86;
+  --script-rule: rgba(255, 255, 255, 0.08);
+  --script-shadow: 0 0 0 1px rgba(255, 255, 255, 0.06), 0 18px 48px rgba(0, 0, 0, 0.6);
+}
+
+.script-page p {
+  margin: 0;
+  color: var(--script-ink);
+}
+
+.script-scene {
+  position: relative;
+  padding-bottom: 2.2em;
+}
+
+.script-scene + .script-scene {
+  padding-top: 0.5em;
+}
+
+/* Scene heading, bold capitals, with the running scene number in both
+   margins, as a shooting script prints it. */
+.script-page .script-slug {
+  position: relative;
+  font-weight: 700;
+  text-transform: uppercase;
+  margin-bottom: 0.4em;
+}
+
+.script-scene-number {
+  position: absolute;
+  top: 0;
+  font-weight: 700;
+}
+
+.script-scene-number-left {
+  left: -8ch;
+}
+
+.script-scene-number-right {
+  right: -6ch;
+}
+
+/* Duration / roster / scene card -- working notes, not part of the
+   script, so they're small, quiet, and set in the app's own font. */
+.script-scene-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  margin: 0 0 1em;
+  font-family: var(--font-body, 'Inter', sans-serif);
+  font-size: 11.5px;
+  line-height: 1.4;
+  color: var(--script-ink-soft);
+}
+
+.script-page .script-action {
+  margin: 0 0 1em;
+  white-space: pre-wrap;
+}
+
+.script-dialogue {
+  margin: 0 0 1em;
+}
+
+.script-page .script-character {
+  margin-left: 22ch;
+  text-transform: uppercase;
+}
+
+.script-page .script-parenthetical {
+  margin-left: 16ch;
+  max-width: 25ch;
+}
+
+.script-page .script-line {
+  margin-left: 10ch;
+  max-width: 35ch;
+}
+
+.script-page .script-transition {
+  margin: 0 0 1em;
+  text-align: right;
+  text-transform: uppercase;
+}
+
+/* The scene's buttons sit on the page but stay out of the way until the
+   scene is pointed at (side panels come in the next step). */
+.script-scene-tools {
+  font-family: var(--font-body, 'Inter', sans-serif);
+  opacity: 0.55;
+  transition: opacity 0.25s ease;
+}
+
+.script-scene:hover .script-scene-tools,
+.script-scene-tools:focus-within {
+  opacity: 1;
+}
+
+.script-page .script-scene-tools p {
+  color: inherit;
+}
+
+.script-page-light .script-scene-tools .cancel-button {
+  color: #3b3b3b;
+  border-color: rgba(0, 0, 0, 0.2);
+  background: transparent;
+}
+
+.script-page-light .script-scene-tools .feedback-textarea {
+  background: #f6f5f2;
+  color: #141414;
+  border-color: rgba(0, 0, 0, 0.15);
+}
+
+/* Light / Dark page switch above the page. */
+.script-theme-switch {
+  display: inline-flex;
+  margin: 14px auto 0;
+  padding: 3px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 999px;
+  background: var(--bg-surface);
+}
+
+.script-theme-option {
+  padding: 5px 14px;
+  border: none;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 12px;
+  cursor: pointer;
+  transition: background-color 0.3s var(--ease-spring), color 0.3s var(--ease-spring);
+}
+
+.script-theme-option.is-active {
+  background: var(--accent-gradient-soft);
+  color: var(--text-primary);
+}
+
+/* The Screenplay stage uses the empty space either side of the 720px
+   column (the user's ask): it widens out to up to 1040px, still centred
+   on the same column, leaving room for the sidebar. */
+#ai-movie-stage-screenplay {
+  position: relative;
+  left: 50%;
+  width: min(1040px, calc(100vw - 340px));
+  transform: translateX(-50%);
+  box-sizing: border-box;
+}
+
+@media (max-width: 768px) {
+  #ai-movie-stage-screenplay {
+    width: calc(100vw - 32px);
+  }
+}
+
+/* The page measures the space it really has (not the screen): when
+   there isn't room for a full-size page, the margins and the dialogue
+   columns shrink together, so it still reads like a script. */
+.ai-movie-screenplay-current-card {
+  container-type: inline-size;
+}
+
+@container (max-width: 760px) {
+  .script-page {
+    padding: 5ch 4ch 5ch 6ch;
+    font-size: 13px;
+  }
+  .script-scene-number-left { left: -5ch; }
+  .script-scene-number-right { display: none; }
+  .script-page .script-character { margin-left: 12ch; }
+  .script-page .script-parenthetical { margin-left: 8ch; }
+  .script-page .script-line { margin-left: 5ch; }
 }

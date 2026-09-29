@@ -371,6 +371,9 @@ const LABELS = {
     aiMovieDialogueCancelButton: 'Cancel',
     aiMovieDialoguePlaceholder: 'Optional — any direction for the dialogue, e.g. "make this a tense argument" (leave blank to let the AI decide)',
     aiMovieBeatNarrationButton: 'Narration for this whole beat',
+    scriptThemeLabel: 'Page colour',
+    scriptThemeLight: '☀ Light',
+    scriptThemeDark: '☾ Dark',
     aiMovieBeatNarrationNote: 'Writes one continuous narrator voice-over that flows across every scene of this beat, in order. Dialogue already written is kept.',
     aiMovieBeatNarrationPlaceholder: 'Describe the narration for this beat, e.g. "Narrator explains how war and pollution emptied Earth, people left for colonies, and only the gods and temples remained."',
     aiMovieBeatNarrationSubmitButton: 'Write Narration',
@@ -996,6 +999,9 @@ const LABELS = {
     aiMovieDialogueCancelButton: 'ବାତିଲ୍',
     aiMovieDialoguePlaceholder: 'ଇଚ୍ଛାଧୀନ — ସଂଳାପ ପାଇଁ କୌଣସି ନିର୍ଦ୍ଦେଶ, ଯଥା "ଏହାକୁ ଏକ ଉତ୍ତେଜନାପୂର୍ଣ୍ଣ ବିବାଦ କରନ୍ତୁ" (ଖାଲି ଛାଡ଼ିଲେ AI ନିଜେ ନିଷ୍ପତ୍ତି ନେବ)',
     aiMovieBeatNarrationButton: 'ଏହି ସମ୍ପୂର୍ଣ୍ଣ ବିଟ୍ ପାଇଁ ବର୍ଣ୍ଣନା',
+    scriptThemeLabel: 'ପୃଷ୍ଠାର ରଙ୍ଗ',
+    scriptThemeLight: '☀ ହାଲୁକା',
+    scriptThemeDark: '☾ ଗାଢ଼',
     aiMovieBeatNarrationNote: 'ଏହି ବିଟ୍‌ର ସମସ୍ତ ଦୃଶ୍ୟ ଦେଇ କ୍ରମରେ ବହୁଥିବା ଗୋଟିଏ ନିରନ୍ତର ବର୍ଣ୍ଣନାକାରୀ ଭଏସ୍-ଓଭର ଲେଖେ। ପୂର୍ବରୁ ଲେଖାଯାଇଥିବା ସଂଳାପ ରହିଯାଏ।',
     aiMovieBeatNarrationPlaceholder: 'ଏହି ବିଟ୍ ପାଇଁ ବର୍ଣ୍ଣନା ବିଷୟରେ ଲେଖନ୍ତୁ, ଯଥା "ଯୁଦ୍ଧ ଓ ପ୍ରଦୂଷଣ କିପରି ପୃଥିବୀକୁ ଖାଲି କଲା, ଏବଂ କେବଳ ଭଗବାନ ଓ ମନ୍ଦିର ରହିଗଲେ, ବର୍ଣ୍ଣନାକାରୀ କହନ୍ତି।"',
     aiMovieBeatNarrationSubmitButton: 'ବର୍ଣ୍ଣନା ଲେଖନ୍ତୁ',
@@ -4508,6 +4514,23 @@ function App() {
   // whole Screenplay section, so a failed request looked like "nothing
   // happens".
   const [aiMovieDialogueError, setAiMovieDialogueError] = useState(null)
+  // Screenplay page colour -- white paper or black, like Final Draft's two
+  // backdrops (the user's call). Remembered in this browser only.
+  const [scriptTheme, setScriptTheme] = useState(() => {
+    try {
+      return localStorage.getItem('scriptTheme') === 'dark' ? 'dark' : 'light'
+    } catch {
+      return 'light'
+    }
+  })
+  function changeScriptTheme(mode) {
+    setScriptTheme(mode)
+    try {
+      localStorage.setItem('scriptTheme', mode)
+    } catch {
+      // Private window or blocked storage: the switch still works for this visit.
+    }
+  }
   // Beat-wide narration: which beat's box is open, its text, progress
   // ({ scene, total }) while it runs, and any error.
   const [aiMovieNarrationBeatIndex, setAiMovieNarrationBeatIndex] = useState(null)
@@ -9367,58 +9390,75 @@ function App() {
                                       </div>
                                     )}
 
+                                    {Array.isArray(beat.scenes) && beat.scenes.length > 0 && (
+                                      <div className="script-theme-switch" role="group" aria-label={t.scriptThemeLabel}>
+                                        {['light', 'dark'].map((mode) => (
+                                          <button
+                                            key={mode}
+                                            type="button"
+                                            className={`script-theme-option${scriptTheme === mode ? ' is-active' : ''}`}
+                                            onClick={() => changeScriptTheme(mode)}
+                                          >
+                                            {mode === 'light' ? t.scriptThemeLight : t.scriptThemeDark}
+                                          </button>
+                                        ))}
+                                      </div>
+                                    )}
+
+                                    <div className={`script-page script-page-${scriptTheme}`}>
                                     {beat.scenes?.map((scene, sceneIndex) => {
                                       const reviseKey = `${viewIndex}-${sceneIndex}`
                                       const isReviseFormOpen = aiMovieRevisingSceneIndex === reviseKey
                                       return (
-                                        <div key={sceneIndex} className="bit-row">
-                                          <p className="bit-heading">
-                                            {sceneNumberOffset + sceneIndex + 1}. {scene.sceneHeading?.[aiMovieLanguage] ?? scene.sceneHeading?.en ?? ''}
+                                        <div key={sceneIndex} className="script-scene">
+                                          <p className="script-slug">
+                                            <span className="script-scene-number script-scene-number-left">{sceneNumberOffset + sceneIndex + 1}</span>
+                                            {scene.sceneHeading?.[aiMovieLanguage] ?? scene.sceneHeading?.en ?? ''}
+                                            <span className="script-scene-number script-scene-number-right">{sceneNumberOffset + sceneIndex + 1}</span>
                                           </p>
-                                          <p className="ai-movie-scene-duration">
-                                            {t.aiMovieSceneDurationLabel(effectiveAiMovieSceneMinutes(scene))}
-                                          </p>
-                                          {scene.characters?.[aiMovieLanguage] && (
-                                            <p className="ai-movie-scene-characters">{scene.characters[aiMovieLanguage]}</p>
-                                          )}
-                                          {scene.card && (
-                                            <p className="ai-movie-scene-card">
-                                              {t.aiMovieScenePurposeLabels[scene.card.purpose] ?? scene.card.purpose}
-                                              {' · '}
-                                              {scene.card.emotion?.[aiMovieLanguage] || scene.card.emotion?.en} {scene.card.intensity}/10
-                                              {' · '}
-                                              {scene.card.turn?.[aiMovieLanguage] || scene.card.turn?.en}
-                                            </p>
-                                          )}
+                                          <div className="script-scene-meta">
+                                            <span>{t.aiMovieSceneDurationLabel(effectiveAiMovieSceneMinutes(scene))}</span>
+                                            {scene.characters?.[aiMovieLanguage] && <span>{scene.characters[aiMovieLanguage]}</span>}
+                                            {scene.card && (
+                                              <span>
+                                                {t.aiMovieScenePurposeLabels[scene.card.purpose] ?? scene.card.purpose}
+                                                {' · '}
+                                                {scene.card.emotion?.[aiMovieLanguage] || scene.card.emotion?.en} {scene.card.intensity}/10
+                                                {' · '}
+                                                {scene.card.turn?.[aiMovieLanguage] || scene.card.turn?.en}
+                                              </span>
+                                            )}
+                                          </div>
                                           {Array.isArray(scene.content) && scene.content.length > 0 ? (
                                             scene.content.map((block, blockIndex) =>
                                               block.type === 'dialogue' ? (
-                                                <div key={blockIndex} className="ai-movie-dialogue-line">
-                                                  <p className="ai-movie-dialogue-character">{aiMovieDialogueCharacterCue(scene.content, blockIndex)}</p>
+                                                <div key={blockIndex} className="script-dialogue">
+                                                  <p className="script-character">{aiMovieDialogueCharacterCue(scene.content, blockIndex)}</p>
                                                   {block.parenthetical?.en && (
-                                                    <p className="ai-movie-dialogue-parenthetical">
+                                                    <p className="script-parenthetical">
                                                       ({block.parenthetical[aiMovieLanguage] || block.parenthetical.en})
                                                     </p>
                                                   )}
-                                                  <p>{block.line?.[aiMovieLanguage] ?? block.line?.en ?? ''}</p>
+                                                  <p className="script-line">{block.line?.[aiMovieLanguage] ?? block.line?.en ?? ''}</p>
                                                 </div>
                                               ) : block.type === 'transition' ? (
-                                                <p key={blockIndex} className="ai-movie-transition">{block.transition}</p>
+                                                <p key={blockIndex} className="script-transition">{block.transition}</p>
                                               ) : (
-                                                <p key={blockIndex}>{block.text?.[aiMovieLanguage] ?? block.text?.en ?? ''}</p>
+                                                <p key={blockIndex} className="script-action">{block.text?.[aiMovieLanguage] ?? block.text?.en ?? ''}</p>
                                               )
                                             )
                                           ) : (
                                             <>
-                                              <p>{scene.action?.[aiMovieLanguage] ?? scene.action?.en ?? ''}</p>
+                                              <p className="script-action">{scene.action?.[aiMovieLanguage] ?? scene.action?.en ?? ''}</p>
                                               {Array.isArray(scene.dialogue) && scene.dialogue.map((line, lineIndex) => (
-                                                <div key={lineIndex} className="ai-movie-dialogue-line">
-                                                  <p className="ai-movie-dialogue-character">{line.character}</p>
-                                                  <p>{line.line?.[aiMovieLanguage] ?? line.line?.en ?? ''}</p>
+                                                <div key={lineIndex} className="script-dialogue">
+                                                  <p className="script-character">{line.character}</p>
+                                                  <p className="script-line">{line.line?.[aiMovieLanguage] ?? line.line?.en ?? ''}</p>
                                                 </div>
                                               ))}
                                             </>
                                           )}
+                                          <div className="script-scene-tools">
                                           <button
                                             type="button"
                                             className="cancel-button ai-movie-revise-scene-button"
@@ -9502,9 +9542,11 @@ function App() {
                                               </>
                                             )
                                           })()}
+                                          </div>
                                         </div>
                                       )
                                     })}
+                                    </div>
 
                                     {/* Song beats (the Beat Sheet says "song") get a song sheet:
                                         everything except the lyrics, which a real lyricist writes. */}

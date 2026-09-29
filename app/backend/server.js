@@ -3608,7 +3608,7 @@ async function fillAiMovieScreenplayBeatToTarget(
         .filter((_, j) => j !== i)
         .map((s) => sceneToPromptText(s))
         .join("\n\n");
-      const content = await generateAiMovieSceneDialogue(
+      const { characters, content } = await generateAiMovieSceneDialogue(
         priorContextText,
         referenceMaterialText,
         scenesSoFarText,
@@ -3624,7 +3624,7 @@ async function fillAiMovieScreenplayBeatToTarget(
       if (Array.isArray(content) && content.some((block) => block.type === "dialogue")) {
         currentScenes = currentScenes.map((s, j) => {
           if (j !== i) return s;
-          const updated = { ...s, content };
+          const updated = { ...s, content, characters };
           return { ...updated, estimatedMinutes: computeAiMovieSceneMinutes(updated) };
         });
       }
@@ -3776,15 +3776,29 @@ async function generateAiMovieScreenplaySceneRevision(
 // the earlier dialogue-free Screenplay generation stage stay exactly as
 // they were, still writing clean, neutral prose; this natural/colloquial
 // treatment is deliberately NOT applied there.
+//
+// This is also the ONE place given a full cinematic-craft addendum (camera
+// direction, held reactions, object symbolism, subtext, a decisive closing
+// beat, and a character roster line) -- again deliberately scoped to only
+// this final pass, at the user's own explicit direction, not the earlier
+// dialogue-free Screenplay generation stage.
 const AI_MOVIE_SCENE_DIALOGUE_SYSTEM_PROMPT = `You are working on an AI Movie — a film that will be entirely AI-generated, never physically shot. Because of that, never reason about budget, cast/crew/location availability, shoot schedules, or any real-world production constraint — anything that can be imagined can be included, with no limitation.
 
-You are given the story's already-approved, locked layers below (including full Characters), every screenplay scene already written in earlier beats, and the current beat's own other scenes (fixed context — do not touch them, only the one scene named at the end). Break this ONE scene's existing action description into an ORDERED sequence of blocks — action and dialogue interleaved exactly as they naturally occur (a bit of action, then a line, more action, a reply, and so on) — matching how a real screenplay actually reads, never a block of action followed by a separate stack of dialogue. IF NO INSTRUCTION IS GIVEN BELOW, decide honestly whether this scene genuinely needs spoken dialogue at all: many purely visual, physical, or transitional scenes are complete with NO dialogue — if that's true here, return the scene as a single "action" block containing its full original text, unchanged, rather than inventing lines just to fill the space. Preserve every bit of the scene's existing substance — never remove, shorten, or invent new plot content; you are only re-splitting the SAME action text around the dialogue you insert, never rewriting what happens.
+You are given the story's already-approved, locked layers below (including full Characters), every screenplay scene already written in earlier beats, and the current beat's own other scenes (fixed context — do not touch them, only the one scene named at the end). Break this ONE scene's existing action description into an ORDERED sequence of blocks — action and dialogue interleaved exactly as they naturally occur (a bit of action, then a line, more action, a reply, and so on) — matching how a real screenplay actually reads, never a block of action followed by a separate stack of dialogue. IF NO INSTRUCTION IS GIVEN BELOW, decide honestly whether this scene genuinely needs spoken dialogue at all: many purely visual, physical, or transitional scenes are complete with NO dialogue — if that's true here, return the scene as a single "action" block containing its full original text, unchanged, rather than inventing lines just to fill the space. Preserve everything that actually HAPPENS in the scene — the real plot, who does what — never remove or invent new plot events. You may, however, enrich HOW it's shown (see the cinematic craft below): that's shaping the same events, not changing them.
 
 IMPORTANT EXCEPTION: that freedom to decide "no dialogue needed" and hand the scene back unchanged applies ONLY when no instruction is given below. The instant an instruction IS given, it is a direct request from the user that you MUST fulfill — never fall back to "this scene doesn't need dialogue" or return the scene unchanged just because it's not what you'd have chosen on your own. Whatever the instruction asks for (a specific line, a topic to cover, narration, the narrator, more/different dialogue), make it actually appear in your output.
 
 A NARRATOR is also always available for every scene, on top of whoever is in the Characters layer — it is NOT one of the story's characters, so never look for it there or hold back for lack of an established personality for it. Use it for narration/voiceover: setting up the past, present, or future, bridging elapsed time, or framing the emotional weight of a moment — whenever the scene's own action genuinely calls for that kind of voiceover, or (per the exception above, this is mandatory, not optional) whenever the instruction given below asks for the narrator or for backstory/context to be explained. Write its lines exactly like any other dialogue block, using the exact character name "NARRATOR". The narrator's voice is fixed and consistent across every scene: very simple, direct, everyday language (never literary or ornate); empathetic, on the audience's side; spoken with a strong, confident conviction; and unafraid of a little blunt, hard-hitting phrasing when the moment earns it. With no instruction given, only use it when a voiceover genuinely belongs — most such scenes still need no narrator at all, exactly like most scenes need no dialogue.
 
-This is the FINAL on-screen text the audience actually hears, so both the dialogue lines AND the action text in your output must sound like real, natural, everyday speech and prose — NEVER formal, textbook, or dictionary-correct language, in either English or Hindi. For the Hindi field specifically, this means a genuine SCRIPT SWITCH, not a translation and not a transliteration: for an everyday English word a real bilingual speaker would just say in English (payment, delivery, order, deal, phone, message, and so on), write that exact word in LATIN LETTERS, sitting inside the otherwise-Devanagari sentence — do NOT translate it into its formal Hindi equivalent, and do NOT spell it out phonetically in Devanagari either. Concretely, for "payment": "payment कब होगा?" is CORRECT; "भुगतान कब होगा?" is WRONG (that's a translation); "पेमेंट कब होगा?" is ALSO WRONG (that's a Devanagari transliteration, not English) — only actual Latin-script "payment" is right. Same logic for "delivery": "delivery होते ही" is correct, "डिलीवरी होते ही" is wrong. Do this naturally and often wherever the scene's own vocabulary calls for it — every scene with dialogue should have real Latin-script English words genuinely embedded mid-sentence like this, not zero — while the surrounding grammar, verbs, and connecting words stay in Devanagari Hindi. Beyond that script-mixing, also prefer direct, casual, specific phrasing over generic formal phrasing, and ground lines in the scene's own concrete details rather than vague generic dialogue. When dialogue is warranted, write it tight and naturalistic — never expository ("as you know…") or overwritten — consistent with each speaking character's established personality, wants, and voice from the Characters layer above (or, for the narrator, the fixed NARRATOR voice described above), and use each character's name exactly as it appears in that layer — except the narrator, whose name is always exactly "NARRATOR".`;
+This is the FINAL on-screen text the audience actually hears, so both the dialogue lines AND the action text in your output must sound like real, natural, everyday speech and prose — NEVER formal, textbook, or dictionary-correct language, in either English or Hindi. For the Hindi field specifically, this means a genuine SCRIPT SWITCH, not a translation and not a transliteration: for an everyday English word a real bilingual speaker would just say in English (payment, delivery, order, deal, phone, message, and so on), write that exact word in LATIN LETTERS, sitting inside the otherwise-Devanagari sentence — do NOT translate it into its formal Hindi equivalent, and do NOT spell it out phonetically in Devanagari either. Concretely, for "payment": "payment कब होगा?" is CORRECT; "भुगतान कब होगा?" is WRONG (that's a translation); "पेमेंट कब होगा?" is ALSO WRONG (that's a Devanagari transliteration, not English) — only actual Latin-script "payment" is right. Same logic for "delivery": "delivery होते ही" is correct, "डिलीवरी होते ही" is wrong. Do this naturally and often wherever the scene's own vocabulary calls for it — every scene with dialogue should have real Latin-script English words genuinely embedded mid-sentence like this, not zero — while the surrounding grammar, verbs, and connecting words stay in Devanagari Hindi. Beyond that script-mixing, also prefer direct, casual, specific phrasing over generic formal phrasing, and ground lines in the scene's own concrete details rather than vague generic dialogue. When dialogue is warranted, write it tight and naturalistic — never expository ("as you know…") or overwritten — consistent with each speaking character's established personality, wants, and voice from the Characters layer above (or, for the narrator, the fixed NARRATOR voice described above), and use each character's name exactly as it appears in that layer — except the narrator, whose name is always exactly "NARRATOR".
+
+This pass also gives the scene its final cinematic shape, on top of the dialogue itself:
+- Character roster: also return "characters" — one line naming every character present in this scene, plus a short note on any background presence (e.g. "RUDRA, OM, plus a dozen temple worshippers in the background"). Names only, no new plot detail.
+- Camera direction: within the action blocks, reach for real screenplay camera-directive language where it earns its place — TIGHT CLOSE-UP ON, SLOW DOLLY IN ON, CAMERA HOLDS ON, FOCUS SHIFTS TO, CUT TO:, SHARP CUT TO: — guiding the reader's eye like an actual shot list, not just descriptive prose.
+- The held reaction: don't always cut to whoever's speaking or moving — sometimes the stronger choice is to hold on a silent face while everything else happens around or off-screen from them (a swallowed sob, a blank stare, a tightening jaw). Use it where the moment earns it, not in every scene.
+- Object symbolism: let tension or stillness show up in a tangible nearby detail (drifting smoke, spilled water, fallen ash, torn cloth) as well as in a face.
+- Subtext: let lines carry what a character is concealing, not only what they say outright — warm on the surface, colder underneath, when the story calls for it. Dead air (a character who deliberately doesn't answer) is a valid, often stronger choice than a line.
+- The button: end the scene on a decisive beat — a loaded look, an unanswered question, FREEZE FRAME:, or SHARP CUT TO: — never let it just trail off.`;
 
 async function generateAiMovieSceneDialogue(
   priorContextText,
@@ -3823,13 +3837,14 @@ async function generateAiMovieSceneDialogue(
       responseSchema: {
         type: Type.OBJECT,
         properties: {
+          characters: AI_MOVIE_BILINGUAL_TEXT_SCHEMA,
           content: { type: Type.ARRAY, items: AI_MOVIE_SCENE_CONTENT_BLOCK_SCHEMA, minItems: "1" },
         },
-        required: ["content"],
+        required: ["characters", "content"],
       },
     },
   });
-  return result.content;
+  return { characters: result.characters, content: result.content };
 }
 
 // A beat's "generating" status is only ever meant to be transient, within
@@ -4250,7 +4265,7 @@ app.post("/api/ai-movie/stages/screenplay/beats/:beatIndex/scenes/:sceneIndex/di
     const targetSceneText = sceneToPromptText(targetScene);
     const characterDialogueBriefsText = aiMovieCharacterDialogueBriefsText(project.backfill);
 
-    const content = await generateAiMovieSceneDialogue(
+    const { characters, content } = await generateAiMovieSceneDialogue(
       priorContextText,
       referenceMaterialText,
       scenesSoFarText,
@@ -4269,13 +4284,13 @@ app.post("/api/ai-movie/stages/screenplay/beats/:beatIndex/scenes/:sceneIndex/di
     const newScenes = latestScenes.map((s, i) => {
       if (i !== sceneIndex) return s;
       const { dialogue: _legacyDialogue, ...rest } = s;
-      const updated = { ...rest, content };
+      const updated = { ...rest, content, characters };
       return { ...updated, estimatedMinutes: computeAiMovieSceneMinutes(updated) };
     });
     latestBeats[beatIndex] = { ...latestBeats[beatIndex], scenes: newScenes };
     await saveAiMovieBackfillField(projectId, "screenplayBeats", latestBeats);
 
-    res.json({ beatIndex, sceneIndex, content });
+    res.json({ beatIndex, sceneIndex, content, characters });
   } catch (error) {
     console.error(`Screenplay beat ${beatIndex} scene ${sceneIndex} dialogue failed:`, error.message);
     res.status(502).json({ error: error.message });

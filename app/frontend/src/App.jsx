@@ -5550,7 +5550,7 @@ function App() {
           const beats = [...(prev?.screenplayBeats ?? [])]
           const existing = beats[beatIndex]
           if (!existing) return prev ?? {}
-          const scenes = existing.scenes.map((s, i) => (i === sceneIndex ? { ...s, content: data.content } : s))
+          const scenes = existing.scenes.map((s, i) => (i === sceneIndex ? { ...s, content: data.content, characters: data.characters } : s))
           beats[beatIndex] = { ...existing, scenes }
           return { ...(prev ?? {}), screenplayBeats: beats }
         })
@@ -8959,6 +8959,9 @@ function App() {
                                           <p className="ai-movie-scene-duration">
                                             {t.aiMovieSceneDurationLabel(effectiveAiMovieSceneMinutes(scene))}
                                           </p>
+                                          {scene.characters?.[aiMovieLanguage] && (
+                                            <p className="ai-movie-scene-characters">{scene.characters[aiMovieLanguage]}</p>
+                                          )}
                                           {Array.isArray(scene.content) && scene.content.length > 0 ? (
                                             scene.content.map((block, blockIndex) =>
                                               block.type === 'dialogue' ? (

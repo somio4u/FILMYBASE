@@ -3071,7 +3071,11 @@ function flattenAiMovieContentForExtraction(pastedText, backfill) {
   if (backfill?.screenplayBeats) {
     const scenes = backfill.screenplayBeats.filter((b) => b.scenes).flatMap((b) => b.scenes);
     if (scenes.length > 0) {
-      parts.push(`Screenplay:\n${scenes.map((scene) => `${scene.sceneHeading.en}\n${scene.action.en}`).join("\n\n")}`);
+      // sceneToPromptText, not a direct scene.action read -- a scene revised
+      // into interleaved action/dialogue "content" has no "action" field at
+      // all, and reading .en off of it broke every later AI call on the
+      // project with "Cannot read properties of undefined (reading 'en')".
+      parts.push(`Screenplay:\n${scenes.map((scene) => sceneToPromptText(scene)).join("\n\n")}`);
     }
   }
   return parts.join("\n\n");
@@ -3332,18 +3336,18 @@ function sanitizeAiMovieContentBlocks(blocks) {
 // action/dialogue "content" blocks, or older data saved with the earlier
 // separate flat "dialogue" list (still readable, just not re-split).
 function sceneToPromptText(scene) {
-  const heading = scene.sceneHeading.en;
+  const heading = scene.sceneHeading?.en ?? "";
   if (Array.isArray(scene.content) && scene.content.length > 0) {
     const body = scene.content
-      .map((block) => (block.type === "dialogue" ? `${block.character}\n${block.line.en}` : block.text.en))
+      .map((block) => (block.type === "dialogue" ? `${block.character}\n${block.line?.en ?? ""}` : block.text?.en ?? ""))
       .join("\n\n");
     return `${heading}\n${body}`;
   }
   const legacyDialogueBlock =
     Array.isArray(scene.dialogue) && scene.dialogue.length > 0
-      ? `\n\n${scene.dialogue.map((d) => `${d.character}\n${d.line.en}`).join("\n\n")}`
+      ? `\n\n${scene.dialogue.map((d) => `${d.character}\n${d.line?.en ?? ""}`).join("\n\n")}`
       : "";
-  return `${heading}\n${scene.action.en}${legacyDialogueBlock}`;
+  return `${heading}\n${scene.action?.en ?? ""}${legacyDialogueBlock}`;
 }
 
 // Real, checkable screen-time estimate -- replaces trusting the AI's own

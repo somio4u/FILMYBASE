@@ -3084,7 +3084,9 @@ function flattenAiMovieContentForExtraction(pastedText, backfill, { includeScree
         .join("\n")}`
     );
   }
-  if (backfill?.plot) parts.push(`Beat Sheet:\n${backfill.plot.map((beat) => `${beat.title.en}: ${beat.description.en}`).join("\n")}`);
+  // Numbered, so a writer told "Beat 4" can find it -- and match it to
+  // reference material that numbers its scenes the same way.
+  if (backfill?.plot) parts.push(`Beat Sheet:\n${backfill.plot.map((beat, i) => `Beat ${i + 1} — ${beat.title.en}: ${beat.description.en}`).join("\n")}`);
   if (includeScreenplay && backfill?.screenplayBeats) {
     const scenes = backfill.screenplayBeats.filter((b) => b.scenes).flatMap((b) => b.scenes);
     if (scenes.length > 0) {
@@ -3374,6 +3376,7 @@ const AI_MOVIE_SCENE_CONTENT_BLOCK_SCHEMA = {
 const AI_MOVIE_CONTENT_BLOCK_FORMAT_RULE = `DIALOGUE BLOCK EXTRAS (standard screenplay format, both optional on any dialogue block):
 - "parenthetical": a very short acting note shown under the character name — 1 to 4 words, e.g. "quietly", "without looking up", "to Meera" — ONLY when how the line is said isn't already obvious from the line itself. Real scripts use these sparingly: most lines need none. No brackets, just the words; the "hi" version in Hindi.
 - "extension": "V.O." when the voice comes from someone NOT physically in the scene (voiceover, a memory, a voice on a broadcast); "O.S." when the speaker IS in the scene's place but off camera (behind a door, from the next room). The NARRATOR is always "V.O.". Leave it out for everyone speaking on camera.
+EVERY DIALOGUE BLOCK HAS REAL SPOKEN WORDS. A wordless reaction — a nod, a head-shake, a silence, a look — is an ACTION block ("Omm shakes his head."), never a dialogue block with an empty line.
 TRANSITIONS (CUT TO:, SHARP CUT TO:, SMASH CUT TO:, MATCH CUT TO:, DISSOLVE TO:, FREEZE FRAME:, FADE OUT., and the rest of the allowed list) are NEVER written inside action text — each one is its own block with "type": "transition" and the "transition" field set to exactly one allowed value. Use them sparingly: most scenes simply end with no transition at all. Use one only when the cut itself carries meaning — a shock, a jump in time, or the scene's final decisive beat.`;
 
 // Only "type" is actually required above (text/character/line all vary by
@@ -3409,17 +3412,72 @@ function parseAiMovieSlugline(heading) {
   return { intExt, location: parts.join(" - ").trim(), timeOfDay };
 }
 
+// First-draft writers are told not to write dialogue, but a real test run
+// still had them type lines straight into the action text
+// ("OMM\n(gesturing)\nThat's not just strain...") -- which prints as a
+// plain action paragraph, never as dialogue. When the English and Hindi
+// action split into the same number of paragraphs, each paragraph that
+// starts with a character-name line is turned into a real dialogue block,
+// in both languages by position. Anything that doesn't line up exactly is
+// left as written.
+const AI_MOVIE_TYPED_CUE_LINE = /^([A-Z][A-Z0-9 .'-]{0,30}?)(?:\s*\((V\.O\.|O\.S\.)\))?$/;
+const AI_MOVIE_NOT_A_CUE = /\b(CLOSE|ON|CAMERA|ANGLE|INT|EXT|CUT|FADE|POV|INSERT|WIDE|SHOT|BACK|LATER|TEXT|SUPER|TITLE|MONTAGE|FLASHBACK|CONTINUOUS|DISSOLVE|NO DIALOGUE)\b/;
+
+function splitAiMovieTypedDialogue(action) {
+  const paragraphs = (text) => (text ?? "").split(/\n\s*\n/).map((p) => p.trim()).filter(Boolean);
+  const lines = (paragraph) => paragraph.split("\n").map((l) => l.trim()).filter(Boolean);
+  const en = paragraphs(action?.en);
+  const hi = paragraphs(action?.hi);
+  if (en.length < 2 || en.length !== hi.length) return null;
+  let found = false;
+  const blocks = en.map((paragraph, i) => {
+    const enLines = lines(paragraph);
+    const hiLines = lines(hi[i]);
+    const cue = enLines.length >= 2 && enLines[0].match(AI_MOVIE_TYPED_CUE_LINE);
+    if (!cue || AI_MOVIE_NOT_A_CUE.test(cue[1]) || hiLines.length !== enLines.length) {
+      return { type: "action", text: { en: paragraph, hi: hi[i] } };
+    }
+    found = true;
+    const hasNote = enLines.length >= 3 && /^\(.*\)$/.test(enLines[1]);
+    const from = hasNote ? 2 : 1;
+    const block = {
+      type: "dialogue",
+      character: cue[1].trim(),
+      line: { en: enLines.slice(from).join(" "), hi: hiLines.slice(from).join(" ") },
+    };
+    if (hasNote) block.parenthetical = { en: enLines[1], hi: hiLines[1] };
+    if (cue[2]) block.extension = cue[2];
+    return block;
+  });
+  return found ? sanitizeAiMovieContentBlocks(blocks) : null;
+}
+
 function normalizeAiMovieSceneFormat(scene) {
   // Standard screenplay sluglines are always in capitals.
   const heading = (scene?.sceneHeading?.en ?? "").trim().toUpperCase();
-  const stripHeading = (text) =>
-    typeof text === "string" && heading && text.trimStart().toUpperCase().startsWith(heading)
-      ? text.trimStart().slice(heading.length).trimStart()
-      : text;
+  // Also drops a heading line the Hindi text opens with in its own
+  // (translated) form -- seen for real: "EXT. रिसीवर गैंट्री - CONTINUOUS",
+  // which the exact-English match above can't catch.
+  const stripHeading = (text) => {
+    if (typeof text !== "string" || !heading) return text;
+    const trimmed = text.trimStart();
+    if (trimmed.toUpperCase().startsWith(heading)) return trimmed.slice(heading.length).trimStart();
+    const firstLine = trimmed.split("\n", 1)[0];
+    return /^(INT|EXT|I\/E)[.\s/]/i.test(firstLine) && firstLine.length <= 80 ? trimmed.slice(firstLine.length).trimStart() : text;
+  };
   const stripBilingual = (value) => (value ? { ...value, en: stripHeading(value.en), hi: stripHeading(value.hi) } : value);
 
   const normalized = { ...scene, sceneHeading: { en: heading, hi: heading }, slugline: parseAiMovieSlugline(heading) };
   if (scene?.action) normalized.action = stripBilingual(scene.action);
+  const hasContent = Array.isArray(scene?.content) && scene.content.length > 0;
+  if (!hasContent && normalized.action) {
+    const typedDialogue = splitAiMovieTypedDialogue(normalized.action);
+    if (typedDialogue) {
+      delete normalized.action;
+      normalized.content = typedDialogue;
+      return normalized;
+    }
+  }
   if (Array.isArray(scene?.content) && scene.content.length > 0) {
     const [first, ...rest] = scene.content;
     const trimmedFirst = first.type === "action" ? { ...first, text: stripBilingual(first.text) } : first;
@@ -3449,7 +3507,13 @@ function sanitizeAiMovieContentBlocks(blocks) {
   if (!Array.isArray(blocks)) return blocks;
   return blocks
     .map((block) => {
-      if (block?.type === "dialogue") return sanitizeAiMovieDialogueBlock(block);
+      if (block?.type === "dialogue") {
+        // A real test run returned "OMM (shaking his head):" with no words
+        // at all -- a silent reaction dressed up as a line, which would
+        // print as an empty speech. Dropped: a line must have words.
+        const cleaned = sanitizeAiMovieDialogueBlock(block);
+        return cleaned.line.en.trim() || cleaned.line.hi.trim() ? cleaned : null;
+      }
       // A transition block only survives if it's one of the standard terms
       // -- anything else would print as a garbled "transition", so it's
       // dropped rather than guessed at.
@@ -3512,6 +3576,39 @@ function sceneToPromptText(scene) {
       ? `\n\n${scene.dialogue.map((d) => `${d.character}\n${d.line?.en ?? ""}`).join("\n\n")}`
       : "";
   return `${heading}\n${scene.action?.en ?? ""}${legacyDialogueBlock}`;
+}
+
+// Repeat catcher. A real test run on Akhada showed the writers padding a
+// short beat with near-word-for-word copies of scenes already written
+// (Beat 4 came back as 12 scenes, 9 of them copies of Beats 1-3 or of each
+// other). A scene is dropped when at least 40% of its three-word runs
+// already appear in the text it's checked against (the scenes written
+// before it) -- a real new scene, even one in the same place with the same
+// people, never repeats that much of the wording. (Set to 40% from the
+// test data: clear copies overlapped 44-57%, genuinely different scenes
+// never more than ~30%. A re-worded repeat overlaps less than that, so
+// the beat checker below also catches repeats by meaning.)
+const AI_MOVIE_REPEAT_OVERLAP_LIMIT = 0.4;
+
+function aiMovieWordTriples(text) {
+  const words = (text ?? "").toLowerCase().replace(/[^\p{L}\p{N}\s]/gu, " ").split(/\s+/).filter(Boolean);
+  const triples = new Set();
+  for (let i = 0; i + 2 < words.length; i++) triples.add(`${words[i]} ${words[i + 1]} ${words[i + 2]}`);
+  return triples;
+}
+
+function dropAiMovieRepeatedScenes(newScenes, earlierText) {
+  const seen = aiMovieWordTriples(earlierText);
+  const kept = [];
+  for (const scene of newScenes) {
+    const triples = aiMovieWordTriples(sceneToPromptText(scene).split("\n").slice(1).join("\n"));
+    let repeated = 0;
+    for (const triple of triples) if (seen.has(triple)) repeated++;
+    if (triples.size > 0 && repeated / triples.size >= AI_MOVIE_REPEAT_OVERLAP_LIMIT) continue;
+    kept.push(scene);
+    for (const triple of triples) seen.add(triple);
+  }
+  return kept;
 }
 
 // Real, checkable screen-time estimate -- never the AI's own self-reported
@@ -3838,6 +3935,110 @@ async function generateAiMovieForwardStage(stageKey, priorContextText, reference
 // generated ahead of whichever beat the user is currently reviewing, topped
 // back up each time they approve one — so there's always a small queue of
 // ready beats waiting, never a wait for the next one to write itself.
+// Beat boundaries. A real test run on Akhada showed every writer drifting
+// across beats: Beat 1 also wrote Beats 5-7, Beat 2 re-wrote Beats 3-6, and
+// the Pahandi song beat (8) went on to write the sky breach and the
+// Rakhyaka's fight (Beats 9-11) -- so the film's biggest moments got used
+// up in the wrong place. The writers only ever saw this beat's title, with
+// an unnumbered Beat Sheet and reference files numbered "SCENE 1..46", so
+// they couldn't tell where this beat ended. Every writer working on one
+// beat -- new scenes, expansion, Request Changes, Extend, Write Dialogue,
+// song sheet, Script Doctor -- now gets this note naming the beat by
+// number, the beats on either side, and what that means. It goes at the
+// very END of each prompt, next to the task itself: placed earlier (before
+// ~30 pages of reference material) a second test run showed Beat 1 still
+// ignoring it.
+function aiMovieBeatForWriters(beats, beatIndex) {
+  return {
+    ...beats[beatIndex],
+    boundaryNote: aiMovieBeatBoundaryNote(beats, beatIndex),
+    beatNumber: beatIndex + 1,
+    beatSheetText: beats.map((b, i) => `Beat ${i + 1} — ${b.title.en}: ${b.description.en}`).join("\n"),
+  };
+}
+
+// Beat checker. Even with the boundary note at the end of the prompt, a
+// third test run still had Beat 1 writing Beat 4's gantry scene and Beat
+// 5's call to Rudra's sister -- the cheaper writing model reliably follows
+// its reference file past where the beat ends. So every batch of new
+// scenes gets one small, cheap check: given only the numbered Beat Sheet,
+// which beat does each scene mainly show? Scenes that belong to another
+// beat are dropped. Best effort -- if the check itself fails, the scenes
+// are kept as written rather than failing the whole beat.
+const AI_MOVIE_BEAT_CHECK_SYSTEM_PROMPT = `You check a film screenplay draft for scenes written under the wrong beat. You get the film's numbered Beat Sheet and the new scenes written for ONE beat. For each scene, name the ONE beat number whose events that scene mainly shows. A scene that shows this beat's own events in more detail — their steps, the reactions, the place around them — belongs to this beat, even when it adds small details the Beat Sheet line doesn't mention. Only name a different beat when the scene's main events are clearly that other beat's events, as the Beat Sheet describes them.
+Also mark "repeatsEarlier": true when a scene mainly shows AGAIN something already shown — in an earlier scene of this list, or in this beat's scenes already written (if given) — just re-worded, instead of moving the moment forward. The same event shown from a genuinely new angle that adds something (a new reaction, a new consequence) is not a repeat.`;
+
+async function keepAiMovieScenesInTheirBeat(beat, scenes, existingBeatScenesText = "") {
+  if (!beat?.beatSheetText || !Number.isInteger(beat.beatNumber) || scenes.length === 0) return scenes;
+  const scenesText = scenes.map((scene, i) => `SCENE ${i + 1}\n${sceneToPromptText(scene)}`).join("\n\n");
+  const existingBlock = existingBeatScenesText ? `\n\nThis beat's scenes already written (context only, not to be judged):\n\n${existingBeatScenesText}` : "";
+  try {
+    const result = await generateJsonContent({
+      model: GEMINI_MODEL_NAME,
+      contents: `Beat Sheet:\n${beat.beatSheetText}${existingBlock}\n\nThese NEW scenes were written for Beat ${beat.beatNumber}:\n\n${scenesText}\n\nFor each new scene: which beat's events does it mainly show, and does it just repeat something already shown?`,
+      config: {
+        systemInstruction: AI_MOVIE_BEAT_CHECK_SYSTEM_PROMPT,
+        responseMimeType: "application/json",
+        maxOutputTokens: 2048,
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            scenes: {
+              type: Type.ARRAY,
+              items: {
+                type: Type.OBJECT,
+                properties: { sceneNumber: { type: Type.NUMBER }, beatNumber: { type: Type.NUMBER }, repeatsEarlier: { type: Type.BOOLEAN } },
+                required: ["sceneNumber", "beatNumber", "repeatsEarlier"],
+              },
+            },
+          },
+          required: ["scenes"],
+        },
+      },
+    });
+    const dropped = new Set(
+      (result.scenes ?? [])
+        .filter((entry) => Math.round(Number(entry.beatNumber)) !== beat.beatNumber || entry.repeatsEarlier === true)
+        .map((entry) => Math.round(Number(entry.sceneNumber)))
+    );
+    if (dropped.size > 0) {
+      console.log(`Beat ${beat.beatNumber}: dropped ${dropped.size} of ${scenes.length} new scene(s) -- another beat's events, or a repeat.`);
+    }
+    return scenes.filter((_, i) => !dropped.has(i + 1));
+  } catch (error) {
+    console.error("Beat check failed, keeping the scenes as written:", error.message);
+    return scenes;
+  }
+}
+
+function aiMovieBeatBoundaryBlock(beat) {
+  return beat?.boundaryNote ? `\n\n${beat.boundaryNote}` : "";
+}
+
+function aiMovieBeatBoundaryNote(beats, beatIndex) {
+  const beat = beats?.[beatIndex];
+  if (!beat) return "";
+  const number = beatIndex + 1;
+  const previous = beats[beatIndex - 1];
+  const next = beats[beatIndex + 1];
+  const lines = [
+    `THIS BEAT'S BOUNDARIES: you are working on Beat ${number} of ${beats.length} ("${beat.title.en}") and ONLY that beat.`,
+    previous
+      ? `- The beat before it, Beat ${number - 1} ("${previous.title.en}"), is handled on its own — never re-stage its events here.`
+      : "- This is the film's first beat.",
+    next
+      ? `- The beat after it, Beat ${number + 1} ("${next.title.en}": ${next.description.en}), is written separately, later. NONE of its events may appear here — not as a lead-in, a teaser, or "the next natural step". The same goes for every later beat.`
+      : "- This is the film's last beat.",
+    `- If the reference material numbers its scenes or beats the same way (e.g. "SCENE ${number}"), only the part numbered ${number} belongs to this beat. Read the other numbered parts for context only — never write them.`,
+  ];
+  if (isAiMovieSongBeat(beat)) {
+    lines.push(
+      "- This is a SONG beat: the song itself fills most of this beat's screen time (its song sheet — music, singers, how it is filmed — is written separately). Write the scene(s) the song sits in: what we see just before and while it plays, with one plain action line where the song begins. Never add events from other beats to fill the time."
+    );
+  }
+  return lines.join("\n");
+}
+
 // The INTERVAL -- placed by the user on a beat card (their choice: never
 // guessed automatically), stored as backfill.intervalAfterBeat. Every
 // writer working on that beat is told it ends at the interval, and the beat
@@ -3874,7 +4075,8 @@ const AI_MOVIE_SCREEN_ONLY_RULE = `SCREEN-ONLY WRITING (basic screenplay format 
 - WRONG: "The announcement hangs in the air, adding a layer of mystery and fear." RIGHT: "Silence. A torch crackles."
 - WRONG: "Her doubts wrestle with the undeniable reality." RIGHT: "Tara shakes her head once. She doesn't look up."
 - WRONG: "Their low voices express shared grief and respect, signalling an agreement of ancient wisdom." RIGHT: "The clan members murmur and bow their heads."
-Every sentence must be something that takes real screen time. Never add words just to make a scene longer — to make a scene longer, add more real on-screen moments: actions, reactions, events, lines.`;
+Every sentence must be something that takes real screen time. Never add words just to make a scene longer — to make a scene longer, add more real on-screen moments: actions, reactions, events, lines.
+Never copy the reference material's notes to the writer into the action — lines like "(They speak — dialogue later)", "No dialogue needed", or a closing comment on what the moment means ("A careful man, breaking the world by the book.", "The city is sick.") are instructions for you, not things on screen — and never add notes like that of your own ("NO DIALOGUE.").`;
 
 // Scene headings and names, in both languages. A real Hindi scene heading
 // came back as "अंत. अखाड़ा रिंग" -- "INT." translated into "अंत.", which
@@ -3886,9 +4088,41 @@ Every sentence must be something that takes real screen time. Never add words ju
 // from fighting it.)
 const AI_MOVIE_HEADING_AND_NAMES_RULE = `SCENE HEADINGS AND NAMES: the scene heading is ALWAYS standard English screenplay format ("INT. AKHADA RING - TIMELESS", "EXT. GRAND ROAD - DAY") — in the "hi" field too, exactly the same English text, never translated (translating "INT." into Hindi turns it into a different word entirely). Never repeat the scene heading inside the action text. Every character name, in every "hi" field, is written in ENGLISH (Latin) letters exactly as it appears in the character list — "Rudra आगे बढ़ता है", never "रुद्र आगे बढ़ता है" — so each name has one spelling everywhere.`;
 
+// The other half of the script-switching rule. With only "switch often,
+// never zero", a real test run over-switched into words no Hindi speaker
+// says in English -- "Rudra की jaw कस जाती है", "तीर्थयात्रियों का ocean",
+// "saffron रंग", and a formal "अनुरोध" sitting next to "patience". The
+// wrong/right pairs below are taken from that run.
+const AI_MOVIE_HINDI_SWITCH_LIMITS_RULE = `LIMITS ON ENGLISH INSIDE HINDI: switch ONLY words that people in India really say in English in everyday talk — tech, work and modern-life words (phone, power, grid, system, signal, data, screen, payment, deal, sir, sorry, OK) and this story's own sci-fi names and terms (Receiver, holo-banner, nav chip). NEVER switch an ordinary word that has a common everyday Hindi word — body parts, colours, nature, feelings, family, simple actions:
+- WRONG: "Rudra की jaw कस जाती है" RIGHT: "Rudra का जबड़ा कस जाता है"
+- WRONG: "तीर्थयात्रियों का ocean" RIGHT: "तीर्थयात्रियों का समंदर"
+- WRONG: "saffron रंग के कपड़े" RIGHT: "केसरिया कपड़े"
+- WRONG: "कृपया patience बनाए रखने का अनुरोध है" RIGHT: "थोड़ा सब्र रखिए"
+Keep the Hindi around the English words casual and spoken — never a formal, bookish word ("अनुरोध", "कृपया", "प्रतीक्षा") next to an English one. In ACTION text, even fewer switches: plain, simple Hindi, with English only for camera directions and the story's own tech names.`;
+
+// How a beat is meant to reach its fixed time. The same test run showed
+// the writers hitting the number with the wrong material: scenes borrowed
+// from other beats, near-copies of scenes already written, a made-up
+// cut-away (Samir watching a live feed of the off-world prayer room, which
+// no beat mentions), and the reference file's own notes to the writer
+// copied into the action ("A careful man, breaking the world by the
+// book.", "(They speak -- dialogue later)").
+const AI_MOVIE_FILL_TIME_HONESTLY_RULE = `FILLING A BEAT'S TIME HONESTLY: a beat's Beat Sheet line, and the reference material's paragraph for it, are a SUMMARY, not the finished scene — a beat with a real target time needs many more on-screen moments than the summary lists. Reach the time by showing THIS beat's own events in fuller on-screen detail: break each event into its steps, and show the reactions, small physical actions, sounds, and the place around them. Good ways to add real screen time inside a beat:
+- the moments just before and just after its main event;
+- the event's effect on the place and people this beat already involves (the city below as its lights fail, the crowd looking up);
+- a small private action that shows who a character is (Samir's hands on the controls, Omm wiping grease off his palm);
+- letting a big moment play out in full — step by step, with the silence after it — instead of in one line.
+NEVER reach it by:
+- writing events that belong to another beat (earlier or later);
+- cutting away to characters or storylines this beat doesn't involve — e.g. showing someone watching a screen of this beat's events when the beat never mentions them;
+- repeating or re-wording a scene that already exists, in this beat or an earlier one.
+WHAT A SCENE IS: a new scene starts only when the place or the time changes. Everything that happens continuously in one place is ONE scene — never chop it into a row of short "CONTINUOUS" scenes of a shot or two each. Each event happens ONCE: once Rudra has pushed the slider, no later scene shows him pushing it again. And no dialogue in this pass — write "Omm begs him to pull back", never a character name followed by a spoken line.`;
+
 const AI_MOVIE_SCREENPLAY_BEAT_SYSTEM_PROMPT = `You are working on an AI Movie — a film that will be entirely AI-generated, never physically shot. Because of that, never reason about budget, cast/crew/location availability, shoot schedules, or any real-world production constraint — anything that can be imagined can be included, with no limitation.
 
 You are given the story's already-approved, locked layers (Story, Synopsis, Characters, Three-Act Structure, full Beat Sheet) below, plus every screenplay scene already written so far. Write ONLY the scenes for the ONE beat named at the end — a beat is a pocket, not a single scene, so expand it into however many full scenes this ONE beat genuinely needs to be properly established: never fewer than 2, but no upper limit either — a simple beat might need only 2, a dense or eventful one might need 7 or more. The beat comes with its own target screen-time in minutes — use the standard screenwriting rule of thumb that one screenplay page equals about one minute of screen time to translate that target into an implied page count, and let the scene count AND each scene's own length follow from that: a beat with a small target should stay tight (fewer/shorter scenes), a beat with a large target earns more room (more and/or longer scenes). Give each scene its own honest "estimatedMinutes" estimate, and keep the sum of those estimates close to the beat's target — never pad or compress scenes just to hit the number exactly, but treat the target as the real guide for scope, not a suggestion to ignore. That target is a starting guide, not a hard ceiling: if the user's own feedback below explicitly asks for this beat (or a scene in it) to be longer, slower, or more detailed, honor that even if it pushes the total well past the original target — the user is always free to make the story longer, and a later regeneration of this same beat can simply carry forward a bigger target next time. Each scene needs a scene heading and a vivid action/visual description. Do NOT write any dialogue — that is a separate, later pass; describe what happens and what's said only in action-line terms (e.g. "she pleads with him"), never as quoted lines. Continue directly from the last scene already written (same characters, same momentum, no repeats) — never jump ahead to a later beat.
+
+${AI_MOVIE_FILL_TIME_HONESTLY_RULE}
 
 ${AI_MOVIE_SCREEN_ONLY_RULE}
 
@@ -3912,7 +4146,7 @@ async function generateAiMovieScreenplayBeat(priorContextText, referenceMaterial
 
   const result = await generateJsonContent({
     model: GEMINI_MODEL_NAME,
-    contents: `The story's approved layers so far:\n\n${priorContextText}${referenceBlock}${feedbackBlock}${scenesBlock}\n\nNow write the scenes for this beat:\n${beat.title.en}: ${beat.description.en}${runtimeBlock}`,
+    contents: `The story's approved layers so far:\n\n${priorContextText}${referenceBlock}${feedbackBlock}${scenesBlock}\n\nNow write the scenes for this beat:\n${beat.title.en}: ${beat.description.en}${runtimeBlock}${aiMovieBeatBoundaryBlock(beat)}`,
     config: {
       systemInstruction: AI_MOVIE_SCREENPLAY_BEAT_SYSTEM_PROMPT,
       responseMimeType: "application/json",
@@ -3934,10 +4168,15 @@ async function generateAiMovieScreenplayBeat(priorContextText, referenceMaterial
       },
     },
   });
-  return result.scenes.map((scene) => {
+  const scenes = result.scenes.map((scene) => {
     const normalized = normalizeAiMovieSceneFormat(scene);
     return { ...normalized, estimatedMinutes: computeAiMovieSceneMinutes(normalized) };
   });
+  // Repeats of earlier beats' scenes (or of each other), and scenes that
+  // belong to a different beat, are dropped -- but a beat is never left with
+  // nothing at all.
+  const fresh = await keepAiMovieScenesInTheirBeat(beat, dropAiMovieRepeatedScenes(scenes, scenesSoFarText));
+  return fresh.length > 0 ? fresh : scenes.slice(0, 1);
 }
 
 // The beat's own runtimeMinutes (set back at the Beat Sheet stage) is the
@@ -3950,6 +4189,8 @@ async function generateAiMovieScreenplayBeat(priorContextText, referenceMaterial
 const AI_MOVIE_SCREENPLAY_BEAT_EXPAND_SYSTEM_PROMPT = `You are working on an AI Movie — a film that will be entirely AI-generated, never physically shot. Because of that, never reason about budget, cast/crew/location availability, shoot schedules, or any real-world production constraint — anything that can be imagined can be included, with no limitation.
 
 You are given the story's already-approved, locked layers, every screenplay scene already written in earlier beats, and this ONE beat's own scenes already written so far, given below as fixed, unchangeable context — do NOT repeat, summarize, or rewrite any of them. This beat's real runtime target has not been reached yet by what's there so far, so write ADDITIONAL new scenes only for this SAME beat, continuing directly from its last existing scene (same characters, same momentum, no repeats, never jumping ahead to a later beat), to cover roughly the additional screen time named at the end. Each new scene needs a scene heading and a vivid action/visual description. Do NOT write any dialogue — that is a separate, later pass. Give each new scene its own honest "estimatedMinutes."
+
+${AI_MOVIE_FILL_TIME_HONESTLY_RULE}
 
 ${AI_MOVIE_SCREEN_ONLY_RULE}
 
@@ -3970,7 +4211,7 @@ async function generateAiMovieScreenplayBeatExpansion(
 
   const result = await generateJsonContent({
     model: GEMINI_MODEL_NAME,
-    contents: `The story's approved layers so far:\n\n${priorContextText}${referenceBlock}${scenesBlock}\n\nThis beat (${beat.title.en}: ${beat.description.en}) already has these scenes, fixed -- do not repeat them:\n\n${existingBeatScenesText}\n\nWrite additional new scenes only for this same beat, covering roughly ${remainingMinutes} more minutes of screen time — about ${remainingMinutes} standard screenplay pages (roughly ${Math.round(remainingMinutes * AI_MOVIE_LINES_PER_PAGE)} formatted lines), built from real on-screen moments (actions, reactions, events), never from extra descriptive words.`,
+    contents: `The story's approved layers so far:\n\n${priorContextText}${referenceBlock}${scenesBlock}\n\nThis beat (${beat.title.en}: ${beat.description.en}) already has these scenes, fixed -- do not repeat them:\n\n${existingBeatScenesText}\n\nWrite additional new scenes only for this same beat, covering roughly ${remainingMinutes} more minutes of screen time — about ${remainingMinutes} standard screenplay pages (roughly ${Math.round(remainingMinutes * AI_MOVIE_LINES_PER_PAGE)} formatted lines), built from real on-screen moments (actions, reactions, events), never from extra descriptive words.${aiMovieBeatBoundaryBlock(beat)}`,
     config: {
       systemInstruction: AI_MOVIE_SCREENPLAY_BEAT_EXPAND_SYSTEM_PROMPT,
       responseMimeType: "application/json",
@@ -3984,10 +4225,14 @@ async function generateAiMovieScreenplayBeatExpansion(
       },
     },
   });
-  return result.scenes.map((scene) => {
+  const scenes = result.scenes.map((scene) => {
     const normalized = normalizeAiMovieSceneFormat(scene);
     return { ...normalized, estimatedMinutes: computeAiMovieSceneMinutes(normalized) };
   });
+  // A new scene that mostly repeats one already written (in this beat or an
+  // earlier one) is padding, not screen time -- dropped. If nothing new is
+  // left, the caller stops asking for more.
+  return keepAiMovieScenesInTheirBeat(beat, dropAiMovieRepeatedScenes(scenes, `${scenesSoFarText ?? ""}\n\n${existingBeatScenesText}`), existingBeatScenesText);
 }
 
 // Closing a beat's shortfall against its fixed target doesn't always mean
@@ -4125,6 +4370,8 @@ You are given the story's already-approved, locked layers below, every screenpla
 
 By default, still write plain action only in the "action" field, no dialogue — that's the normal case, same as before. BUT more screen time doesn't always mean more description or an extra scene: when the instruction is asking for a longer scene (or more detail, more weight) AND the scene already has characters genuinely interacting, dialogue between them is often the more honest way to actually fill that time — use it. When you do, return the scene via "content" instead of "action": an ORDERED list of action and dialogue blocks, interleaved exactly as they happen, in the SAME natural, colloquial, code-mixed style "Write Dialogue" uses elsewhere in this app — never formal or textbook language, and for Hindi, a real script switch for everyday English words (e.g. "payment कब होगा?", never a translation like "भुगतान कब होगा?" or a transliteration like "पेमेंट कब होगा?"). Leave "content" empty when you're not adding dialogue.
 
+${AI_MOVIE_HINDI_SWITCH_LIMITS_RULE}
+
 ${AI_MOVIE_SCREEN_ONLY_RULE}
 
 ${AI_MOVIE_HEADING_AND_NAMES_RULE}
@@ -4153,7 +4400,7 @@ async function generateAiMovieScreenplaySceneRevision(
 
   const result = await generateJsonContent({
     model: GEMINI_MODEL_NAME,
-    contents: `The story's approved layers so far:\n\n${priorContextText}${referenceBlock}${scenesBlock}${siblingBlock}\n\nRevise this one scene:\n\n${targetSceneText}${instructionBlock}`,
+    contents: `The story's approved layers so far:\n\n${priorContextText}${referenceBlock}${scenesBlock}${siblingBlock}\n\nRevise this one scene:\n\n${targetSceneText}${instructionBlock}${aiMovieBeatBoundaryBlock(beat)}`,
     config: {
       systemInstruction: AI_MOVIE_SCREENPLAY_SCENE_REVISE_SYSTEM_PROMPT,
       responseMimeType: "application/json",
@@ -4210,7 +4457,7 @@ You are given the story's already-approved, locked layers below (including full 
 
 IMPORTANT EXCEPTION: that freedom to decide "no dialogue needed" and hand the scene back unchanged applies ONLY when no instruction is given below. The instant an instruction IS given, it is a direct request from the user that you MUST fulfill — never fall back to "this scene doesn't need dialogue" or return the scene unchanged just because it's not what you'd have chosen on your own. Whatever the instruction asks for (a specific line, a topic to cover, narration, the narrator, more/different dialogue), make it actually appear in your output.
 
-A NARRATOR is also always available for every scene, on top of whoever is in the Characters layer — it is NOT one of the story's characters, so never look for it there or hold back for lack of an established personality for it. Use it for narration/voiceover: setting up the past, present, or future, bridging elapsed time, or framing the emotional weight of a moment — whenever the scene's own action genuinely calls for that kind of voiceover, or (per the exception above, this is mandatory, not optional) whenever the instruction given below asks for the narrator or for backstory/context to be explained. Write its lines exactly like any other dialogue block, using the exact character name "NARRATOR". The narrator's voice is fixed and consistent across every scene: very simple, direct, everyday language (never literary or ornate); empathetic, on the audience's side; spoken with a strong, confident conviction; and unafraid of a little blunt, hard-hitting phrasing when the moment earns it. With no instruction given, only use it when a voiceover genuinely belongs — most such scenes still need no narrator at all, exactly like most scenes need no dialogue.
+A NARRATOR is also always available for every scene, on top of whoever is in the Characters layer — it is NOT one of the story's characters, so never look for it there or hold back for lack of an established personality for it. Use it for narration/voiceover: setting up the past, present, or future, bridging elapsed time, or framing the emotional weight of a moment — whenever the scene's own action genuinely calls for that kind of voiceover, or (per the exception above, this is mandatory, not optional) whenever the instruction given below asks for the narrator or for backstory/context to be explained. Write its lines exactly like any other dialogue block, using the exact character name "NARRATOR". The NARRATOR is never someone inside the story: a voice on a broadcast, a screen, a call, or a loudspeaker belongs to that speaker — give them their own name (e.g. "COUNCIL BROADCASTER"), never "NARRATOR". The narrator's voice is fixed and consistent across every scene: very simple, direct, everyday language (never literary or ornate); empathetic, on the audience's side; spoken with a strong, confident conviction; and unafraid of a little blunt, hard-hitting phrasing when the moment earns it. With no instruction given, only use it when a voiceover genuinely belongs — most such scenes still need no narrator at all, exactly like most scenes need no dialogue.
 
 This is the FINAL on-screen text the audience actually hears, so both the dialogue lines AND the action text in your output must sound like real, natural, everyday speech and prose — NEVER formal, textbook, or dictionary-correct language, in either English or Hindi. For the Hindi field specifically, this means a genuine SCRIPT SWITCH, not a translation and not a transliteration: for an everyday English word a real bilingual speaker would just say in English (payment, delivery, order, deal, phone, message, and so on), write that exact word in LATIN LETTERS, sitting inside the otherwise-Devanagari sentence — do NOT translate it into its formal Hindi equivalent, and do NOT spell it out phonetically in Devanagari either. Concretely, for "payment": "payment कब होगा?" is CORRECT; "भुगतान कब होगा?" is WRONG (that's a translation); "पेमेंट कब होगा?" is ALSO WRONG (that's a Devanagari transliteration, not English) — only actual Latin-script "payment" is right. Same logic for "delivery": "delivery होते ही" is correct, "डिलीवरी होते ही" is wrong. Do this naturally and often wherever the scene's own vocabulary calls for it — every scene with dialogue should have real Latin-script English words genuinely embedded mid-sentence like this, not zero — while the surrounding grammar, verbs, and connecting words stay in Devanagari Hindi. Beyond that script-mixing, also prefer direct, casual, specific phrasing over generic formal phrasing, and ground lines in the scene's own concrete details rather than vague generic dialogue. When dialogue is warranted, write it tight and naturalistic — never expository ("as you know…") or overwritten — consistent with each speaking character's established personality, wants, and voice from the Characters layer above (or, for the narrator, the fixed NARRATOR voice described above), and use each character's name exactly as it appears in that layer — except the narrator, whose name is always exactly "NARRATOR".
 
@@ -4223,6 +4470,8 @@ This pass also gives the scene its final cinematic shape, on top of the dialogue
 - The button: end the scene on a decisive beat — a loaded look, an unanswered question, or a FREEZE FRAME: / SHARP CUT TO: as the final "transition" block — never let it just trail off.
 
 The "characters" field, and every "hi" field in every block above, still needs its own real, separately-written Hindi text — never the English copied over, left blank, or written in English. This matters even more now that there's more to juggle per scene: treat the Hindi field as just as important as the English one, for every single field, every time.
+
+${AI_MOVIE_HINDI_SWITCH_LIMITS_RULE}
 
 ${AI_MOVIE_SCREEN_ONLY_RULE}
 
@@ -4260,7 +4509,7 @@ async function generateAiMovieSceneDialogue(
 
   const result = await generateJsonContent({
     model: AI_MOVIE_DIALOGUE_MODEL_NAME,
-    contents: `The story's approved layers so far:\n\n${priorContextText}${referenceBlock}${briefsBlock}${scenesBlock}${siblingBlock}\n\n${taskLine}\n\n${targetSceneText}${instructionBlock}`,
+    contents: `The story's approved layers so far:\n\n${priorContextText}${referenceBlock}${briefsBlock}${scenesBlock}${siblingBlock}\n\n${taskLine}\n\n${targetSceneText}${instructionBlock}${aiMovieBeatBoundaryBlock(beat)}`,
     config: {
       systemInstruction: AI_MOVIE_SCENE_DIALOGUE_SYSTEM_PROMPT,
       responseMimeType: "application/json",
@@ -4283,7 +4532,28 @@ async function generateAiMovieSceneDialogue(
       },
     },
   });
-  return { characters: ensureAiMovieBilingualText(result.characters), content: sanitizeAiMovieContentBlocks(result.content) };
+  const content = sanitizeAiMovieContentBlocks(result.content);
+  // A real test run had this pass paste its neighbouring scenes into the
+  // answer (Beat 2's third scene came back as scenes 1 + 2 + itself, with
+  // their headings stuck in the middle). When much of the new text comes
+  // from the OTHER scenes rather than this one, the answer is refused, so
+  // the scene keeps its original version.
+  if (aiMovieCopiesOtherScenes(content, targetSceneText, `${scenesSoFarText ?? ""}\n\n${beatSiblingScenesText ?? ""}`)) {
+    throw new Error("The dialogue came back repeating other scenes instead of this one -- please try again.");
+  }
+  return { characters: ensureAiMovieBilingualText(result.characters), content };
+}
+
+// How much of a rewritten scene is text taken from OTHER scenes: its
+// three-word runs that appear in those scenes but not in the scene's own
+// original text. Same 40% limit as the repeat catcher.
+function aiMovieCopiesOtherScenes(content, ownSceneText, otherScenesText) {
+  const newTriples = aiMovieWordTriples(sceneToPromptText({ content }));
+  const own = aiMovieWordTriples(ownSceneText);
+  const others = aiMovieWordTriples(otherScenesText);
+  let copied = 0;
+  for (const triple of newTriples) if (others.has(triple) && !own.has(triple)) copied++;
+  return newTriples.size > 0 && copied / newTriples.size >= AI_MOVIE_REPEAT_OVERLAP_LIMIT;
 }
 
 // A beat's "generating" status is only ever meant to be transient, within
@@ -4357,14 +4627,19 @@ async function generateNextAiMovieScreenplayBeat(projectId) {
       nextIndex
     );
     const scenesSoFarText = flattenAiMovieScreenplayScenesSoFar(screenplayBeats, nextIndex);
-    const initialScenes = await generateAiMovieScreenplayBeat(priorContextText, referenceMaterialText, scenesSoFarText, beats[nextIndex], null);
-    const scenes = await fillAiMovieScreenplayBeatToTarget(
+    const initialScenes = await generateAiMovieScreenplayBeat(priorContextText, referenceMaterialText, scenesSoFarText, aiMovieBeatForWriters(beats, nextIndex), null);
+    // A song beat is mostly the song, which is only a short paragraph on
+    // the page -- measured by pages it always looks short, and a real test
+    // run showed it then padded with the NEXT beats' plot (the Pahandi beat
+    // wrote the breach and the Rakhyaka's fight). The song sheet sets the
+    // song's real length and Extend counts it, so no padding here.
+    const scenes = isAiMovieSongBeat(beats[nextIndex]) ? initialScenes : await fillAiMovieScreenplayBeatToTarget(
       initialScenes,
       beats[nextIndex].runtimeMinutes,
       priorContextText,
       referenceMaterialText,
       scenesSoFarText,
-      beats[nextIndex],
+      aiMovieBeatForWriters(beats, nextIndex),
       aiMovieCharacterDialogueBriefsText(project.backfill)
     );
 
@@ -4551,18 +4826,19 @@ app.post("/api/ai-movie/stages/screenplay/beats/:index/request-changes", require
       beatIndex
     );
     const scenesSoFarText = flattenAiMovieScreenplayScenesSoFar(screenplayBeats, beatIndex);
-    const initialScenes = await generateAiMovieScreenplayBeat(priorContextText, referenceMaterialText, scenesSoFarText, beats[beatIndex], feedback || null);
+    const initialScenes = await generateAiMovieScreenplayBeat(priorContextText, referenceMaterialText, scenesSoFarText, aiMovieBeatForWriters(beats, beatIndex), feedback || null);
     // The beat's own runtimeMinutes target (set back at the Beat Sheet
     // stage) never gets adjusted down to match a short regeneration -- if
     // the new scenes come up short, more screenplay gets written for this
     // same beat until it actually reaches that fixed target.
-    const scenes = await fillAiMovieScreenplayBeatToTarget(
+    // No padding on a song beat -- same reason as first-draft generation.
+    const scenes = isAiMovieSongBeat(beats[beatIndex]) ? initialScenes : await fillAiMovieScreenplayBeatToTarget(
       initialScenes,
       beats[beatIndex].runtimeMinutes,
       priorContextText,
       referenceMaterialText,
       scenesSoFarText,
-      beats[beatIndex],
+      aiMovieBeatForWriters(beats, beatIndex),
       aiMovieCharacterDialogueBriefsText(project.backfill)
     );
 
@@ -4630,7 +4906,7 @@ You are given the story's locked layers, the reference material, and one beat th
 - "singers": who sings — on screen and/or playback (e.g. "chorus of pilgrims, a lead female voice").
 - "durationMinutes": how long the song runs on screen (most film songs run 2.5 to 4 minutes).
 - "lyricistBrief": a short brief for the human lyricist — the theme, key images, the emotion of each part, words or ideas that belong to this world (names, places, rituals). DO NOT WRITE ANY LYRICS: not a single line, not a refrain, not a hook, not a sample verse, in any language. A real lyricist writes every word.
-- "picturization": how the song is filmed, section by section, in order — use section names like "Prelude", "Mukhda", "Interlude 1", "Antara 1", "Interlude 2", "Antara 2", "Final Mukhda", "Outro". For each, describe only what the camera sees: people, movement, places, light, camera moves, and the story moments that happen during that section.
+- "picturization": how the song is filmed, section by section, in order — use section names like "Prelude", "Mukhda", "Interlude 1", "Antara 1", "Interlude 2", "Antara 2", "Final Mukhda", "Outro". For each, describe only what the camera sees: people, movement, places, light, camera moves, and the story moments that happen during that section. Picture ONLY this beat's own moments — never events from earlier or later beats (a real test run filled the prelude and first verse with earlier beats' opening shots and the next beat's power surge).
 Write simple, easy English, and natural Hindi for every "hi" field.
 
 ${AI_MOVIE_SCREEN_ONLY_RULE}
@@ -4657,7 +4933,7 @@ async function generateAiMovieSongSheet(priorContextText, referenceMaterialText,
     : "";
   const result = await generateJsonContent({
     model: GEMINI_MODEL_NAME,
-    contents: `The story's approved layers so far:\n\n${priorContextText}${referenceBlock}\n\nThe song beat: ${beat.title.en}: ${beat.description.en}\n\nIts scenes:\n\n${beatScenesText}\n\nNow write the song sheet for this beat. No lyrics.`,
+    contents: `The story's approved layers so far:\n\n${priorContextText}${referenceBlock}\n\nThe song beat: ${beat.title.en}: ${beat.description.en}\n\nIts scenes:\n\n${beatScenesText}\n\nNow write the song sheet for this beat. No lyrics.${aiMovieBeatBoundaryBlock(beat)}`,
     config: {
       systemInstruction: AI_MOVIE_SONG_SHEET_SYSTEM_PROMPT,
       responseMimeType: "application/json",
@@ -4727,7 +5003,7 @@ app.post("/api/ai-movie/stages/screenplay/beats/:index/song", requireRole("admin
     const song = await generateAiMovieSongSheet(
       priorContextText,
       referenceMaterialText,
-      beats[beatIndex],
+      aiMovieBeatForWriters(beats, beatIndex),
       beat.scenes.map((scene) => sceneToPromptText(scene)).join("\n\n")
     );
     // One atomic update of just this beat's song -- can't clobber scenes
@@ -4778,6 +5054,14 @@ Check for:
 - "emotion": a scene with no emotional turn (its card shows the same value at start and end) where the story needs one, or an emotion that doesn't fit the moment.
 - "interval": ONLY if this beat ends at the interval — whether its final scene truly cuts at a peak.
 
+Check these FIRST — in a real test run they were the biggest problems and a review missed every one of them:
+- Wrong beat (category "story_logic", severity "major"): a scene showing events that belong to a DIFFERENT beat — one already covered earlier, or the next beat or any later one (see this beat's boundaries in the story context). Fix: "Cut this scene — its events belong to Beat N."
+- Repeats (category "pacing", severity "major"): a scene that repeats, or nearly repeats, another scene in this beat or an earlier one — same events, same wording. Fix: "Cut this scene — it repeats scene N."
+- Empty speech (category "character", severity "major"): a character cue with no spoken words under it.
+- A made-up cut-away (category "story_logic"): a scene about characters or a storyline this beat doesn't involve, added only to fill time.
+SONG BEATS: the song itself fills most of the beat's time — its length is not a pacing problem, and never suggest cutting a song below what the beat's target time allows.
+Only point at text that is really in the scene you name — never describe a line or detail that isn't there.
+
 For each note:
 - "sceneNumber": the scene's number WITHIN this beat (1 = its first scene); 0 if the note is about the whole beat.
 - "category": one of the above; "severity": "major" if the audience would notice or it breaks something, "minor" for polish.
@@ -4792,7 +5076,7 @@ async function generateAiMovieScriptDoctorNotes(priorContextText, referenceMater
   const scenesBlock = scenesSoFarText ? `\n\nScenes already written in earlier beats:\n\n${scenesSoFarText}` : "";
   const result = await generateJsonContent({
     model: GEMINI_MODEL_NAME,
-    contents: `The story's approved layers so far:\n\n${priorContextText}${referenceBlock}${scenesBlock}\n\nReview this beat — ${beat.title.en}: ${beat.description.en}\n\n${beatReviewText}`,
+    contents: `The story's approved layers so far:\n\n${priorContextText}${referenceBlock}${scenesBlock}\n\nReview this beat — ${beat.title.en}: ${beat.description.en}\n\n${beatReviewText}${aiMovieBeatBoundaryBlock(beat)}`,
     config: {
       systemInstruction: AI_MOVIE_DOCTOR_SYSTEM_PROMPT,
       responseMimeType: "application/json",
@@ -4849,7 +5133,7 @@ app.post("/api/ai-movie/stages/screenplay/beats/:index/doctor", requireRole("adm
       }),
     ].join("\n\n");
 
-    const rawNotes = await generateAiMovieScriptDoctorNotes(priorContextText, referenceMaterialText, scenesSoFarText, beats[beatIndex], beatReviewText);
+    const rawNotes = await generateAiMovieScriptDoctorNotes(priorContextText, referenceMaterialText, scenesSoFarText, aiMovieBeatForWriters(beats, beatIndex), beatReviewText);
     // Only notes that point at a real scene (or the whole beat) survive, and
     // each remembers the heading of its scene at review time.
     const notes = rawNotes
@@ -4942,7 +5226,7 @@ app.post("/api/ai-movie/stages/screenplay/beats/:index/extend-to-target", requir
       priorContextText,
       referenceMaterialText,
       scenesSoFarText,
-      beats[beatIndex],
+      aiMovieBeatForWriters(beats, beatIndex),
       aiMovieCharacterDialogueBriefsText(project.backfill)
     );
 
@@ -5034,7 +5318,7 @@ app.post("/api/ai-movie/stages/screenplay/beats/:beatIndex/scenes/:sceneIndex/re
       referenceMaterialText,
       scenesSoFarText,
       beatSiblingScenesText,
-      beats[beatIndex],
+      aiMovieBeatForWriters(beats, beatIndex),
       targetSceneText,
       instruction || null
     );
@@ -5126,7 +5410,7 @@ app.post("/api/ai-movie/stages/screenplay/beats/:beatIndex/scenes/:sceneIndex/di
       referenceMaterialText,
       scenesSoFarText,
       beatSiblingScenesText,
-      beats[beatIndex],
+      aiMovieBeatForWriters(beats, beatIndex),
       targetSceneText,
       instruction || null,
       characterDialogueBriefsText

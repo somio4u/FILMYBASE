@@ -3682,6 +3682,118 @@ async function backfillAiMovieCharacterDialogueBriefsIfMissing(projectId, pasted
   }
 }
 
+// Scene cards: a silent story analyst gives every written scene a small
+// card -- what the scene is FOR (moves the plot, reveals character, or
+// both), the main emotion the AUDIENCE should feel, how strong it is on a
+// 1-10 scale measured against the whole film, and the emotional turn from
+// the scene's start to its end. Standard story-craft bookkeeping (a scene
+// that doesn't turn is usually a weak scene), and the emotion data is what
+// music, lighting, and performance will need later in Production.
+// Written in the background for any scene that doesn't have one yet --
+// existing scenes included -- never as a separate step the user runs.
+const AI_MOVIE_SCENE_CARD_SCHEMA = {
+  type: Type.OBJECT,
+  properties: {
+    purpose: { type: Type.STRING, enum: ["plot_advancing", "character_revealing", "both"] },
+    emotion: AI_MOVIE_BILINGUAL_TEXT_SCHEMA,
+    intensity: { type: Type.NUMBER },
+    turn: AI_MOVIE_BILINGUAL_TEXT_SCHEMA,
+  },
+  required: ["purpose", "emotion", "intensity", "turn"],
+};
+
+const AI_MOVIE_SCENE_CARD_SYSTEM_PROMPT = `You are a story analyst on an AI Movie. For EACH scene given (in order, one card per scene), write a scene card:
+- "purpose": "plot_advancing" if it mainly moves the story's events forward, "character_revealing" if it mainly shows who someone is or how they are changing, "both" if it genuinely does both.
+- "emotion": the main emotion the AUDIENCE should feel in this scene, in one or two words (e.g. "dread", "quiet grief", "joy"). Write it in simple English, and in natural Hindi for "hi".
+- "intensity": 1 to 10, measured against the WHOLE film, not just this beat — 10 is reserved for the film's very biggest moments (the interval cliffhanger, the climax); a quiet transition is 1-3.
+- "turn": the scene's emotional value at its START → at its END, e.g. "hope → dread". If the emotion genuinely doesn't change, say so honestly with the same value on both sides (e.g. "calm → calm") — do not invent a turn that isn't in the scene.
+Judge only from what is actually written in each scene.`;
+
+async function generateAiMovieSceneCards(beatLabel, scenesText, sceneCount) {
+  const result = await generateJsonContent({
+    model: GEMINI_MODEL_NAME,
+    contents: `${beatLabel}\n\nIts ${sceneCount} scenes, in order:\n\n${scenesText}\n\nWrite exactly ${sceneCount} scene cards, one per scene, in the same order.`,
+    config: {
+      systemInstruction: AI_MOVIE_SCENE_CARD_SYSTEM_PROMPT,
+      responseMimeType: "application/json",
+      maxOutputTokens: 4096,
+      responseSchema: {
+        type: Type.OBJECT,
+        properties: { cards: { type: Type.ARRAY, items: AI_MOVIE_SCENE_CARD_SCHEMA } },
+        required: ["cards"],
+      },
+    },
+  });
+  return result.cards.map((card) => ({
+    purpose: ["plot_advancing", "character_revealing", "both"].includes(card.purpose) ? card.purpose : "both",
+    emotion: ensureAiMovieBilingualText(card.emotion),
+    intensity: Math.min(10, Math.max(1, Math.round(Number(card.intensity) || 1))),
+    turn: ensureAiMovieBilingualText(card.turn),
+  }));
+}
+
+// Same guards as the voice-brief self-heal (it's triggered from the same
+// polled project GET): one run per project at a time, a cooldown after a
+// failure. Works through beats in order, one Gemini call per beat.
+//
+// Each card is saved straight onto its own scene with one atomic database
+// update -- and ONLY if that scene still has the heading it had when it
+// was read. The user may revise or regenerate a scene while this runs in
+// the background; a card written for the old scene is then simply
+// skipped (and the new scene gets its own card on a later pass), so this
+// can never overwrite newer work or attach a card to the wrong scene.
+const aiMovieSceneCardsInFlight = new Set();
+const aiMovieSceneCardsLastFailedAt = new Map();
+
+async function fillAiMovieSceneCardsIfMissing(projectId, backfill) {
+  const screenplayBeats = backfill?.screenplayBeats;
+  if (!Array.isArray(screenplayBeats)) return;
+  const needsCards = (beat) =>
+    (beat.status === "pending" || beat.status === "approved") && Array.isArray(beat.scenes) && beat.scenes.some((scene) => !scene.card);
+  if (!screenplayBeats.some(needsCards)) return;
+  if (aiMovieSceneCardsInFlight.has(projectId)) return;
+  const lastFailedAt = aiMovieSceneCardsLastFailedAt.get(projectId);
+  if (lastFailedAt && Date.now() - lastFailedAt < AI_MOVIE_BRIEF_BACKFILL_RETRY_COOLDOWN_MS) return;
+
+  aiMovieSceneCardsInFlight.add(projectId);
+  try {
+    const plot = backfill.plot ?? [];
+    for (let beatIndex = 0; beatIndex < screenplayBeats.length; beatIndex++) {
+      const beat = screenplayBeats[beatIndex];
+      if (!needsCards(beat)) continue;
+      const meta = plot[beatIndex];
+      const beatLabel = `Beat ${beatIndex + 1} of ${screenplayBeats.length}: ${meta?.title?.en ?? ""} — ${meta?.description?.en ?? ""}`;
+      const scenesText = beat.scenes.map((scene, i) => `SCENE ${i + 1}\n${sceneToPromptText(scene)}`).join("\n\n");
+      const cards = await generateAiMovieSceneCards(beatLabel, scenesText, beat.scenes.length);
+      // A wrong count can't be matched to scenes reliably -- treat it as a
+      // failure (cooldown) rather than retrying this beat on every poll.
+      if (cards.length !== beat.scenes.length) throw new Error(`Expected ${beat.scenes.length} scene cards, got ${cards.length}`);
+      for (let sceneIndex = 0; sceneIndex < beat.scenes.length; sceneIndex++) {
+        const scene = beat.scenes[sceneIndex];
+        if (scene.card || !cards[sceneIndex]) continue;
+        await db.query(
+          `UPDATE ai_movie_projects
+             SET backfill = jsonb_set(backfill, $2::text[], $3::jsonb)
+           WHERE id = $1 AND backfill #>> $4::text[] = $5`,
+          [
+            projectId,
+            ["screenplayBeats", String(beatIndex), "scenes", String(sceneIndex), "card"],
+            JSON.stringify(cards[sceneIndex]),
+            ["screenplayBeats", String(beatIndex), "scenes", String(sceneIndex), "sceneHeading", "en"],
+            scene.sceneHeading?.en ?? "",
+          ]
+        );
+      }
+    }
+    aiMovieSceneCardsLastFailedAt.delete(projectId);
+  } catch (error) {
+    aiMovieSceneCardsLastFailedAt.set(projectId, Date.now());
+    console.error("Background scene card fill failed (next attempt after cooldown):", error.message);
+  } finally {
+    aiMovieSceneCardsInFlight.delete(projectId);
+  }
+}
+
 async function generateAiMovieForwardStage(stageKey, priorContextText, referenceMaterialText, feedback) {
   const referenceBlock = referenceMaterialText
     ? `\n\nThe user has also provided reference material below — treat it as authoritative grounding, stay faithful to it:\n\n${referenceMaterialText}`
@@ -4788,6 +4900,7 @@ app.get("/api/ai-movie/projects/:id", requireRole("admin"), async (req, res) => 
   // the normal trigger -- backfill it quietly in the background, no redo
   // of anything already done.
   backfillAiMovieCharacterDialogueBriefsIfMissing(row.id, row.pasted_text, row.backfill);
+  fillAiMovieSceneCardsIfMissing(row.id, row.backfill);
 
   // Every scene's heading is normalized (English slugline in both
   // languages, never repeated inside the action) and its duration is

@@ -1749,6 +1749,13 @@ button, input, textarea, select {
   text-align: left;
 }
 
+/* Scene card line: purpose · emotion intensity/10 · emotional turn. */
+.ai-movie-scene-card {
+  margin: 0 0 6px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
 /* Short acting note under the character name, e.g. "(quietly)" -- set in
    a touch from the name, the way a screenplay indents it. */
 .ai-movie-dialogue-parenthetical {

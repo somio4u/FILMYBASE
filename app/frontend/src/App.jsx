@@ -320,6 +320,7 @@ const LABELS = {
     aiMovieScreenplayBeatWritingLabel: "Writing this beat's scenes…",
     aiMovieScreenplayBeatErrorLabel: 'Something went wrong generating this beat.',
     aiMovieScreenplayRetryButton: 'Retry',
+    aiMovieScenePurposeLabels: { plot_advancing: 'Plot', character_revealing: 'Character', both: 'Plot + Character' },
     aiMovieScreenplayPdfButton: (lang) => `Download Screenplay PDF (${lang === 'hi' ? 'Hindi' : 'English'})`,
     aiMovieExtendToTargetButton: (target) => `Extend to ${target} min`,
     aiMovieExtendingToTargetLabel: 'Extending this beat…',
@@ -905,6 +906,7 @@ const LABELS = {
     aiMovieScreenplayBeatWritingLabel: 'ଏହି ବିଟ୍‌ର ଦୃଶ୍ୟ ଲେଖାଯାଉଛି…',
     aiMovieScreenplayBeatErrorLabel: 'ଏହି ବିଟ୍ ତିଆରି କରିବାରେ କିଛି ଭୁଲ ହେଲା।',
     aiMovieScreenplayRetryButton: 'ପୁଣି ଚେଷ୍ଟା କରନ୍ତୁ',
+    aiMovieScenePurposeLabels: { plot_advancing: 'କାହାଣୀ', character_revealing: 'ଚରିତ୍ର', both: 'କାହାଣୀ + ଚରିତ୍ର' },
     aiMovieScreenplayPdfButton: (lang) => `ସ୍କ୍ରିନପ୍ଲେ PDF ଡାଉନଲୋଡ୍ କରନ୍ତୁ (${lang === 'hi' ? 'ହିନ୍ଦୀ' : 'ଇଂରାଜୀ'})`,
     aiMovieExtendToTargetButton: (target) => `${target} ମିନିଟ୍ ପର୍ଯ୍ୟନ୍ତ ବଢ଼ାନ୍ତୁ`,
     aiMovieExtendingToTargetLabel: 'ଏହି ବିଟ୍ ବଢ଼ାଯାଉଛି…',
@@ -9057,6 +9059,15 @@ function App() {
                                           </p>
                                           {scene.characters?.[aiMovieLanguage] && (
                                             <p className="ai-movie-scene-characters">{scene.characters[aiMovieLanguage]}</p>
+                                          )}
+                                          {scene.card && (
+                                            <p className="ai-movie-scene-card">
+                                              {t.aiMovieScenePurposeLabels[scene.card.purpose] ?? scene.card.purpose}
+                                              {' · '}
+                                              {scene.card.emotion?.[aiMovieLanguage] || scene.card.emotion?.en} {scene.card.intensity}/10
+                                              {' · '}
+                                              {scene.card.turn?.[aiMovieLanguage] || scene.card.turn?.en}
+                                            </p>
                                           )}
                                           {Array.isArray(scene.content) && scene.content.length > 0 ? (
                                             scene.content.map((block, blockIndex) =>

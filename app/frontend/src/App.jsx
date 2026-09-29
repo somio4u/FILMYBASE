@@ -5551,7 +5551,7 @@ function App() {
           const beats = [...(prev?.screenplayBeats ?? [])]
           const existing = beats[beatIndex]
           if (!existing) return prev ?? {}
-          const scenes = existing.scenes.map((s, i) => (i === sceneIndex ? { ...s, dialogue: data.dialogue } : s))
+          const scenes = existing.scenes.map((s, i) => (i === sceneIndex ? { ...s, content: data.content } : s))
           beats[beatIndex] = { ...existing, scenes }
           return { ...(prev ?? {}), screenplayBeats: beats }
         })

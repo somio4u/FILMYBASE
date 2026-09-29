@@ -1749,6 +1749,21 @@ button, input, textarea, select {
   text-align: left;
 }
 
+/* The INTERVAL marker on the beat it follows. */
+.ai-movie-interval-marker {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  margin: 12px 0;
+  padding: 8px;
+  border-top: 1px dashed var(--text-secondary);
+  border-bottom: 1px dashed var(--text-secondary);
+  font-weight: bold;
+  letter-spacing: 1px;
+  color: var(--text-primary);
+}
+
 /* Scene card line: purpose · emotion intensity/10 · emotional turn. */
 .ai-movie-scene-card {
   margin: 0 0 6px;

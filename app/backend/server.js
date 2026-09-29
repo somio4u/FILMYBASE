@@ -3838,6 +3838,26 @@ async function generateAiMovieForwardStage(stageKey, priorContextText, reference
 // generated ahead of whichever beat the user is currently reviewing, topped
 // back up each time they approve one — so there's always a small queue of
 // ready beats waiting, never a wait for the next one to write itself.
+// The INTERVAL -- placed by the user on a beat card (their choice: never
+// guessed automatically), stored as backfill.intervalAfterBeat. Every
+// writer working on that beat is told it ends at the interval, and the beat
+// right after is told it opens the second half, per the project's own
+// Rule 1 (Indian film: the scene before the interval is one of the biggest
+// moments in the whole film, cut at the peak). Appended to the story
+// context every writer already receives, so all of them -- new scenes,
+// expansion, Request Changes, Write Dialogue -- get it the same way.
+function withAiMovieIntervalNote(priorContextText, backfill, beatIndex) {
+  const intervalAfterBeat = backfill?.intervalAfterBeat;
+  if (!Number.isInteger(intervalAfterBeat)) return priorContextText;
+  if (beatIndex === intervalAfterBeat) {
+    return `${priorContextText}\n\nINTERVAL: this beat ENDS AT THE FILM'S INTERVAL (Indian cinema's mid-film break). Its final scene must end on one of the very biggest moments of the whole film — a shock, a twist, or a strong emotional peak — as big as the climax in its own way, so the audience is desperate to come back. Build to that peak and cut to interval AT the peak, never after it has cooled down. Earlier scenes in this beat should build toward it.`;
+  }
+  if (beatIndex === intervalAfterBeat + 1) {
+    return `${priorContextText}\n\nAFTER THE INTERVAL: this beat opens the second half of the film, right after the interval. Its first scene should pick the story straight back up with fresh energy and a strong hook, not a slow recap.`;
+  }
+  return priorContextText;
+}
+
 const AI_MOVIE_SCREENPLAY_BUFFER_SIZE = 4;
 
 // Basic screenplay format, shared word-for-word by every agent that writes
@@ -4331,7 +4351,11 @@ async function generateNextAiMovieScreenplayBeat(projectId) {
 
   try {
     const referenceMaterialText = await getAiMovieReferenceMaterialText(projectId);
-    const priorContextText = flattenAiMovieContentForExtraction(project.pasted_text, project.backfill, { includeScreenplay: false });
+    const priorContextText = withAiMovieIntervalNote(
+      flattenAiMovieContentForExtraction(project.pasted_text, project.backfill, { includeScreenplay: false }),
+      project.backfill,
+      nextIndex
+    );
     const scenesSoFarText = flattenAiMovieScreenplayScenesSoFar(screenplayBeats, nextIndex);
     const initialScenes = await generateAiMovieScreenplayBeat(priorContextText, referenceMaterialText, scenesSoFarText, beats[nextIndex], null);
     const scenes = await fillAiMovieScreenplayBeatToTarget(
@@ -4521,7 +4545,11 @@ app.post("/api/ai-movie/stages/screenplay/beats/:index/request-changes", require
 
   try {
     const referenceMaterialText = await getAiMovieReferenceMaterialText(projectId);
-    const priorContextText = flattenAiMovieContentForExtraction(project.pasted_text, project.backfill, { includeScreenplay: false });
+    const priorContextText = withAiMovieIntervalNote(
+      flattenAiMovieContentForExtraction(project.pasted_text, project.backfill, { includeScreenplay: false }),
+      project.backfill,
+      beatIndex
+    );
     const scenesSoFarText = flattenAiMovieScreenplayScenesSoFar(screenplayBeats, beatIndex);
     const initialScenes = await generateAiMovieScreenplayBeat(priorContextText, referenceMaterialText, scenesSoFarText, beats[beatIndex], feedback || null);
     // The beat's own runtimeMinutes target (set back at the Beat Sheet
@@ -4593,7 +4621,11 @@ app.post("/api/ai-movie/stages/screenplay/beats/:index/extend-to-target", requir
 
   try {
     const referenceMaterialText = await getAiMovieReferenceMaterialText(projectId);
-    const priorContextText = flattenAiMovieContentForExtraction(project.pasted_text, project.backfill, { includeScreenplay: false });
+    const priorContextText = withAiMovieIntervalNote(
+      flattenAiMovieContentForExtraction(project.pasted_text, project.backfill, { includeScreenplay: false }),
+      project.backfill,
+      beatIndex
+    );
     const scenesSoFarText = flattenAiMovieScreenplayScenesSoFar(screenplayBeats, beatIndex);
     // Re-measure first: saved scenes may still carry durations from the
     // older words/200 count, which would make the beat look closer to its
@@ -4682,7 +4714,11 @@ app.post("/api/ai-movie/stages/screenplay/beats/:beatIndex/scenes/:sceneIndex/re
 
   try {
     const referenceMaterialText = await getAiMovieReferenceMaterialText(projectId);
-    const priorContextText = flattenAiMovieContentForExtraction(project.pasted_text, project.backfill, { includeScreenplay: false });
+    const priorContextText = withAiMovieIntervalNote(
+      flattenAiMovieContentForExtraction(project.pasted_text, project.backfill, { includeScreenplay: false }),
+      project.backfill,
+      beatIndex
+    );
     const scenesSoFarText = flattenAiMovieScreenplayScenesSoFar(screenplayBeats, beatIndex);
     const beatSiblingScenesText = beat.scenes
       .filter((_, i) => i !== sceneIndex)
@@ -4765,7 +4801,11 @@ app.post("/api/ai-movie/stages/screenplay/beats/:beatIndex/scenes/:sceneIndex/di
 
   try {
     const referenceMaterialText = await getAiMovieReferenceMaterialText(projectId);
-    const priorContextText = flattenAiMovieContentForExtraction(project.pasted_text, project.backfill, { includeScreenplay: false });
+    const priorContextText = withAiMovieIntervalNote(
+      flattenAiMovieContentForExtraction(project.pasted_text, project.backfill, { includeScreenplay: false }),
+      project.backfill,
+      beatIndex
+    );
     const scenesSoFarText = flattenAiMovieScreenplayScenesSoFar(screenplayBeats, beatIndex);
     const beatSiblingScenesText = beat.scenes
       .filter((_, i) => i !== sceneIndex)
@@ -4944,6 +4984,30 @@ app.get("/api/ai-movie/projects/:id", requireRole("admin"), async (req, res) => 
   });
 });
 
+// Places (or, with afterBeat: null, removes) the INTERVAL. One interval
+// per film, so placing it again simply moves it. Saved with one atomic
+// update so it can never clobber screenplay work being saved at the same
+// moment in the background.
+app.post("/api/ai-movie/projects/:id/interval", requireRole("admin"), async (req, res) => {
+  const { afterBeat } = req.body;
+  const result = await db.query("SELECT backfill FROM ai_movie_projects WHERE id = $1", [req.params.id]);
+  const row = result.rows[0];
+  if (!row) {
+    res.status(404).json({ error: "Project not found." });
+    return;
+  }
+  const beatCount = row.backfill?.plot?.length ?? 0;
+  if (afterBeat !== null && (!Number.isInteger(afterBeat) || afterBeat < 0 || afterBeat >= beatCount - 1)) {
+    res.status(400).json({ error: "The interval has to go after a beat that has another beat following it." });
+    return;
+  }
+  await db.query("UPDATE ai_movie_projects SET backfill = jsonb_set(backfill, '{intervalAfterBeat}', $2::jsonb), updated_at = now() WHERE id = $1", [
+    req.params.id,
+    JSON.stringify(afterBeat),
+  ]);
+  res.json({ intervalAfterBeat: afterBeat });
+});
+
 // Industry-format screenplay PDF for an AI Movie -- the standard US
 // screenplay page, so "one page = one minute" actually holds for what gets
 // printed: Letter size, Courier 12 (10 characters per inch, ~55 lines per
@@ -5094,6 +5158,15 @@ function renderAiMovieScreenplayPdf(res, { title, scenes, lang }) {
         for (const line of scene.dialogue) writeDialogue((line.character ?? "").toUpperCase(), "", pick(line.line));
       }
     }
+
+    // Indian scripts mark the break with a centred INTERVAL line.
+    if (scene.intervalAfter) {
+      keepLines(3);
+      blankLine();
+      write("Courier-Bold", "INTERVAL", P.pageLeft, doc.y, { width: P.pageRight - P.pageLeft, align: "center" });
+      blankLine();
+      blankLine();
+    }
   });
 
   // Page numbers, top right, from the second script page on (the title
@@ -5114,10 +5187,15 @@ app.get("/api/ai-movie/projects/:id/screenplay.pdf", requireRole("admin"), async
     res.status(404).json({ error: "Project not found." });
     return;
   }
-  const scenes = (row.backfill?.screenplayBeats ?? [])
-    .filter((beat) => Array.isArray(beat.scenes))
-    .flatMap((beat) => beat.scenes)
-    .map((scene) => normalizeAiMovieSceneFormat(scene));
+  const intervalAfterBeat = row.backfill?.intervalAfterBeat;
+  const scenes = (row.backfill?.screenplayBeats ?? []).flatMap((beat, beatIndex) =>
+    Array.isArray(beat.scenes)
+      ? beat.scenes.map((scene, sceneIndex) => ({
+          ...normalizeAiMovieSceneFormat(scene),
+          intervalAfter: beatIndex === intervalAfterBeat && sceneIndex === beat.scenes.length - 1,
+        }))
+      : []
+  );
   if (scenes.length === 0) {
     res.status(400).json({ error: "No screenplay scenes written yet." });
     return;

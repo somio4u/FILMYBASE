@@ -320,6 +320,9 @@ const LABELS = {
     aiMovieScreenplayBeatWritingLabel: "Writing this beat's scenes…",
     aiMovieScreenplayBeatErrorLabel: 'Something went wrong generating this beat.',
     aiMovieScreenplayRetryButton: 'Retry',
+    aiMovieSetIntervalButton: 'Interval goes after this beat',
+    aiMovieRemoveIntervalButton: 'Remove interval',
+    aiMovieIntervalMarker: '— INTERVAL after this beat —',
     aiMovieScenePurposeLabels: { plot_advancing: 'Plot', character_revealing: 'Character', both: 'Plot + Character' },
     aiMovieScreenplayPdfButton: (lang) => `Download Screenplay PDF (${lang === 'hi' ? 'Hindi' : 'English'})`,
     aiMovieExtendToTargetButton: (target) => `Extend to ${target} min`,
@@ -906,6 +909,9 @@ const LABELS = {
     aiMovieScreenplayBeatWritingLabel: 'ଏହି ବିଟ୍‌ର ଦୃଶ୍ୟ ଲେଖାଯାଉଛି…',
     aiMovieScreenplayBeatErrorLabel: 'ଏହି ବିଟ୍ ତିଆରି କରିବାରେ କିଛି ଭୁଲ ହେଲା।',
     aiMovieScreenplayRetryButton: 'ପୁଣି ଚେଷ୍ଟା କରନ୍ତୁ',
+    aiMovieSetIntervalButton: 'ଏହି ବିଟ୍ ପରେ ଇଣ୍ଟରଭାଲ୍',
+    aiMovieRemoveIntervalButton: 'ଇଣ୍ଟରଭାଲ୍ ହଟାନ୍ତୁ',
+    aiMovieIntervalMarker: '— ଏହି ବିଟ୍ ପରେ ଇଣ୍ଟରଭାଲ୍ —',
     aiMovieScenePurposeLabels: { plot_advancing: 'କାହାଣୀ', character_revealing: 'ଚରିତ୍ର', both: 'କାହାଣୀ + ଚରିତ୍ର' },
     aiMovieScreenplayPdfButton: (lang) => `ସ୍କ୍ରିନପ୍ଲେ PDF ଡାଉନଲୋଡ୍ କରନ୍ତୁ (${lang === 'hi' ? 'ହିନ୍ଦୀ' : 'ଇଂରାଜୀ'})`,
     aiMovieExtendToTargetButton: (target) => `${target} ମିନିଟ୍ ପର୍ଯ୍ୟନ୍ତ ବଢ଼ାନ୍ତୁ`,
@@ -4335,6 +4341,7 @@ function App() {
   // The silent asset-extraction agent's output (characters/properties/
   // environments) — saved alongside the project but never rendered here.
   const [aiMovieAssets, setAiMovieAssets] = useState(null)
+  const [isSavingAiMovieInterval, setIsSavingAiMovieInterval] = useState(false)
 
   // Persistence: every AI Movie project is saved to its own database row as
   // you go. null = not saved yet (a fresh, un-analyzed paste).
@@ -5472,6 +5479,29 @@ function App() {
     }
     await pollAiMovieScreenplayUntilReady(projectId)
     setIsApprovingAiMovieScreenplayBeat(false)
+  }
+
+  // Places the INTERVAL after the given beat, or removes it (null).
+  async function handleSetAiMovieIntervalClick(afterBeat) {
+    if (!aiMovieProjectId) return
+    setIsSavingAiMovieInterval(true)
+    setAiMovieStageError(null)
+    try {
+      const response = await fetch(`${BACKEND_URL}/api/ai-movie/projects/${aiMovieProjectId}/interval`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ afterBeat }),
+      })
+      const data = await response.json()
+      if (!response.ok) {
+        setAiMovieStageError(data.error || t.genericError)
+      } else {
+        setAiMovieBackfillResult((prev) => ({ ...(prev ?? {}), intervalAfterBeat: data.intervalAfterBeat }))
+      }
+    } catch {
+      setAiMovieStageError(t.genericError)
+    }
+    setIsSavingAiMovieInterval(false)
   }
 
   // Grows a written-but-short beat to its fixed Beat Sheet time, keeping
@@ -9181,6 +9211,33 @@ function App() {
                                         </div>
                                       )
                                     })}
+
+                                    {/* The INTERVAL is placed by hand (the user's choice), one per
+                                        film -- placing it on another beat simply moves it. */}
+                                    {aiMovieBackfillResult?.intervalAfterBeat === viewIndex ? (
+                                      <div className="ai-movie-interval-marker">
+                                        <span>{t.aiMovieIntervalMarker}</span>
+                                        <button
+                                          type="button"
+                                          className="ai-movie-revise-scene-button"
+                                          onClick={() => handleSetAiMovieIntervalClick(null)}
+                                          disabled={isSavingAiMovieInterval}
+                                        >
+                                          {t.aiMovieRemoveIntervalButton}
+                                        </button>
+                                      </div>
+                                    ) : (
+                                      viewIndex < beatsPlot.length - 1 && (
+                                        <button
+                                          type="button"
+                                          className="ai-movie-revise-scene-button"
+                                          onClick={() => handleSetAiMovieIntervalClick(viewIndex)}
+                                          disabled={isSavingAiMovieInterval}
+                                        >
+                                          {t.aiMovieSetIntervalButton}
+                                        </button>
+                                      )
+                                    )}
 
                                     {beat.feedback && (
                                       <p className="feedback-note">

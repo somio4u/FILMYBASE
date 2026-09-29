@@ -67,6 +67,13 @@ console.log(
 // in this file uses this constant (a real, explicit model id valid on both
 // AI Studio and Vertex AI) instead of a literal model name.
 const GEMINI_MODEL_NAME = "gemini-2.5-flash-lite";
+// AI Movie's final Write Dialogue pass only (the user's own call): that one
+// prompt carries by far the longest rule list in the app -- natural Hindi
+// code-switching, the NARRATOR, camera direction, subtext, the closing
+// button, screen-only writing, headings/names -- and a real scene showed
+// Flash-Lite dropping several of those rules at once. Everything else
+// stays on the cheaper GEMINI_MODEL_NAME above.
+const AI_MOVIE_DIALOGUE_MODEL_NAME = "gemini-2.5-flash";
 // DATABASE_URL (a full Postgres connection string, e.g. from Supabase) is
 // used when set; otherwise falls back to the local "filmmaking_app" dev
 // database. Supabase's pooled connection requires SSL but uses a
@@ -4002,19 +4009,20 @@ async function generateAiMovieSceneDialogue(
     : "Write dialogue (or decide none is needed) for this one scene:";
 
   const result = await generateJsonContent({
-    model: GEMINI_MODEL_NAME,
+    model: AI_MOVIE_DIALOGUE_MODEL_NAME,
     contents: `The story's approved layers so far:\n\n${priorContextText}${referenceBlock}${briefsBlock}${scenesBlock}${siblingBlock}\n\n${taskLine}\n\n${targetSceneText}${instructionBlock}`,
     config: {
       systemInstruction: AI_MOVIE_SCENE_DIALOGUE_SYSTEM_PROMPT,
       responseMimeType: "application/json",
       // Was 2048 -- too small once a scene carries interleaved dialogue,
       // camera direction, AND a full separate Hindi version of every block
-      // (Devanagari costs noticeably more tokens than English). A long
-      // scene got cut off mid-JSON, and every retry hit the same wall, so
-      // the longest scenes (exactly the ones fill-to-target sends here to
-      // lengthen) were the likeliest to fail. A ceiling only -- normal
-      // scenes still cost exactly what they write.
-      maxOutputTokens: 8192,
+      // (Devanagari costs noticeably more tokens than English). Raised again
+      // for Gemini 2.5 Flash: it "thinks" before answering, and on this model
+      // that thinking counts against this same limit -- this app's
+      // @google/genai version (0.3.1) can't cap thinking separately, so the
+      // ceiling itself leaves room for thinking plus the full scene. Only a
+      // ceiling: a call costs what it actually uses.
+      maxOutputTokens: 32768,
       responseSchema: {
         type: Type.OBJECT,
         properties: {

@@ -5362,3 +5362,204 @@ button:not(:disabled):active {
   box-shadow: 0 10px 28px rgba(129, 201, 149, 0.35);
   filter: brightness(1.05);
 }
+
+/* ============================================================
+   Typing straight into the script. The scene being edited keeps
+   the page's exact look -- every field is borderless, in the same
+   typewriter font, size and indent as the printed line -- with a
+   faint highlight while it has the cursor, small + / x controls in
+   the right margin, and a Submit bar under the scene.
+   ============================================================ */
+.script-scene.is-editing {
+  cursor: text;
+  margin: 0 -2ch;
+  padding: 1em 2ch 1em;
+  border-radius: 6px;
+  background: rgba(138, 180, 248, 0.06);
+  box-shadow: 0 0 0 1px rgba(138, 180, 248, 0.25);
+  animation: scene-arrive 0.4s var(--ease-spring) both;
+}
+
+.script-scene.is-editing::before {
+  left: -0.2ch;
+}
+
+.script-edit-field {
+  display: block;
+  box-sizing: border-box;
+  width: 100%;
+  margin: 0;
+  padding: 1px 3px;
+  border: none;
+  border-radius: 3px;
+  background: transparent;
+  color: var(--script-ink);
+  font: inherit;
+  line-height: inherit;
+  resize: none;
+  overflow: hidden;
+  field-sizing: content;
+  transition: background-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.script-edit-field::placeholder {
+  color: var(--script-ink-soft);
+  opacity: 0.7;
+}
+
+.script-edit-field:hover {
+  background: var(--script-rule);
+}
+
+.script-edit-field:focus {
+  outline: none;
+  background: rgba(138, 180, 248, 0.12);
+  box-shadow: 0 0 0 1px rgba(138, 180, 248, 0.45);
+}
+
+.script-page .script-edit-slug {
+  display: inline-block;
+  width: calc(100% - 1ch);
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.script-page input.script-character {
+  width: auto;
+  min-width: 18ch;
+  text-transform: uppercase;
+}
+
+.script-page input.script-parenthetical {
+  width: 25ch;
+  font-style: italic;
+}
+
+.script-page textarea.script-line {
+  width: 35ch;
+}
+
+.script-page input.script-transition {
+  text-align: right;
+}
+
+.script-edit-block {
+  position: relative;
+  margin-bottom: 1em;
+}
+
+.script-edit-block .script-dialogue,
+.script-edit-block .script-action {
+  margin-bottom: 0;
+}
+
+.script-edit-controls {
+  position: absolute;
+  top: 0;
+  right: -9ch;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  opacity: 0;
+  transform: translateX(-4px);
+  transition: opacity 0.2s ease, transform 0.25s var(--ease-spring);
+}
+
+.script-edit-block:hover .script-edit-controls,
+.script-edit-block:focus-within .script-edit-controls,
+.script-edit-controls.is-visible {
+  opacity: 1;
+  transform: none;
+}
+
+.script-edit-controls.is-visible {
+  position: static;
+  flex-direction: row;
+}
+
+.script-edit-controls button {
+  padding: 2px 7px;
+  border: 1px solid var(--script-rule);
+  border-radius: 999px;
+  background: var(--script-paper);
+  color: var(--script-ink-soft);
+  font-family: var(--font-body);
+  font-size: 10.5px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.script-edit-controls button:hover {
+  color: var(--script-ink);
+  border-color: rgba(138, 180, 248, 0.6);
+}
+
+.script-edit-submit-bar {
+  margin-top: 1.2em;
+  padding-top: 0.9em;
+  border-top: 1px dashed var(--script-rule);
+  font-family: var(--font-body);
+}
+
+.script-page .script-edit-submit-bar p {
+  margin: 0 0 10px;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--script-ink-soft);
+}
+
+.script-edit-submit-bar > div {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.script-page-light .script-edit-submit-bar .cancel-button {
+  color: #3b3b3b;
+  border-color: rgba(0, 0, 0, 0.2);
+  background: transparent;
+}
+
+.script-tools-editing-note {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--accent-gradient-soft);
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--text-primary);
+}
+
+.script-edit-fixes {
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--success-bg);
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--text-primary);
+  animation: scene-arrive 0.4s var(--ease-spring) both;
+}
+
+.script-edit-fixes ul {
+  margin: 0;
+  padding-left: 18px;
+}
+
+.script-edit-fixes p {
+  margin: 0;
+}
+
+/* On a narrow page there's no right margin for the controls: they sit
+   under the line instead. */
+@container script-page (max-width: 760px) {
+  .script-edit-controls {
+    position: static;
+    flex-direction: row;
+    margin-top: 4px;
+  }
+  .script-page input.script-parenthetical,
+  .script-page textarea.script-line {
+    width: auto;
+    max-width: 100%;
+  }
+}

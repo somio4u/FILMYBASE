@@ -5408,6 +5408,204 @@ app.post("/api/ai-movie/stages/screenplay/beats/:beatIndex/scenes/:sceneIndex/re
 // does NOT put the beat back to "pending" -- the scene's actual content
 // (heading/action) isn't touched, only dialogue layered on top of it, so
 // there's nothing there that needs a fresh review pass.
+// Typing straight into the script (user request): the user edits one
+// scene on the page, in the language they're reading, and submits it.
+// This editor only CORRECTS -- spelling, grammar, punctuation, and
+// language (anything typed in English, in romanized Hindi, or in another
+// language like Odia inside the Hindi version becomes natural Hindi; the
+// reverse for the English version) -- then writes the other language to
+// match. It never rewrites the user's content. It also says what it fixed,
+// so the user can see every change.
+const AI_MOVIE_SCENE_EDIT_SYSTEM_PROMPT = `You are a careful script editor on a film screenplay. The writer has typed or edited ONE scene themselves, directly on the script page, in the language named below. Your job is to CORRECT it, never to rewrite it.
+
+1. Fix spelling, grammar and punctuation.
+2. Fix the language of the edited version:
+   - If the edited version is HINDI: every Hindi field must be natural, everyday spoken Hindi in Devanagari. Anything the writer typed in full English sentences, in Hindi written with English letters (romanized Hindi, e.g. "aaj hum chalte hain"), or in another language (e.g. Odia) must be rewritten as natural Hindi with exactly the same meaning. Words people in India really say in English may stay in English, following the limits below — and such a word is written in ENGLISH LETTERS inside the Hindi sentence ("Samir अपना ship चला रहा है", "एक और delivery"), never spelled out in Devanagari ("शिप", "डिलीवरी").
+   - If the edited version is ENGLISH: every English field must be simple, natural English. Anything typed in Hindi, Odia or any other language must be translated into English with the same meaning.
+3. Keep EVERYTHING else the writer wrote: the same events, the same lines, the same order, the same characters, the same scene heading. Do not add new events or lines, do not remove any, and do not "improve" the style, the wording or the drama. If a sentence is already correct, leave it exactly as it is.
+4. Keep the standard screenplay format: the scene heading is a standard English slugline in capitals; a character's name is in capital English letters; an acting note is 1 to 4 words. Keep every block as the kind of block it is (action stays action, dialogue stays dialogue).
+5. Then write the OTHER language version of every block as a faithful translation of the corrected text (the Hindi version following the rules below), so both languages say the same thing.
+6. "fixes": a short list, in simple English, of what you corrected (e.g. "Changed an English sentence in the second action line into Hindi", "Fixed the spelling of 'vibration'"). An empty list if nothing needed fixing.
+
+${AI_MOVIE_HINDI_SWITCH_LIMITS_RULE}
+
+${AI_MOVIE_HEADING_AND_NAMES_RULE}
+
+${AI_MOVIE_CONTENT_BLOCK_FORMAT_RULE}`;
+
+// The AI returns one correction per block, numbered -- and the scene is
+// rebuilt here from the writer's OWN blocks (same lines, same order, same
+// types, same characters), taking only the corrected wording from the AI.
+// A real test run had the AI simply drop a dialogue line the writer had
+// just added; built this way, no line can go missing. A block the AI
+// skipped keeps the writer's own text.
+const AI_MOVIE_SCENE_EDIT_CORRECTION_SCHEMA = {
+  type: Type.OBJECT,
+  properties: {
+    number: { type: Type.NUMBER },
+    text: AI_MOVIE_BILINGUAL_TEXT_SCHEMA,
+    line: AI_MOVIE_BILINGUAL_TEXT_SCHEMA,
+    parenthetical: AI_MOVIE_BILINGUAL_TEXT_SCHEMA,
+    character: { type: Type.STRING },
+  },
+  required: ["number"],
+};
+
+async function generateAiMovieSceneEditCorrection(language, sceneHeading, blocks, characterNames, beat) {
+  const languageName = language === "hi" ? "HINDI" : "ENGLISH";
+  const blocksText = blocks
+    .map((block, i) => {
+      if (block.type === "dialogue") {
+        const note = block.parenthetical ? ` (acting note: ${block.parenthetical})` : "";
+        return `${i + 1}. DIALOGUE — character: ${block.character}${note} — line: ${block.line}`;
+      }
+      if (block.type === "transition") return `${i + 1}. TRANSITION — ${block.transition}`;
+      return `${i + 1}. ACTION — ${block.text}`;
+    })
+    .join("\n");
+  const result = await generateJsonContent({
+    model: AI_MOVIE_DIALOGUE_MODEL_NAME,
+    contents: `The film's characters (spell their names exactly like this): ${characterNames.join(", ") || "(none listed)"}.\nThis scene belongs to the beat: ${beat.title.en}: ${beat.description.en}\n\nThe writer edited the ${languageName} version of this scene. Scene heading: ${sceneHeading}\n\nIts numbered blocks:\n${blocksText}\n\nReturn "blocks": exactly ONE entry for EVERY numbered block above — ${blocks.length} entries, same numbers, none skipped, none merged, none added. For an ACTION block fill "text"; for a DIALOGUE block fill "character" (capital English letters), "line", and "parenthetical" only if it had an acting note; for a TRANSITION block just the number. Every text field has both "en" and "hi".`,
+    config: {
+      systemInstruction: AI_MOVIE_SCENE_EDIT_SYSTEM_PROMPT,
+      responseMimeType: "application/json",
+      // 2.5 Flash thinks before answering, and that counts against this
+      // same ceiling -- same headroom as Write Dialogue.
+      maxOutputTokens: 32768,
+      responseSchema: {
+        type: Type.OBJECT,
+        properties: {
+          sceneHeading: { type: Type.STRING },
+          blocks: { type: Type.ARRAY, items: AI_MOVIE_SCENE_EDIT_CORRECTION_SCHEMA },
+          fixes: { type: Type.ARRAY, items: { type: Type.STRING } },
+        },
+        required: ["sceneHeading", "blocks", "fixes"],
+      },
+    },
+  });
+
+  const corrections = new Map((Array.isArray(result.blocks) ? result.blocks : []).map((c) => [Math.round(Number(c?.number)), c]));
+  // The writer's own text for the language they edited, the AI's for both
+  // when it has one; never empty.
+  const bilingual = (corrected, ownText) => {
+    const own = ownText ?? "";
+    const en = typeof corrected?.en === "string" && corrected.en.trim() ? corrected.en : language === "en" ? own : "";
+    const hi = typeof corrected?.hi === "string" && corrected.hi.trim() ? corrected.hi : language === "hi" ? own : "";
+    return { en: en || own, hi: hi || own };
+  };
+  let skipped = 0;
+  const content = blocks.map((block, i) => {
+    const correction = corrections.get(i + 1);
+    if (!correction) skipped++;
+    if (block.type === "dialogue") {
+      const rebuilt = {
+        type: "dialogue",
+        character: (typeof correction?.character === "string" && correction.character.trim() ? correction.character : block.character).trim().toUpperCase(),
+        line: bilingual(correction?.line ?? correction?.text, block.line),
+      };
+      if (block.parenthetical) rebuilt.parenthetical = bilingual(correction?.parenthetical, block.parenthetical);
+      if (block.extension) rebuilt.extension = block.extension;
+      return rebuilt;
+    }
+    if (block.type === "transition") return { type: "transition", transition: block.transition };
+    return { type: "action", text: bilingual(correction?.text ?? correction?.line, block.text) };
+  });
+  if (skipped > 0) console.log(`Scene edit: the AI skipped ${skipped} of ${blocks.length} block(s); kept the writer's own text for them.`);
+  return {
+    sceneHeading: typeof result.sceneHeading === "string" && result.sceneHeading.trim() ? result.sceneHeading : sceneHeading,
+    content: sanitizeAiMovieContentBlocks(content),
+    fixes: Array.isArray(result.fixes) ? result.fixes.filter((fix) => typeof fix === "string" && fix.trim()) : [],
+  };
+}
+
+// The edited blocks as the screen sends them: one language only, plain
+// strings. Anything malformed is dropped; empty blocks too.
+function cleanAiMovieEditedBlocks(blocks) {
+  if (!Array.isArray(blocks)) return [];
+  const text = (value) => (typeof value === "string" ? value.trim() : "");
+  return blocks
+    .map((block) => {
+      if (block?.type === "dialogue") {
+        const cleaned = { type: "dialogue", character: text(block.character).toUpperCase(), line: text(block.line) };
+        if (text(block.parenthetical)) cleaned.parenthetical = text(block.parenthetical).replace(/^\(\s*|\s*\)$/g, "");
+        if (block.extension === "V.O." || block.extension === "O.S.") cleaned.extension = block.extension;
+        return cleaned.character && cleaned.line ? cleaned : null;
+      }
+      if (block?.type === "transition") {
+        const transition = text(block.transition).toUpperCase();
+        return transition ? { type: "transition", transition } : null;
+      }
+      const actionText = text(block?.text);
+      return actionText ? { type: "action", text: actionText } : null;
+    })
+    .filter(Boolean)
+    .slice(0, 200);
+}
+
+app.post("/api/ai-movie/stages/screenplay/beats/:beatIndex/scenes/:sceneIndex/edit", requireRole("admin"), async (req, res) => {
+  const beatIndex = Number(req.params.beatIndex);
+  const sceneIndex = Number(req.params.sceneIndex);
+  const { projectId, language, sceneHeading } = req.body;
+  if (!projectId) {
+    res.status(400).json({ error: "No project to save into." });
+    return;
+  }
+  const blocks = cleanAiMovieEditedBlocks(req.body.blocks);
+  if (blocks.length === 0) {
+    res.status(400).json({ error: "The scene is empty -- write at least one line before submitting." });
+    return;
+  }
+
+  const projectResult = await db.query("SELECT backfill FROM ai_movie_projects WHERE id = $1", [projectId]);
+  const project = projectResult.rows[0];
+  if (!project) {
+    res.status(404).json({ error: "Project not found." });
+    return;
+  }
+  const beats = project.backfill?.plot ?? [];
+  const screenplayBeats = project.backfill?.screenplayBeats ?? [];
+  const beat = screenplayBeats[beatIndex];
+  if (!Number.isInteger(beatIndex) || !beats[beatIndex] || !beat || !Array.isArray(beat.scenes)) {
+    res.status(400).json({ error: "Not a valid beat." });
+    return;
+  }
+  if (!Number.isInteger(sceneIndex) || sceneIndex < 0 || sceneIndex >= beat.scenes.length) {
+    res.status(400).json({ error: "Not a valid scene." });
+    return;
+  }
+
+  try {
+    const characterNames = (project.backfill?.characterArc ?? []).map((c) => c?.name).filter(Boolean);
+    const heading = typeof sceneHeading === "string" && sceneHeading.trim() ? sceneHeading.trim() : beat.scenes[sceneIndex].sceneHeading?.en ?? "";
+    const corrected = await generateAiMovieSceneEditCorrection(language === "en" ? "en" : "hi", heading, blocks, characterNames, beats[beatIndex]);
+
+    const latest = (await db.query("SELECT backfill FROM ai_movie_projects WHERE id = $1", [projectId])).rows[0].backfill;
+    const latestBeats = latest.screenplayBeats ?? screenplayBeats;
+    const latestScenes = latestBeats[beatIndex]?.scenes ?? beat.scenes;
+    const newScenes = latestScenes.map((s, i) => {
+      if (i !== sceneIndex) return s;
+      // The old action text, legacy dialogue list and scene card described
+      // the scene before the edit -- the card is rewritten in the
+      // background the next time the project opens.
+      const { action: _action, dialogue: _dialogue, card: _card, ...rest } = s;
+      const updated = normalizeAiMovieSceneFormat({
+        ...rest,
+        sceneHeading: { en: corrected.sceneHeading, hi: corrected.sceneHeading },
+        content: corrected.content,
+        editedByUser: true,
+      });
+      return { ...updated, estimatedMinutes: computeAiMovieSceneMinutes(updated) };
+    });
+    latestBeats[beatIndex] = { ...latestBeats[beatIndex], scenes: newScenes };
+    await saveAiMovieBackfillField(projectId, "screenplayBeats", latestBeats);
+
+    res.json({ beatIndex, sceneIndex, scene: newScenes[sceneIndex], fixes: corrected.fixes });
+  } catch (error) {
+    console.error(`Screenplay beat ${beatIndex} scene ${sceneIndex} edit failed:`, error.message);
+    res.status(502).json({ error: error.message });
+  }
+});
+
 // Beat-wide narration (user request): one NARRATOR voice-over that flows
 // across 3, 4, 5 consecutive scenes, described once for the whole beat.
 // The screen sends the beat's scenes one at a time, in order, through the

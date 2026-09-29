@@ -373,6 +373,24 @@ const LABELS = {
     aiMovieDialoguePlaceholder: 'Optional — any direction for the dialogue, e.g. "make this a tense argument" (leave blank to let the AI decide)',
     aiMovieBeatNarrationButton: 'Narration for this whole beat',
     scriptThemeLabel: 'Page colour',
+    scriptEditStartButton: '✎ Edit scene',
+    scriptEditEditingNote: 'Editing on the page — type straight into the script, then press Submit under the scene.',
+    scriptEditDoubleClickHint: 'Double-click to edit this scene',
+    scriptEditHeadingLabel: 'Scene heading',
+    scriptEditCharacterPlaceholder: 'CHARACTER',
+    scriptEditParentheticalPlaceholder: '(acting note — optional)',
+    scriptEditLinePlaceholder: 'Dialogue…',
+    scriptEditActionPlaceholder: 'Action…',
+    scriptEditActionShort: 'Action',
+    scriptEditDialogueShort: 'Dialogue',
+    scriptEditAddActionButton: 'Add an action line after this',
+    scriptEditAddDialogueButton: 'Add a dialogue line after this',
+    scriptEditRemoveButton: 'Remove this line',
+    scriptEditSubmitNote: 'Submit — the AI fixes spelling, grammar and language (e.g. English typed in the Hindi version), keeps your words and events, and updates the other language to match.',
+    scriptEditSubmitButton: 'Submit',
+    scriptEditSubmittingLabel: 'Checking your scene…',
+    scriptEditFixesTitle: 'What the AI fixed',
+    scriptEditNoFixesNote: 'Nothing needed fixing.',
     aiMovieStageNotOpenYetNote: 'This stage opens once the one before it is approved.',
     scriptScenesTitle: 'Scenes',
     scriptSelectedSceneTitle: (number) => `Scene ${number}`,
@@ -1006,6 +1024,24 @@ const LABELS = {
     aiMovieDialoguePlaceholder: 'ଇଚ୍ଛାଧୀନ — ସଂଳାପ ପାଇଁ କୌଣସି ନିର୍ଦ୍ଦେଶ, ଯଥା "ଏହାକୁ ଏକ ଉତ୍ତେଜନାପୂର୍ଣ୍ଣ ବିବାଦ କରନ୍ତୁ" (ଖାଲି ଛାଡ଼ିଲେ AI ନିଜେ ନିଷ୍ପତ୍ତି ନେବ)',
     aiMovieBeatNarrationButton: 'ଏହି ସମ୍ପୂର୍ଣ୍ଣ ବିଟ୍ ପାଇଁ ବର୍ଣ୍ଣନା',
     scriptThemeLabel: 'ପୃଷ୍ଠାର ରଙ୍ଗ',
+    scriptEditStartButton: '✎ ଦୃଶ୍ୟ ସମ୍ପାଦନ',
+    scriptEditEditingNote: 'ପୃଷ୍ଠାରେ ସମ୍ପାଦନା ଚାଲିଛି — ସିଧା ସ୍କ୍ରିପ୍ଟରେ ଲେଖନ୍ତୁ, ତାପରେ ଦୃଶ୍ୟ ତଳେ Submit ଦବାନ୍ତୁ।',
+    scriptEditDoubleClickHint: 'ଏହି ଦୃଶ୍ୟ ସମ୍ପାଦନ ପାଇଁ ଦୁଇଥର କ୍ଲିକ୍ କରନ୍ତୁ',
+    scriptEditHeadingLabel: 'ଦୃଶ୍ୟ ଶୀର୍ଷକ',
+    scriptEditCharacterPlaceholder: 'ଚରିତ୍ର',
+    scriptEditParentheticalPlaceholder: '(ଅଭିନୟ ଟିପ୍ପଣୀ — ଇଚ୍ଛାଧୀନ)',
+    scriptEditLinePlaceholder: 'ସଂଳାପ…',
+    scriptEditActionPlaceholder: 'ଆକ୍ସନ…',
+    scriptEditActionShort: 'ଆକ୍ସନ',
+    scriptEditDialogueShort: 'ସଂଳାପ',
+    scriptEditAddActionButton: 'ଏହା ପରେ ଏକ ଆକ୍ସନ ଧାଡ଼ି ଯୋଡ଼ନ୍ତୁ',
+    scriptEditAddDialogueButton: 'ଏହା ପରେ ଏକ ସଂଳାପ ଧାଡ଼ି ଯୋଡ଼ନ୍ତୁ',
+    scriptEditRemoveButton: 'ଏହି ଧାଡ଼ି ହଟାନ୍ତୁ',
+    scriptEditSubmitNote: 'Submit — AI ବନାନ, ବ୍ୟାକରଣ ଓ ଭାଷା ଠିକ୍ କରେ (ଯଥା ହିନ୍ଦୀ ସଂସ୍କରଣରେ ଲେଖାଯାଇଥିବା ଇଂରାଜୀ), ଆପଣଙ୍କ ଶବ୍ଦ ଓ ଘଟଣା ରଖେ, ଏବଂ ଅନ୍ୟ ଭାଷାକୁ ମେଳ କରେ।',
+    scriptEditSubmitButton: 'Submit',
+    scriptEditSubmittingLabel: 'ଆପଣଙ୍କ ଦୃଶ୍ୟ ଯାଞ୍ଚ ହେଉଛି…',
+    scriptEditFixesTitle: "AI କ'ଣ ଠିକ୍ କଲା",
+    scriptEditNoFixesNote: 'କିଛି ଠିକ୍ କରିବା ଦରକାର ନଥିଲା।',
     aiMovieStageNotOpenYetNote: 'ପୂର୍ବ ପର୍ଯ୍ୟାୟ ଅନୁମୋଦିତ ହେବା ପରେ ଏହି ପର୍ଯ୍ୟାୟ ଖୋଲିବ।',
     scriptScenesTitle: 'ଦୃଶ୍ୟଗୁଡ଼ିକ',
     scriptSelectedSceneTitle: (number) => `ଦୃଶ୍ୟ ${number}`,
@@ -4542,6 +4578,14 @@ function App() {
   // request) instead of one long column of every stage. null = follow the
   // stage being worked on right now.
   const [aiMovieFocusedStage, setAiMovieFocusedStage] = useState(null)
+  // Typing straight into the script (user request). While a scene is being
+  // edited, this holds its blocks in the language being read, as plain
+  // strings; Submit sends them to the script editor, which fixes grammar
+  // and language and writes the other language to match.
+  const [aiMovieEditingScene, setAiMovieEditingScene] = useState(null)
+  const [isSubmittingAiMovieSceneEdit, setIsSubmittingAiMovieSceneEdit] = useState(false)
+  const [aiMovieSceneEditError, setAiMovieSceneEditError] = useState(null)
+  const [aiMovieSceneEditFixes, setAiMovieSceneEditFixes] = useState(null)
   const [aiMovieBeatTurnDirection, setAiMovieBeatTurnDirection] = useState('open')
   function selectAiMovieScene(sceneIndex, scrollToIt) {
     setAiMovieSelectedSceneIndex(sceneIndex)
@@ -4551,6 +4595,7 @@ function App() {
   }
   useEffect(() => {
     setAiMovieSelectedSceneIndex(0)
+    setAiMovieEditingScene(null)
   }, [aiMovieScreenplayViewIndex])
 
   // Every click answers with a soft ripple from the point pressed (step 4
@@ -6032,6 +6077,163 @@ function App() {
 
   function toggleAiMovieStageExpanded(stageKey, currentlyCollapsed) {
     setAiMovieExpandedStages((prev) => ({ ...prev, [stageKey]: currentlyCollapsed }))
+  }
+
+  function startEditingAiMovieScene(beatIndex, sceneIndex, scene) {
+    const pick = (value) => (value?.[aiMovieLanguage] || value?.en || '')
+    let blocks
+    if (Array.isArray(scene.content) && scene.content.length > 0) {
+      blocks = scene.content.map((block) =>
+        block.type === 'dialogue'
+          ? { type: 'dialogue', character: block.character ?? '', parenthetical: pick(block.parenthetical), extension: block.extension ?? '', line: pick(block.line) }
+          : block.type === 'transition'
+            ? { type: 'transition', transition: block.transition ?? '' }
+            : { type: 'action', text: pick(block.text) }
+      )
+    } else {
+      blocks = [{ type: 'action', text: pick(scene.action) }]
+      for (const line of scene.dialogue ?? []) {
+        blocks.push({ type: 'dialogue', character: line.character ?? '', parenthetical: '', extension: '', line: pick(line.line) })
+      }
+    }
+    setAiMovieEditingScene({ key: `${beatIndex}-${sceneIndex}`, heading: scene.sceneHeading?.en ?? '', blocks })
+    setAiMovieSceneEditError(null)
+    setAiMovieSceneEditFixes(null)
+    setAiMovieSelectedSceneIndex(sceneIndex)
+  }
+
+  function updateAiMovieEditBlock(blockIndex, patch) {
+    setAiMovieEditingScene((prev) => prev && { ...prev, blocks: prev.blocks.map((b, i) => (i === blockIndex ? { ...b, ...patch } : b)) })
+  }
+
+  function insertAiMovieEditBlock(afterIndex, type) {
+    const block = type === 'dialogue' ? { type: 'dialogue', character: '', parenthetical: '', extension: '', line: '' } : { type: 'action', text: '' }
+    setAiMovieEditingScene((prev) => prev && { ...prev, blocks: [...prev.blocks.slice(0, afterIndex + 1), block, ...prev.blocks.slice(afterIndex + 1)] })
+  }
+
+  function removeAiMovieEditBlock(blockIndex) {
+    setAiMovieEditingScene((prev) => prev && { ...prev, blocks: prev.blocks.filter((_, i) => i !== blockIndex) })
+  }
+
+  async function submitAiMovieSceneEdit(beatIndex, sceneIndex) {
+    if (!aiMovieProjectId || !aiMovieEditingScene) return
+    setIsSubmittingAiMovieSceneEdit(true)
+    setAiMovieSceneEditError(null)
+    try {
+      const response = await fetch(`${BACKEND_URL}/api/ai-movie/stages/screenplay/beats/${beatIndex}/scenes/${sceneIndex}/edit`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          projectId: aiMovieProjectId,
+          language: aiMovieLanguage,
+          sceneHeading: aiMovieEditingScene.heading,
+          blocks: aiMovieEditingScene.blocks,
+        }),
+      })
+      const data = await response.json()
+      if (!response.ok) {
+        setAiMovieSceneEditError(data.error || t.genericError)
+      } else {
+        setAiMovieBackfillResult((prev) => {
+          const beats = [...(prev?.screenplayBeats ?? [])]
+          const existing = beats[beatIndex]
+          if (!existing) return prev ?? {}
+          beats[beatIndex] = { ...existing, scenes: existing.scenes.map((s, i) => (i === sceneIndex ? data.scene : s)) }
+          return { ...(prev ?? {}), screenplayBeats: beats }
+        })
+        setAiMovieSceneEditFixes({ key: `${beatIndex}-${sceneIndex}`, fixes: data.fixes ?? [] })
+        setAiMovieEditingScene(null)
+      }
+    } catch {
+      setAiMovieSceneEditError(t.genericError)
+    }
+    setIsSubmittingAiMovieSceneEdit(false)
+  }
+
+  // The scene being typed into, laid out exactly like the printed page:
+  // each action / name / acting note / line is a borderless field in the
+  // same font and indent, with small +/× controls in the right margin.
+  function renderAiMovieEditableScene(beatIndex, sceneIndex, sceneNumber) {
+    const editing = aiMovieEditingScene
+    const rowsFor = (text, width) => Math.max(1, (text ?? '').split('\n').reduce((n, line) => n + Math.max(1, Math.ceil(line.length / width)), 0))
+    return (
+      <div key={sceneIndex} id={`script-scene-${sceneIndex}`} className="script-scene is-selected is-editing">
+        <p className="script-slug">
+          <span className="script-scene-number script-scene-number-left">{sceneNumber}</span>
+          <input
+            className="script-edit-field script-edit-slug"
+            value={editing.heading}
+            onChange={(e) => setAiMovieEditingScene((prev) => ({ ...prev, heading: e.target.value }))}
+            aria-label={t.scriptEditHeadingLabel}
+          />
+          <span className="script-scene-number script-scene-number-right">{sceneNumber}</span>
+        </p>
+        {editing.blocks.map((block, blockIndex) => (
+          <div key={blockIndex} className={`script-edit-block script-edit-block-${block.type}`}>
+            {block.type === 'dialogue' ? (
+              <div className="script-dialogue">
+                <input
+                  className="script-edit-field script-character"
+                  value={block.character}
+                  onChange={(e) => updateAiMovieEditBlock(blockIndex, { character: e.target.value.toUpperCase() })}
+                  placeholder={t.scriptEditCharacterPlaceholder}
+                />
+                <input
+                  className="script-edit-field script-parenthetical"
+                  value={block.parenthetical}
+                  onChange={(e) => updateAiMovieEditBlock(blockIndex, { parenthetical: e.target.value })}
+                  placeholder={t.scriptEditParentheticalPlaceholder}
+                />
+                <textarea
+                  className="script-edit-field script-line"
+                  value={block.line}
+                  rows={rowsFor(block.line, 35)}
+                  onChange={(e) => updateAiMovieEditBlock(blockIndex, { line: e.target.value })}
+                  placeholder={t.scriptEditLinePlaceholder}
+                />
+              </div>
+            ) : block.type === 'transition' ? (
+              <input
+                className="script-edit-field script-transition"
+                value={block.transition}
+                onChange={(e) => updateAiMovieEditBlock(blockIndex, { transition: e.target.value.toUpperCase() })}
+              />
+            ) : (
+              <textarea
+                className="script-edit-field script-action"
+                value={block.text}
+                rows={rowsFor(block.text, 60)}
+                onChange={(e) => updateAiMovieEditBlock(blockIndex, { text: e.target.value })}
+                placeholder={t.scriptEditActionPlaceholder}
+              />
+            )}
+            <div className="script-edit-controls">
+              <button type="button" onClick={() => insertAiMovieEditBlock(blockIndex, 'action')} title={t.scriptEditAddActionButton}>+ {t.scriptEditActionShort}</button>
+              <button type="button" onClick={() => insertAiMovieEditBlock(blockIndex, 'dialogue')} title={t.scriptEditAddDialogueButton}>+ {t.scriptEditDialogueShort}</button>
+              <button type="button" onClick={() => removeAiMovieEditBlock(blockIndex)} title={t.scriptEditRemoveButton} aria-label={t.scriptEditRemoveButton}>×</button>
+            </div>
+          </div>
+        ))}
+        {editing.blocks.length === 0 && (
+          <div className="script-edit-controls is-visible">
+            <button type="button" onClick={() => insertAiMovieEditBlock(-1, 'action')}>+ {t.scriptEditActionShort}</button>
+            <button type="button" onClick={() => insertAiMovieEditBlock(-1, 'dialogue')}>+ {t.scriptEditDialogueShort}</button>
+          </div>
+        )}
+        <div className="script-edit-submit-bar">
+          <p>{t.scriptEditSubmitNote}</p>
+          <div>
+            <button type="button" className="cancel-button" onClick={() => setAiMovieEditingScene(null)} disabled={isSubmittingAiMovieSceneEdit}>
+              {t.aiMovieReviseSceneCancelButton}
+            </button>
+            <button type="button" className="choose-button" onClick={() => submitAiMovieSceneEdit(beatIndex, sceneIndex)} disabled={isSubmittingAiMovieSceneEdit}>
+              {isSubmittingAiMovieSceneEdit ? t.scriptEditSubmittingLabel : t.scriptEditSubmitButton}
+            </button>
+          </div>
+          {aiMovieSceneEditError && <p className="feedback-note">{aiMovieSceneEditError}</p>}
+        </div>
+      </div>
+    )
   }
 
   function shownAiMovieStage() {
@@ -9487,7 +9689,7 @@ function App() {
                                       const scene = beat.scenes[sceneIndex]
                                       const reviseKey = `${viewIndex}-${sceneIndex}`
                                       const isReviseFormOpen = aiMovieRevisingSceneIndex === reviseKey
-                                      const isAiWriting = isWritingAiMovieDialogue || isRevisingAiMovieScreenplayScene || isGeneratingAiMovieScreenplayBeat
+                                      const isAiWriting = isWritingAiMovieDialogue || isRevisingAiMovieScreenplayScene || isGeneratingAiMovieScreenplayBeat || isSubmittingAiMovieSceneEdit
                                       return (
                                         <div className={`script-workspace${isAiWriting ? ' is-ai-writing' : ''}`}>
                                           <aside className="script-navigator" aria-label={t.scriptScenesTitle}>
@@ -9526,13 +9728,17 @@ function App() {
                                                 key={`beat-${viewIndex}`}
                                                 className={`script-page script-page-${scriptTheme} script-turn-${aiMovieBeatTurnDirection}`}
                                               >
-                                                {beat.scenes.map((scene, sceneIndex) => (
+                                                {beat.scenes.map((scene, sceneIndex) => aiMovieEditingScene?.key === `${viewIndex}-${sceneIndex}` ? (
+                                                  renderAiMovieEditableScene(viewIndex, sceneIndex, sceneNumberOffset + sceneIndex + 1)
+                                                ) : (
                                                   <div
                                                     key={sceneIndex}
                                                     id={`script-scene-${sceneIndex}`}
                                                     className={`script-scene${sceneIndex === Math.min(aiMovieSelectedSceneIndex, beat.scenes.length - 1) ? ' is-selected' : ''}`}
                                                     style={{ '--scene-order': sceneIndex }}
                                                     onClick={() => selectAiMovieScene(sceneIndex, false)}
+                                                    onDoubleClick={() => !aiMovieEditingScene && startEditingAiMovieScene(viewIndex, sceneIndex, scene)}
+                                                    title={t.scriptEditDoubleClickHint}
                                                   >
                                                     <p className="script-slug">
                                                       <span className="script-scene-number script-scene-number-left">{sceneNumberOffset + sceneIndex + 1}</span>
@@ -9602,6 +9808,30 @@ function App() {
                                             )}
                                             </div>
                                             <div className="script-tools-actions">
+                                              {aiMovieEditingScene?.key === reviseKey ? (
+                                                <p className="script-tools-editing-note">{t.scriptEditEditingNote}</p>
+                                              ) : (
+                                                <button
+                                                  type="button"
+                                                  className="choose-button script-edit-start-button"
+                                                  onClick={() => startEditingAiMovieScene(viewIndex, sceneIndex, scene)}
+                                                  disabled={Boolean(aiMovieEditingScene) || isAiWriting}
+                                                >
+                                                  {t.scriptEditStartButton}
+                                                </button>
+                                              )}
+                                              {aiMovieSceneEditFixes?.key === reviseKey && (
+                                                <div className="script-edit-fixes">
+                                                  <p className="script-panel-title">{t.scriptEditFixesTitle}</p>
+                                                  {aiMovieSceneEditFixes.fixes.length === 0 ? (
+                                                    <p>{t.scriptEditNoFixesNote}</p>
+                                                  ) : (
+                                                    <ul>
+                                                      {aiMovieSceneEditFixes.fixes.map((fix, fixIndex) => <li key={fixIndex}>{fix}</li>)}
+                                                    </ul>
+                                                  )}
+                                                </div>
+                                              )}
                                           <button
                                             type="button"
                                             className="cancel-button ai-movie-revise-scene-button"

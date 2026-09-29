@@ -74,6 +74,13 @@ const GEMINI_MODEL_NAME = "gemini-2.5-flash-lite";
 // Flash-Lite dropping several of those rules at once. Everything else
 // stays on the cheaper GEMINI_MODEL_NAME above.
 const AI_MOVIE_DIALOGUE_MODEL_NAME = "gemini-2.5-flash";
+// The screenplay first-draft writer and its "write more scenes" step (used
+// by fill-to-target and Extend) also use 2.5 Flash -- the user's call after
+// a real Akhada test run: on Flash-Lite, Beat 1 came out at 0.4 of its 2.5
+// minutes (or borrowed later beats), while 2.5 Flash reached 2.2 minutes
+// with scenes that all genuinely belonged to Beat 1. Slower and costs more
+// per call, but this is where screenplay quality is decided.
+const AI_MOVIE_SCREENPLAY_WRITER_MODEL_NAME = "gemini-2.5-flash";
 // DATABASE_URL (a full Postgres connection string, e.g. from Supabase) is
 // used when set; otherwise falls back to the local "filmmaking_app" dev
 // database. Supabase's pooled connection requires SSL but uses a
@@ -4002,7 +4009,8 @@ async function keepAiMovieScenesInTheirBeat(beat, scenes, existingBeatScenesText
         .map((entry) => Math.round(Number(entry.sceneNumber)))
     );
     if (dropped.size > 0) {
-      console.log(`Beat ${beat.beatNumber}: dropped ${dropped.size} of ${scenes.length} new scene(s) -- another beat's events, or a repeat.`);
+      const headings = scenes.filter((_, i) => dropped.has(i + 1)).map((scene) => scene.sceneHeading?.en).join(" | ");
+      console.log(`Beat ${beat.beatNumber}: dropped ${dropped.size} of ${scenes.length} new scene(s) -- another beat's events, or a repeat: ${headings}`);
     }
     return scenes.filter((_, i) => !dropped.has(i + 1));
   } catch (error) {
@@ -4145,15 +4153,16 @@ async function generateAiMovieScreenplayBeat(priorContextText, referenceMaterial
       : "";
 
   const result = await generateJsonContent({
-    model: GEMINI_MODEL_NAME,
+    model: AI_MOVIE_SCREENPLAY_WRITER_MODEL_NAME,
     contents: `The story's approved layers so far:\n\n${priorContextText}${referenceBlock}${feedbackBlock}${scenesBlock}\n\nNow write the scenes for this beat:\n${beat.title.en}: ${beat.description.en}${runtimeBlock}${aiMovieBeatBoundaryBlock(beat)}`,
     config: {
       systemInstruction: AI_MOVIE_SCREENPLAY_BEAT_SYSTEM_PROMPT,
       responseMimeType: "application/json",
       // A beat with a genuinely open-ended scene count (no maxItems cap —
       // some beats need well more than 4) needs more headroom than a
-      // fixed-small-count beat would.
-      maxOutputTokens: 16384,
+      // fixed-small-count beat would -- and on 2.5 Flash its "thinking"
+      // counts against this same limit (see Write Dialogue). Only a ceiling.
+      maxOutputTokens: 32768,
       responseSchema: {
         type: Type.OBJECT,
         properties: {
@@ -4210,12 +4219,12 @@ async function generateAiMovieScreenplayBeatExpansion(
   const scenesBlock = scenesSoFarText ? `\n\nScreenplay scenes already written in earlier beats:\n\n${scenesSoFarText}` : "";
 
   const result = await generateJsonContent({
-    model: GEMINI_MODEL_NAME,
+    model: AI_MOVIE_SCREENPLAY_WRITER_MODEL_NAME,
     contents: `The story's approved layers so far:\n\n${priorContextText}${referenceBlock}${scenesBlock}\n\nThis beat (${beat.title.en}: ${beat.description.en}) already has these scenes, fixed -- do not repeat them:\n\n${existingBeatScenesText}\n\nWrite additional new scenes only for this same beat, covering roughly ${remainingMinutes} more minutes of screen time — about ${remainingMinutes} standard screenplay pages (roughly ${Math.round(remainingMinutes * AI_MOVIE_LINES_PER_PAGE)} formatted lines), built from real on-screen moments (actions, reactions, events), never from extra descriptive words.${aiMovieBeatBoundaryBlock(beat)}`,
     config: {
       systemInstruction: AI_MOVIE_SCREENPLAY_BEAT_EXPAND_SYSTEM_PROMPT,
       responseMimeType: "application/json",
-      maxOutputTokens: 8192,
+      maxOutputTokens: 32768, // room for 2.5 Flash thinking, same as the first draft
       responseSchema: {
         type: Type.OBJECT,
         properties: {
@@ -5847,6 +5856,19 @@ app.post("/api/ai-movie/projects/import", requireRole("admin"), async (req, res)
       req.user.id,
     ]
   );
+
+  // Optional: an export can also carry the project's reference files (the
+  // Akhada story bible, scenic breakdown, rules) -- without them every
+  // writer on the imported project would lose its grounding. Older export
+  // files simply don't have this list.
+  const referenceFiles = Array.isArray(project.referenceFiles) ? project.referenceFiles : [];
+  for (const file of referenceFiles) {
+    if (typeof file?.content !== "string" || !file.content.trim()) continue;
+    await db.query(
+      "INSERT INTO ai_movie_reference_files (project_id, category, label, content) VALUES ($1, $2, $3, $4)",
+      [inserted.rows[0].id, typeof file.category === "string" && file.category ? file.category : "other", file.label ?? null, file.content]
+    );
+  }
 
   res.json({ id: inserted.rows[0].id });
 });

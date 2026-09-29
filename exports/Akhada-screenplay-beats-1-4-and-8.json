@@ -1,0 +1,1880 @@
+{
+  "exportedFrom": "filmmaking-app-ai-movie",
+  "version": 2,
+  "project": {
+    "title": "Akhada",
+    "pastedText": "The Akhada\n\nIn a galaxy where prayer is a crime, Earth is the last holy place. When a celestial shield protecting the vibrant city of Puri fails, a shadow army descends, unleashing a terrifying zombifying plague. Five strangers – a cautious engineer, a cold strategist, a warm healer, a guilt-ridden pilot, and a skeptical data analyst – are inexplicably chosen by an ancient artifact, the danda, to become the new guardians of a timeless sanctuary known as the Akhada. Guided by the dying Rakhyaka and the spectral Biswabasu clan, they must train to overcome their own inner demons and past traumas to confront the fallen protector, Kalapahada, who seeks to harness the divine essence of Lord Jagannath to achieve immortality and rewrite cosmic law. Their journey will take them across worlds, forcing them to face their deepest fears and ultimately embrace the profound truth that true strength lies not in holding on, but in letting go.",
+    "detectedStage": "story",
+    "backfill": {
+      "plot": [
+        {
+          "title": {
+            "en": "The Failing Receiver",
+            "hi": "द फेलिंग रिसीवर"
+          },
+          "description": {
+            "en": "A ship tears across future Puri toward the Wireless Orbital Receiver, whose failing power beams reveal a city, and a faith, running out of energy.",
+            "hi": "एक जहाज भविष्य के पुरी को वायरलेस ऑर्बिटल रिसीवर की ओर चीरता है, जिसकी घटती बिजली की किरणें एक शहर और एक विश्वास को उजागर करती हैं, जो ऊर्जा से बाहर चल रहा है।"
+          },
+          "runtimeMinutes": 2.5
+        },
+        {
+          "title": {
+            "en": "Rath Yatra Morning",
+            "hi": "रथ यात्रा की सुबह"
+          },
+          "description": {
+            "en": "On Rath Yatra morning, a Council broadcast tells the record crowd that Earth is the last protected holy place left in a galaxy where prayer is now a crime.",
+            "hi": "रथ यात्रा की सुबह, एक परिषद के प्रसारण ने रिकॉर्ड भीड़ को बताया कि पृथ्वी आकाशगंगा में बचा हुआ एकमात्र संरक्षित पवित्र स्थान है जहाँ प्रार्थना अब एक अपराध है।"
+          },
+          "runtimeMinutes": 2
+        },
+        {
+          "title": {
+            "en": "The First Zombify",
+            "hi": "द फर्स्ट ज़ॉम्बीफाई"
+          },
+          "description": {
+            "en": "Off-world, shadow-soldiers break into a hidden prayer room and turn a praying man into one of them — the first glimpse of how the shadow army grows.",
+            "hi": "ऑफ-वर्ल्ड, छाया-सैनिक एक छिपे हुए प्रार्थना कक्ष में घुस जाते हैं और एक प्रार्थना करने वाले व्यक्ति को उनमें से एक में बदल देते हैं - यह पहली झलक है कि छाया सेना कैसे बढ़ती है।"
+          },
+          "runtimeMinutes": 1.5
+        },
+        {
+          "title": {
+            "en": "Pushed Past The Line",
+            "hi": "पुश्ड पास्ट द लाइन"
+          },
+          "description": {
+            "en": "On the Receiver gantry, Rudra overrides Omm's warning and pushes the failing power output past the safe line, by the book, to keep the city lit.",
+            "hi": "रिसीवर गैंट्री पर, रुद्र ओम की चेतावनी को ओवरराइड करता है और शहर को रोशन रखने के लिए, किताब के अनुसार, आउटपुट को सुरक्षित रेखा से आगे बढ़ाता है।"
+          },
+          "runtimeMinutes": 3
+        },
+        {
+          "title": {
+            "en": "Rudra's Sister",
+            "hi": "रुद्र की बहन"
+          },
+          "description": {
+            "en": "Rudra calls his sister, who is in the crowd in Puri today, and a flash of an old Martian war memory shows exactly why he's this careful.",
+            "hi": "रुद्र अपनी बहन को फोन करता है, जो आज पुरी की भीड़ में है, और एक पुराने मार्टियन युद्ध की याद की झलक दिखाती है कि वह इतना सावधान क्यों है।"
+          },
+          "runtimeMinutes": 1.5
+        },
+        {
+          "title": {
+            "en": "Meera's Cold Number, Tara Ignored",
+            "hi": "मीरा का कोल्ड नंबर, तारा को अनदेखा किया गया"
+          },
+          "description": {
+            "en": "At the Global Council, Meera coldly quantifies an acceptable sacrifice while Tara's warning that the sky over the temple is 'folding' gets waved off as noise.",
+            "hi": "ग्लोबल काउंसिल में, मीरा ठंडक से एक स्वीकार्य बलिदान का आकलन करती है जबकि तारा की चेतावनी कि मंदिर के ऊपर का आकाश 'मुड़ रहा है' शोर के रूप में खारिज कर दिया जाता है।"
+          },
+          "runtimeMinutes": 3
+        },
+        {
+          "title": {
+            "en": "Samir's Drop",
+            "hi": "समीर का ड्रॉप"
+          },
+          "description": {
+            "en": "Courier Samir delivers an experimental nav chip mid-ritual and quietly routes his fee to a family he won't name.",
+            "hi": "कूरियर समीर अनुष्ठान के बीच में एक प्रायोगिक नेव चिप बचाता है और चुपके से अपनी फीस एक ऐसे परिवार को भेज देता है जिसका वह नाम नहीं बताएगा।"
+          },
+          "runtimeMinutes": 2
+        },
+        {
+          "title": {
+            "en": "The Pahandi (Song)",
+            "hi": "पहांडी (गीत)"
+          },
+          "description": {
+            "en": "During the swaying Pahandi procession, the five strangers brush past each other once in the crowd, none of them noticing.",
+            "hi": "लहराते पहांडी जुलूस के दौरान, पांच अजनबी भीड़ में एक-दूसरे से एक बार गुजरते हैं, उनमें से कोई भी नोटिस नहीं करता है।"
+          },
+          "runtimeMinutes": 3
+        },
+        {
+          "title": {
+            "en": "The Breach Begins",
+            "hi": "द ब्रीच बिगिन्स"
+          },
+          "description": {
+            "en": "As crowd power-demand spikes, Rudra pushes the Receiver to full and the sky over the temple begins to ripple wrong.",
+            "hi": "जैसे ही भीड़ की बिजली की मांग बढ़ती है, रुद्र रिसीवर को पूरा करता है और मंदिर के ऊपर का आकाश गलत तरीके से झिलमिलाने लगता है।"
+          },
+          "runtimeMinutes": 2
+        },
+        {
+          "title": {
+            "en": "The Sky Tears",
+            "hi": "द स्काई टेयर्स"
+          },
+          "description": {
+            "en": "The last sky-shield gives way, the sky tears open, and hundreds of shadow-soldiers fall into the festival crowd, turning it into a stampede.",
+            "hi": "आखिरी स्काई-शील्ड टूट जाती है, आसमान फट जाता है, और सैकड़ों छाया-सैनिक उत्सव की भीड़ में गिर जाते हैं, जिससे भगदड़ मच जाती है।"
+          },
+          "runtimeMinutes": 2
+        },
+        {
+          "title": {
+            "en": "The Rakhyaka Fights",
+            "hi": "राख्यका लड़ता है"
+          },
+          "description": {
+            "en": "The old guardian, the Rakhyaka, walks into the invading army alone and fights it to a standstill with nothing but a wooden staff, until a heavy strike wounds him badly.",
+            "hi": "पुराना संरक्षक, राख्यका, अकेले आक्रमणकारी सेना में चला जाता है और केवल एक लकड़ी के डंडे से उसे रोक देता है, जब तक कि एक भारी प्रहार उसे बुरी तरह घायल नहीं कर देता।"
+          },
+          "runtimeMinutes": 3
+        },
+        {
+          "title": {
+            "en": "The Freeze",
+            "hi": "द फ्रीज"
+          },
+          "description": {
+            "en": "Knowing he cannot win, the Rakhyaka strikes his staff to the ground, freezes all of time in Puri, and pulls five frozen strangers into the Akhada with a spark of light.",
+            "hi": "यह जानते हुए कि वह जीत नहीं सकता, राख्यका अपने डंडे को जमीन पर मारता है, पुरी में हर समय को जमा देता है, और प्रकाश की एक चिंगारी के साथ पांच जमे हुए अजनबियों को अखाड़ा में खींच लेता है।"
+          },
+          "runtimeMinutes": 2
+        },
+        {
+          "title": {
+            "en": "Waking In The Akhada",
+            "hi": "अखाड़े में जागना"
+          },
+          "description": {
+            "en": "The five wake on a floating, timeless wrestling-ground as the dead Biswabasu clan bows to them and the Rakhyaka names them the god's new guardians.",
+            "hi": "पांच लोग एक तैरते, कालातीत कुश्ती मैदान पर जागते हैं क्योंकि मृत विश्वबासु कबीले उन्हें प्रणाम करता है और राख्यका उन्हें ईश्वर का नया संरक्षक नामित करता है।"
+          },
+          "runtimeMinutes": 4
+        },
+        {
+          "title": {
+            "en": "The Origin Montage",
+            "hi": "उत्पत्ति मोंटाज"
+          },
+          "description": {
+            "en": "Memory-light shows the clan's ancient origin with Nila Madhava, the carving of the neem-wood danda, and the danda's first-ever choice of five protectors instead of one.",
+            "hi": "स्मृति-प्रकाश नीला माधव के साथ कबीले की प्राचीन उत्पत्ति, नीम-लकड़ी के डंडे की नक्काशी, और डंडे का एक के बजाय पांच संरक्षकों का पहला चुनाव दिखाता है।"
+          },
+          "runtimeMinutes": 4
+        },
+        {
+          "title": {
+            "en": "An Enemy With No Name",
+            "hi": "बिना नाम का दुश्मन"
+          },
+          "description": {
+            "en": "The Rakhyaka reveals only that the enemy was once one of them, a chosen protector turned against the Lord by something he won't name.",
+            "hi": "राख्यका केवल इतना बताता है कि दुश्मन कभी उनमें से एक था, एक चुना हुआ संरक्षक जो भगवान के खिलाफ हो गया था, जिसे वह नाम नहीं बताएगा।"
+          },
+          "runtimeMinutes": 1.5
+        },
+        {
+          "title": {
+            "en": "Training Begins",
+            "hi": "प्रशिक्षण शुरू होता है"
+          },
+          "description": {
+            "en": "Each hero trains under a clan mentor who is secretly their own past-life student — Omm's stone won't answer him, Rudra clamps down his heat, Meera's water comes too easily, Samir overshoots, and Tara learns a needle-thin portal at the cost of her grip on the present.",
+            "hi": "प्रत्येक नायक एक कबीले के गुरु के अधीन प्रशिक्षण लेता है जो गुप्त रूप से उनका अपना पूर्व-जन्म का छात्र है - ओम का पत्थर उसे जवाब नहीं देता है, रुद्र अपनी गर्मी को कम करता है, मीरा का पानी बहुत आसानी से आता है, समीर लक्ष्य चूक जाता है, और तारा वर्तमान पर अपनी पकड़ खोने की कीमत पर एक सुई-पतल पोर्टल सीखती है।"
+          },
+          "runtimeMinutes": 4
+        },
+        {
+          "title": {
+            "en": "The Training Fight",
+            "hi": "प्रशिक्षण लड़ाई"
+          },
+          "description": {
+            "en": "A real sparring bout reveals the five as they truly are: Omm underrated, Samir overrated, Meera the sharpest, and Rudra — still refusing to loose his fire — looking like the weakest of them all.",
+            "hi": "एक वास्तविक अभ्यास लड़ाई पांच को वैसा ही प्रकट करती है जैसी वे वास्तव में हैं: ओम को कम करके आंका गया, समीर को बढ़ा-चढ़ाकर बताया गया, मीरा सबसे तेज, और रुद्र - अभी भी अपनी आग छोड़ने से इनकार कर रहा है - उन सभी में सबसे कमजोर लग रहा है।"
+          },
+          "runtimeMinutes": 3
+        },
+        {
+          "title": {
+            "en": "The Failed Joining",
+            "hi": "द फेल्ड जॉइनिंग"
+          },
+          "description": {
+            "en": "The Rakhyaka explains that the enemy feeds on any force thrown at him; the five try to join their five powers into one, and the collision wounds Omm badly. Alone, Tara has a silent vision she tells no one.",
+            "hi": "राख्यका समझाता है कि दुश्मन उस पर फेंकी गई किसी भी ताकत पर पनपता है; पांच अपने पांचों शक्तियों को एक में जोड़ने की कोशिश करते हैं, और टक्कर ओम को बुरी तरह घायल कर देती है। अकेले, तारा के पास एक मूक दृष्टि है जो वह किसी को नहीं बताती है।"
+          },
+          "runtimeMinutes": 3.5
+        },
+        {
+          "title": {
+            "en": "A Beast In The Akhada",
+            "hi": "अखाड़े में एक जानवर"
+          },
+          "description": {
+            "en": "Something drops through the still-open frozen portal into the sacred Akhada itself — a beast the timeless world was never built to face.",
+            "hi": "कुछ अभी भी खुले जमे हुए पोर्टल से पवित्र अखाड़े में ही गिरता है - एक जानवर जिसे कालातीत दुनिया का सामना करने के लिए कभी नहीं बनाया गया था।"
+          },
+          "runtimeMinutes": 2
+        },
+        {
+          "title": {
+            "en": "The Hard Choice",
+            "hi": "कठिन चुनाव"
+          },
+          "description": {
+            "en": "A beloved clan mentor is infected and turning; the five must put him down themselves, learning that if the dark power takes the Akhada, the entire protector cycle ends forever. They rush back to Earth before they're ready.",
+            "hi": "एक प्रिय कबीले के गुरु संक्रमित हो रहे हैं और बदल रहे हैं; पांच को उन्हें खुद खत्म करना होगा, यह सीखते हुए कि यदि अंधेरी शक्ति अखाड़ा पर कब्जा कर लेती है, तो संरक्षक चक्र हमेशा के लिए समाप्त हो जाएगा। वे तैयार होने से पहले पृथ्वी पर वापस दौड़ते हैं।"
+          },
+          "runtimeMinutes": 3
+        },
+        {
+          "title": {
+            "en": "Time Resumes",
+            "hi": "समय फिर से शुरू होता है"
+          },
+          "description": {
+            "en": "The five land back on the Grand Road as time snaps on around them, turning as one to face the still-mid-lunge shadow army.",
+            "hi": "समय उनके चारों ओर वापस आने के साथ पांच ग्रैंड रोड पर वापस उतरते हैं, और एक साथ मुड़कर अभी भी बीच-छाप में छाया सेना का सामना करते हैं।"
+          },
+          "runtimeMinutes": 2
+        },
+        {
+          "title": {
+            "en": "The Zombify Horror",
+            "hi": "ज़ॉम्बीफाई हॉरर"
+          },
+          "description": {
+            "en": "The five cut loose for the first time on Earth, then realize the enemy is touching fleeing pilgrims and turning them into shadow-soldiers — nearly 5000 souls changing before their eyes. They refuse to kill the once-human demons.",
+            "hi": "पांच पहली बार पृथ्वी पर खुलकर खेलते हैं, फिर महसूस करते हैं कि दुश्मन भाग रहे तीर्थयात्रियों को छू रहा है और उन्हें छाया-सैनिकों में बदल रहा है - लगभग 5000 आत्माएं उनकी आंखों के सामने बदल रही हैं। वे एक बार-मानव राक्षसों को मारने से इनकार करते हैं।"
+          },
+          "runtimeMinutes": 3
+        },
+        {
+          "title": {
+            "en": "The Lathi Problem",
+            "hi": "लाठी समस्या"
+          },
+          "description": {
+            "en": "None of the five can hold the silk-wrapped danda; only the Rakhyaka can, so Samir lifts him into the sky toward the portal while the others fight to move the Lord toward the Gundicha Temple.",
+            "hi": "पांचों में से कोई भी रेशम-लिपटे डंडे को नहीं पकड़ सकता; केवल राख्यका ही कर सकता है, इसलिए समीर उसे पोर्टल की ओर आकाश में उठाता है जबकि अन्य भगवान को गुंडिचा मंदिर की ओर ले जाने के लिए लड़ते हैं।"
+          },
+          "runtimeMinutes": 3
+        },
+        {
+          "title": {
+            "en": "The Guardian Falls",
+            "hi": "रक्षक का पतन"
+          },
+          "description": {
+            "en": "The shadow army fuses into one monster and strikes the Rakhyaka down in the sky; he falls before the Gundicha Temple, and his last spell raises a dome of light over it as the danda spears the ground.",
+            "hi": "छाया सेना एक राक्षस में विलीन हो जाती है और आकाश में रक्षक पर हमला करती है; वह गुंडिचा मंदिर के सामने गिर जाता है, और उसके अंतिम मंत्र से डंडा जमीन में घुसते ही उस पर प्रकाश का गुंबद उठ जाता है।"
+          },
+          "runtimeMinutes": 3
+        },
+        {
+          "title": {
+            "en": "The Last Order",
+            "hi": "अंतिम आदेश"
+          },
+          "description": {
+            "en": "Dying under the dome, the Rakhyaka tells the five none of them can hold the lathi yet — they must take the Lord and hide Him. They slip Him away in secret. INTERVAL: \"The teacher is gone. The war just started.\"",
+            "hi": "गुंबद के नीचे मरते हुए, रक्षक पांचों को बताता है कि उनमें से कोई भी अभी लठ्ठी नहीं संभाल सकता - उन्हें भगवान को ले जाना होगा और छिपाना होगा। वे उसे गुप्त रूप से ले जाते हैं। अंतराल: \"गुरु चले गए। युद्ध अभी शुरू हुआ है।\""
+          },
+          "runtimeMinutes": 2
+        },
+        {
+          "title": {
+            "en": "Kalapahada Revealed",
+            "hi": "कालापहाड़ का खुलासा"
+          },
+          "description": {
+            "en": "In the empty sanctum, a tall armored figure removes his faceless helmet, revealing Kalapahada — and the place where the Lord should be is empty.",
+            "hi": "खाली गर्भगृह में, एक लंबा बख्तरबंद व्यक्ति अपना चेहरा रहित हेलमेट हटाता है, जिससे कालापहाड़ का पता चलता है - और वह स्थान जहां भगवान होने चाहिए, खाली है।"
+          },
+          "runtimeMinutes": 2
+        },
+        {
+          "title": {
+            "en": "The Lathi Chained, The Clock Set",
+            "hi": "लठ्ठी बंधी, घड़ी निर्धारित"
+          },
+          "description": {
+            "en": "Kalapahada forces the resisting danda to obey him by dark power, then taunts the fled Lord: the Yatra must complete, but he won't be allowed to enter His temple — a nine-day countdown begins.",
+            "hi": "कालापहाड़ अंधेरी शक्ति से प्रतिरोध करने वाले डंडे को अपनी आज्ञा मानने के लिए मजबूर करता है, फिर भागे हुए भगवान को ताना मारता है: यात्रा पूरी होनी चाहिए, लेकिन उन्हें उनके मंदिर में प्रवेश करने की अनुमति नहीं होगी - नौ दिनों की उलटी गिनती शुरू होती है।"
+          },
+          "runtimeMinutes": 2.5
+        },
+        {
+          "title": {
+            "en": "Galaxy-Famous, Building An Army",
+            "hi": "आकाशगंगा-प्रसिद्ध, सेना का निर्माण"
+          },
+          "description": {
+            "en": "Broadcasts across a hundred worlds replay the five's stand on the Grand Road as heroes, while Kalapahada's fleet sweeps world after world, quietly building a growing shadow army as he waits.",
+            "hi": "सौ लोकों में प्रसारित प्रसारण पांचों के महामार्ग पर नायकों के रूप में खड़े होने को दोहराते हैं, जबकि कालापहाड़ का बेड़ा एक के बाद एक दुनिया को साफ करता है, वह इंतजार करते हुए चुपचाप एक बढ़ती हुई छाया सेना का निर्माण करता है।"
+          },
+          "runtimeMinutes": 2.5
+        },
+        {
+          "title": {
+            "en": "Granthaloka Welcome (Song)",
+            "hi": "ग्रंथलोक स्वागत (गीत)"
+          },
+          "description": {
+            "en": "The five bring the Lord to Tara's home world, Granthaloka, the galaxy's great library, where a devotional welcome greets Him — and Tara reunites, uneasily, with her father.",
+            "hi": "पांचों भगवान को तारा की गृह दुनिया, ग्रंथलोक, आकाशगंगा के महान पुस्तकालय में लाते हैं, जहां एक भक्तिपूर्ण स्वागत उनका अभिवादन करता है - और तारा अपने पिता से बेचैनी से फिर से मिलती है।"
+          },
+          "runtimeMinutes": 4
+        },
+        {
+          "title": {
+            "en": "The Name In The Library",
+            "hi": "पुस्तकालय में नाम"
+          },
+          "description": {
+            "en": "In the library's living digital archive, the heroes summon the real Madala Panji chronicle, which finally speaks the enemy's name — Kalapahada — and tells his story.",
+            "hi": "पुस्तकालय के जीवित डिजिटल अभिलेखागार में, नायक असली मड़ला पंजी क्रॉनिकल को बुलाते हैं, जो अंततः दुश्मन का नाम - कालापहाड़ - बोलता है और उसकी कहानी बताता है।"
+          },
+          "runtimeMinutes": 4
+        },
+        {
+          "title": {
+            "en": "The Scale Of It",
+            "hi": "इसका पैमाना"
+          },
+          "description": {
+            "en": "A distress feed shows a whole colony world gone dark, its dead risen by the million — proof that Kalapahada isn't chasing the five, he's building an army.",
+            "hi": "एक संकट फ़ीड दिखाता है कि एक पूरी कॉलोनी दुनिया अंधेरे में चली गई है, उसके लाखों मृत जी उठे हैं - यह साबित होता है कि कालापहाड़ पांचों का पीछा नहीं कर रहा है, वह सेना बना रहा है।"
+          },
+          "runtimeMinutes": 2
+        },
+        {
+          "title": {
+            "en": "Granthaloka Attacked",
+            "hi": "ग्रंथलोक पर हमला"
+          },
+          "description": {
+            "en": "Kalapahada's forces fall on Granthaloka; this time the five stand and actively fight to protect the people, not just to flee.",
+            "hi": "कालापहाड़ की सेनाएं ग्रंथलोक पर गिरती हैं; इस बार पांच लोग खड़े होते हैं और सक्रिय रूप से लोगों की रक्षा के लिए लड़ते हैं, न कि केवल भागने के लिए।"
+          },
+          "runtimeMinutes": 4
+        },
+        {
+          "title": {
+            "en": "The Father's Fall",
+            "hi": "पिता का पतन"
+          },
+          "description": {
+            "en": "Tara's father sacrifices himself sealing the library's archive with his life, pressing an old palm-leaf prophecy verse into her hands before the heroes can reach him.",
+            "hi": "तारा के पिता पुस्तकालय के अभिलेखागार को अपने जीवन से सील कर देते हैं, नायकों के उस तक पहुंचने से पहले ही उसके हाथों में एक पुरानी ताड़-पत्र भविष्यवाणी श्लोक दबा देते हैं।"
+          },
+          "runtimeMinutes": 3.5
+        },
+        {
+          "title": {
+            "en": "The Mirror",
+            "hi": "आईना"
+          },
+          "description": {
+            "en": "In the dark of the ship, each hero silently recognizes a piece of themselves in Kalapahada's story — the villain is where each of their own roads leads.",
+            "hi": "जहाज के अंधेरे में, प्रत्येक नायक चुपचाप कालापहाड़ की कहानी में खुद का एक टुकड़ा पहचानता है - खलनायक वह है जहां उनकी अपनी सड़कें ले जाती हैं।"
+          },
+          "runtimeMinutes": 2
+        },
+        {
+          "title": {
+            "en": "The Maha Guru's Secret (Song)",
+            "hi": "महा गुरु का रहस्य (गीत)"
+          },
+          "description": {
+            "en": "At a hidden faith-world, a Maha Guru survives a killing blow by letting it pass through him instead of blocking it, and begins to teach the five what they just saw — a lesson that starts to soften Meera.",
+            "hi": "एक छिपी हुई आस्था-दुनिया में, एक महा गुरु उसे रोकने के बजाय उससे गुजरने देकर घातक प्रहार से बच जाता है, और पांचों को सिखाना शुरू कर देता है जो उन्होंने अभी देखा है - एक सबक जो मीरा को नरम करना शुरू कर देता है।"
+          },
+          "runtimeMinutes": 5
+        },
+        {
+          "title": {
+            "en": "Feeding The Enemy",
+            "hi": "दुश्मन को खिलाना"
+          },
+          "description": {
+            "en": "The five ambush Kalapahada's flagship to take the lathi back with everything they have, only to watch him absorb all of it and grow stronger — fighting him only feeds him.",
+            "hi": "पांचों लोग लठ्ठी वापस लेने के लिए कालापहाड़ के प्रमुख जहाज पर घात लगाकर हमला करते हैं, केवल उसे सब कुछ अवशोषित करते और मजबूत होते हुए देखने के लिए - उससे लड़ना केवल उसे खिलाता है।"
+          },
+          "runtimeMinutes": 3.5
+        },
+        {
+          "title": {
+            "en": "Rock Bottom",
+            "hi": "तल"
+          },
+          "description": {
+            "en": "Tara's long-running data finally resolves: Rudra's own careful over-push of the Receiver helped tear the sky open in the first place. The team fractures under the weight of it.",
+            "hi": "तारा का लंबे समय से चला आ रहा डेटा अंततः हल हो जाता है: रुद्र के स्वयं के रिसीवर के सावधानीपूर्वक अति-धक्के ने सबसे पहले आकाश को फाड़ने में मदद की। टीम इसके भार के नीचे टूट जाती है।"
+          },
+          "runtimeMinutes": 4
+        },
+        {
+          "title": {
+            "en": "The Turn",
+            "hi": "मोड़"
+          },
+          "description": {
+            "en": "Replaying the Maha Guru's lesson, the five realize force can only pass through a heart that isn't gripping its own guilt. One by one they set their private weights down, piece together Kalapahada's whole plan, and turn the ship for Earth.",
+            "hi": "महा गुरु के पाठ को दोहराते हुए, पांचों को एहसास होता है कि बल केवल उस हृदय से गुजर सकता है जो अपने स्वयं के अपराध को नहीं पकड़े हुए है। एक-एक करके वे अपने निजी बोझ को नीचे रखते हैं, कालापहाड़ की पूरी योजना को एक साथ जोड़ते हैं, और पृथ्वी के लिए जहाज मोड़ते हैं।"
+          },
+          "runtimeMinutes": 2.5
+        },
+        {
+          "title": {
+            "en": "The Trap Springs",
+            "hi": "जाल बिछा"
+          },
+          "description": {
+            "en": "Coming in toward Earth, reality buckles — the ship is gone, and the five find themselves inside a maya, an illusion Kalapahada built to hold them.",
+            "hi": "पृथ्वी की ओर आते हुए, वास्तविकता लड़खड़ा जाती है - जहाज चला जाता है, और पांचों खुद को माया के अंदर पाते हैं, एक भ्रम जिसे कालापहाड़ ने उन्हें फंसाने के लिए बनाया था।"
+          },
+          "runtimeMinutes": 2
+        },
+        {
+          "title": {
+            "en": "Rudra Is Forged",
+            "hi": "रुद्र गढ़ा गया"
+          },
+          "description": {
+            "en": "Trapped in a battle with no exit, the five realize the only way out is to stop fighting; Rudra walks into the chained lathi's killing power with an open heart, is forged into its true bearer, and shatters the illusion.",
+            "hi": "बिना निकास के युद्ध में फंसे, पांचों को एहसास होता है कि बाहर निकलने का एकमात्र तरीका लड़ना बंद करना है; रुद्र खुले दिल से बंधी लठ्ठी की घातक शक्ति में चलता है, उसका सच्चा वाहक बन जाता है, और भ्रम को तोड़ देता है।"
+          },
+          "runtimeMinutes": 5
+        },
+        {
+          "title": {
+            "en": "The Seizing",
+            "hi": "जब्ती"
+          },
+          "description": {
+            "en": "Back in the real world, as the Lord is carried on foot toward the Sri Mandir, Kalapahada strikes in front of the temple, seizes the idol, and flies Him out to sea.",
+            "hi": "वास्तविक दुनिया में वापस, जैसे ही भगवान को श्री मंदिर की ओर पैदल ले जाया जा रहा है, कालापहाड़ मंदिर के सामने हमला करता है, मूर्ति को पकड़ लेता है, और उसे समुद्र में उड़ा ले जाता है।"
+          },
+          "runtimeMinutes": 3
+        },
+        {
+          "title": {
+            "en": "The Dark Manthan Begins",
+            "hi": "अंधेरे मंथन की शुरुआत"
+          },
+          "description": {
+            "en": "Far out at sea, Kalapahada draws the sacred Brahma from the idol and tears open a great portal; nagas and danavas pour through as he begins a dark Samudra Manthan to churn out his own immortality.",
+            "hi": "समुद्र में दूर, कालापहाड़ मूर्ति से पवित्र ब्रह्म को निकालता है और एक महान पोर्टल खोलता है; जैसे ही वह अपनी अमरता को मंथने के लिए एक अंधेरा समुद्र मंथन शुरू करता है, नाग और दानव उसमें से बहते हैं।"
+          },
+          "runtimeMinutes": 4
+        },
+        {
+          "title": {
+            "en": "The Final Battle",
+            "hi": "अंतिम लड़ाई"
+          },
+          "description": {
+            "en": "The five arrive and, instead of fighting Kalapahada's way, yield — channeling one thread of power through Tara as the living conduit, led by Rudra and the blazing lathi, with Omm pulling Tara back when she drifts.",
+            "hi": "पांचों पहुंचते हैं और, कालापहाड़ के तरीके से लड़ने के बजाय, आत्मसमर्पण करते हैं - रुद्र और धधकती लठ्ठी के नेतृत्व में, जीवित नाली के रूप में तारा के माध्यम से शक्ति के एक धागे को चैनलाइज करते हुए, ओम तारा को पीछे खींचता है जब वह भटक जाती है।"
+          },
+          "runtimeMinutes": 6
+        },
+        {
+          "title": {
+            "en": "The Answer",
+            "hi": "उत्तर"
+          },
+          "description": {
+            "en": "Kalapahada makes his oldest case to Meera — that he gave everything and got nothing back — and she answers that devotion was never a transaction, never owed and never withheld. The threaded strike passes clean through him, and he comes apart into light.",
+            "hi": "कालापहाड़ मीरा से अपना सबसे पुराना तर्क रखता है - कि उसने सब कुछ दिया और कुछ भी वापस नहीं मिला - और वह जवाब देती है कि भक्ति कभी भी एक सौदा नहीं थी, कभी भी बकाया नहीं थी और कभी भी रोकी नहीं गई। धागेदार प्रहार साफ उसके माध्यम से गुजरता है, और वह प्रकाश में विघटित हो जाता है।"
+          },
+          "runtimeMinutes": 4
+        },
+        {
+          "title": {
+            "en": "After",
+            "hi": "बाद में"
+          },
+          "description": {
+            "en": "In the sudden quiet, the five recover the Brahma, and the Rakhyaka's spirit shines once more in the settling danda before passing on for good.",
+            "hi": "अचानक शांति में, पांचों ब्रह्म को ठीक करते हैं, और रक्षक की आत्मा हमेशा के लिए चले जाने से पहले बसने वाले डंडे में एक बार फिर चमकती है।"
+          },
+          "runtimeMinutes": 2
+        },
+        {
+          "title": {
+            "en": "Niladri Bije",
+            "hi": "नीलाद्री बिजे"
+          },
+          "description": {
+            "en": "The Lord enters the temple on time, exactly as He has for thousands of years. Rudra plants the spent danda where the Rakhyaka fell, Tara finally believes her family's old prophecy, and the five stand together as the new Akhada, on watch.",
+            "hi": "भगवान मंदिर में समय पर प्रवेश करते हैं, ठीक वैसे ही जैसे वह हजारों वर्षों से करते आए हैं। रुद्र उस डंडे को वहां रोपते हैं जहां रक्षक गिरा था, तारा आखिरकार अपने परिवार की पुरानी भविष्यवाणी पर विश्वास करती है, और पांचों नए अखाड़े के रूप में एक साथ खड़े होते हैं, पहरे पर।"
+          },
+          "runtimeMinutes": 3
+        }
+      ],
+      "story": {
+        "title": {
+          "en": "The Akhada",
+          "hi": "अखाड़ा"
+        },
+        "summary": {
+          "en": "In a galaxy where prayer is a crime, Earth is the last holy place. When a celestial shield protecting the vibrant city of Puri fails, a shadow army descends, unleashing a terrifying zombifying plague. Five strangers – a cautious engineer, a cold strategist, a warm healer, a guilt-ridden pilot, and a skeptical data analyst – are inexplicably chosen by an ancient artifact, the danda, to become the new guardians of a timeless sanctuary known as the Akhada. Guided by the dying Rakhyaka and the spectral Biswabasu clan, they must train to overcome their own inner demons and past traumas to confront the fallen protector, Kalapahada, who seeks to harness the divine essence of Lord Jagannath to achieve immortality and rewrite cosmic law. Their journey will take them across worlds, forcing them to face their deepest fears and ultimately embrace the profound truth that true strength lies not in holding on, but in letting go.",
+          "hi": "एक ऐसी आकाशगंगा में जहाँ प्रार्थना एक अपराध है, पृथ्वी पवित्र स्थान है। जब पुरी शहर की रक्षा करने वाली एक दिव्य ढाल विफल हो जाती है, तो एक छाया सेना उतर आती है, जो एक भयानक ज़ोम्बी बनाने वाली महामारी फैलाती है। पांच अजनबी - एक सावधान इंजीनियर, एक ठंडी रणनीतिकार, एक स्नेही मरहम लगाने वाला, एक दोषी पायलट, और एक संदेहास्पद डेटा विश्लेषक - एक प्राचीन कलाकृति, दंडा, द्वारा अनजाने में 'अखाड़ा' नामक एक कालातीत अभयारण्य के नए रक्षक बनने के लिए चुने जाते हैं। मरते हुए रक्षाक और भूतिया बिश्वबासु कबीले द्वारा निर्देशित, उन्हें अपने आंतरिक राक्षसों और अतीत के आघातों पर काबू पाने के लिए प्रशिक्षण लेना चाहिए, ताकि वे गिरे हुए रक्षक, कालापहाड़ का सामना कर सकें, जो अमरता प्राप्त करने और ब्रह्मांडीय कानून को फिर से लिखने के लिए भगवान जगन्नाथ के दिव्य सार का उपयोग करना चाहता है। उनकी यात्रा उन्हें दुनिया भर में ले जाएगी, उन्हें अपने गहरे डर का सामना करने के लिए मजबूर करेगी और अंततः इस गहन सत्य को अपनाने के लिए कि सच्ची शक्ति पकड़ने में नहीं, बल्कि जाने देने में है।"
+        }
+      },
+      "synopsis": {
+        "logline": {
+          "en": "Year 5000. Prayer is a crime across the galaxy. Only one temple is left, and the man who once died for it has come back to tear it down. Five strangers wake as the god's last guardians — and must learn the one thing he never did: some things are not earned, they are given.",
+          "hi": "वर्ष 5000. पूरे ब्रह्मांड में प्रार्थना एक अपराध है। केवल एक मंदिर बचा है, और वह व्यक्ति जो कभी इसके लिए मरा था, उसे गिराने के लिए वापस आ गया है। पांच अजनबी भगवान के अंतिम अभिभावक के रूप में जागते हैं — और उन्हें वह एक चीज सीखनी चाहिए जो वह कभी नहीं कर पाया: कुछ चीजें कमाई नहीं जातीं, वे दी जाती हैं।"
+        },
+        "premise": {
+          "en": "Five ordinary strangers in a future Puri — an engineer, a strategist, a cook, a courier, and a librarian's daughter — are pulled out of frozen time into a timeless void and told they are the next guardians of the last god left in a galaxy where prayer is now a crime. Trained by their own past-life students, they lose their teacher at the cathartic midpoint and are forced to carry the Lord's journey themselves, hunted across the galaxy by Kalapahada, a guardian who broke long ago and now wants the sacred Brahma to make himself immortal. Each hero hides from their own element behind an old wound; each must reopen it to survive. The film ends where it began: at the temple, on time, with the five no longer strangers who owe something, but a new Akhada, on watch.",
+          "hi": "भविष्य के पुरी में पांच साधारण अजनबी — एक इंजीनियर, एक रणनीतिकार, एक रसोइया, एक कुरियर, और एक लाइब्रेरियन की बेटी — जमे हुए समय से बाहर निकालकर एक कालातीत शून्य में डाल दिए जाते हैं और उन्हें बताया जाता है कि वे उस आखिरी भगवान के अगले संरक्षक हैं जो एक ऐसे ब्रह्मांड में बचा है जहाँ प्रार्थना अब एक अपराध है। अपने ही पिछले जन्म के छात्रों द्वारा प्रशिक्षित, वे मध्यबिंदु पर अपने शिक्षक को खो देते हैं और भगवान की यात्रा को स्वयं आगे बढ़ाने के लिए मजबूर हो जाते हैं, जिनका पीछा पूरे ब्रह्मांड में कालापहाड़, एक ऐसा संरक्षक करता है जो बहुत पहले टूट गया था और अब पवित्र ब्रह्म को अमर बनाना चाहता है। प्रत्येक नायक एक पुराने घाव के पीछे अपने तत्व से छिपता है; प्रत्येक को जीवित रहने के लिए उसे फिर से खोलना पड़ता है। फिल्म वहीं समाप्त होती है जहाँ से शुरू हुई थी: मंदिर में, समय पर, पांच अब अजनबी नहीं रहे जो कुछ बकाया रखते हैं, बल्कि एक नया अखाड़ा, निगरानी पर।"
+        },
+        "toneGenre": {
+          "en": "A large-scale Indian mythological science-fiction actioner, set 3000 years in the future but grounded in real Jagannath Puri ritual and history — epic in scope, devotional at its core, with a strong emotional throughline about grace versus guilt (devotion is not a transaction).",
+          "hi": "एक बड़े पैमाने पर भारतीय पौराणिक विज्ञान-कथा एक्शनर, जो 3000 साल भविष्य में स्थापित है, लेकिन वास्तविक जगन्नाथ पुरी अनुष्ठान और इतिहास में निहित है — दायरे में महाकाव्य, मूल रूप से भक्तिपूर्ण, कृपा बनाम अपराधबोध के बारे में एक मजबूत भावनात्मक रेखा के साथ (भक्ति एक लेनदेन नहीं है)।"
+        },
+        "targetAudience": {
+          "en": "Mainstream Odia theatrical audiences as a big single-screen and multiplex event film, and wider Indian audiences drawn to large-scale mythological/spectacle-action films with genuine devotional weight.",
+          "hi": "मुख्यधारा के ओडिया थिएट्रिकल दर्शक एक बड़ी सिंगल-स्क्रीन और मल्टीप्लेक्स इवेंट फिल्म के रूप में, और व्यापक भारतीय दर्शक जो वास्तविक भक्तिपूर्ण भार वाली बड़े पैमाने की पौराणिक/तमाशा-एक्शन फिल्मों की ओर आकर्षित होते हैं।"
+        }
+      },
+      "threeAct": [
+        {
+          "actName": {
+            "en": "Act 1 — The Start & The Breach",
+            "hi": "अधिनियम 1 - शुरुआत और दरार"
+          },
+          "description": {
+            "en": "Future Puri prepares for the Rath Yatra as its energy grid fails. Five strangers — Rudra, Omm, Meera, Tara, Samir — live separate lives that brush past each other once during the Pahandi. Rudra's careful over-push of the failing Wireless Orbital Receiver tears the sky open, and a shadow army pours through.",
+            "hi": "भविष्य का पुरी रथ यात्रा की तैयारी कर रहा है क्योंकि उसका ऊर्जा ग्रिड विफल हो जाता है। पांच अजनबी - रुद्र, ओम, मीरा, तारा,   समीर - अलग-अलग जीवन जीते हैं जो पहंदी के दौरान एक बार एक-दूसरे से टकराते हैं। विफल हो रहे वायरलेस ऑर्बिटल रिसीवर को रुद्र का सावधानीपूर्वक अधिक धकेलना आकाश को चीर देता है, और एक छाया सेना उसमें से निकल पड़ती है।"
+          },
+          "turningPoint": {
+            "en": "The old guardian, the Rakhyaka, fights the invading army to a standstill, then freezes all of time in Puri and pulls the five frozen strangers into the timeless Akhada.",
+            "hi": "पुराना संरक्षक, रख्याका, आक्रमणकारी सेना से तब तक लड़ता है जब तक वह गतिरोध तक नहीं पहुँच जाती, फिर पुरी में सभी समय को जमा देता है और पांच जमे हुए अजनबियों को कालातीत अखड़ा में खींच लेता है।"
+          }
+        },
+        {
+          "actName": {
+            "en": "Act 2A — The Timeless Akhada",
+            "hi": "अधिनियम 2ए - कालातीत अखड़ा"
+          },
+          "description": {
+            "en": "The five wake inside the Akhada, a timeless void built from the sacred danda, and are told they are the god's new guardians. Trained by clan mentors who are secretly their own past-life students, each hero is forced to confront the element they've been hiding from — until a beast slips through the still-open portal into the Akhada itself and infects a beloved clan member.",
+            "hi": "पांचों अखड़ा के अंदर जागते हैं, जो पवित्र डंडे से बना एक कालातीत शून्य है, और उन्हें बताया जाता है कि वे भगवान के नए संरक्षक हैं। कबीले के गुरुओं द्वारा प्रशिक्षित, जो गुप्त रूप से उनके अपने पिछले जन्म के छात्र हैं, प्रत्येक नायक उस तत्व का सामना करने के लिए मजबूर होता है जिससे वे छिप रहे थे - जब तक कि एक जानवर खुले हुए पोर्टल से अखड़ा में ही फिसल नहीं जाता और एक प्यारे कबीले के सदस्य को संक्रमित नहीं कर देता।"
+          },
+          "turningPoint": {
+            "en": "To save the Akhada — and the entire protector cycle — from collapsing forever, the five must put down one of their own and rush back to Earth before they feel ready.",
+            "hi": "अखड़ा - और पूरे संरक्षक चक्र - को हमेशा के लिए ढहने से बचाने के लिए, पांचों को अपने में से एक को नीचे रखना होगा और तैयार महसूस करने से पहले पृथ्वी पर वापस दौड़ना होगा।"
+          }
+        },
+        {
+          "actName": {
+            "en": "Interval — The Guardian's Fall",
+            "hi": "अंतराल - संरक्षक का पतन"
+          },
+          "description": {
+            "en": "Time resumes on the Grand Road mid-battle. The five hold back from killing the zombified pilgrims and fight instead for the portal, but none of them can hold the lathi — only the wounded Rakhyaka can carry it into the sky to try to seal the tear.",
+            "hi": "समय ग्रैंड रोड पर लड़ाई के बीच फिर से शुरू हो जाता है। पांचों ज़ोंबी तीर्थयात्रियों को मारने से पीछे हट जाते हैं और इसके बजाय पोर्टल के लिए लड़ते हैं, लेकिन उनमें से कोई भी लाठी नहीं पकड़ सकता - केवल घायल रख्याका ही दरार को सील करने के प्रयास में इसे आकाश में ले जा सकता है।"
+          },
+          "turningPoint": {
+            "en": "The shadow army fuses into one monster and strikes the Rakhyaka down in front of the Gundicha Temple. Dying, he tells the five none of them can hold the lathi yet, and that they must take the Lord and hide Him. \"The teacher is gone. The war just started.\"",
+            "hi": "छाया सेना एक राक्षस में विलीन हो जाती है और गुंडिचा मंदिर के सामने रख्याका को मार गिराती है। मरते हुए, वह पांचों को बताता है कि उनमें से कोई भी अभी तक लाठी नहीं पकड़ सकता है, और उन्हें भगवान को ले जाकर छिपाना होगा। \"गुरु चले गए हैं। युद्ध अभी शुरू हुआ है।\""
+          }
+        },
+        {
+          "actName": {
+            "en": "Act 2B — The Journey",
+            "hi": "अधिनियम 2बी - यात्रा"
+          },
+          "description": {
+            "en": "Kalapahada is revealed, forces the lathi to obey him, and sets a nine-day clock for the Lord's return. As the five become galaxy-famous for the Grand Road battle, they carry the Lord to Tara's home world, Granthaloka, where the library names their enemy for the first time — and where Tara loses her father defending the archive. A direct assault to take the lathi back fails; fighting Kalapahada only feeds him.",
+            "hi": "कालापहाड़ का खुलासा होता है, लाठी को उसे आज्ञा मानने के लिए मजबूर करता है, और भगवान की वापसी के लिए नौ दिन का समय निर्धारित करता है। जैसे-जैसे पांचों ग्रैंड रोड की लड़ाई के लिए आकाशगंगा में प्रसिद्ध हो जाते हैं, वे भगवान को तारा की गृह दुनिया, ग्रंथलोक ले जाते हैं, जहाँ पुस्तकालय पहली बार उनके दुश्मन का नाम बताता है - और जहाँ तारा पुस्तकालय की रक्षा करते हुए अपने पिता को खो देती है। लाठी वापस लेने का सीधा हमला विफल हो जाता है; कालापहाड़ से लड़ने से वह केवल उसे पोषित करता है।"
+          },
+          "turningPoint": {
+            "en": "Rock bottom: Tara's data proves Rudra's own caution helped tear the sky open in the first place. In the wreck of that discovery, each hero finally sets their private guilt down and understands Kalapahada's whole plan — the Brahma, the portal, the Samudra Manthan — and turns the ship for home.",
+            "hi": "पूरी तरह से नीचे: तारा के डेटा से साबित होता है कि रुद्र की अपनी सावधानी ने ही सबसे पहले आकाश को फाड़ने में मदद की। उस खोज के मलबे में, प्रत्येक नायक आखिरकार अपने व्यक्तिगत अपराध को नीचे रखता है और कालापहाड़ की पूरी योजना - ब्रह्मा, पोर्टल, समुद्र मंथन - को समझता है - और घर के लिए जहाज को मोड़ता है।"
+          }
+        },
+        {
+          "actName": {
+            "en": "Act 3 — The Climax: Samudra Manthan",
+            "hi": "अधिनियम 3 - चरमोत्कर्ष: समुद्र मंथन"
+          },
+          "description": {
+            "en": "Kalapahada traps the five in an illusion they can't out-fight — until Rudra stops fighting, takes the lathi's killing power, and is forged into its true bearer, shattering the maya. In the real world, Kalapahada seizes the Lord in front of the Sri Mandir and carries Him out to sea, tearing open a portal and beginning a dark Samudra Manthan to drink his own immortality.",
+            "hi": "कालापहाड़ पांचों को एक भ्रम में फंसा देता है जिससे वे लड़कर बाहर नहीं निकल सकते - जब तक कि रुद्र लड़ना बंद नहीं कर देता, लाठी की मारक शक्ति को नहीं ले लेता, और उसका सच्चा वाहक नहीं बन जाता, जिससे माया टूट जाती है। वास्तविक दुनिया में, कालापहाड़ श्री मंदिर के सामने भगवान को पकड़ लेता है और उन्हें समुद्र में ले जाता है, एक पोर्टल खोलता है और अपनी अमरता पीने के लिए एक अंधेरे समुद्र मंथन की शुरुआत करता है।"
+          },
+          "turningPoint": {
+            "en": "The five yield instead of striking — one thread of power through Tara, led by Rudra. Meera answers Kalapahada's oldest wound directly: devotion was never a transaction, never owed and never withheld, and the strike passes clean through him. The Lord enters the temple on time at Niladri Bije, and the five become the new Akhada, on watch.",
+            "hi": "पांचों हमला करने के बजाय झुक जाते हैं - तारा के माध्यम से शक्ति का एक धागा, रुद्र के नेतृत्व में। मीरा सीधे कालापहाड़ के सबसे पुराने घाव का जवाब देती है: भक्ति कभी भी एक लेन-देन नहीं थी, कभी भी बकाया नहीं थी और कभी भी रोकी नहीं गई थी, और प्रहार उसके आर-पार निकल जाता है। भगवान निलेंद्री बीजे पर समय पर मंदिर में प्रवेश करते हैं, और पांच नए अखड़ा बन जाते हैं, निगरानी में।"
+          }
+        }
+      ],
+      "characterArc": [
+        {
+          "arc": {
+            "en": "A cautious engineer terrified of his own power, whose careful over-push of the Receiver causes the Breach. At the climax he walks into the lathi's killing power to save the others, is forged into a warrior, and becomes its bearer.",
+            "hi": "एक सतर्क इंजीनियर जो अपनी ही शक्ति से डरता था, जिसका रिसीवर पर सावधानीपूर्वक अत्यधिक दबाव डालने से ब्रीच होता है। चरमोत्कर्ष पर वह दूसरों को बचाने के लिए लाठी की जानलेवा शक्ति में चला जाता है, एक योद्धा के रूप में गढ़ जाता है, और उसका वाहक बन जाता है।"
+          },
+          "name": "Rudra",
+          "need": {
+            "en": "To stop hiding his fire and trust himself enough to actually burn, even if it costs him.",
+            "hi": "अपनी आग को छिपाना बंद करना और खुद पर इतना भरोसा करना कि वह वास्तव में जल सके, भले ही इसकी कीमत चुकानी पड़े।"
+          },
+          "want": {
+            "en": "To keep everyone safe by being careful — to follow the rules, hold the line, never take a risk that could go wrong.",
+            "hi": "सभी को सुरक्षित रखना - नियमों का पालन करना, अपनी जगह पर टिके रहना, कभी भी कोई ऐसा जोखिम नहीं उठाना जो गलत हो सकता है।"
+          }
+        },
+        {
+          "arc": {
+            "en": "A strategist who runs numbers on human lives to avoid ever being wrong again. She softens after watching the Maha Guru let force pass through him, and delivers the film's answer to Kalapahada: devotion was never a transaction.",
+            "hi": "एक रणनीतिकार जो फिर कभी गलत न होने से बचने के लिए मानव जीवन पर संख्याएँ चलाती है। महा गुरु को बल को अपने माध्यम से गुजरने देने के बाद वह नरम पड़ जाती है, और कलापहाड़ा को फिल्म का जवाब देती है: भक्ति कभी भी एक सौदा नहीं थी।"
+          },
+          "name": "Meera",
+          "need": {
+            "en": "To accept that some things can't be counted, and that being right isn't the same as being good.",
+            "hi": "यह स्वीकार करना कि कुछ चीजों को गिना नहीं जा सकता है, और सही होना अच्छा होने जैसा नहीं है।"
+          },
+          "want": {
+            "en": "To be right — to win every argument with a cold, exact number, and never be blamed again for a mistake.",
+            "hi": "सही होना - हर बहस को एक ठंडे, सटीक नंबर के साथ जीतना, और फिर कभी गलती के लिए दोषी न ठहराया जाना।"
+          }
+        },
+        {
+          "arc": {
+            "en": "A warm cook and healer hiding an old guilt behind constant care for others. Wounded early in the Akhada, he ultimately yields his own timing at the climax and pulls Tara back from drifting.",
+            "hi": "एक स्नेही रसोइया और मरहम लगाने वाला जो दूसरों की निरंतर देखभाल के पीछे एक पुराने अपराधबोध को छिपाता है। अखाड़े में जल्दी घायल होने के बाद, वह अंततः चरमोत्कर्ष पर अपनी लय छोड़ देता है और तारा को बहकने से वापस खींच लेता है।"
+          },
+          "name": "Omm",
+          "need": {
+            "en": "To let others help, and to trust that putting a weight down isn't the same as failing.",
+            "hi": "दूसरों को मदद करने देना, और यह भरोसा करना कि वज़न नीचे रखना असफलता के समान नहीं है।"
+          },
+          "want": {
+            "en": "To be needed — to carry every load himself so no one else ever gets hurt because of him.",
+            "hi": "ज़रूरी बनना - हर बोझ खुद उठाना ताकि उसकी वजह से किसी और को कभी चोट न लगे।"
+          }
+        },
+        {
+          "arc": {
+            "en": "A grave courier who freezes at key moments, running from an old wreckage. He gives away the very chip he was paid to deliver, and at the climax holds the exact kind of gap he once froze at.",
+            "hi": "एक गंभीर कुरियर जो महत्वपूर्ण क्षणों में जम जाता है, एक पुरानी तबाही से भाग रहा है। वह उसी चिप को दे देता है जिसके लिए उसे भुगतान किया गया था, और चरमोत्कर्ष पर उसी तरह का अंतराल रखता है जिस पर वह एक बार जम गया था।"
+          },
+          "name": "Samir",
+          "need": {
+            "en": "To stop trying to purchase forgiveness and actually show up in the moment he once ran from.",
+            "hi": "क्षमा खरीदने की कोशिश करना बंद करना और उस क्षण में वास्तव में उपस्थित होना जिससे वह एक बार भाग गया था।"
+          },
+          "want": {
+            "en": "To buy back his family's forgiveness — to keep sending money and never ask for anything in return.",
+            "hi": "अपने परिवार की क्षमा वापस खरीदना - पैसे भेजते रहना और बदले में कभी कुछ न मांगना।"
+          }
+        },
+        {
+          "arc": {
+            "en": "A sceptic whose fractured mind gave her real visions she's spent years dismissing as illness. She loses her father at Granthaloka, becomes the living conduit for the final joined strike, and finally believes her family's old prophecy at the end.",
+            "hi": "एक संशयवादी जिसका टूटा हुआ दिमाग उसे वास्तविक अंतर्दृष्टि देता था जिसे उसने वर्षों तक बीमारी कहकर खारिज कर दिया था। वह ग्रंथालोक में अपने पिता को खो देती है, अंतिम संयुक्त प्रहार के लिए जीवित माध्यम बन जाती है, और अंत में अंत में अपने परिवार की पुरानी भविष्यवाणी पर विश्वास करती है।"
+          },
+          "name": "Tara",
+          "need": {
+            "en": "To accept a truth she can't prove, and trust what she feels as much as what she can measure.",
+            "hi": "एक ऐसे सच को स्वीकार करना जिसे वह साबित नहीं कर सकती, और जो वह महसूस करती है उस पर उतना ही भरोसा करना जितना वह माप सकती है।"
+          },
+          "want": {
+            "en": "To prove her visions are a symptom, not a truth — to stay blunt, data-first, and unfooled by mysticism.",
+            "hi": "यह साबित करना कि उसकी अंतर्दृष्टि एक लक्षण है, सच नहीं - सीधे-सादे, डेटा-प्रथम रहना, और रहस्यवाद से मूर्ख न बनना।"
+          }
+        },
+        {
+          "arc": {
+            "en": "A protector chosen long ago who broke, came to hate the god he once served, and refused the cycle of rebirth to return with all his memory intact. He is undone not by force but by Meera's answer — that grace was never a transaction he was owed or denied.",
+            "hi": "बहुत पहले चुना गया एक रक्षक जो टूट गया, उस ईश्वर से नफरत करने लगा जिसकी वह कभी सेवा करता था, और अपने सभी यादों को बरकरार रखते हुए लौटने के लिए पुनर्जन्म के चक्र को अस्वीकार कर दिया। वह बल से नहीं बल्कि मीरा के जवाब से undone होता है - कि कृपा कभी भी एक ऐसा सौदा नहीं थी जिसका वह हकदार था या जिससे उसे वंचित किया गया था।"
+          },
+          "name": "Kalapahada",
+          "need": {
+            "en": "To let go of the belief that devotion owed him anything in return.",
+            "hi": "इस विश्वास को छोड़ देना कि भक्ति ने उसे बदले में कुछ भी दिया था।"
+          },
+          "want": {
+            "en": "To recover the sacred Brahma, force open the great portal, and drink the Manthan's immortality for himself.",
+            "hi": "पवित्र ब्रह्मा को पुनः प्राप्त करना, महान पोर्टल को जबरन खोलना, और मंथन की अमरता स्वयं पीना।"
+          }
+        }
+      ],
+      "screenplayBeats": [
+        {
+          "scenes": [
+            {
+              "card": {
+                "turn": {
+                  "en": "calm → calm",
+                  "hi": "शांत → शांत"
+                },
+                "emotion": {
+                  "en": "detachment",
+                  "hi": "उदासीनता"
+                },
+                "purpose": "character_revealing",
+                "intensity": 2
+              },
+              "action": {
+                "en": "BLACK. Tiny, distant stars slowly drift. The camera moves, pulling closer to a pale blue dot: Earth. Clouds swirl, then break. The loud sounds of the world rush up. A sleek SHIP, PARMARTH 1, cuts through the sky. Its metal hull shows many old scars. Blue light, like a braid, streams from its engines. Inside, SAMIR sits alone. He is young. His face shows no emotion. He wears a special helmet. Soft lights from the helmet reflect in his eyes. He looks straight ahead at the controls.",
+                "hi": "काला। छोटे, दूर के तारे धीरे-धीरे घूमते हैं। कैमरा हिलता है, एक हल्के नीले बिंदु के करीब आता है: पृथ्वी। बादल घूमते हैं, फिर टूटते हैं। दुनिया की तेज़ आवाज़ें ऊपर आती हैं। एक चिकना जहाज, PARMARTH 1, आकाश को चीरता है। उसके धातु के खोल पर कई पुराने निशान दिखते हैं। इंजन से नीली रोशनी, एक चोटी की तरह, बहती है। अंदर, SAMIR अकेला बैठा है। वह जवान है। उसके चेहरे पर कोई भाव नहीं है। उसने एक विशेष हेलमेट पहना है। हेलमेट से निकलने वाली नरम रोशनी उसकी आँखों में चमकती है। वह सीधे नियंत्रणों को देखता है।"
+              },
+              "slugline": {
+                "intExt": "EXT",
+                "location": "DEEP SPACE",
+                "timeOfDay": "DAWN"
+              },
+              "sceneHeading": {
+                "en": "EXT. DEEP SPACE - DAWN",
+                "hi": "EXT. DEEP SPACE - DAWN"
+              },
+              "estimatedMinutes": 0.2
+            },
+            {
+              "card": {
+                "turn": {
+                  "en": "awe → unease",
+                  "hi": "विस्मय → बेचैनी"
+                },
+                "emotion": {
+                  "en": "unease",
+                  "hi": "बेचैनी"
+                },
+                "purpose": "plot_advancing",
+                "intensity": 4
+              },
+              "action": {
+                "en": "The PARMARTH 1 banks sharply. Below, FUTURE PURI stretches out. It is a huge city by the sea. White stone and glass towers stand in rings. Temple spires, shining and new, rise among them. Taller than everything, a giant black and gold tower reaches up. A bright ring of light spins slowly at its top: the WIRELESS ORBITAL RECEIVER. Thick beams of soft gold light fall from the Receiver into the city. One golden beam flickers. It shakes. Then it dies. A whole section of the city, a perfect ring of buildings, goes dark. Silence falls there for a quick moment. Then, with a sudden buzz, the power crawls back. The gold light returns, weak. The city lights flicker back on, but slowly. The city seems tired, unwell.",
+                "hi": "PARMARTH 1 तेज़ी से मुड़ता है। नीचे, भविष्य का पुरी फैला हुआ है। यह समुद्र के किनारे एक विशाल शहर है। सफेद पत्थर और कांच के टावर छल्ले में खड़े हैं। मंदिरों के शिखर, चमकदार और नए, उनके बीच उठते हैं। सबसे ऊँचा, एक विशाल काला और सुनहरा टावर ऊपर तक पहुँचता है। उसके शीर्ष पर प्रकाश का एक चमकदार छल्ला धीरे-धीरे घूमता है: वायरलेस ऑर्बिटल रिसीवर। रिसीवर से शहर में नरम सुनहरी रोशनी की मोटी किरणें गिरती हैं। एक सुनहरी किरण झिलमिलाती है। वह हिलती है। फिर वह बुझ जाती है। शहर का एक पूरा खंड, इमारतों का एक सही छल्ला, अंधेरे में डूब जाता है। एक पल के लिए वहां सन्नाटा छा जाता है। फिर, अचानक एक गुंजन के साथ, बिजली वापस आती है। सुनहरी रोशनी वापस आती है, लेकिन कमजोर। शहर की बत्तियाँ वापस जलती हैं, लेकिन धीरे-धीरे। शहर थका हुआ और बीमार लगता है।"
+              },
+              "slugline": {
+                "intExt": "EXT",
+                "location": "SKY OVER PURI",
+                "timeOfDay": "DAWN"
+              },
+              "sceneHeading": {
+                "en": "EXT. SKY OVER PURI - DAWN",
+                "hi": "EXT. SKY OVER PURI - DAWN"
+              },
+              "estimatedMinutes": 0.3
+            },
+            {
+              "card": {
+                "turn": {
+                  "en": "neutral → anxious",
+                  "hi": "तटस्थ → चिंतित"
+                },
+                "emotion": {
+                  "en": "anxiety",
+                  "hi": "चिंता"
+                },
+                "purpose": "character_revealing",
+                "intensity": 3
+              },
+              "action": {
+                "en": "Inside the cockpit, SAMIR watches the city below through his viewport. A low hum fills the small space. On his helmet display, a grid overlay of Puri flickers. Several energy readings spike into the red, then slowly recede to yellow, never quite settling. His neutral expression holds, but his eyes shift, following the chaotic energy flow on his screen. His hand, resting lightly on a control panel, flexes once, then relaxes.",
+                "hi": "कॉकपिट के अंदर, समीर अपनी खिड़की से नीचे शहर को देखता है। एक धीमी गुनगुनाहट छोटे से स्थान में भर जाती है। उसके हेलमेट डिस्प्ले पर, पुरी का एक ग्रिड ओवरले चमकता है। कई ऊर्जा रीडिंग लाल रंग में चढ़ जाती हैं, फिर धीरे-धीरे पीले रंग में वापस आ जाती हैं, कभी पूरी तरह स्थिर नहीं होतीं। उसका तटस्थ भाव बना रहता है, लेकिन उसकी आँखें हिलती हैं, स्क्रीन पर अराजक ऊर्जा प्रवाह का पीछा करती हैं। उसका हाथ, नियंत्रण पैनल पर हल्का रखा हुआ, एक बार सिकुड़ता है, फिर ढीला पड़ जाता है।"
+              },
+              "slugline": {
+                "intExt": "INT",
+                "location": "PARMARTH 1 COCKPIT",
+                "timeOfDay": "DAWN"
+              },
+              "sceneHeading": {
+                "en": "INT. PARMARTH 1 COCKPIT - DAWN",
+                "hi": "INT. PARMARTH 1 COCKPIT - DAWN"
+              },
+              "estimatedMinutes": 0.2
+            },
+            {
+              "card": {
+                "turn": {
+                  "en": "calm → dread",
+                  "hi": "शांत → भय"
+                },
+                "emotion": {
+                  "en": "dread",
+                  "hi": "भय"
+                },
+                "purpose": "plot_advancing",
+                "intensity": 5
+              },
+              "action": {
+                "en": "A closer view of the enormous Wireless Orbital Receiver. The spinning ring at its crown wobbles slightly, imperceptibly, against the pale morning sky. The golden energy beams pouring from it are now noticeably thinner, almost translucent in places. A faint, strained WHINE emanates from the tower, a sound of immense machinery struggling under pressure. Small, intermittent sparks, like static electricity, dance briefly along the edge of the spinning ring before vanishing.",
+                "hi": "विशाल वायरलेस ऑर्बिटल रिसीवर का एक नज़दीकी दृश्य। उसके शीर्ष पर घूमती हुई अंगूठी, सुबह के फीके आकाश के सामने, थोड़ी सी, अगोचर रूप से हिलती है। उससे निकलने वाली सुनहरी ऊर्जा किरणें अब स्पष्ट रूप से पतली हैं, कुछ जगहों पर लगभग पारदर्शी। टावर से एक धीमी, तनावपूर्ण कराहट निकलती है, भारी मशीनरी के दबाव में संघर्ष करने की आवाज़। छोटे, रुक-रुक कर निकलने वाले स्पार्क, जैसे स्थिर बिजली, घूमने वाली अंगूठी के किनारे पर संक्षिप्त रूप से नाचते हैं और फिर गायब हो जाते हैं।"
+              },
+              "slugline": {
+                "intExt": "EXT",
+                "location": "WIRELESS ORBITAL RECEIVER",
+                "timeOfDay": "DAWN"
+              },
+              "sceneHeading": {
+                "en": "EXT. WIRELESS ORBITAL RECEIVER - DAWN",
+                "hi": "EXT. WIRELESS ORBITAL RECEIVER - DAWN"
+              },
+              "estimatedMinutes": 0.2
+            },
+            {
+              "card": {
+                "turn": {
+                  "en": "normal → unstable",
+                  "hi": "सामान्य → अस्थिर"
+                },
+                "emotion": {
+                  "en": "instability",
+                  "hi": "अस्थिरता"
+                },
+                "purpose": "plot_advancing",
+                "intensity": 3
+              },
+              "action": {
+                "en": "Down in the city, on a busy street, a towering holo-advertisement for a popular synth-drink flickers erratically. Its vibrant colors momentarily distort into washed-out pixels, then snap back. Small, personal drones, usually buzzing with precise movements, weave slightly off course before correcting. Streetlights on a section of road dim perceptibly, then brighten, casting inconsistent shadows as early morning commuters pass by.",
+                "hi": "शहर में नीचे, एक व्यस्त सड़क पर, एक लोकप्रिय सिंथ-ड्रिंक का विशाल होलो-विज्ञापन अनियमित रूप से चमकता है। उसके जीवंत रंग क्षण भर के लिए धुंधले पिक्सेल में विकृत हो जाते हैं, फिर वापस आ जाते हैं। छोटे, व्यक्तिगत ड्रोन, जो आमतौर पर सटीक चालों के साथ भिनभिनाते हैं, ठीक होने से पहले थोड़ा रास्ता भटक जाते हैं। सड़क के एक खंड पर स्ट्रीटलाइट्स स्पष्ट रूप से मंद हो जाती हैं, फिर तेज हो जाती हैं, जिससे सुबह के शुरुआती यात्रियों के गुजरने पर असंगत छाया बनती हैं।"
+              },
+              "slugline": {
+                "intExt": "EXT",
+                "location": "PURI STREET",
+                "timeOfDay": "DAWN"
+              },
+              "sceneHeading": {
+                "en": "EXT. PURI STREET - DAWN",
+                "hi": "EXT. PURI STREET - DAWN"
+              },
+              "estimatedMinutes": 0.2
+            }
+          ],
+          "status": "pending",
+          "feedback": null
+        },
+        {
+          "scenes": [
+            {
+              "card": {
+                "turn": {
+                  "en": "festive anticipation → solemn realization",
+                  "hi": "उत्सवपूर्ण प्रत्याशा → गंभीर अहसास"
+                },
+                "emotion": {
+                  "en": "awe and unease",
+                  "hi": "आश्चर्य और बेचैनी"
+                },
+                "purpose": "plot_advancing",
+                "intensity": 5
+              },
+              "action": {
+                "en": "Morning sunlight shines on the GRAND ROAD. It is filled with people. A vast river of bodies flows down the street. Hundreds of thousands of pilgrims wear white and saffron clothes. The air hums with a deep, happy sound, like a giant ocean wave. Overhead, huge, half-built CHARIOTS stand tall. Drones fly around them, placing wood and cloth. Human workers move with the drones, hand by hand. The whole scene is alive with movement and quiet work.",
+                "hi": "ग्रांड रोड पर सुबह की धूप चमक रही है। यह लोगों से भरा हुआ है। शरीर की एक विशाल नदी सड़क पर बह रही है। लाखों तीर्थयात्री सफेद और भगवा कपड़े पहने हुए हैं। हवा एक गहरी, प्रसन्न ध्वनि के साथ गूंज रही है, जैसे एक विशाल समुद्री लहर। ऊपर, विशाल, आधे-बने रथ ऊँचे खड़े हैं। ड्रोन उनके चारों ओर उड़ रहे हैं, लकड़ी और कपड़े लगा रहे हैं। मानव कार्यकर्ता ड्रोनों के साथ, हाथ से काम कर रहे हैं। पूरा दृश्य हलचल और शांत काम से जीवंत है।"
+              },
+              "content": [
+                {
+                  "text": {
+                    "en": "Morning sunlight shines on the GRAND ROAD. It is filled with people. A vast river of bodies flows down the street. Hundreds of thousands of pilgrims wear white and saffron clothes. The air hums with a deep, happy sound, like a giant ocean wave.",
+                    "hi": "सुबह की धूप GRAND ROAD पर चमक रही है. यह लोगों से भरी हुई है. शरीरों की एक विशाल नदी सड़क पर बह रही है. लाखों तीर्थयात्री सफेद और केसरिया कपड़े पहने हुए हैं. हवा में एक गहरी, खुशगवार आवाज़ गूंज रही है, जैसे किसी विशाल समंदर की लहर."
+                  },
+                  "type": "action"
+                },
+                {
+                  "text": {
+                    "en": "Overhead, huge, half-built CHARIOTS stand tall. Drones fly around them, placing wood and cloth. Human workers move with the drones, hand by hand. The whole scene is alive with movement and quiet work.",
+                    "hi": "ऊपर, विशाल, आधे-बने CHARIOTS ऊँचे खड़े हैं. Drones उनके चारों ओर उड़ रहे हैं, लकड़ी और कपड़ा लगा रहे हैं. इंसान worker drones के साथ, हाथ से हाथ मिलाकर काम कर रहे हैं. पूरा scene हलचल और शांत काम से भरा है."
+                  },
+                  "type": "action"
+                },
+                {
+                  "text": {
+                    "en": "A CALM VOICE, amplified across the entire Grand Road, cuts through the hum of the crowd. It is the Council broadcast, its words clear and steady.",
+                    "hi": "एक शांत आवाज़, पूरी Grand Road पर गूंजती हुई, भीड़ की गुनगुनाहट को चीर देती है. यह Council का broadcast है, उसके शब्द साफ और स्थिर हैं."
+                  },
+                  "type": "action"
+                },
+                {
+                  "line": {
+                    "en": "Good morning, Puri. Today marks the start of the Rath Yatra. We remind everyone of the ongoing energy crisis, but the grid is stable.",
+                    "hi": "सुप्रभात, Puri. आज Rath Yatra की शुरुआत है. हम सभी को चल रही energy crisis याद दिलाते हैं, लेकिन grid stable है."
+                  },
+                  "type": "dialogue",
+                  "character": "COUNCIL BROADCASTER"
+                },
+                {
+                  "line": {
+                    "en": "A record crowd is expected. And a reminder: Earth remains the last protected holy place in a galaxy where prayer is now a crime. Enjoy the festival.",
+                    "hi": "record crowd की उम्मीद है. और एक याद दिलाना चाहते हैं: Earth, पूरे galaxy में एकमात्र सुरक्षित holy place है जहाँ prayer करना अब एक crime है. festival का आनंद लें."
+                  },
+                  "type": "dialogue",
+                  "character": "COUNCIL BROADCASTER"
+                }
+              ],
+              "slugline": {
+                "intExt": "EXT",
+                "location": "GRAND ROAD, PURI",
+                "timeOfDay": "MORNING"
+              },
+              "characters": {
+                "en": "COUNCIL BROADCASTER",
+                "hi": "COUNCIL BROADCASTER"
+              },
+              "sceneHeading": {
+                "en": "EXT. GRAND ROAD, PURI - MORNING",
+                "hi": "EXT. GRAND ROAD, PURI - MORNING"
+              },
+              "estimatedMinutes": 0.5
+            },
+            {
+              "card": {
+                "turn": {
+                  "en": "festive hum → stark information",
+                  "hi": "उत्सवपूर्ण गूंज → कठोर जानकारी"
+                },
+                "emotion": {
+                  "en": "ominous revelation",
+                  "hi": "अशुभ रहस्योद्घाटन"
+                },
+                "purpose": "plot_advancing",
+                "intensity": 6
+              },
+              "action": {
+                "en": "High above the crowd, many HOLO-BANNERS drift slowly. They show bright pictures and moving words. Suddenly, one huge banner changes. A woman's face, made of pure light, appears. She is ten feet tall. Text blooms around her face in glowing letters: \"ENERGY CRISIS: GRID FAILING.\" Then, \"RECORD CROWD.\" And finally, \"EARTH: LAST PROTECTED HOLY PLACE. PRAYER A CRIME ELSEWHERE.\" The woman's face is calm. Her image floats over the endless crowd, giving out these facts silently. The ocean of people continues to move below her.",
+                "hi": "भीड़ के ऊपर, कई होलो-बैनर धीरे-धीरे तैर रहे हैं। वे चमकीले चित्र और चलते हुए शब्द दिखाते हैं। अचानक, एक विशाल बैनर बदल जाता है। एक महिला का चेहरा, शुद्ध प्रकाश से बना, दिखाई देता है। वह दस फुट लंबी है। उसके चेहरे के चारों ओर चमकते अक्षरों में टेक्स्ट उगता है: \"ऊर्जा संकट: ग्रिड विफल हो रहा है।\" फिर, \"रिकॉर्ड भीड़।\" और अंत में, \"पृथ्वी: अंतिम संरक्षित पवित्र स्थान। कहीं और प्रार्थना एक अपराध।\" महिला का चेहरा शांत है। उसकी छवि अंतहीन भीड़ के ऊपर तैरती है, चुपचाप ये तथ्य बताती है। उसके नीचे लोगों का महासागर चलता रहता है।"
+              },
+              "slugline": {
+                "intExt": "EXT",
+                "location": "GRAND ROAD, PURI",
+                "timeOfDay": "CONTINUOUS"
+              },
+              "sceneHeading": {
+                "en": "EXT. GRAND ROAD, PURI - CONTINUOUS",
+                "hi": "EXT. GRAND ROAD, PURI - CONTINUOUS"
+              },
+              "estimatedMinutes": 0.2
+            },
+            {
+              "card": {
+                "turn": {
+                  "en": "celebratory murmur → reverent murmur",
+                  "hi": "उत्सवपूर्ण फुसफुसाहट → आदरणीय फुसफुसाहट"
+                },
+                "emotion": {
+                  "en": "quiet defiance",
+                  "hi": "शांत अवज्ञा"
+                },
+                "purpose": "character_revealing",
+                "intensity": 4
+              },
+              "action": {
+                "en": "The giant holo-banner still floats high above the Grand Road. The calm face of the Council Broadcaster is paused, the bold text around her image fading slightly: \"PRAYER A CRIME ELSEWHERE.\" Below, the ocean of pilgrims stretches in every direction. A ripple moves through the crowd, not of panic, but a shared, quiet understanding. An old man, his face weathered, lowers his gaze from the banner and clasps his hands tightly. A young woman beside him subtly touches a small, silver pendant hidden beneath her saffron scarf. Others exchange quick, knowing glances, their smiles softening around the edges. The celebratory hum of the crowd subsides to a deeper, more reverent murmur.",
+                "hi": "विशाल होलो-बैनर अभी भी ग्रैंड रोड के ऊपर तैर रहा है। काउंसिल ब्रॉडकास्टर का शांत चेहरा रुका हुआ है, उसके चारों ओर का टेक्स्ट थोड़ा फीका पड़ रहा है: \"अन्यत्र प्रार्थना एक अपराध है।\" नीचे, तीर्थयात्रियों का सागर हर दिशा में फैला हुआ है। भीड़ में एक लहर दौड़ जाती है, घबराहट की नहीं, बल्कि एक साझा, शांत समझ की। एक वृद्ध व्यक्ति, जिसका चेहरा झुर्रियों भरा है, बैनर से अपनी नज़रें हटाता है और अपने हाथों को कसकर जोड़ लेता है। उसके बगल में एक युवती अपनी केसरिया दुपट्टे के नीचे छिपे एक छोटे, चांदी के पेंडेंट को धीरे से छूती है। दूसरे लोग जल्दी से, अर्थपूर्ण नज़रें आदान-प्रदान करते हैं, उनकी मुस्कान किनारों से नरम पड़ जाती है। भीड़ का उत्सवपूर्ण गुनगुनाना एक गहरी, अधिक श्रद्धामय फुसफुसाहट में बदल जाता है।"
+              },
+              "slugline": {
+                "intExt": "EXT",
+                "location": "GRAND ROAD, PURI",
+                "timeOfDay": "CONTINUOUS"
+              },
+              "sceneHeading": {
+                "en": "EXT. GRAND ROAD, PURI - CONTINUOUS",
+                "hi": "EXT. GRAND ROAD, PURI - CONTINUOUS"
+              },
+              "estimatedMinutes": 0.3
+            },
+            {
+              "card": {
+                "turn": {
+                  "en": "active construction → devout ritual",
+                  "hi": "सक्रिय निर्माण → भक्त अनुष्ठान"
+                },
+                "emotion": {
+                  "en": "devout focus",
+                  "hi": "भक्तिपूर्ण ध्यान"
+                },
+                "purpose": "both",
+                "intensity": 4
+              },
+              "action": {
+                "en": "Closer to the enormous, half-built chariots, the blend of ancient ritual and futuristic technology continues. Drone-swarms buzz with focused energy, meticulously positioning carved wooden panels onto the towering structures. Human servitors, their bare hands calloused, meticulously tie vibrant, sacred cloths around the chariot wheels. One elderly servitor carefully places a small, fresh garland of white flowers onto a newly installed section of wood, his movements slow and deliberate, a silent prayer in each gesture. The air smells faintly of fresh-cut wood and burning incense from a small, temporary shrine nearby.",
+                "hi": "विशाल, आधे-बने रथों के करीब, प्राचीन अनुष्ठान और भविष्य की तकनीक का मिश्रण जारी है। ड्रोन-झुंड केंद्रित ऊर्जा के साथ भिनभिनाते हैं, विशाल संरचनाओं पर नक्काशीदार लकड़ी के पैनलों को सावधानी से स्थापित करते हैं। मानव सेवक, उनके नंगे हाथ सख्त, रथ के पहियों के चारों ओर चमकीले, पवित्र कपड़े सावधानी से बाँधते हैं। एक वृद्ध सेवक ध्यान से लकड़ी के एक नए स्थापित खंड पर सफेद फूलों की एक छोटी, ताजी माला रखता है, उसकी हरकतें धीमी और जानबूझकर होती हैं, हर हावभाव में एक मौन प्रार्थना होती है। पास के एक छोटे, अस्थायी मंदिर से ताज़ी कटी लकड़ी और जलती धूप की हल्की गंध हवा में फैली है।"
+              },
+              "slugline": {
+                "intExt": "EXT",
+                "location": "GRAND ROAD, PURI",
+                "timeOfDay": "CONTINUOUS"
+              },
+              "sceneHeading": {
+                "en": "EXT. GRAND ROAD, PURI - CONTINUOUS",
+                "hi": "EXT. GRAND ROAD, PURI - CONTINUOUS"
+              },
+              "estimatedMinutes": 0.3
+            },
+            {
+              "card": {
+                "turn": {
+                  "en": "vibrant activity → flickering imperfection",
+                  "hi": "जीवंत गतिविधि → टिमटिमाता अपूर्णता"
+                },
+                "emotion": {
+                  "en": "subtle decay",
+                  "hi": "सूक्ष्म क्षय"
+                },
+                "purpose": "plot_advancing",
+                "intensity": 4
+              },
+              "action": {
+                "en": "Despite the steady flow of pilgrims and the vibrant activity, small imperfections persist. A row of futuristic streetlights lining a side lane flickers in an uneven rhythm, some dimming to a faint glow before surging back to full brightness. A holographic vendor stand, displaying colourful sweets, briefly pixels out, its projected images dissolving into shimmering static before re-coalescing. A small child, carried on his father's shoulders, points vaguely towards a section of a nearby skyscraper where the embedded facade lights momentarily wink out, leaving a dark patch against the morning sky, before returning to their steady gleam.",
+                "hi": "तीर्थयात्रियों के निरंतर प्रवाह और जीवंत गतिविधि के बावजूद, छोटी-मोटी खामियां बनी हुई हैं। एक साइड लेन पर लगे भविष्य के स्ट्रीटलाइट्स की एक कतार एक असमान ताल में टिमटिमाती है, कुछ हल्की चमक तक मंद पड़ जाती हैं और फिर पूरी चमक पर वापस आ जाती हैं। एक होलोग्राफिक विक्रेता स्टैंड, रंगीन मिठाइयां प्रदर्शित करता हुआ, संक्षेप में पिक्सेल में बिखर जाता है, उसकी प्रक्षेपित छवियां चमकते स्थिर चित्र में घुल जाती हैं और फिर से एकजुट हो जाती हैं। एक छोटा बच्चा, अपने पिता के कंधों पर बैठा, पास की एक गगनचुंबी इमारत के एक हिस्से की ओर इशारा करता है जहाँ लगी बाहरी रोशनी पल भर के लिए बुझ जाती है, सुबह के आकाश में एक अंधेरा धब्बा छोड़ जाती है, और फिर अपनी स्थिर चमक पर लौट आती है।"
+              },
+              "slugline": {
+                "intExt": "EXT",
+                "location": "GRAND ROAD, PURI",
+                "timeOfDay": "CONTINUOUS"
+              },
+              "sceneHeading": {
+                "en": "EXT. GRAND ROAD, PURI - CONTINUOUS",
+                "hi": "EXT. GRAND ROAD, PURI - CONTINUOUS"
+              },
+              "estimatedMinutes": 0.3
+            }
+          ],
+          "status": "pending",
+          "feedback": null
+        },
+        {
+          "scenes": [
+            {
+              "card": {
+                "turn": {
+                  "en": "peaceful devotion → peaceful devotion",
+                  "hi": "शांतिपूर्ण भक्ति → शांतिपूर्ण भक्ति"
+                },
+                "emotion": {
+                  "en": "peaceful devotion",
+                  "hi": "शांतिपूर्ण भक्ति"
+                },
+                "purpose": "character_revealing",
+                "intensity": 2
+              },
+              "action": {
+                "en": "The room is small and cramped. It is made of cold, grey metal. A single, flickering flame lights a tiny statue of an idol. A father, a mother, and a child kneel before it. Their bodies sway gently. Their eyes are closed. Their lips move in silent prayer. The air is quiet, save for the soft sound of their breathing. The mother gently holds the child close. The father's hand rests on the child's head. It is a moment of deep, hidden peace.",
+                "hi": "कमरा छोटा और तंग है। यह ठंडी, भूरे रंग की धातु से बना है। एक अकेली, टिमटिमाती लौ एक छोटी मूर्ति को रोशन करती है। एक पिता, एक माँ और एक बच्चा उसके सामने घुटने टेकते हैं। उनके शरीर धीरे से झूलते हैं। उनकी आँखें बंद हैं। उनके होंठ मौन प्रार्थना में हिलते हैं। हवा शांत है, उनकी साँसों की नरम आवाज़ को छोड़कर। माँ बच्चे को धीरे से अपने पास रखती है। पिता का हाथ बच्चे के सिर पर टिका है। यह गहरी, छिपी हुई शांति का क्षण है।"
+              },
+              "slugline": {
+                "intExt": "INT",
+                "location": "HIDDEN PRAYER ROOM, OFF-WORLD COLONY",
+                "timeOfDay": "NIGHT"
+              },
+              "sceneHeading": {
+                "en": "INT. HIDDEN PRAYER ROOM, OFF-WORLD COLONY - NIGHT",
+                "hi": "INT. HIDDEN PRAYER ROOM, OFF-WORLD COLONY - NIGHT"
+              },
+              "estimatedMinutes": 0.2
+            },
+            {
+              "card": {
+                "turn": {
+                  "en": "peaceful devotion → stark terror",
+                  "hi": "शांतिपूर्ण भक्ति → खौफ"
+                },
+                "emotion": {
+                  "en": "sudden terror",
+                  "hi": "अचानक भय"
+                },
+                "purpose": "plot_advancing",
+                "intensity": 7
+              },
+              "action": {
+                "en": "A harsh, high-pitched WHINE slices through the quiet. The metal door on one wall glows red. It is not opening, but being cut. Black smoke curls from the edges of the cut. The glowing metal folds inward like soft paper. Shadow-soldiers pour into the room. They are like tears in the air, man-shaped, with smoking black edges. They move without sound, their forms shifting. The family freezes, eyes wide with fear. The child whimpers softly. The mother pulls the child tighter, shielding its face.",
+                "hi": "एक कठोर, ऊँची आवाज़ की चीख़ शांति को चीर देती है। एक दीवार पर धातु का दरवाज़ा लाल चमकता है। वह खुल नहीं रहा है, बल्कि उसे काटा जा रहा है। कटे हुए किनारों से काला धुआँ निकलता है। चमकती हुई धातु नरम कागज़ की तरह अंदर की ओर मुड़ जाती है। छाया-सैनिक कमरे में घुस आते हैं। वे हवा में आँसुओं की तरह हैं, आदमी के आकार के, धुएँ के काले किनारों के साथ। वे बिना आवाज़ के चलते हैं, उनके आकार बदलते रहते हैं। परिवार डर से आँखें फाड़कर जम जाता है। बच्चा धीरे से रोता है। माँ बच्चे को और कसकर खींचती है, उसके चेहरे को ढालती है।"
+              },
+              "slugline": {
+                "intExt": "INT",
+                "location": "HIDDEN PRAYER ROOM, OFF-WORLD COLONY",
+                "timeOfDay": "CONTINUOUS"
+              },
+              "sceneHeading": {
+                "en": "INT. HIDDEN PRAYER ROOM, OFF-WORLD COLONY - CONTINUOUS",
+                "hi": "INT. HIDDEN PRAYER ROOM, OFF-WORLD COLONY - CONTINUOUS"
+              },
+              "estimatedMinutes": 0.2
+            },
+            {
+              "card": {
+                "turn": {
+                  "en": "stark terror → utter despair",
+                  "hi": "खौफ → पूर्ण निराशा"
+                },
+                "emotion": {
+                  "en": "abject horror",
+                  "hi": "भयानक आतंक"
+                },
+                "purpose": "both",
+                "intensity": 8
+              },
+              "action": {
+                "en": "One shadow-soldier moves swiftly. It reaches for the praying father. It does not hit him hard. It simply TOUCHES his arm. The father's skin quickly turns grey. His eyes change. They become black glass. He rises slowly, his movements stiff and jerky. He is now one of them. The mother’s throat opens in a silent SCREAM of horror. The small, hidden flame on the idol flickers once, struggles, and then dies out completely. Darkness fills the room.",
+                "hi": "एक छाया-सैनिक तेज़ी से चलता है। वह प्रार्थना करते हुए पिता की ओर बढ़ता है। वह उसे ज़ोर से नहीं मारता। वह बस उसकी बाँह को छूता है। पिता की त्वचा तेज़ी से भूरी हो जाती है। उसकी आँखें बदल जाती हैं। वे काले शीशे जैसी हो जाती हैं। वह धीरे-धीरे उठता है, उसकी हरकतें अकड़ी हुई और झटकेदार होती हैं। वह अब उनमें से एक है। माँ का गला डर के एक शांत चीख़ में खुलता है। मूर्ति पर छोटी, छिपी हुई लौ एक बार टिमटिमाती है, संघर्ष करती है, और फिर पूरी तरह बुझ जाती है। कमरे में अँधेरा छा जाता है।"
+              },
+              "slugline": {
+                "intExt": "INT",
+                "location": "HIDDEN PRAYER ROOM, OFF-WORLD COLONY",
+                "timeOfDay": "CONTINUOUS"
+              },
+              "sceneHeading": {
+                "en": "INT. HIDDEN PRAYER ROOM, OFF-WORLD COLONY - CONTINUOUS",
+                "hi": "INT. HIDDEN PRAYER ROOM, OFF-WORLD COLONY - CONTINUOUS"
+              },
+              "estimatedMinutes": 0.2
+            }
+          ],
+          "status": "pending",
+          "feedback": null
+        },
+        {
+          "scenes": [
+            {
+              "card": {
+                "turn": {
+                  "en": "calm → unease",
+                  "hi": "शांत → असहजता"
+                },
+                "emotion": {
+                  "en": "unease",
+                  "hi": "असहजता"
+                },
+                "purpose": "character_revealing",
+                "intensity": 3
+              },
+              "action": {
+                "en": "Strong wind whips around the narrow gantry, high above Puri. Below, the city sprawls, a distant hum rising up. RUDRA, focused, moves along a line of floating holographic readout panels. His fingers tap lightly on the shimmering displays, checking readings with precise movements. The panels show erratic energy fluctuations, green lines spiking into amber warnings. OMM stands beside a section of the great tower's metal skin. He presses his broad palm to the cold surface. His eyes close. He feels a deep, grinding vibration, a strain under the metal that echoes through him. He pulls his hand away, his brow furrowed with concern. He looks at Rudra, then shakes his head slowly, gesturing vaguely downwards with a worried expression. The floating panels around Rudra show a soft, pulsing red light beneath the main energy conduits, a subtle but insistent warning that Omm's earth-sense has detected.",
+                "hi": "तेज हवा नैरो गैन्ट्री के चारों ओर चलती है, पुरी के ऊपर बहुत ऊँचाई पर। नीचे, शहर फैला हुआ है, एक दूर की गूंज ऊपर आती है। रुद्र, ध्यान केंद्रित किए हुए, तैरते हुए होलोग्राफिक रीडआउट पैनल की एक पंक्ति के साथ चलता है। उसकी उंगलियाँ चमकते डिस्प्ले पर हल्के से टैप करती हैं, सटीक गतिविधियों के साथ रीडिंग की जाँच करती हैं। पैनल अनियमित ऊर्जा उतार-चढ़ाव दिखाते हैं, हरी रेखाएँ एम्बर चेतावनियों में बदल जाती हैं। ओम विशाल टॉवर की धातु की त्वचा के एक हिस्से के पास खड़ा है। वह अपनी चौड़ी हथेली को ठंडी सतह पर दबाता है। उसकी आँखें बंद हो जाती हैं। उसे एक गहरी, घिसने वाली कंपन महसूस होती है, धातु के नीचे एक तनाव जो उसके पूरे शरीर में गूंजता है। वह अपनी हथेली हटाता है, उसकी भौंहें चिंता से सिकुड़ी हुई हैं। वह रुद्र की ओर देखता है, फिर धीरे-धीरे सिर हिलाता है, चिंतित अभिव्यक्ति के साथ अस्पष्ट रूप से नीचे की ओर इशारा करता है। रुद्र के चारों ओर तैरते हुए पैनल मुख्य ऊर्जा वाहिनी के नीचे एक नरम, धड़कती हुई लाल बत्ती दिखाते हैं, एक सूक्ष्म लेकिन लगातार चेतावनी जिसे ओम के धरती-ज्ञान ने महसूस किया है।"
+              },
+              "content": [
+                {
+                  "text": {
+                    "en": "Strong wind whips around the narrow gantry, high above Puri. Below, the city sprawls, a distant hum rising up. RUDRA, focused, moves along a line of floating holographic readout panels. His fingers tap lightly on the shimmering displays, checking readings with precise movements. The panels show erratic energy fluctuations, green lines spiking into amber warnings.",
+                    "hi": "तेज़ हवा पतली gantry के चारों ओर चल रही है, Puri के बहुत ऊपर। नीचे, शहर फैला हुआ है, एक हल्की गूँज ऊपर आ रही है। RUDRA, ध्यान लगाए हुए, तैरते हुए holographic readout panels की एक line के साथ चलता है। उसके उंगलियाँ चमकते हुए displays पर हल्के से tap करती हैं, precise movement के साथ readings check करता है। panels erratic energy fluctuations दिखाते हैं, green lines amber warnings में बदल रही हैं।"
+                  },
+                  "type": "action"
+                },
+                {
+                  "text": {
+                    "en": "OMM stands beside a section of the great tower's metal skin. He presses his broad palm to the cold surface. His eyes close. He feels a deep, grinding vibration, a strain under the metal that echoes through him.",
+                    "hi": "OMM बड़े tower के metal skin के एक हिस्से के पास खड़ा है। वह अपनी चौड़ी हथेली ठंडी सतह पर दबाता है। उसकी आँखें बंद हो जाती हैं। उसे एक गहरी, पीसने वाली vibration महसूस होती है, metal के नीचे एक strain जो उसके अंदर गूँजता है।"
+                  },
+                  "type": "action"
+                },
+                {
+                  "line": {
+                    "en": "Rudra, the ground isn't right. Something below... it's pulling.",
+                    "hi": "Rudra, ज़मीन ठीक नहीं है। नीचे कुछ... खींच रहा है।"
+                  },
+                  "type": "dialogue",
+                  "character": "OMM"
+                },
+                {
+                  "text": {
+                    "en": "Rudra glances at Omm, then back to his panels. His brow furrows slightly. FOCUS SHIFTS TO: the floating panels around Rudra, which show a soft, pulsating red light beneath the main energy conduits, a subtle but insistent warning that Omm's earth-sense has detected.",
+                    "hi": "Rudra Omm की तरफ़ देखता है, फिर अपने panels पर वापस। उसकी भौंहें हल्की सिकुड़ जाती हैं। FOCUS SHIFTS TO: Rudra के चारों ओर तैरते हुए panels, जो मुख्य energy conduits के नीचे एक हल्की, pulsating red light दिखाते हैं, एक subtle लेकिन ज़ोरदार warning जिसे Omm के earth-sense ने पकड़ा है।"
+                  },
+                  "type": "action"
+                },
+                {
+                  "line": {
+                    "en": "(without looking up) Readings are within acceptable parameters, Omm. Just a typical load fluctuation.",
+                    "hi": "(बिना ऊपर देखे) Readings acceptable parameters में हैं, Omm। बस एक typical load fluctuation है।"
+                  },
+                  "type": "dialogue",
+                  "character": "RUDRA"
+                },
+                {
+                  "text": {
+                    "en": "OMM sighs, a deep, resigned sound swallowed by the wind. He gives a slow, reluctant nod, his gaze falling to the pulsing red light on a nearby holographic panel, which now seems to throb with a growing intensity.",
+                    "hi": "OMM आह भरता है, एक गहरी, resigned आवाज़ जो हवा में घुल जाती है। वह एक धीमी, अनिच्छुक nod देता है, उसकी नज़र पास के holographic panel पर pulsating red light पर पड़ती है, जो अब बढ़ती intensity के साथ धड़कता हुआ लगता है।"
+                  },
+                  "type": "action"
+                }
+              ],
+              "slugline": {
+                "intExt": "EXT",
+                "location": "RECEIVER GANTRY, HIGH OVER PURI",
+                "timeOfDay": "MORNING"
+              },
+              "characters": {
+                "en": "RUDRA, OMM",
+                "hi": "RUDRA, OMM"
+              },
+              "sceneHeading": {
+                "en": "EXT. RECEIVER GANTRY, HIGH OVER PURI - MORNING",
+                "hi": "EXT. RECEIVER GANTRY, HIGH OVER PURI - MORNING"
+              },
+              "estimatedMinutes": 0.6
+            },
+            {
+              "card": {
+                "turn": {
+                  "en": "serious → tense satisfaction",
+                  "hi": "गंभीर → तनावपूर्ण संतुष्टि"
+                },
+                "emotion": {
+                  "en": "determination",
+                  "hi": "दृढ़ संकल्प"
+                },
+                "purpose": "both",
+                "intensity": 7
+              },
+              "action": {
+                "en": "Inside a small, sheltered alcove on the gantry, Rudra stands before a primary control console. His face is illuminated by the glowing data screens. The main display shows a holographic map of the entire city grid. Dark sections flicker on and off, entire districts momentarily losing power before sputtering back to life. Omm is beside him, his expression serious, his earlier warning clear. He places a heavy hand on Rudra's shoulder, then points to the critical red pulse indicator on a nearby screen, urging him to reconsider. Rudra's jaw tightens. His gaze is fixed on the flickering map, the struggling city. He takes a deep, resolute breath. His hand moves, with deliberate slowness, to a holographic slider labeled \"POWER OUTPUT.\" He pushes it, smoothly, past a bright yellow safety line. A sharp, high-pitched BEEP sounds as the slider enters a flashing red zone. On a smaller screen, Rudra types quickly, his fingers dancing across the interface, filing a system override confirmation and a detailed log entry. Through a curved viewport, the golden energy beams pouring from the Receiver visibly intensify, becoming denser, brighter. Below, on the city grid map, the last dark sections snap back to full, steady illumination. Rudra watches the city relight, his eyes holding a flicker of deep tension.",
+                "hi": "गैन्ट्री पर एक छोटे, आश्रय वाले स्थान में, रुद्र एक प्राथमिक नियंत्रण कंसोल के सामने खड़ा है। उसका चेहरा चमकते डेटा स्क्रीन से प्रकाशित है। मुख्य डिस्प्ले पर पूरे शहर के ग्रिड का एक होलोग्राफिक नक्शा दिखाई दे रहा है। अंधेरे हिस्से बार-बार झिलमिलाते हैं, पूरे जिले क्षण भर के लिए बिजली खो देते हैं और फिर झिलमिलाकर वापस चालू हो जाते हैं। ओम उसके बगल में खड़ा है, उसका चेहरा गंभीर है, उसकी पिछली चेतावनी स्पष्ट है। वह रुद्र के कंधे पर अपना भारी हाथ रखता है, फिर पास की स्क्रीन पर महत्वपूर्ण लाल पल्स संकेतक की ओर इशारा करता है, उसे पुनर्विचार करने का आग्रह करता है। रुद्र का जबड़ा कस जाता है। उसकी नज़र झिलमिलाते नक्शे, संघर्षरत शहर पर टिकी है। वह एक गहरी, दृढ़ साँस लेता है। उसका हाथ, जानबूझकर धीमी गति से, \"पावर आउटपुट\" नामक एक होलोग्राफिक स्लाइडर की ओर बढ़ता है। वह इसे आसानी से एक चमकीली पीली सुरक्षा रेखा के पार धकेलता है। एक तेज़, ऊँची-पिच वाली बीप की आवाज़ आती है क्योंकि स्लाइडर एक चमकते लाल क्षेत्र में प्रवेश करता है। एक छोटी स्क्रीन पर, रुद्र तेज़ी से टाइप करता है, उसकी उंगलियाँ इंटरफ़ेस पर नाचती हैं, एक सिस्टम ओवरराइड पुष्टि और एक विस्तृत लॉग एंट्री दर्ज करता है। एक घुमावदार व्यूपोर्ट के माध्यम से, रिसीवर से निकलने वाली सुनहरी ऊर्जा किरणें स्पष्ट रूप से तीव्र हो जाती हैं, घनी और चमकीली हो जाती हैं। नीचे, शहर के ग्रिड नक्शे पर, अंतिम अंधेरे हिस्से पूरी, स्थिर रोशनी में वापस आ जाते हैं। रुद्र शहर को फिर से रोशन होते हुए देखता है, उसकी आँखों में गहरे तनाव की एक चमक है।"
+              },
+              "slugline": {
+                "intExt": "INT",
+                "location": "RECEIVER CONTROL ALCOVE, GANTRY",
+                "timeOfDay": "MORNING"
+              },
+              "sceneHeading": {
+                "en": "INT. RECEIVER CONTROL ALCOVE, GANTRY - MORNING",
+                "hi": "INT. RECEIVER CONTROL ALCOVE, GANTRY - MORNING"
+              },
+              "estimatedMinutes": 0.5
+            },
+            {
+              "card": {
+                "turn": {
+                  "en": "relief → foreboding",
+                  "hi": "राहत → पूर्वाभास"
+                },
+                "emotion": {
+                  "en": "foreboding",
+                  "hi": "पूर्वाभास"
+                },
+                "purpose": "character_revealing",
+                "intensity": 5
+              },
+              "action": {
+                "en": "Rudra watches the city map. All districts are now brightly lit. The high-pitched BEEP from the console slowly fades. A low, persistent HUM now fills the alcove, a deeper sound than before. Omm’s hand is still on Rudra's shoulder. He feels the new, stronger vibrations rumbling through the tower’s structure. His face is grim. He slowly lowers his hand and presses his palm back to the cold metal skin of the tower itself, eyes closed, listening to the deep, unnatural growl that vibrates up through his body. He shakes his head, a small, subtle movement. Rudra does not look at him. His gaze remains fixed on the city grid, now stable, now bright. A flicker of satisfaction, quickly masked by renewed tension, crosses Rudra’s face. He taps a series of quick commands on the console.",
+                "hi": "रुद्र शहर के नक्शे को देखता है। सभी जिले अब तेज़ी से जगमगा रहे हैं। कंसोल से आती तेज़ बीप धीरे-धीरे शांत हो जाती है। अब अल्कूव में एक धीमी, लगातार गूंज भर जाती है, पहले से ज़्यादा गहरी आवाज़। ओम का हाथ अभी भी रुद्र के कंधे पर है। वह टावर की संरचना से होकर आने वाली नई, तेज़ कंपन महसूस करता है। उसका चेहरा गंभीर है। वह धीरे-धीरे अपना हाथ नीचे करता है और अपनी हथेली को टावर की ठंडी धातु की सतह पर वापस रखता है, आँखें बंद किए हुए, अपने शरीर से होकर आने वाली गहरी, अप्राकृतिक गड़गड़ाहट को सुनता है। वह अपना सिर हिलाता है, एक छोटी, सूक्ष्म गति। रुद्र उसे नहीं देखता। उसकी नज़र शहर के ग्रिड पर टिकी हुई है, जो अब स्थिर और चमकदार है। संतुष्टि की एक चमक, जो तुरंत नए तनाव से ढक जाती है, रुद्र के चेहरे पर आती है। वह कंसोल पर तेज़ी से कमांड टैप करता है।"
+              },
+              "slugline": {
+                "intExt": "INT",
+                "location": "RECEIVER CONTROL ALCOVE, GANTRY",
+                "timeOfDay": "CONTINUOUS"
+              },
+              "sceneHeading": {
+                "en": "INT. RECEIVER CONTROL ALCOVE, GANTRY - CONTINUOUS",
+                "hi": "INT. RECEIVER CONTROL ALCOVE, GANTRY - CONTINUOUS"
+              },
+              "estimatedMinutes": 0.3
+            },
+            {
+              "card": {
+                "turn": {
+                  "en": "heightened → dread",
+                  "hi": "बढ़ा हुआ → भय"
+                },
+                "emotion": {
+                  "en": "dread",
+                  "hi": "भय"
+                },
+                "purpose": "plot_advancing",
+                "intensity": 8
+              },
+              "action": {
+                "en": "The air around the gantry now crackles faintly with static electricity. The golden energy beams pouring from the Receiver are intensely bright, almost painfully so, casting long, sharp shadows across the city below. The spinning ring at the top of the tower rotates with a faster, more agitated WHIRRING sound. Small arcs of blue lightning, no thicker than a finger, occasionally jump between segments of the spinning ring, dissipating instantly with a faint POP. Down in the city, the holo-banners and streetlights, which were flickering earlier, are now unnaturally stable, their glow almost harsh. The overall drone of the city below sounds tighter, more stressed, like a single, high-strung machine.",
+                "hi": "गैन्ट्री के चारों ओर की हवा अब हल्की स्थिर बिजली से चटक रही है। रिसीवर से निकलने वाली सुनहरी ऊर्जा किरणें बहुत तेज़ चमक रही हैं, लगभग असहनीय, शहर के नीचे लंबी, तीखी छायाएँ डाल रही हैं। टावर के शीर्ष पर घूमती अंगूठी अब तेज़, अधिक उत्तेजित घूमने की आवाज़ के साथ घूम रही है। नीली बिजली के छोटे आर्क, उंगली से मोटे नहीं, कभी-कभी घूमने वाली अंगूठी के खंडों के बीच कूदते हैं, एक हल्की पॉप के साथ तुरंत गायब हो जाते हैं। शहर के नीचे, पहले जो होलो-बैनर और स्ट्रीटलाइट्स टिमटिमा रहे थे, वे अब अप्राकृतिक रूप से स्थिर हैं, उनकी चमक लगभग कठोर है। शहर का कुल शोर अधिक कसैला, अधिक तनावपूर्ण लगता है, जैसे एक ही, तनावग्रस्त मशीन।"
+              },
+              "slugline": {
+                "intExt": "EXT",
+                "location": "RECEIVER GANTRY, HIGH OVER PURI",
+                "timeOfDay": "CONTINUOUS"
+              },
+              "sceneHeading": {
+                "en": "EXT. RECEIVER GANTRY, HIGH OVER PURI - CONTINUOUS",
+                "hi": "EXT. RECEIVER GANTRY, HIGH OVER PURI - CONTINUOUS"
+              },
+              "estimatedMinutes": 0.3
+            }
+          ],
+          "status": "pending",
+          "feedback": null
+        },
+        {
+          "scenes": null,
+          "status": "not_started",
+          "feedback": null
+        },
+        {
+          "scenes": null,
+          "status": "not_started",
+          "feedback": null
+        },
+        {
+          "scenes": null,
+          "status": "not_started",
+          "feedback": null
+        },
+        {
+          "song": {
+            "mood": {
+              "en": "Devotional, energetic, chaotic, communal, building tension.",
+              "hi": "भक्तिपूर्ण, ऊर्जावान, अराजक, सामुदायिक, तनावपूर्ण।"
+            },
+            "singers": {
+              "en": "A large male chorus singing devotional chants, overlaid with a powerful female lead voice.",
+              "hi": "भक्ति मंत्र गाता हुआ एक बड़ा पुरुष कोरस, जिसके ऊपर एक शक्तिशाली महिला प्रमुख स्वर है।"
+            },
+            "situation": {
+              "en": "This song plays during the Pahandi procession, a key moment in the Rath Yatra festival. It's the first time the five main characters are physically in the same space, though they are unaware of each other's significance. The song serves to visually establish their proximity and the vibrant, chaotic atmosphere of the festival before the major events unfold.",
+              "hi": "यह गीत रथ यात्रा के पर्व के दौरान पहाँडी जुलूस के समय बजता है, जो एक महत्वपूर्ण क्षण है। यह पहली बार है जब पांच मुख्य पात्र एक ही स्थान पर मौजूद हैं, हालांकि वे एक-दूसरे के महत्व से अनजान हैं। यह गीत प्रमुख घटनाओं के सामने आने से पहले, उनके निकटता और उत्सव के जीवंत, अराजक वातावरण को दृश्य रूप से स्थापित करने का काम करता है।"
+            },
+            "musicStyle": {
+              "en": "Traditional Odia folk fusion with a strong percussive base, medium-fast tempo (approx. 120-130 BPM). Features dhol, mridangam, ghanta (large cymbals), and possibly synthesized elements to represent the futuristic setting.",
+              "hi": "पारंपरिक ओडिया लोक फ्यूजन, एक मजबूत ताल-आधारित, मध्यम-तेज़ गति (लगभग 120-130 बीपीएम)। इसमें ढोल, मृदंगम, घंटा (बड़े झांझ), और भविष्य के परिवेश का प्रतिनिधित्व करने के लिए संभवतः सिंथेसाइज़्ड तत्व शामिल हैं।"
+            },
+            "storyPurpose": {
+              "en": "By the end of the song, the characters remain unaware of each other, but their physical proximity is established. The audience sees them brush past one another amidst the overwhelming crowd and energy of the festival, subtly foreshadowing their future connection and the impending chaos.",
+              "hi": "गीत के अंत तक, पात्र एक-दूसरे से अनजान रहते हैं, लेकिन उनकी भौतिक निकटता स्थापित हो जाती है। दर्शक उन्हें त्योहार की भारी भीड़ और ऊर्जा के बीच एक-दूसरे से गुजरते हुए देखते हैं, जो उनके भविष्य के जुड़ाव और आने वाली अराजकता का सूक्ष्म संकेत देता है।"
+            },
+            "workingTitle": {
+              "en": "The Crowd's Touch",
+              "hi": "भीड़ का स्पर्श"
+            },
+            "lyricistBrief": {
+              "en": "The theme is the intense devotion and communal energy of the Rath Yatra's Pahandi procession. The lyrics should capture the feeling of being swept up in a massive crowd, the rhythmic chanting, and the overwhelming presence of the deities. Focus on sensory details: the sounds of the drums and bells, the sight of the swaying idols, the dust in the air, and the sheer force of human devotion. The feeling should be one of awe and immersion, hinting at the underlying spiritual significance of the event.",
+              "hi": "थीम रथ यात्रा के पहाँडी जुलूस की तीव्र भक्ति और सामुदायिक ऊर्जा है। गीत को भारी भीड़ में बह जाने की भावना, लयबद्ध मंत्रोच्चार, और देवताओं की भारी उपस्थिति को पकड़ना चाहिए। इंद्रिय विवरणों पर ध्यान केंद्रित करें: ढोल और घंटियों की आवाजें, हिलते हुए विग्रहों का दृश्य, हवा में धूल, और मानव भक्ति की भारी शक्ति। भावना विस्मय और तल्लीनता की होनी चाहिए, जो घटना के अंतर्निहित आध्यात्मिक महत्व का संकेत दे।"
+            },
+            "picturization": [
+              {
+                "section": "Prelude",
+                "visuals": {
+                  "en": "Opens with a wide shot of the Grand Road, teeming with an impossibly large crowd. HOLO-BANNERS display abstract devotional patterns. The air shimmers with heat and dust. The first resonant beats of the drums begin, a low rumble that grows.",
+                  "hi": "वाइड शॉट के साथ खुलता है जिसमें ग्रैंड रोड, एक असंभव रूप से बड़ी भीड़ से खचाखच भरी है। होलो-बैनर अमूर्त भक्ति पैटर्न प्रदर्शित करते हैं। हवा गर्मी और धूल से झिलमिलाती है। ढोल की पहली गूंजती हुई धुनें शुरू होती हैं, एक धीमी गड़गड़ाहट जो बढ़ती है।"
+                }
+              },
+              {
+                "section": "Mukhda",
+                "visuals": {
+                  "en": "The Pahandi procession begins. Massive, ornate deities are carried aloft by straining servitors in white. The crowd surges. The camera moves through the throng, focusing on the sheer scale and energy. QUICK CUTS introduce the five protagonists separately, lost in the crowd: Samir weaving through people, Omm looking up in awe, Meera navigating with purpose, Tara appearing overwhelmed, Rudra holding his ground.",
+                  "hi": "पहाँडी जुलूस शुरू होता है। विशाल, अलंकृत देवता सफेद रंग के सेवकों द्वारा उठाए जा रहे हैं। भीड़ आगे बढ़ती है। कैमरा भीड़ के बीच से गुजरता है, जो केवल पैमाने और ऊर्जा पर ध्यान केंद्रित करता है। त्वरित कट पांच मुख्य पात्रों को अलग-अलग पेश करते हैं, भीड़ में खोए हुए: समीर लोगों के बीच से गुजर रहा है, ओम विस्मय में ऊपर देख रहा है, मीरा उद्देश्य के साथ नेविगेट कर रही है, तारा अभिभूत दिख रही है, रुद्र अपनी जमीन पर खड़ा है।"
+                }
+              },
+              {
+                "section": "Interlude 1",
+                "visuals": {
+                  "en": "The music swells. The camera focuses on the rhythmic movement of the servitors and the sway of the deities. Quick, close-up shots of devotional faces in the crowd. The camera pans up towards the sky, showing the vastness of the gathering. A beat of pure sonic energy from the traditional instruments.",
+                  "hi": "संगीत बढ़ता है। कैमरा सेवकों की लयबद्ध हलचल और विग्रहों के झूलने पर केंद्रित होता है। भीड़ में भक्तिपूर्ण चेहरों के त्वरित, क्लोज-अप शॉट। विशाल सभा को दिखाने के लिए कैमरा आकाश की ओर पैन करता है। पारंपरिक वाद्य यंत्रों से शुद्ध ध्वनि ऊर्जा का एक बीट।"
+                }
+              },
+              {
+                "section": "Antara 1",
+                "visuals": {
+                  "en": "The camera weaves through the crowd, showing brief, accidental brushes between the five strangers. Samir's shoulder brushes Omm. Meera's path crosses Tara's. Rudra's arm briefly touches Samir. These are fleeting, unnoticed moments within the chaotic flow. Shots emphasize the density of people and the difficulty of moving.",
+                  "hi": "कैमरा भीड़ के बीच से गुजरता है, पांच अजनबियों के बीच संक्षिप्त, आकस्मिक स्पर्श दिखाता है। समीर का कंधा ओम से रगड़ता है। मीरा का रास्ता तारा के रास्ते को पार करता है। रुद्र की बांह संक्षिप्त रूप से समीर को छूती है। ये अराजक प्रवाह के भीतर क्षणभंगुर, अनदेखे क्षण हैं। शॉट लोगों के घनत्व और चलने की कठिनाई पर जोर देते हैं।"
+                }
+              },
+              {
+                "section": "Interlude 2",
+                "visuals": {
+                  "en": "More intense drumming and cymbal crashes. The camera might briefly show a wide shot of the entire procession, a river of humanity. Focus shifts back to the faces of the five, seen momentarily in the crowd, each reacting differently to the overwhelming experience – fascination, unease, determination, confusion.",
+                  "hi": "अधिक तीव्र ड्रमिंग और झांझ की आवाज़ें। कैमरा संक्षिप्त रूप से पूरे जुलूस का एक वाइड शॉट दिखा सकता है, जो मानवता की एक नदी है। फोकस पांच चेहरों पर वापस आ जाता है, जो भीड़ में क्षण भर के लिए दिखाई देते हैं, प्रत्येक अत्यधिक अनुभव पर अलग-अलग प्रतिक्रिया करता है - आकर्षण, बेचैनी, दृढ़ संकल्प, भ्रम।"
+                }
+              },
+              {
+                "section": "Antara 2",
+                "visuals": {
+                  "en": "The song reaches a crescendo. The camera catches more fleeting, anonymous interactions between the protagonists. A shared glance that doesn't connect, a hand that reaches out and pulls back. The focus remains on the overwhelming scale of the festival and how small and disconnected the individuals are within it, despite their proximity. The energy of the crowd is palpable.",
+                  "hi": "गीत अपने चरम पर पहुँचता है। कैमरा नायकों के बीच अधिक क्षणभंगुर, अनाम बातचीत को पकड़ता है। एक साझा नज़र जो जुड़ती नहीं है, एक हाथ जो आगे बढ़ता है और पीछे हट जाता है। फोकस उत्सव के भारी पैमाने पर बना रहता है और व्यक्ति इसके भीतर कितने छोटे और अलग-थलग हैं, उनकी निकटता के बावजूद। भीड़ की ऊर्जा स्पष्ट है।"
+                }
+              },
+              {
+                "section": "Final Mukhda",
+                "visuals": {
+                  "en": "The deities continue their slow, powerful journey. The camera briefly reunites shots of the five protagonists, emphasizing their isolation within the mass of people. The chanting of the chorus becomes more prominent, a powerful wave of sound. The scene ends on a wide shot of the procession moving forward, the energy at its peak.",
+                  "hi": "देवता अपनी धीमी, शक्तिशाली यात्रा जारी रखते हैं। कैमरा संक्षिप्त रूप से पांच मुख्य पात्रों के शॉट्स को फिर से जोड़ता है, लोगों के विशाल जनसमूह के भीतर उनके अलगाव पर जोर देता है। कोरस का मंत्रोच्चार अधिक प्रमुख हो जाता है, ध्वनि की एक शक्तिशाली लहर। दृश्य जुलूस के आगे बढ़ने के वाइड शॉट पर समाप्त होता है, ऊर्जा अपने चरम पर होती है।"
+                }
+              },
+              {
+                "section": "Outro",
+                "visuals": {
+                  "en": "The music begins to fade, the drums slowing. The camera lingers on the faces of the crowd, then pulls back to show the vastness of the procession still moving. The sound of the festival continues, but the focus is on the lingering feeling of immense, impersonal energy.",
+                  "hi": "संगीत फीका पड़ने लगता है, ड्रम धीमे हो जाते हैं। कैमरा भीड़ के चेहरों पर टिका रहता है, फिर पीछे हटकर जुलूस की विशालता को आगे बढ़ते हुए दिखाता है। उत्सव की आवाज़ जारी रहती है, लेकिन ध्यान विशाल, अवैयक्तिक ऊर्जा की स्थायी भावना पर होता है।"
+                }
+              }
+            ],
+            "durationMinutes": 3
+          },
+          "scenes": [
+            {
+              "card": {
+                "turn": {
+                  "en": "awe → awe",
+                  "hi": "आश्चर्य → आश्चर्य"
+                },
+                "emotion": {
+                  "en": "awe",
+                  "hi": "आश्चर्य"
+                },
+                "purpose": "character_revealing",
+                "intensity": 3
+              },
+              "action": {
+                "en": "A roar rises from the crowd, deep and resonant, like the ocean. DRUMS begin a slow, powerful beat, joined by the piercing sound of CONCHES. Servitors, dressed in simple white dhotis, emerge from the temple, straining under the weight of the massive, carved deities. The Lord is carried out in the swaying, rocking movement of the Pahandi. The crowd pushes forward, a human tide drawn by devotion. Gold dust is tossed into the air, shimmering. Samir, lean and focused, navigates through a dense knot of people, his shoulder briefly brushing against a broadly built man who is laughing loudly. Omm, his hands clasped before him, is deeply absorbed in the chanting, his forward movement causing him to gently bump into the back of a woman. Meera, precise in her movements, deftly sidesteps a group of children, her path briefly crossing with another woman who is intently scanning the faces in the crowd. Tara, eyes wide, takes in the overwhelming spectacle, her movements a little disoriented by the press of bodies, accidentally touching the arm of a man who is carefully making his way through the surge. Rudra, ever cautious, keeps his hands to himself, but the sheer force of the crowd pushes him close to a passing figure, their robes briefly touching before separating. The deities continue their slow, majestic sway, carried forward by the fervent energy of the devoted. The crowd's roar continues, a single, sustained note of awe.",
+                "hi": "भीड़ से एक गर्जना उठती है, गहरी और गुंजायमान, समुद्र की तरह। ढोल एक धीमी, शक्तिशाली ताल बजाना शुरू करते हैं, जिसमें शंख की तेज आवाज जुड़ जाती है। साधारण सफेद धोतियों में सजे सेवक, मंदिर से निकलते हैं, विशाल, नक्काशीदार देवताओं के वजन के नीचे तनावग्रस्त होते हैं। भगवान को पाखंडी के झूलते, डगमगाते हुए आंदोलन में बाहर लाया जाता है। भीड़ आगे बढ़ती है, भक्ति से खींची गई एक मानवीय लहर। सोने की धूल हवा में फेंकी जाती है, चमकती हुई। समीर, पतला और केंद्रित, लोगों की एक घनी गांठ के माध्यम से नेविगेट करता है, उसका कंधा संक्षेप में एक चौड़े-मजबूत आदमी के खिलाफ ब्रश करता है जो जोर से हंस रहा है। ओम, अपने हाथों को सामने जोड़कर, जप में गहराई से लीन है, उसका आगे बढ़ना उसे एक महिला की पीठ से धीरे से टकराने का कारण बनता है। मीरा, अपनी चाल में सटीक, बच्चों के एक समूह को चतुराई से दरकिनार करती है, उसका रास्ता संक्षेप में एक और महिला के साथ पार करता है जो भीड़ में चेहरों को ध्यान से स्कैन कर रही है। तारा, आँखें चौड़ी करके, भारी तमाशे को देखती है, उसके आंदोलन शरीर के दबाव से थोड़ा विचलित होते हैं, गलती से एक आदमी की बांह को छूती है जो लहर के माध्यम से सावधानी से अपना रास्ता बना रहा है। रुद्र, हमेशा सतर्क, अपने हाथों को अपने पास रखता है, लेकिन भीड़ की सरासर शक्ति उसे एक गुजरते हुए आकृति के करीब धकेलती है, उनके वस्त्र संक्षेप में छूते हैं और फिर अलग हो जाते हैं। देवता अपनी धीमी, राजसी लय जारी रखते हैं, भक्तों की प्रबल ऊर्जा द्वारा आगे बढ़ाए जाते हैं। भीड़ की गर्जना जारी रहती है, विस्मय का एक एकल, निरंतर स्वर।"
+              },
+              "slugline": {
+                "intExt": "EXT",
+                "location": "GRAND ROAD - PAHANDI PROCESSION",
+                "timeOfDay": "DAY"
+              },
+              "sceneHeading": {
+                "en": "EXT. GRAND ROAD - PAHANDI PROCESSION - DAY",
+                "hi": "EXT. GRAND ROAD - PAHANDI PROCESSION - DAY"
+              },
+              "estimatedMinutes": 0.5
+            }
+          ],
+          "status": "pending",
+          "feedback": null,
+          "doctorNotes": null
+        },
+        {
+          "scenes": null,
+          "status": "not_started",
+          "feedback": null
+        },
+        {
+          "scenes": null,
+          "status": "not_started",
+          "feedback": null
+        },
+        {
+          "scenes": null,
+          "status": "not_started",
+          "feedback": null
+        },
+        {
+          "scenes": null,
+          "status": "not_started",
+          "feedback": null
+        },
+        {
+          "scenes": null,
+          "status": "not_started",
+          "feedback": null
+        },
+        {
+          "scenes": null,
+          "status": "not_started",
+          "feedback": null
+        },
+        {
+          "scenes": null,
+          "status": "not_started",
+          "feedback": null
+        },
+        {
+          "scenes": null,
+          "status": "not_started",
+          "feedback": null
+        },
+        {
+          "scenes": null,
+          "status": "not_started",
+          "feedback": null
+        },
+        {
+          "scenes": null,
+          "status": "not_started",
+          "feedback": null
+        },
+        {
+          "scenes": null,
+          "status": "not_started",
+          "feedback": null
+        },
+        {
+          "scenes": null,
+          "status": "not_started",
+          "feedback": null
+        },
+        {
+          "scenes": null,
+          "status": "not_started",
+          "feedback": null
+        },
+        {
+          "scenes": null,
+          "status": "not_started",
+          "feedback": null
+        },
+        {
+          "scenes": null,
+          "status": "not_started",
+          "feedback": null
+        },
+        {
+          "scenes": null,
+          "status": "not_started",
+          "feedback": null
+        },
+        {
+          "scenes": null,
+          "status": "not_started",
+          "feedback": null
+        },
+        {
+          "scenes": null,
+          "status": "not_started",
+          "feedback": null
+        },
+        {
+          "scenes": null,
+          "status": "not_started",
+          "feedback": null
+        },
+        {
+          "scenes": null,
+          "status": "not_started",
+          "feedback": null
+        },
+        {
+          "scenes": null,
+          "status": "not_started",
+          "feedback": null
+        },
+        {
+          "scenes": null,
+          "status": "not_started",
+          "feedback": null
+        },
+        {
+          "scenes": null,
+          "status": "not_started",
+          "feedback": null
+        },
+        {
+          "scenes": null,
+          "status": "not_started",
+          "feedback": null
+        },
+        {
+          "scenes": null,
+          "status": "not_started",
+          "feedback": null
+        },
+        {
+          "scenes": null,
+          "status": "not_started",
+          "feedback": null
+        },
+        {
+          "scenes": null,
+          "status": "not_started",
+          "feedback": null
+        },
+        {
+          "scenes": null,
+          "status": "not_started",
+          "feedback": null
+        },
+        {
+          "scenes": null,
+          "status": "not_started",
+          "feedback": null
+        },
+        {
+          "scenes": null,
+          "status": "not_started",
+          "feedback": null
+        },
+        {
+          "scenes": null,
+          "status": "not_started",
+          "feedback": null
+        },
+        {
+          "scenes": null,
+          "status": "not_started",
+          "feedback": null
+        },
+        {
+          "scenes": null,
+          "status": "not_started",
+          "feedback": null
+        },
+        {
+          "scenes": null,
+          "status": "not_started",
+          "feedback": null
+        },
+        {
+          "scenes": null,
+          "status": "not_started",
+          "feedback": null
+        },
+        {
+          "scenes": null,
+          "status": "not_started",
+          "feedback": null
+        },
+        {
+          "scenes": null,
+          "status": "not_started",
+          "feedback": null
+        },
+        {
+          "scenes": null,
+          "status": "not_started",
+          "feedback": null
+        }
+      ],
+      "characterDialogueBriefs": [
+        {
+          "name": "Rudra",
+          "brief": {
+            "en": "Rudra speaks with deliberate, measured tones, prioritizing clarity and control due to his engineering background and past trauma. His language is precise, often relying on technical or procedural phrasing. Early on, he's hesitant and guarded, his sentences sometimes trailing off as he second-guesses himself. As he accepts his fire, his speech becomes more direct, confident, and forceful, with a new underlying intensity that reflects his transformation into a warrior.",
+            "hi": "रुद्र इंजीनियरिंग पृष्ठभूमि और अतीत के आघात के कारण स्पष्टता और नियंत्रण को प्राथमिकता देते हुए, मापी हुई आवाज में बात करते हैं। उनकी भाषा सटीक है, जो अक्सर तकनीकी या प्रक्रियात्मक वाक्यांशों पर निर्भर करती है। शुरुआत में, वह हिचकिचाते और सतर्क रहते हैं, खुद पर संदेह करते हुए उनके वाक्य कभी-कभी अधूरे रह जाते हैं। जैसे-जैसे वह अपनी अग्नि को स्वीकार करते हैं, उनकी बोली अधिक सीधी, आत्मविश्वासी और जोरदार हो जाती है, जिसमें एक नई अंतर्निहित तीव्रता होती है जो एक योद्धा के रूप में उनके परिवर्तन को दर्शाती है।"
+          }
+        },
+        {
+          "name": "Meera",
+          "brief": {
+            "en": "Meera's dialogue is initially sharp, precise, and fact-driven, reflecting her strategist's mindset and her need to be unequivocally right. She uses clear, objective language, often quantifying situations. Her cadence is quick and confident, sometimes bordering on blunt. As she softens, her speech becomes less rigid, allowing for more emotional resonance and a greater willingness to accept ambiguity, shifting from 'right' to 'good'.",
+            "hi": "मीरा की बातचीत शुरू में तीखी, सटीक और तथ्य-संचालित होती है, जो एक रणनीतिकार की मानसिकता और सही होने की उनकी आवश्यकता को दर्शाती है। वह स्पष्ट, वस्तुनिष्ठ भाषा का उपयोग करती है, अक्सर स्थितियों को परिमाणित करती है। उनकी लय तेज और आत्मविश्वासी होती है, कभी-कभी तो सीधी बात पर भी उतर आती है। जैसे-जैसे वह नरम पड़ती है, उनकी बोली कम कठोर हो जाती है, अधिक भावनात्मक प्रतिध्वनि की अनुमति देती है और अस्पष्टता को स्वीकार करने की अधिक इच्छा पैदा करती है, 'सही' से 'अच्छा' की ओर बढ़ती है।"
+          }
+        },
+        {
+          "name": "Omm",
+          "brief": {
+            "en": "Omm speaks with a warm, easy cadence, often laced with gentle humor and plain, practical language suitable for a cook and healer. His sentences are generally longer, conveying a sense of care and attentiveness. He frequently uses reassuring phrases. His early dialogue may hint at underlying guilt through an overabundance of helpfulness, but his fundamental tone remains grounded and compassionate. As he learns to let go, his speech retains its warmth but gains a quiet strength and acceptance.",
+            "hi": "ओम की बोली गर्मजोशी भरी, सहज लय के साथ होती है, जिसमें अक्सर कोमल हास्य और एक रसोइए और मरहम लगाने वाले के लिए उपयुक्त सरल, व्यावहारिक भाषा होती है। उनके वाक्य आम तौर पर लंबे होते हैं, जो देखभाल और ध्यान का बोध कराते हैं। वह अक्सर आश्वस्त करने वाले वाक्यांशों का उपयोग करते हैं। उनकी शुरुआती बातचीत अत्यधिक सहायक होने के माध्यम से अंतर्निहित अपराध बोध का संकेत दे सकती है, लेकिन उनका मूल स्वर जमीनी और दयालु बना रहता है। जैसे-जैसे वह छोड़ना सीखते हैं, उनकी बोली अपनी गर्माहट बनाए रखती है लेकिन एक शांत शक्ति और स्वीकृति प्राप्त करती है।"
+          }
+        },
+        {
+          "name": "Samir",
+          "brief": {
+            "en": "Samir's speech is terse and clipped, reflecting his role as a courier and his internal struggle with guilt. He avoids unnecessary words, speaking in short, direct sentences. He often sounds grave and hesitant, particularly when confronted with moments that echo his past trauma. His dialogue reveals a deep-seated desire for forgiveness, expressed through a quiet, almost apologetic tone. As he confronts his past, his voice may gain a subtle steadiness, though still marked by his reserved nature.",
+            "hi": "समीर की बोली संक्षिप्त और कटी-फटी होती है, जो एक कूरियर के रूप में उनकी भूमिका और अपराध बोध से उनके आंतरिक संघर्ष को दर्शाती है। वह अनावश्यक शब्दों से बचते हैं, छोटे, सीधे वाक्यों में बोलते हैं। वह अक्सर गंभीर और झिझकते हुए लगते हैं, खासकर उन क्षणों का सामना करते समय जो उनके अतीत के आघात को दर्शाते हैं। उनकी बातचीत क्षमा की गहरी इच्छा को दर्शाती है, जिसे एक शांत, लगभग माफी मांगने वाले स्वर में व्यक्त किया गया है। जैसे-जैसे वह अपने अतीत का सामना करते हैं, उनकी आवाज़ में सूक्ष्म स्थिरता आ सकती है, हालांकि अभी भी उनके आरक्षित स्वभाव से चिह्नित है।"
+          }
+        },
+        {
+          "name": "Tara",
+          "brief": {
+            "en": "Tara's early dialogue is blunt, skeptical, and dismissive of anything not empirically verifiable. She uses direct, almost abrasive language, cutting through ambiguity. Her cadence is often sharp and questioning, reflecting her scientific mindset and her deep-seated denial of her own visions. As she learns to accept her truth, her speech remains direct but gains a new layer of empathy and wonder, allowing for a more open and less defensive tone.",
+            "hi": "तारा की शुरुआती बातचीत सीधी, संदेहास्पद और किसी भी ऐसी चीज़ को खारिज करने वाली होती है जिसे अनुभवजन्य रूप से सत्यापित नहीं किया जा सकता है। वह सीधी, लगभग आक्रामक भाषा का उपयोग करती है, अस्पष्टता को काटती है। उनकी लय अक्सर तेज और प्रश्नवाचक होती है, जो उनकी वैज्ञानिक मानसिकता और अपनी दृष्टियों के गहरे इनकार को दर्शाती है। जैसे-जैसे वह अपनी सच्चाई को स्वीकार करना सीखती है, उनकी बोली सीधी बनी रहती है लेकिन सहानुभूति और आश्चर्य की एक नई परत प्राप्त करती है, जिससे अधिक खुला और कम रक्षात्मक स्वर मिलता है।"
+          }
+        },
+        {
+          "name": "Kalapahada",
+          "brief": {
+            "en": "Kalapahada's speech is imbued with a bitter, self-righteous weariness. He speaks with the authority of someone who believes they have been deeply wronged, his tone often laced with cold grief and a sense of entitlement. His vocabulary might suggest a past of status or power, now twisted by resentment. As Meera confronts him, his rigid conviction begins to fracture, revealing the vulnerability beneath his armor, leading to a dissolution rather than a final outburst.",
+            "hi": "कलापहाड़ की बोली एक कड़वे, आत्म-धार्मिक थकान से ओत-प्रोत है। वह ऐसे व्यक्ति के अधिकार के साथ बोलता है जो मानता है कि उसके साथ गहरा अन्याय हुआ है, उसकी आवाज़ अक्सर ठंडे शोक और हक़दार होने की भावना से युक्त होती है। उसकी शब्दावली शायद स्थिति या शक्ति के अतीत का सुझाव दे, जो अब नाराजगी से विकृत हो गई है। जैसे-जैसे मीरा उसका सामना करती है, उसका कठोर विश्वास टूटने लगता है, उसके कवच के नीचे की भेद्यता को प्रकट करता है, जिससे अंतिम विस्फोट के बजाय विघटन होता है।"
+          }
+        },
+        {
+          "name": "The Rakhyaka",
+          "brief": {
+            "en": "The Rakhyaka's voice is ancient, resonant, and carries the weight of immense knowledge and authority. His words are sparse but carry profound significance, often delivered with a calm certainty that transcends immediate circumstances. His pronouncements are clear and directive, filled with gravitas. Even in his dying moments, his voice remains steady, guiding and firm, focused on the mission and the truth.",
+            "hi": "रक्षक की आवाज़ प्राचीन, गूंजने वाली है और इसमें अपार ज्ञान और अधिकार का भार है। उसके शब्द विरल हैं लेकिन गहरा महत्व रखते हैं, अक्सर एक शांत निश्चितता के साथ दिए जाते हैं जो तत्काल परिस्थितियों से परे है। उसकी घोषणाएँ स्पष्ट और निर्देशात्मक होती हैं, जिनमें गंभीरता भरी होती है। अपनी मृत्यु के क्षणों में भी, उसकी आवाज़ स्थिर, मार्गदर्शक और दृढ़ बनी रहती है, जो मिशन और सत्य पर केंद्रित होती है।"
+          }
+        }
+      ]
+    },
+    "assets": {
+      "characters": [
+        {
+          "name": "Rudra",
+          "visualDescription": {
+            "en": "Late 30s, controlled with careful eyes. Terrified of his own inner fire, he habitually suppresses his power, appearing reserved and cautious. His typical wardrobe consists of practical, functional engineer's attire, perhaps with reinforced fabrics and integrated tools, in muted greys and blues.",
+            "hi": "देर 30s, नियंत्रित, सावधान आँखों वाला। अपनी आंतरिक अग्नि से भयभीत, वह आदत के अनुसार अपनी शक्ति को दबाता है, संयमित और सतर्क दिखाई देता है। उसके सामान्य पहनावे में व्यावहारिक, कार्यात्मक इंजीनियर की पोशाक शामिल होती है, शायद मजबूत कपड़ों और एकीकृत उपकरणों के साथ, म्यूट ग्रे और नीले रंग में।"
+          }
+        },
+        {
+          "name": "Meera",
+          "visualDescription": {
+            "en": "A strategist with an exact, cold demeanor. She presents as sharp and analytical, with a severe hairstyle and crisp, tailored uniforms befitting her high-ranking position. Her typical wardrobe is monochromatic, favoring dark blues, blacks, and greys, emphasizing efficiency and a lack of personal adornment.",
+            "hi": "एक रणनीतिकार, सटीक, ठंडे व्यवहार वाली। वह तेज और विश्लेषणात्मक दिखती है, एक गंभीर केशविन्यास और उसकी उच्च पद के अनुरूप कुरकुरी, सजी हुई वर्दी के साथ। उसके सामान्य पहनावे में एकरंगी रंग होते हैं, जो गहरे नीले, काले और ग्रे रंग के होते हैं, जो दक्षता और व्यक्तिगत अलंकरण की कमी पर जोर देते हैं।"
+          }
+        },
+        {
+          "name": "Omm",
+          "visualDescription": {
+            "en": "Broad-shouldered and warm-hearted, with a kind face often smudged with grease from his work as a cook and healer. He wears comfortable, practical clothing like sturdy aprons, thick woven tunics, and trousers, often in earthy tones of brown, green, or ochre.",
+            "hi": "चौड़े कंधों वाला और दिल का गर्म, एक दयालु चेहरे वाला जो अक्सर एक रसोइए और मरहम लगाने वाले के रूप में उसके काम से चिकनाई से सना होता है। वह आरामदायक, व्यावहारिक कपड़े पहनता है जैसे मजबूत एप्रन, मोटे बुने हुए अंगरखे और पतलून, अक्सर भूरे, हरे या गेरू रंग के मिट्टी के रंगों में।"
+          }
+        },
+        {
+          "name": "Samir",
+          "visualDescription": {
+            "en": "Young, with a still, grave face that betrays little emotion. He carries himself with a quiet intensity, often seen in a sleek courier uniform, perhaps dark grey or black with subtle blue trim, designed for speed and functionality.",
+            "hi": "युवा, एक शांत, गंभीर चेहरे के साथ जो बहुत कम भावनाएं व्यक्त करता है। वह शांत तीव्रता के साथ खुद को प्रस्तुत करता है, अक्सर एक चिकना कूरियर वर्दी में देखा जाता है, शायद गहरे भूरे या काले रंग में हल्के नीले रंग के ट्रिम के साथ, जो गति और कार्यक्षमता के लिए डिज़ाइन किया गया है।"
+          }
+        },
+        {
+          "name": "Tara",
+          "visualDescription": {
+            "en": "Sharp and often tired, with an intense gaze. She typically wears practical, functional attire that allows for movement and data access, like a data analyst's jumpsuit or tunic with integrated scanners and a wrist-mounted device. Her clothing is often in muted, functional colors like dark teal or charcoal grey.",
+            "hi": "तेज और अक्सर थकी हुई, एक तीव्र निगाह के साथ। वह आम तौर पर व्यावहारिक, कार्यात्मक पोशाक पहनती है जो आंदोलन और डेटा एक्सेस की अनुमति देती है, जैसे कि एक डेटा विश्लेषक का जंपसूट या एकीकृत स्कैनर और कलाई पर लगे उपकरण के साथ अंगरखा। उसके कपड़े अक्सर म्यूट, कार्यात्मक रंगों जैसे गहरे टील या चारकोल ग्रे में होते हैं।"
+          }
+        },
+        {
+          "name": "The Rakhyaka",
+          "visualDescription": {
+            "en": "An ancient, lean guardian, radiating an aura of immense age and wisdom. He wears simple, worn robes in muted, natural colors, perhaps faded saffron or undyed cotton. His most distinguishing feature is the plain wooden staff (danda) wrapped in old silk that he carries.",
+            "hi": "एक प्राचीन, दुबला संरक्षक, जो अपार आयु और ज्ञान की आभा बिखेरता है। वह म्यूट, प्राकृतिक रंगों में सरल, घिसे-पिटे वस्त्र पहनता है, शायद फीका केसरिया या बिना रंगा हुआ सूती। उसकी सबसे विशिष्ट विशेषता पुरानी रेशम से लिपटी हुई सादी लकड़ी की छड़ी (दंडा) है जिसे वह ले जाता है।"
+          }
+        },
+        {
+          "name": "Kalapahada",
+          "visualDescription": {
+            "en": "A tall, imposing figure clad in dark, imposing armor that seems to absorb light. His helmet is faceless, designed to distort perception. When revealed, his face is old, beautiful, and filled with a profound, cold grief. His armor might incorporate dark, metallic textures and sharp, angular designs.",
+            "hi": "एक लंबा, प्रभावशाली व्यक्ति जो गहरे, प्रभावशाली कवच में सुसज्जित है जो प्रकाश को अवशोषित करता हुआ प्रतीत होता है। उसका हेलमेट चेहरा रहित है, जिसे धारणा को विकृत करने के लिए डिज़ाइन किया गया है। जब प्रकट होता है, तो उसका चेहरा बूढ़ा, सुंदर और गहन, ठंडे दुःख से भरा होता है। उसके कवच में गहरे, धात्विक बनावट और तेज, कोणीय डिजाइन शामिल हो सकते हैं।"
+          }
+        }
+      ],
+      "properties": [
+        {
+          "name": "The danda (lathi)",
+          "visualDescription": {
+            "en": "A plain wooden staff, roughly six feet long, carved from neem wood. It is wrapped in old, weathered silk, giving it an ancient and sacred appearance. When wielding its true power, it blazes with an intense, white-hot energy.",
+            "hi": "नीम की लकड़ी से तराशी गई एक सादी लकड़ी की छड़ी, लगभग छह फीट लंबी। यह पुरानी, ​​घिसी-पिटी रेशम में लिपटी हुई है, जो इसे एक प्राचीन और पवित्र रूप देती है। जब इसकी वास्तविक शक्ति का प्रयोग किया जाता है, तो यह तीव्र, सफेद-गर्म ऊर्जा के साथ चमकती है।"
+          }
+        },
+        {
+          "name": "Parmarth 1",
+          "visualDescription": {
+            "en": "A lean, fast courier craft with a scarred hull. It features blue plasma braid trailing from its vents and is equipped with a neural harness for its pilot. Its design prioritizes speed and maneuverability.",
+            "hi": "एक दुबला, तेज कूरियर क्राफ्ट जिसकी पतवार पर खरोंचें हैं। इसमें इसके वेंट से एक नीली प्लाज्मा चोटी निकल रही है और इसके पायलट के लिए एक न्यूरल हार्नेस से सुसज्जित है। इसका डिज़ाइन गति और गतिशीलता को प्राथमिकता देता है।"
+          }
+        },
+        {
+          "name": "Wireless Orbital Receiver",
+          "visualDescription": {
+            "en": "A vast, imposing black-and-gold tower, taller than any building in Puri, crowned with a slowly spinning ring of light. It emits beams of soft gold energy into the city grid. Its structure is a blend of advanced alloy and massive technological components.",
+            "hi": "एक विशाल, प्रभावशाली काला-और-सुनहरा टॉवर, पुरी की किसी भी इमारत से ऊंचा, प्रकाश की धीरे-धीरे घूमती हुई रिंग से सजा हुआ। यह शहर के ग्रिड में सुनहरी ऊर्जा की किरणें उत्सर्जित करता है। इसकी संरचना उन्नत मिश्र धातु और विशाल तकनीकी घटकों का मिश्रण है।"
+          }
+        },
+        {
+          "name": "Holo-banners",
+          "visualDescription": {
+            "en": "Floating holographic advertisements and broadcasts, ten feet tall, made of light, drifting above the crowds in Puri. They display calm council messages and information in vibrant, glowing text and images.",
+            "hi": "पुरी की भीड़ के ऊपर तैरते हुए दस फीट ऊंचे होलोग्राफिक विज्ञापन और प्रसारण, जो प्रकाश से बने होते हैं। वे शांत परिषद संदेश और जीवंत, चमकते पाठ और छवियों में जानकारी प्रदर्शित करते हैं।"
+          }
+        },
+        {
+          "name": "Shadow-soldiers",
+          "visualDescription": {
+            "en": "Man-shaped figures that appear as tears in the air, with edges smoking black. They move with an unsettling, unnatural gait. When they touch living beings, they cause a rapid greying of the skin and turn the eyes to black glass.",
+            "hi": "मानव-आकार के आंकड़े जो हवा में दरार के रूप में दिखाई देते हैं, जिनके किनारे काले धुएं से निकलते हैं। वे एक परेशान करने वाली, अप्राकृतिक चाल से चलते हैं। जब वे जीवित प्राणियों को छूते हैं, तो वे त्वचा का तेजी से ग्रे होना और आंखों का काला कांच बनना पैदा करते हैं।"
+          }
+        },
+        {
+          "name": "Experimental navigation chip",
+          "visualDescription": {
+            "en": "A small, advanced chip with a surface crawling with tiny lights, kept in a stasis field within a locked case. It glows with an internal, subtle energy.",
+            "hi": "एक छोटी, उन्नत चिप जिसकी सतह पर छोटी-छोटी लाइटें रेंग रही हैं, एक बंद केस के भीतर एक स्थैतिक क्षेत्र में रखी गई है। यह एक आंतरिक, सूक्ष्म ऊर्जा के साथ चमकती है।"
+          }
+        },
+        {
+          "name": "Lord Jagannath's idol (Brahma)",
+          "visualDescription": {
+            "en": "A sacred idol, representing Lord Jagannath. It is the vessel for the divine Brahma, a blinding point of pure light when extracted. The idol itself is likely to be made of wood, adorned with divine ornamentation, evoking a powerful, ancient presence.",
+            "hi": "एक पवित्र मूर्ति, जो भगवान जगन्नाथ का प्रतिनिधित्व करती है। यह दिव्य ब्रह्म का पात्र है, जिसे निकालने पर शुद्ध प्रकाश का एक छोटा, चकाचौंध बिंदु। मूर्ति स्वयं लकड़ी की बनी होने की संभावना है, जिसे दिव्य अलंकरण से सजाया गया है, जो एक शक्तिशाली, प्राचीन उपस्थिति को दर्शाती है।"
+          }
+        },
+        {
+          "name": "The Beast",
+          "visualDescription": {
+            "en": "A hunched mass of smoking black, with too many joints and limbs that move with unnatural speed. It is larger than a shadow-soldier and leaves grey, spreading wounds where it claws.",
+            "hi": "धूम्रपान करने वाले काले रंग का एक झुका हुआ ढेर, जिसमें बहुत अधिक जोड़ और अंग हैं जो अप्राकृतिक गति से चलते हैं। यह छाया-सैनिक से बड़ा है और जहां यह पंजा मारता है वहां ग्रे, फैलने वाले घाव छोड़ता है।"
+          }
+        },
+        {
+          "name": "Palm-leaf prophecy verse",
+          "visualDescription": {
+            "en": "An ancient verse inscribed on brittle palm leaves, passed down through generations. The script is delicate and faded, a tangible link to a forgotten past.",
+            "hi": "सदियों से चली आ रही भंगुर ताड़ के पत्तों पर अंकित एक प्राचीन श्लोक। लिपि नाजुक और फीकी है, जो भूले हुए अतीत से एक मूर्त कड़ी है।"
+          }
+        }
+      ],
+      "environments": [
+        {
+          "name": "Puri (Future)",
+          "visualDescription": {
+            "en": "A vibrant, coastal mega-city stacked in rings of white stone and glass towers, interspersed with rebuilt temple spires made of shining alloy. It is a futuristic yet spiritually resonant metropolis, with a massive energy receiver dominating the skyline. The mood is generally bustling and devotional, but tinged with an underlying fragility due to the failing energy grid.",
+            "hi": "एक जीवंत, तटीय मेगा-सिटी जो सफेद पत्थर और कांच के टावरों के छल्लों में बंटी हुई है, जिसमें चमकदार मिश्र धातु से बने पुनर्निर्मित मंदिर शिखर भी हैं। यह एक भविष्यवादी फिर भी आध्यात्मिक रूप से गूंजने वाला महानगर है, जिसमें एक विशाल ऊर्जा रिसीवर क्षितिज पर हावी है। ऊर्जा ग्रिड की विफलता के कारण माहौल आम तौर पर हलचल भरा और भक्तिमय होता है, लेकिन अंतर्निहित नाजुकता से युक्त होता है।"
+          }
+        },
+        {
+          "name": "The Akhada (Timeless Void)",
+          "visualDescription": {
+            "en": "A timeless, floating wrestling ground made of ancient stone, suspended in an endless void filled with drifting stars and galaxies. Lit by ancient torches, it is a sacred, otherworldly space where time does not pass and the dead can linger. The mood is serene, ethereal, and deeply spiritual.",
+            "hi": "एक कालातीत, तैरता हुआ कुश्ती का मैदान जो प्राचीन पत्थर से बना है, जो अनन्त शून्य में निलंबित है जिसमें तारे और आकाशगंगाएँ बह रही हैं। प्राचीन मशालों से प्रकाशित, यह एक पवित्र, अलौकिक स्थान है जहाँ समय नहीं बीतता और मृत लोग रह सकते हैं। मिजाज शांत, अलौकिक और गहरा आध्यात्मिक है।"
+          }
+        },
+        {
+          "name": "Granthaloka (Library World)",
+          "visualDescription": {
+            "en": "A world bathed in soft light, characterized by floating terraces and a vast, dark library filled not with books, but with motes of living light representing knowledge. It is a place of profound wisdom and history, with a serene and scholarly atmosphere.",
+            "hi": "एक नरम रोशनी में नहाया हुआ ग्रह, जो तैरते हुए छतों और एक विशाल, अंधेरी पुस्तकालय की विशेषता है जिसमें पुस्तकों के बजाय ज्ञान का प्रतिनिधित्व करने वाले जीवित प्रकाश के कण हैं। यह गहन ज्ञान और इतिहास का स्थान है, जिसमें एक शांत और विद्वतापूर्ण वातावरण है।"
+          }
+        },
+        {
+          "name": "Mid-Sea (Dark Samudra Manthan)",
+          "visualDescription": {
+            "en": "A chaotic and terrifying environment where the sea boils, poison-haze rises, and a colossal dark portal rips open the sky. Nagas and danavas emerge from the churning ocean and the tear in reality, creating a scene of cosmic horror and destructive power.",
+            "hi": "एक अराजक और भयानक वातावरण जहां समुद्र उबलता है, जहर का धुंध उठता है, और एक विशाल काला पोर्टल आकाश को फाड़ देता है। नागा और दानव उबलते समुद्र और वास्तविकता के चीर से निकलते हैं, जो ब्रह्मांडीय भय और विनाशकारी शक्ति का दृश्य बनाते हैं।"
+          }
+        },
+        {
+          "name": "The Maya (Illusion World)",
+          "visualDescription": {
+            "en": "A shifting, impossible landscape that warps and reforms based on Kalapahada's will. It can manifest as burning red worlds, drowned realms, or skies filled with falling temples, designed to trap and disorient.",
+            "hi": "एक बदलता हुआ, असंभव परिदृश्य जो कलापहदा की इच्छा के आधार पर विकृत और पुनः बनता है। यह जलते हुए लाल दुनिया, डूबे हुए क्षेत्रों, या गिरते मंदिरों से भरे आसमान के रूप में प्रकट हो सकता है, जो फंसाने और भटकाने के लिए डिज़ाइन किया गया है।"
+          }
+        }
+      ]
+    },
+    "stageStatus": {
+      "plot": {
+        "status": "approved",
+        "feedback": null
+      },
+      "story": {
+        "status": "approved",
+        "feedback": null
+      },
+      "synopsis": {
+        "status": "approved",
+        "feedback": null
+      },
+      "threeAct": {
+        "status": "approved",
+        "feedback": null
+      },
+      "characterArc": {
+        "status": "approved",
+        "feedback": null
+      }
+    },
+    "referenceFiles": [
+      {
+        "category": "other",
+        "label": "Akhada Agent Handoff (task, 46-beat plot, characters, world lore)",
+        "content": "# AKHADA — AGENT HANDOFF (CLEAN)\n### This is all you need. One film, ~150 min, one interval. AI film = no budget limit, think big.\n### Ignore older drafts. This file + the 46-beat scene list is the whole job.\n\n---\n\n# 1. YOUR TASK\n\nTake the 46 beats in Section 2 and do three things, in order:\n1. **Expand** each beat into full scenes (a beat is a pocket — a full film is ~120–150 scenes). Rich action lines with 5000 AD detail.\n2. **Write the dialogue in colloquial, everyday spoken Odia** — the way people really talk, not textbook Odia. Keep each character's voice (Section 3).\n3. **Critique** the draft hard (pacing, world logic, is the Odia truly colloquial), and fix.\n\nRules: Indian interval (a big cliffhanger at the break — it already is, the teacher's fall). Track runtime as you write (~150 min). Never weaponize the Lord (He blesses, the five fight).\n\n**Theme under everything:** devotion is not a transaction. You win by letting go, not by holding on.\n\n---\n\n# 2. THE STORY (act structure + the 46 beats)\n\n**ACT 1 — THE START & THE BREACH (beats 1–12)**\n1. Space → Earth → Samir's ship Parmarth 1 → Puri → the failing energy Receiver.\n2. Puri, Rath Yatra morning; Council broadcast (energy crisis, record crowd, Earth = last holy place).\n3. Off-world: shadow-soldiers turn a praying man into one of them (plant zombify).\n4. Rudra & Omm on the Receiver; Rudra over-pushes the power \"by the book.\"\n5. Rudra's holo-call: Mars, war droids, his sister (she's in Puri today).\n6. Meera & Tara at the Council: Meera's cold number; Tara ignored (the sky is \"folding\").\n7. Samir's drop job: a nav chip; his money goes to a family he won't name.\n8. The Yatra (Pahandi) — SONG; the five brush past each other once.\n9. The Breach: Rudra fires the Receiver to full; the sky tears; the shadow army pours down.\n10. The Rakhyaka (old guardian) fights the army, is badly hurt.\n11. He can't win; he strikes his staff and freezes all time in Puri.\n12. He gathers the five frozen strangers; a spark pulls them into the Akhada.\n\n**ACT 2A — THE TIMELESS AKHADA (beats 13–20)**\n13. They wake in the Akhada; the Biswabasu clan (the dead) bow to them; the mission.\n14. Origin montage + the lathi rule (see Section 4).\n15. The enemy — NO NAME: \"one of us, something changed him.\"\n16. Training: each mentor is their own past-life student. Omm (comedy, can't force stone), Rudra (won't flame), Meera (water too easy), Samir (overshoots), Tara & Bishu (needle portal; cost = grip on the present).\n17. Training fight: Omm underrated, Samir overrated, Meera best, Rudra looks weakest.\n18. They try to join powers → it collides → Omm is wounded. (They can't yield because each grips their guilt.)\n19. A beast slips through the open portal INTO the Akhada.\n20. It zombifies a clan member; they must put him down; if the Akhada falls the cycle ends forever → they rush back.\n\n**INTERVAL — THE GUARDIAN'S FALL (beats 21–25)**\n21. They return; time snaps on; they turn to fight.\n22. The battle + the zombify horror (~5000 pilgrims turning); they won't kill the once-human demons → go for the portal.\n23. None can hold the lathi; Samir flies the Rakhyaka up to seal it; the team splits to move the Lord to Gundicha.\n24. The shadows fuse into a monster; it strikes the Rakhyaka down; he falls before Gundicha; the lathi spears the ground; he shields Gundicha with his last breath.\n25. Dying, he says: none of you can hold the lathi; take the Lord away, hide Him. They escape in secret.\n**INTERVAL LINE: \"The teacher is gone. The war just started.\"**\n\n**AFTER THE INTERVAL (beats 26–28)**\n26. Kalapahada revealed (helmet off); the Lord is gone.\n27. He forces the lathi to obey by dark power; the taunt → the 9-day clock (\"you will come to me\").\n28. The five are now galaxy-famous (broadcast); Kalapahada conquers planets to build a huge army while he waits.\n\n**ACT 2B — THE JOURNEY (beats 29–38)**\n29. Granthaloka (Tara's home, the great library); welcome for the Lord — SONG.\n30. The digital library; they summon the Madala Panji; it reveals the name KALAPAHADA and his story.\n31. News: a whole planet destroyed; his army grows.\n32. Granthaloka is attacked; the heroes fight actively to save it.\n33. Tara's father dies protecting the library and gives Tara the palm-leaf prophecy; they escape.\n34. In space — the mirror: each hero sees himself in Kalapahada.\n35. Stop 2 (hidden faith world): a Maha Guru beats a killing blow by letting it pass through him — and LIVES; he teaches the secret; Meera softens.\n36. They attack Kalapahada to take the lathi back — he eats everything; they fail.\n37. Rock bottom: Tara's data shows Rudra's Receiver helped break the sky.\n38. The turn: let go of your guilt → then force can pass through you; each puts a debt down; they head home.\n\n**ACT 3 — THE CLIMAX: SAMUDRA MANTHAN (beats 39–46)**\n39. Coming back, Kalapahada traps them in a maya (illusion).\n40. The maya loop (short): the only way out is to stop fighting and take the hard power. Rudra takes the lathi's killing power to save the team — instead of dying he is forged into a warrior and OWNS the lathi. The illusion shatters.\n41. Real world: the solemn rituals carry the Lord toward the Sri Mandir; Kalapahada strikes IN FRONT of the temple, seizes the Lord, and flies Him to the mid-sea.\n42. At sea he pulls out the Brahma; the great portal opens (nagas first, then danavas); the dark Samudra Manthan begins.\n43. The final battle: the five yield — one thread, each power into the next, through Tara, led by Rudra + the lathi. Tara drifts; Omm pulls her back.\n44. Meera answers Kalapahada (\"you just kept sending the bill\"); the strike passes through him; the Manthan collapses; he is undone.\n45. They recover the Brahma; the Rakhyaka's spirit passes on; the danda goes quiet.\n46. NILADRI BIJE: the Lord enters the temple on time; the five become the new Akhada, on watch.\n\n*(Full scene-by-scene visual description of all 46 beats is in the companion file `Akhada_Scenic_Breakdown_v1`.)*\n\n---\n\n# 3. THE CHARACTERS (and their arcs)\n\nEach hero had a wound, then became the OPPOSITE of their element to hide from it. Their arc = opening that element again.\n\n**RUDRA — Fire. THE MAIN HERO.** Wound: the Martian war, war droids, nearly lost his sister. Now: over-careful engineer, terrified of his own fire, won't make flame. His cautious over-push causes the breach. Arc: learn to burn / let go. At the climax he gives his life, is forged by the lathi into a warrior, and becomes its bearer. Voice: measured, careful; later fierce.\n\n**MEERA — Water.** Wound: saved a crewmate, lost key data, decided she was \"wrong.\" Now: cold strategist who runs numbers on human lives. Arc: learn what can't be counted; she cracks the winning idea and answers Kalapahada. Voice: exact, cold; later warm.\n\n**OMM — Earth. Heart + humour.** Wound: hid behind rules once, people got hurt. Now: warm cook who knows every name, a healer. Arc: learn to put a load down / let others help. Wounded in the Akhada; at the climax he yields his timing and pulls Tara back. Voice: warm, funny, plain.\n\n**SAMIR — Air. Youngest.** Wound: ran from a wreckage, hurt his family. Now: grave, never jokes, sends all his money to them; sometimes FREEZES at key moments. Arc: stop trying to buy forgiveness; he gives away his chip; at the climax he holds the gap he once froze at. Voice: terse, grave.\n\n**TARA — Ether/space. The sceptic.** Wound: a rift fractured her mind; she now hates mysticism and treats her visions as a symptom. Now: blunt, data-first. Powers: portals; she is the conduit for the final strike; her weakness = losing her grip on the present. Home: Granthaloka; her father dies. Arc: accept a truth she can't prove. Voice: blunt, dry.\n\n**THE RAKHYAKA — old guardian/mentor.** Trains them; dies at the interval; his spirit returns once at the climax. Only he (and Kalapahada, by force) can hold the lathi.\n\n**KALAPAHADA — the villain.** Once a chosen protector; life broke him; he came to hate the Lord; refused the cycle; reincarnates keeping his memories. Wants the Brahma → portal → Samudra Manthan → immortality. Holds the lathi by force. Conquers planets to build an army and waits for the Lord to return. His cry: \"I gave everything, I got nothing.\" Guardrail: he never mocks devotion itself — only his own lost access to it. Keep his NAME secret until Granthaloka.\n\n---\n\n# 4. THE WORLD & LORE (for the database)\n\n**Setting:** 5000 AD. Prayer is a crime across the galaxy; Earth is the last protected holy place (\"God's Planet\"). Futuristic Puri: the Grand Road, Sri Mandir, Gundicha Temple, the Wireless Orbital Receiver, the three chariots.\n\n**Powers & the fight:** elements come from the hands (fire/water/earth/air/ether). Kalapahada ABSORBS any elemental attack and grows stronger (him only, not his army). The counter: don't hit him — let force pass through (yield). The final move: one thread, each power into the next, through Tara.\n\n**The lathi (danda):** the holy staff, made of neem wood (nimba daru) of the Lord. It serves ONLY a heart that owes nothing; its power KILLS the unworthy who touch it; only dark power can force it. Kalapahada chains it by force. Rudra earns it at the climax by sacrifice. (This time the danda chose FIVE protectors, not one — a first ever.)\n\n**The Akhada (void):** a timeless world (no time, no aging), made from the neem-wood danda. The portal opens only by a spell + striking the lathi. Time-freeze: the guardian's spell freezes all Earth-time; it is spent after one use (can't be reused).\n\n**Zombify:** shadow-soldiers don't kill — they touch a human and turn them into another shadow-soldier. This is how the army grows.\n\n**The Brahma:** the sacred life-substance inside the Lord's idol. Kalapahada needs it for the Manthan. Must be recovered and restored for Niladri Bije.\n\n**The 9-day clock:** the Rath Yatra ritual forces the Lord back to Puri to enter the temple (Bahuda Yatra → Niladri Bije) within ~9 days. Kalapahada waits at the temple. This is the ticking clock.\n\n**The Gopana:** carrying the Lord off-world = a futuristic version of the real historical hiding of the deities. Frame it as GRACE (blessing the oppressed), not fleeing.\n\n**KEY NAMES / REAL TEXTS (use for authentic flavor):**\n- **Biswabasu clan** — the tribal devotees / servitors (Daitapati). **Nila Madhava** — the Lord's early jungle form. **King Indradyumna** — the king in the origin myth.\n- **Madala Panji** — the REAL chronicle of the Jagannath temple. In the film it appears as a hologram in the Granthaloka library and reveals Kalapahada's history. (The real PDF is in the project: `madala-panji-1940.pdf` — scanned/image, needs OCR.)\n- **Malika** — the REAL Odia prophecy verses. Tara's family palm-leaf prophecy is a Malika verse. (Real PDF in the project: `odia-malika-bachana-book.pdf`.)\n- **Granthaloka** = Tara's library planet. **Parmarth 1** = Samir's ship. **Krouloka** = Kalapahada's fortress world (placeholder).\n\n**Controversy guardrails:** keep the 9-day timeline; the Lord blesses, never fights; the journey is grace, not flight; Earth stays the special Tirtha; Kalapahada never mocks devotion itself.\n"
+      },
+      {
+        "category": "art",
+        "label": "Akhada Scenic Breakdown (46 beats, full visual description)",
+        "content": "# AKHADA — SCENE BREAKDOWN WITH SCENIC DESCRIPTION (v1)\n### Full scenes, rich visual description, NO dialogue yet (dialogue comes later, in Odia).\n### Built from Story Draft v5. ~46 scenes, ~150 min film.\n### Easy English in the notes. Where people talk, it says \"(they speak — dialogue later).\"\n\n---\n\n# ACT 1 — THE START AND THE BREACH\n\n## SCENE 1 — EXT. DEEP SPACE → SKY OVER PURI — DAWN\nBlack. Then stars — a slow field of galaxies turning like slow dust. For fifteen seconds only, the camera drifts toward one pale blue dot: Earth. No lecture, no long history — just the pull-in.\n\nWe punch through cloud and the noise of the world rushes up. A ship tears across the sky: **PARMARTH 1** — a lean courier craft, its hull scarred, blue plasma braid trailing from its vents. Inside, alone at the stick, sits **SAMIR**, young, still-faced, plugged into a neural harness that paints soft light across his eyes.\n\nThe ship banks over **future Puri** — a coastal mega-city stacked in rings of white stone and glass towers, temple spires rebuilt in shining alloy among them. And rising over it all, taller than any tower, a vast black-and-gold tower crowned with a slowly spinning ring of light: the **WIRELESS ORBITAL RECEIVER.** Beams of soft gold pour down from it into the city grid — and, as we watch, one beam **stutters and dies**, and a whole ring of the city goes dark for a heartbeat before the power crawls back. The city is sick. (No dialogue.)\n\n## SCENE 2 — EXT. GRAND ROAD, PURI — MORNING\nStreet level. An ocean of pilgrims — a hundred million, the road a living river of bodies in white and saffron. Floating **holo-banners** drift above the crowd, and a calm **Council broadcast** (a woman's face, ten feet tall, made of light) plays over the square, giving us three facts as text and image bloom around her: the **energy crisis** (the failing grid), the **record crowd**, and that **Earth is the last protected holy place** in a galaxy where prayer is now a crime. Behind her image, three enormous chariots stand half-built by drone-swarms and human hands together. (Broadcast voice only; no character dialogue.)\n\n## SCENE 3 — INT. HIDDEN PRAYER ROOM, OFF-WORLD COLONY — NIGHT\nHard cut. A cramped metal room on a grey mining world. A family kneels before a tiny hidden idol lit by a single flame. The door is **cut open** — not opened, *cut*, the metal glowing and folding — and **shadow-soldiers** pour in: man-shaped tears in the air, edges smoking black. One reaches for the praying father. It does not stab him. It **touches** him — and his skin greys, his eyes go to black glass, and he **rises as one of them.** The mother's scream cuts to silence as the flame gutters out. (This plants the zombify horror. No dialogue needed.)\n\n## SCENE 4 — EXT. RECEIVER GANTRY, HIGH OVER PURI — MORNING\nWind and height. On a narrow gantry ringing the great Receiver, **RUDRA** (late 30s, controlled, careful eyes) walks a line of floating readout-panels with **OMM** (broad, warm, grease on his hands). Omm presses a palm to the tower's skin; under the metal, deep below the Grand Road, his earth-sense feels a **strain** — the panels show a soft red pulse he cannot name. He wants Rudra to hold the power back. Rudra pulls up the city grid — whole districts blinking dark — and, jaw tight, drags the Receiver's output slider **up**, past the yellow line, filing a calm approval note as he does it. The gold beams brighten. The city relights. A careful man, breaking the world by the book. (They speak — dialogue later.)\n\n## SCENE 5 — INT. RECEIVER CONTROL NOOK — MORNING\nA quiet alcove. Rudra taps a **holo-call** open. His **sister** appears, small and bright, standing somewhere down in the crowded city. Behind Rudra, for a flash, a memory-image ghosts in the glass: red Martian dust, a line of dead war-droids, a younger Rudra. He waves it away. He tells her (later dialogue) to stay safe and go home before dark; she teases him and refuses. He watches her image wink out, worried. (They speak — dialogue later.)\n\n## SCENE 6 — INT. GLOBAL COUNCIL CHAMBER — DAY\nA ring of floating seats around a slowly turning hologram of a blue-green exoplanet. **MEERA** (calm, exact) presents her terraforming plan — water-worlds blooming in fast-forward above the table. A councillor asks the hard question; without a blink she gives a **cold number** of colonies she would sacrifice to fund it. At the edge of the room, ignored, **TARA** (sharp, tired, a scanner-cuff on her wrist) throws up her own data: the sky over the temple is **folding**, dimension-lines stacking like cracks in glass. The Council waves it off as \"receiver noise.\" Meera and Tara leave through the same door, already disagreeing. (They speak — dialogue later.)\n\n## SCENE 7 — INT. PARMARTH 1 CARGO HOLD / STRATOSPHERE — DAY\nSamir's ship, high over the coast. In the empty hold, one locked case floats in a stasis field: an **experimental navigation chip**, its surface crawling with tiny light. A handler's face flickers on the cockpit glass and gives the drop: Grand Road, mid-ritual. Samir only asks one thing (later dialogue) — when he gets paid. We see his screen route the fee the instant it lands: an automatic transfer to a **family name** he closes before it fully shows. His face gives nothing away. (They speak — dialogue later.)\n\n## SCENE 8 — EXT. GRAND ROAD — PAHANDI — DAY (SONG SPOT A)\nThe great ritual. The deities are carried out of the Sri Mandir in the swaying, rocking **Pahandi** walk, servitors in white straining under them, the crowd's roar rising like the sea. Drums, conches, gold dust in the air. *(A short devotional Yatra song can live here.)* In the crush, the five brush past each other once, none of them looking: Samir dodges Omm's shoulder; Meera steps around Tara; Rudra's arm clips Samir. Five strangers, one frame, gone. (Song / no spoken dialogue.)\n\n## SCENE 9 — EXT. RECEIVER + GRAND ROAD — DAY\nPower use spikes with the swelling crowd. On the gantry, alarms bloom. Rudra, torn, pushes the Receiver to **full** — the crown-ring screaming white. The gold beams turn harsh. Above the temple, the sky begins to **ripple wrong**, like heat-haze over metal. Tara's scanner-cuff shrieks; Omm doubles over as the ground-strain spikes; in Parmarth 1, Samir's chip **glitches**, light spilling from its case. Three heroes, three places, one event felt three ways. (Minimal/no dialogue — reactions.)\n\n## SCENE 10 — EXT. SKY OVER PURI — THE BREACH — DAY\nThe last unseen **kabacha** (sky-shield) gives with a sound like a snapping bell. The sky **tears** — a ragged black **portal** opening over the chariots. Cold pours out. And the **shadow army** comes down — hundreds of smoking man-shapes falling into the crowd, which turns from a festival into a stampede in seconds. Screaming, running, gold banners trampled. (No dialogue — chaos.)\n\n## SCENE 11 — EXT. GRAND ROAD — THE RAKHYAKA — DAY\nAgainst the tide of running people, one old man walks *forward*. **THE RAKHYAKA** — lean, ancient, a plain wooden **staff (danda)** wrapped in old silk in his hand. He plants himself before the front of the army and fights — and he moves like nothing in this century: no energy weapons, just the staff and his body, and shadow-soldiers burst apart at his touch. For a moment he holds them all. Then the army swells, too many, and a heavy dark strike catches him across the chest. He staggers. Blood. His breath goes ragged. He knows — he cannot win this. (Choreography-heavy; no dialogue.)\n\n## SCENE 12 — EXT. GRAND ROAD — THE FREEZE — DAY\nThe Rakhyaka drops to one knee, plants the danda, and speaks an old spell (later dialogue). He **strikes the staff to the ground.** A ring of pale light rushes out — and **everything stops.** The falling banners hang. The screaming mouths freeze. The shadow army halts mid-lunge, the portal frozen mid-churn above. In the sudden, total silence, the wounded old man rises and **walks** through the frozen world. He finds them one by one, each frozen in a different place — Rudra on the gantry, Meera and Tara in the street, Omm mid-fall, Samir climbing from his landed ship. A **spark of white light** leaps from the danda to each of them — and the five are **torn out of frozen time.** Whiteout. (No dialogue.)\n\n---\n\n# ACT 2A — THE TIMELESS AKHADA\n\n## SCENE 13 — INT./EXT. THE AKHADA — TIMELESS\nThe five slam onto warm stone, still screaming from a fight that is now gone. They are on a **floating akhada** — a round wrestling-ground of old stone and torchlight, hanging in an endless soft void, stars and slow galaxies drifting far below the edge. Around them rise the **BISWABASU CLAN** — dozens of the dead, in old cloth, calm and glowing faintly — who **bow** to the five by ancient names. The Rakhyaka, whole again here, no wound, tells them what they are (later dialogue): reborn protectors, the shield broken, the Lord's road nine days long. The five react in five ways — Samir backing toward the edge, Meera scanning for exits, Omm reaching to help a \"person\" who cannot be hurt, Tara already testing the air, refusing all of it. (They speak — dialogue later.)\n\n## SCENE 14 — INT. THE AKHADA / MEMORY-LIGHT — TIMELESS (SHORT MONTAGE)\nThe Rakhyaka lifts the danda and the void fills with **living memory-light** — the origin, shown like a moving mural made of smoke and gold:\n- The **Biswabasu** clan in a deep green jungle, worshipping Lord **Nila Madhava** by a hidden pool.\n- **King Indradyumna**'s men taking the deity; the clan's grief; the two sides facing off; then the peace — the clan given the sacred service, the title **Daitapati.**\n- The old gurus and tantriks foreseeing a **dark power** to come; the carving of the **danda from neem wood**; the building of this **timeless Akhada.**\n- The cycle: a protector chosen, sent to Earth, guarding, dying, striking the danda so it **chooses the next.** Faces flick by across the ages — many protectors, one after another.\n- Then the danda, now, shooting out **five** sparks instead of one — landing on our five. First time ever.\nThe memory-light hardens on one line, carved in the air (later dialogue): **the lathi serves only a heart that owes nothing; it kills the unworthy who touch it; only dark power can force it.** (Narration/dialogue later; visual montage.)\n\n## SCENE 15 — INT. THE AKHADA — TIMELESS\nQuieter. The five ask who they fight. The Rakhyaka's face closes. He tells them only a little (later dialogue) — that the enemy was **once one of them**, a chosen protector, and that **something happened to him** that turned him against the Lord. He will not say the name. The clan around them goes still and grim at the not-saying. (They speak — dialogue later.)\n\n## SCENE 16 — INT./EXT. THE AKHADA — TRAINING — TIMELESS (MONTAGE)\nEach hero is handed to a clan mentor — and, in a nice reveal, each mentor is that hero's own **student from a past life**, gentle with them. We cut between them:\n- **OMM** cannot make the stone floor answer — it stays dead under his hands — until he stops shoving at it; and meanwhile he has cheerfully cooked for the whole clan twice, learning every name.\n- **RUDRA** makes his palms **glow with heat** but clamps it before it becomes flame, sweating, holding it in.\n- **MEERA** lifts a rope of clean **water** out of dry void air on her first try — and looks unsettled at how easy it was.\n- **SAMIR** blurs across the ring on a cushion of **air**, too fast to turn, and shoots straight off the edge into open void before a mentor's wind snaps him back.\n- **BISHU**, Tara's mentor, teaches her to open a **portal the width of a needle** — a bright pinhole in the air — and warns her (later dialogue) that the price is her hold on the present moment. (Montage; light dialogue later.)\n\n## SCENE 17 — EXT. THE AKHADA RING — THE TRAINING FIGHT — TIMELESS\nA real sparring bout, the clan ringed around roaring like a true akhada crowd. Five elements clash in pairs — fire hissing against water into steam, air throwing stone, Tara blinking short portals to dodge. Through the fight we READ them clearly: **Omm** shrugs off every hit, a wall no one cracks (underrated); **Samir** dazzles and then loses control and eats the floor (overrated); **Meera** moves clean and ends every exchange first (the best); **Rudra**, refusing to loose his fire, gets driven back and looks the **weakest** of them all — even though we've seen the furnace he's holding shut. (Choreography; light dialogue later.)\n\n## SCENE 18 — EXT. THE AKHADA RING — THE FAILED JOINING — TIMELESS\nThe Rakhyaka lines the five up and explains the enemy's secret (later dialogue): he **eats** elemental force, so power thrown at him only feeds him — the only way is to **let force pass through.** They try to join their five powers into one. The streams fire at once — fire, water, stone, wind, light — and **collide** in a snarling knot that detonates. The blast throws them flat and **badly burns OMM**, who does not get up easily. In the smoke, we understand what they can't: five people each gripping their own guilt cannot let anything pass through them. Later, alone at the ring's edge, **TARA** has a silent **vision** — the danda in a hero's hand, the Rakhyaka gone — and tells no one. (Action + dialogue later.)\n\n## SCENE 19 — INT. THE AKHADA — THE BREACH FROM WITHIN — TIMELESS\nThe clan freezes mid-task. Above the akhada, a thin seam of light hangs in the void — the **frozen-Earth portal, never fully closed.** Through it, something **drops** onto the sacred stone: a single **beast** — bigger than the shadow-soldiers, a hunched mass of smoking black with too many joints. It lands among the dead. The clan, who cannot truly die here, were never meant to face *this*. It lunges — and where it claws a clan member, the wound spreads **grey**. Panic in a place that has never known it. (Action; no/little dialogue.)\n\n## SCENE 20 — INT. THE AKHADA — THE HARD CHOICE — TIMELESS\nThe five and the Rakhyaka corner the beast, but too late for one: a **beloved clan mentor** (one of their own past-life students) is turning — greying, eyes going to black glass, reaching for the others. The infection begins to spread down his arm to the ground. There is only one way to stop it. In a terrible, quiet beat, the heroes **put him down** — a first, real loss, and the clan watches its own child die in a world where nothing was supposed to die. The lesson lands like ice: the dark power can reach **even here.** If it takes the Akhada, the whole protector cycle — thousands of years — **ends forever.** They cannot wait to be ready. The clan blesses them. The Rakhyaka raises the danda and **strikes.** (Emotional; dialogue later.)\n\n---\n\n# INTERVAL BLOCK — THE GUARDIAN'S FALL\n\n## SCENE 21 — EXT. GRAND ROAD, PURI — DAY (TIME RESUMES)\nWhite light — and they are back, landing hard on the Grand Road in a tight ring, guards already up, still dressed in Akhada dust. For one held second everything is frozen around them — the falling banners, the screaming mouths, the mid-lunge army. They land right in front of the **RAKHYAKA**, who stands wounded but calm — and he **smiles** at them. Then time **snaps back on**: the roar returns, the blade falls, the world moves. The five turn as one to face the army. (No dialogue — a held hero beat.)\n\n## SCENE 22 — EXT. GRAND ROAD — THE BATTLE + THE HORROR — DAY\nThe five cut loose for the first time on Earth — fire, water, stone, wind and light tearing through the shadow ranks in front of a hundred thousand witnesses, and the running crowd slows, turns, and begins to **chant** them on. Then the horror hits home: a shadow touches a fleeing pilgrim and the pilgrim **turns** — greys, rises, joins the enemy. All along the road, the front crowd — about **5000 souls**, the very people who would have pulled the three chariots — begin to change. The heroes freeze at the choice in their hands: these \"demons\" are the people. They will **not** cut them down. Their eyes go up to the **portal.** (Action; a shouted decision — dialogue later.)\n\n## SCENE 23 — EXT. GRAND ROAD / SKY — THE LATHI PROBLEM — DAY\nTo shut the portal, the danda has to go up to it — but when Rudra grabs for the silk-wrapped staff, a jolt throws his hand off; **none of the five can hold it.** The Rakhyaka takes it himself. **SAMIR** wraps the old man in a spinning column of **air** and lifts him up off the road, rising toward the churning portal mouth while the others hold the ground. On the Rakhyaka's shouted order (later dialogue), the team **splits** — Meera, Omm and Rudra carve a path to the chariots to move **Lord Jagannath toward the Gundicha Temple**, finishing the sacred journey by force of arms. (Action; dialogue later.)\n\n## SCENE 24 — EXT. SKY OVER GUNDICHA — THE FALL — DAY\nAt the portal's mouth, the shadow-soldiers **flow together** into one huge **devil-shaped monster**, a tower of smoke and teeth. It swats Samir's air-column aside and closes on the old man. The Rakhyaka fights it staff-to-claw in the sky — magnificent, doomed — until a killing dark blast punches through him. He **falls**, a long terrible drop, and lands broken on the stone **in front of the Gundicha Temple.** The **danda** is flung from his hand — it shoots *out* through the portal (leaving the tear **fully open**) and **spears into the ground** before the temple steps. As it strikes, the dying Rakhyaka rasps the last spell and a **dome of light** rises over the whole Gundicha Temple, sealing the Lord and the people inside. The monster breaks against it. (Action; a last spell — dialogue later.)\n\n## SCENE 25 — EXT. GUNDICHA TEMPLE FRONT — THE LAST ORDER → INTERVAL — DAY\nThe five reach the fallen Rakhyaka under the humming dome. He is going. He tells them the truth (later dialogue): none of them can hold the lathi yet; the dome lives only while he lives; they must **take the Lord away and hide Him.** His hand falls. Outside the dome, the shadow army presses; the sky stays torn. Quick, grim, the five gather the Lord and, under cover of the dome's glare, **slip Him out and away** — unseen. On their five faces: a teacher dead, a war just begun.\n**CUT TO BLACK. TITLE CARD: \"The teacher is gone. The war just started.\" — INTERVAL.**\n\n---\n\n# AFTER THE INTERVAL — THE REVEAL AND THE HUNT\n\n## SCENE 26 — INT. SRI MANDIR / EMPTY SANCTUM — DAY\nSilence after storm. A tall armored figure walks the emptied temple, boots echoing. He wears a **faceless helmet** that seems to bend the eye away from him — hard to look at directly. He reaches the sanctum. He removes the helmet. **KALAPAHADA** — our first clear look at his face: old, beautiful, ruined, eyes full of a cold grief. He looks at the place where the Lord should be. **Empty.** (No dialogue yet — a reveal held in silence.)\n\n## SCENE 27 — INT. SRI MANDIR — THE LATHI TAKEN + THE CLOCK — DAY\nKalapahada crosses to where the **danda** stands driven into the ground (the dome gone now, the Rakhyaka dead). He grips it — and it **fights him**, light crawling up the wood against his hand. He forces it, dark veins of his own power wrapping the staff, **chaining it** to his will. It obeys — but wrongly, unwillingly. He turns to the torn sky and speaks his taunt to the fled Lord (later dialogue): *the Yatra must be completed; you must come back; but I will not let you enter your temple; you will come to me.* Behind him the great portal hangs open like a wound. (He speaks — dialogue later.)\n\n## SCENE 28 — EXT. SPACE / MANY WORLDS — FAME + THE ARMY — MONTAGE\nSplit-light montage. Galaxy-wide **broadcasts** replay the five tearing through the shadow army on the Grand Road — their faces on a thousand screens across a hundred worlds; colonies erupting in hope; leaders recording invitations (\"come to us, bring the Lord\"). Cut against it, darker: **Kalapahada's fleet** descending on world after world, his shadows sweeping cities, touching people who **rise greyed** — his army doubling, then doubling again. He is not chasing. He is **building**, and waiting. (Broadcast fragments; no character dialogue.)\n\n---\n\n# ACT 2B — THE JOURNEY\n\n## SCENE 29 — EXT./INT. GRANTHALOKA — ARRIVAL & WELCOME — DAY (SONG SPOT B)\nA new world: **Granthaloka**, all soft light and floating terraces, home of the galaxy's great library. Tara's world. The heroes' craft sets down among crowds who have waited generations to see the Lord in the open. A **welcome** blooms — lamps, flowers made of light, an old **father figure** (Tara's father) leading the rites; Tara hangs back, complicated, at the sight of him. The Lord is placed on a high lit dais. *(The devotional welcome song lives here — warm, the first safe breath in the film.)* (Song / dialogue later.)\n\n## SCENE 30 — INT. THE DIGITAL LIBRARY — THE NAME — DAY\nTara's father leads them into the **library**: a vast dark hall with **no books** — only floating motes of light. When you name a text, its **keeper appears as a hologram.** They call the **MADALA PANJI** — and a tall figure of amber light rises, the living temple-chronicle. Around them the air fills with moving history: past ages, past attacks on the Lord, past protectors. And then the record speaks a name it has carried for centuries — **KALAPAHADA** — and shows his story: the chosen protector who suffered, who broke, who came to hate the Lord, who found a way to return with all his memory. The five stand inside the glowing history and understand, at last, exactly who hunts them. (They speak / narration — dialogue later.)\n\n## SCENE 31 — INT. GRANTHALOKA — THE SCALE OF IT — DAY\nAn alarm-light. A distress feed floods the library: a **whole colony world gone dark**, then gone — Kalapahada's army sweeping it, the dead rising by the million. The heroes watch the scale of the thing they are running from. It is not one enemy. It is a growing tide. (Reaction; dialogue later.)\n\n## SCENE 32 — EXT. GRANTHALOKA — THE ATTACK — DAY\nThe sky over Granthaloka tears. Kalapahada's forces fall on the library-world. This time the heroes do not flee first — they **stand and fight** to save the people, shielding the fleeing crowds, Omm raising stone walls, Meera drowning shadow-ranks, Rudra (still holding back his full fire) driving them off the terraces. A real, hard, **active** battle — the heroes as protectors, not runaways. (Action; dialogue later.)\n\n## SCENE 33 — EXT./INT. GRANTHALOKA — THE FATHER'S FALL — DAY\nThe tide is too strong. **Tara's father** makes his stand not to cover a retreat but to protect the **heart of the library** — the living records, the memory of the Lord — sealing the archive with his own life as the shadows take him, pressing into Tara's hands one last thing: an old **palm-leaf verse** her family has copied for four centuries. The heroes fight *toward* him and reach him too late — they tried, and failed, and that is the difference. Grief-struck, they lift the Lord and pull back to the ship as Granthaloka burns. (Emotional; dialogue later — shaped to feel DIFFERENT from the Rakhyaka's fall.)\n\n## SCENE 34 — INT. THE SHIP / OPEN SPACE — THE MIRROR — NIGHT\nQuiet engine-hum. The five sit apart in the dark hold with the Lord's soft light between them. Now that they know Kalapahada's story, each privately sees a piece of himself in it — and we feel it in small silent images: Samir staring at the family transfer on his screen; Meera's hand hovering over a casualty count; Rudra flexing a hand that will not burn; Omm holding a weight he won't set down; Tara clutching the palm-leaf verse she doesn't believe. The villain is the end of the road each of them is on. (Mostly silent; light dialogue later.)\n\n## SCENE 35 — EXT./INT. STOP 2 — THE SECRET SHOWN — DAY (SONG SPOT C, OPTIONAL)\nA hidden faith-world, its people worshipping in secret caverns lit by bioluminescent water. A kind old **MAHA GURU** takes them in. When a scout-force of shadows attacks, the Guru does the impossible in plain sight: a killing blow comes, and he does **not** block — he **lets it pass through him**, bending like water, and it strikes nothing, dissolving away. And he **lives.** He turns and, calm, begins to teach them what they just saw (later dialogue). Something in **Meera** cracks open — she stops counting. *(A soft, emotional song can live around this stop.)* (Action + dialogue later.)\n\n## SCENE 36 — EXT. DEEP SPACE / KALAPAHADA'S FLAGSHIP — THE LATHI TEST — DAY\nThe heroes make a hard choice: go at Kalapahada directly and take the lathi back. They ambush his flagship. Full force — Rudra finally loosing more of his fire than ever — everything they have. And he **eats all of it**, elemental power pouring into him and making him brighter, larger, the chained lathi flaring in his grip. He barely bothers to strike back. They flee, hulls smoking, shaken to the bone: fighting him only makes him **stronger.** (Big action; dialogue later.)\n\n## SCENE 37 — INT. THE SHIP — ROCK BOTTOM — NIGHT\nThe lowest point. Omm bleeds through an old field-dressing; Samir won't meet anyone's eyes; the danda's absence sits like a hole. Tara's long-running Puri data finally resolves on her screen — and it is the worst possible truth: the **Receiver thinned the sky.** Kalapahada did not break the shield alone. **Rudra** opened the door — not with his temper, but with his *caution*, the safe, measured, approved decision. The team fractures in the dark. The clock is almost gone. (Heavy; dialogue later.)\n\n## SCENE 38 — INT. THE SHIP / MEMORY-LIGHT — THE TURN — NIGHT\nIn the wreck of themselves, it finally lands. They replay the Guru: you can only let force pass through you if you are **not gripping your own guilt.** The lathi rule clicks — it serves only an open heart; Kalapahada holds it only by force, on borrowed time. One by one, in small, real beats, each hero sets a weight down (shown, not yet spoken). They piece together his whole plan — **the Brahma, the portal, the Samudra Manthan, immortality** — and understand there is only one place left to go: **back to Puri, for the last day.** They turn the ship for Earth. (Emotional turn; dialogue later.)\n\n---\n\n# ACT 3 — THE CLIMAX: SAMUDRA MANTHAN\n\n## SCENE 39 — EXT. SPACE NEAR EARTH — THE TRAP SPRINGS — DAY\nAs they come in toward Earth, reality **buckles.** The stars smear; the ship is gone; the five are suddenly standing in a strange, beautiful **elsewhere** — and Kalapahada is there, waiting. He has pulled them into a **maya** — an illusion-world built to hold them. (No dialogue — a reality-shift.)\n\n## SCENE 40 — EXT. THE MAYA (SHIFTING REALMS) — RUDRA IS FORGED — CONTINUOUS\nA huge, gorgeous, wrong battle. The fight throws them across impossible places — a burning red world, a drowned one, a sky of falling temples — and every time they beat Kalapahada he simply **reforms**, feeding on their power. A loop with no exit. **TARA**, of all of them, feels the seams — *this is not real.* But knowing is not enough; they are still trapped, still swinging, still feeding him. Then the answer, made physical: the only way out is to **stop fighting and take the hard power.** The chained lathi hangs between them and Kalapahada, its killing light bared. **RUDRA** walks into it — arms open, ready to die for the others — and **grips the lathi's killing power.** It should destroy him. Instead, because his heart is finally open and owes nothing, it **pours into him** — fire he has hidden his whole life erupting free — and **transforms him into a warrior**, the lathi's silk burning away, the staff blazing and **his.** That true power **shatters the maya** like glass. (Huge action + transformation; dialogue later.)\n\n## SCENE 41 — EXT. GRAND ROAD, IN FRONT OF THE SRI MANDIR — THE SEIZING — DAY\nReality snaps back. No festival, no chariots now — just the solemn **rituals**: the servitors bearing **Lord Jagannath** on foot back toward the Sri Mandir to be restored, the city holding its breath. The five, Rudra now blazing with the lathi, move with them. They are almost there — the temple rising just ahead — when **KALAPAHADA strikes**, dropping into the road **in front of the temple**, cutting the Lord off before He can reach the steps. In one brutal move he **seizes the idol** and rises with it, tearing upward and out over the coast toward the open sea. (Action; a taunt — dialogue later.)\n\n## SCENE 42 — EXT. MID-SEA — THE BRAHMA & THE CHURNING — DAY\nFar out over black water, Kalapahada holds the idol aloft and **draws the Brahma out** of it — a small, blinding point of pure light. The sky and sea answer: the **great portal** rips wide above the waves, and out of the water rise the **nagas** first — vast serpents of shadow and scale — and then the **danavas** pour through the sky-tear. Kalapahada begins the **dark Samudra Manthan**: a colossal serpent wound around a black mountain thrust up from the sea-floor, the ocean beginning to **turn**, to boil, poison-haze rising off it. He will churn up the amrit and drink himself immortal. (Vast VFX action; dialogue later.)\n\n## SCENE 43 — EXT. MID-SEA — THE FINAL BATTLE — CONTINUOUS\nThe five arrive over the churning sea against everything at once — nagas, danavas, and Kalapahada at the center. But now they do not fight his way. They **yield.** Standing in a line on a shard of floating stone, they build the true technique: Omm's force flows **into** Meera's, into Samir's, into Rudra's — a single **thread**, all of it channeled through **TARA** as the living conduit, and **led by Rudra with the blazing lathi.** At the key second Tara **drifts** — her mind slipping toward the timelines, the thread fraying — until **OMM's** hand closes on her shoulder and pulls her back to the now. The thread holds. (Climactic action; dialogue later.)\n\n## SCENE 44 — EXT. MID-SEA — THE ANSWER & THE END OF KALAPAHADA — CONTINUOUS\nBefore the final blow, Kalapahada turns to **MEERA** — the one who kept the hardest accounts — and makes his case (later dialogue): *I gave everything, I was given nothing.* And Meera, who has set her own ledger down, answers him (later dialogue): *He came back today; He would have come whether or not anyone earned it; it was never owed to you, and never kept from you — you just kept sending the bill.* He has no answer. In that half-second opening, the threaded strike **releases** — and every force he would have eaten passes straight **through** him instead. The dark Manthan collapses inward; the great **portal slams shut** on the nagas and danavas; Kalapahada comes apart into light, his last look turned **upward** — and it is not anger. (Climax; dialogue later.)\n\n## SCENE 45 — EXT. MID-SEA / SHORE — AFTER — DAY\nSudden quiet, only waves. The heroes gather the fallen idol and cradle the **Brahma** safe. For a moment the **Rakhyaka's** face shines in the light of the settling danda — a last look, at peace — and then his spirit **passes on** for good. The staff goes dark and plain in Rudra's hand: wood again, not fire. (Mostly silent; a soft beat of dialogue later.)\n\n## SCENE 46 — EXT./INT. SRI MANDIR — NILADRI BIJE — DAY\nThe city comes out of hiding into ordinary daylight. The servitors complete the rituals as though the world had not almost ended — which is the whole point. **NILADRI BIJE:** the Lord is carried in and **enters the temple**, on time, exactly as He has for thousands of years; the rasagola offered at the door. Outside, **Rudra** plants the spent danda in the ground where the Rakhyaka fell — a quiet marker now, not a weapon. **Tara** unrolls her family's old **palm-leaf verse**, reads the line about the next time — and, at last, believes it. The five stand together as the temple bells ring: no longer five strangers who owed something, but the **new Akhada**, on watch. (Final images; a closing line — dialogue later.)\n\n---\n\n# RUNTIME NOTE\nThese 46 scenes carry ~136 minutes of story, with ~14 minutes of song/big-action room on top for ~150 total. The heavy VFX scenes (10, 22, 24, 40, 42, 43) and the two montages (14, 16, 28) are where the minutes and the money concentrate.\n\n# NOTE FOR THE NEXT AGENT\nThis is the SPINE to draft from. Expand each of these 46 scenes into the full set of real scenes (a beat is a pocket, not one scene — a feature runs ~120–150 scenes), then write the colloquial Odia dialogue. See the Story Bible (00_START_HERE) for characters, world rules, and the full task.\n"
+      },
+      {
+        "category": "other",
+        "label": "Akhada Project Rules Addendum (interval cliffhanger, simple English)",
+        "content": "# AKHADA — EXTRA PROJECT RULES (ADDENDUM)\n### These rules are added on top of the main project instructions. Always follow them.\n\n---\n\n## RULE 1 — This is an Indian film. Big cliffhanger at the interval.\n\nThis is an Indian movie. Indian movies have an interval (a break in the middle).\n\nThe scene right before the interval must end on a BIG cliffhanger.\n\n- It should be a shock, a twist, or a strong emotional high point.\n- It must make the audience want to come back after the break.\n- Do not treat the interval as just a pause. Treat it as one of the biggest moments in the whole film — as big as the climax, in its own way.\n- The story should build up to this moment and then cut to interval at the peak, not after the peak has cooled down.\n\n## RULE 2 — Write in easy, simple English.\n\nThe user is not a native English speaker. Write all English in simple, easy words.\n\n- Use short sentences.\n- Use common, everyday words. No hard or fancy words.\n- If a word might be hard, use a simpler word instead.\n- Explain ideas in a plain, clear way.\n- This rule is for ALL English text: notes, scene breakdowns, analysis, and comments.\n- This rule does NOT change the Odia dialogue. The Odia stays natural, colloquial, and street-real as the main instructions say. Only the English around it becomes simple.\n"
+      }
+    ]
+  }
+}

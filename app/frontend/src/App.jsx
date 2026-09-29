@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useContext, createContext, Fragment } from 'react'
+import { createPortal } from 'react-dom'
 import './App.css'
 
 // Lets MicInput/MicTextarea reach the shared dictation language + t
@@ -372,6 +373,11 @@ const LABELS = {
     aiMovieDialoguePlaceholder: 'Optional — any direction for the dialogue, e.g. "make this a tense argument" (leave blank to let the AI decide)',
     aiMovieBeatNarrationButton: 'Narration for this whole beat',
     scriptThemeLabel: 'Page colour',
+    aiMovieStageNotOpenYetNote: 'This stage opens once the one before it is approved.',
+    scriptScenesTitle: 'Scenes',
+    scriptSelectedSceneTitle: (number) => `Scene ${number}`,
+    scriptAiWritingLabel: 'AI is writing…',
+    aiMovieShortDuration: (minutes) => aiMovieDurationText(minutes, 'sec', 'min'),
     scriptThemeLight: '☀ Light',
     scriptThemeDark: '☾ Dark',
     aiMovieBeatNarrationNote: 'Writes one continuous narrator voice-over that flows across every scene of this beat, in order. Dialogue already written is kept.',
@@ -1000,6 +1006,11 @@ const LABELS = {
     aiMovieDialoguePlaceholder: 'ଇଚ୍ଛାଧୀନ — ସଂଳାପ ପାଇଁ କୌଣସି ନିର୍ଦ୍ଦେଶ, ଯଥା "ଏହାକୁ ଏକ ଉତ୍ତେଜନାପୂର୍ଣ୍ଣ ବିବାଦ କରନ୍ତୁ" (ଖାଲି ଛାଡ଼ିଲେ AI ନିଜେ ନିଷ୍ପତ୍ତି ନେବ)',
     aiMovieBeatNarrationButton: 'ଏହି ସମ୍ପୂର୍ଣ୍ଣ ବିଟ୍ ପାଇଁ ବର୍ଣ୍ଣନା',
     scriptThemeLabel: 'ପୃଷ୍ଠାର ରଙ୍ଗ',
+    aiMovieStageNotOpenYetNote: 'ପୂର୍ବ ପର୍ଯ୍ୟାୟ ଅନୁମୋଦିତ ହେବା ପରେ ଏହି ପର୍ଯ୍ୟାୟ ଖୋଲିବ।',
+    scriptScenesTitle: 'ଦୃଶ୍ୟଗୁଡ଼ିକ',
+    scriptSelectedSceneTitle: (number) => `ଦୃଶ୍ୟ ${number}`,
+    scriptAiWritingLabel: 'AI ଲେଖୁଛି…',
+    aiMovieShortDuration: (minutes) => aiMovieDurationText(minutes, 'ସେକେଣ୍ଡ', 'ମିନିଟ୍'),
     scriptThemeLight: '☀ ହାଲୁକା',
     scriptThemeDark: '☾ ଗାଢ଼',
     aiMovieBeatNarrationNote: 'ଏହି ବିଟ୍‌ର ସମସ୍ତ ଦୃଶ୍ୟ ଦେଇ କ୍ରମରେ ବହୁଥିବା ଗୋଟିଏ ନିରନ୍ତର ବର୍ଣ୍ଣନାକାରୀ ଭଏସ୍-ଓଭର ଲେଖେ। ପୂର୍ବରୁ ଲେଖାଯାଇଥିବା ସଂଳାପ ରହିଯାଏ।',
@@ -4523,6 +4534,51 @@ function App() {
       return 'light'
     }
   })
+  // Which scene the tools panel is showing (step 2 of the redesign), and
+  // which way the page last turned -- the page slides in from that side.
+  const [aiMovieSelectedSceneIndex, setAiMovieSelectedSceneIndex] = useState(0)
+  // Which stage fills the centre screen -- the left menu's Story /
+  // Synopsis / ... / Screenplay items work as switches (the user's
+  // request) instead of one long column of every stage. null = follow the
+  // stage being worked on right now.
+  const [aiMovieFocusedStage, setAiMovieFocusedStage] = useState(null)
+  const [aiMovieBeatTurnDirection, setAiMovieBeatTurnDirection] = useState('open')
+  function selectAiMovieScene(sceneIndex, scrollToIt) {
+    setAiMovieSelectedSceneIndex(sceneIndex)
+    if (scrollToIt) {
+      document.getElementById(`script-scene-${sceneIndex}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    }
+  }
+  useEffect(() => {
+    setAiMovieSelectedSceneIndex(0)
+  }, [aiMovieScreenplayViewIndex])
+
+  // Every click answers with a soft ripple from the point pressed (step 4
+  // of the redesign) -- one listener for the whole app, so every button
+  // gets it without each one needing its own code. Skipped for people
+  // whose system asks for less motion.
+  useEffect(() => {
+    const reduceMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
+    if (reduceMotion) return undefined
+    function handlePointerDown(event) {
+      const button = event.target.closest?.('button')
+      if (!button || button.disabled) return
+      if (getComputedStyle(button).position === 'static') button.classList.add('has-ripple')
+      else if (!button.classList.contains('has-ripple')) button.style.overflow = 'hidden'
+      const rect = button.getBoundingClientRect()
+      const size = Math.max(rect.width, rect.height) * 2
+      const ripple = document.createElement('span')
+      ripple.className = 'click-ripple'
+      ripple.style.width = `${size}px`
+      ripple.style.height = `${size}px`
+      ripple.style.left = `${event.clientX - rect.left - size / 2}px`
+      ripple.style.top = `${event.clientY - rect.top - size / 2}px`
+      button.appendChild(ripple)
+      ripple.addEventListener('animationend', () => ripple.remove())
+    }
+    document.addEventListener('pointerdown', handlePointerDown)
+    return () => document.removeEventListener('pointerdown', handlePointerDown)
+  }, [])
   function changeScriptTheme(mode) {
     setScriptTheme(mode)
     try {
@@ -5214,6 +5270,7 @@ function App() {
 
   async function loadAiMovieProject(id) {
     setAiMovieAnalyzeError(null)
+    setAiMovieFocusedStage(null)
     try {
       const response = await fetch(`${BACKEND_URL}/api/ai-movie/projects/${id}`)
       const data = await response.json()
@@ -5557,6 +5614,8 @@ function App() {
       } else {
         setAiMovieStageStatus((prev) => ({ ...prev, [stageKey]: { status: 'approved', feedback: null } }))
         if (data.assets) setAiMovieAssets(data.assets)
+        // Move on to the next stage, the way the long column used to.
+        setAiMovieFocusedStage(null)
       }
     } catch {
       setAiMovieStageError(t.genericError)
@@ -5641,6 +5700,7 @@ function App() {
       setAiMovieScreenplayBeatFeedbackText('')
       // Slide forward to the next beat -- still just a default position;
       // Prev/Next stay free to move anywhere from here.
+      setAiMovieBeatTurnDirection('next')
       setAiMovieScreenplayViewIndex((i) => i + 1)
     } catch {
       setAiMovieStageError(t.genericError)
@@ -5974,9 +6034,17 @@ function App() {
     setAiMovieExpandedStages((prev) => ({ ...prev, [stageKey]: currentlyCollapsed }))
   }
 
-  function handleAiMovieStageClick(anchorId) {
+  function shownAiMovieStage() {
+    return aiMovieFocusedStage ?? getAiMovieCurrentStage(aiMovieStageStatus)?.key ?? 'screenplay'
+  }
+
+  function handleAiMovieStageClick(stageKey) {
     setIsSidebarOpen(false)
-    document.getElementById(anchorId)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    setAiMovieFocusedStage(stageKey)
+    // A stage opened from the menu is shown open, even if it's approved.
+    setAiMovieExpandedStages((prev) => ({ ...prev, [stageKey]: true }))
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+    document.querySelector('.chat-viewport')?.scrollTo?.({ top: 0, behavior: 'smooth' })
   }
 
   function handleAiMovieExportClick() {
@@ -8915,8 +8983,9 @@ function App() {
                     return (
                       <button
                         key={stageKey}
-                        className={`stage-progress-item stage-${dotStatus}`}
-                        onClick={() => handleAiMovieStageClick(`ai-movie-stage-${stageKey}`)}
+                        className={`stage-progress-item stage-${dotStatus}${aiMovieView === 'editor' && shownAiMovieStage() === stageKey ? ' is-shown' : ''}`}
+                        onClick={() => handleAiMovieStageClick(stageKey)}
+                        aria-current={aiMovieView === 'editor' && shownAiMovieStage() === stageKey ? 'page' : undefined}
                       >
                         <span className="stage-progress-dot" />
                         {label}
@@ -8978,7 +9047,7 @@ function App() {
           )}
 
           {aiMovieView === 'editor' && (
-          <div className="concept-page empty-state">
+          <div className="concept-page empty-state ai-movie-editor">
             {!aiMovieBackfillResult?.story && (
             <div className="format-picker">
               <p className="sidebar-section-note">{t.aiMovieAnalyzeIntro}</p>
@@ -9027,7 +9096,7 @@ function App() {
 
               {aiMovieBackfillResult && (
                 <div className="concept-result">
-                  {aiMovieBackfillResult.story && (() => {
+                  {shownAiMovieStage() !== 'story' ? null : aiMovieBackfillResult.story && (() => {
                     const collapsed = isAiMovieStageCollapsed('story', true)
                     return (
                       <div className="three-act-structure" id="ai-movie-stage-story">
@@ -9061,7 +9130,7 @@ function App() {
                     </button>
                   )}
 
-                  {aiMovieProjectTitle === 'Akhada' && aiMovieStageStatus?.plot && (
+                  {aiMovieProjectTitle === 'Akhada' && aiMovieStageStatus?.plot && shownAiMovieStage() === 'plot' && (
                     <>
                       <button
                         type="button"
@@ -9090,6 +9159,8 @@ function App() {
 
                       // Not reached yet — don't reveal it before its turn.
                       if (!isCurrent && !stageStatusEntry) return null
+                      // Only the stage picked in the left menu is on screen.
+                      if (shownAiMovieStage() !== stageKey) return null
 
                       const collapsed = isAiMovieStageCollapsed(stageKey, isApproved)
 
@@ -9212,7 +9283,20 @@ function App() {
                     })
                   })()}
 
-                  {aiMovieStageStatus?.plot?.status === 'approved' && (() => {
+                  {/* A stage picked in the menu that isn't open yet. */}
+                  {(() => {
+                    const shown = shownAiMovieStage()
+                    const current = getAiMovieCurrentStage(aiMovieStageStatus)
+                    const reached =
+                      shown === 'story'
+                        ? Boolean(aiMovieBackfillResult.story)
+                        : shown === 'screenplay'
+                          ? aiMovieStageStatus?.plot?.status === 'approved'
+                          : Boolean(aiMovieStageStatus[shown]) || current?.key === shown
+                    return reached ? null : <p className="sidebar-section-note ai-movie-stage-locked-note">{t.aiMovieStageNotOpenYetNote}</p>
+                  })()}
+
+                  {shownAiMovieStage() === 'screenplay' && aiMovieStageStatus?.plot?.status === 'approved' && (() => {
                     const screenplayBeats = aiMovieBackfillResult.screenplayBeats ?? []
                     const beatsPlot = aiMovieBackfillResult.plot ?? []
                     const screenplayApproved = aiMovieStageStatus?.screenplay?.status === 'approved'
@@ -9279,7 +9363,10 @@ function App() {
                                   <button
                                     type="button"
                                     className="ai-movie-screenplay-nav-button"
-                                    onClick={() => setAiMovieScreenplayViewIndex((i) => Math.max(0, Math.min(i, screenplayBeats.length - 1) - 1))}
+                                    onClick={() => {
+                                      setAiMovieBeatTurnDirection('prev')
+                                      setAiMovieScreenplayViewIndex((i) => Math.max(0, Math.min(i, screenplayBeats.length - 1) - 1))
+                                    }}
                                     disabled={viewIndex === 0}
                                     aria-label="Previous beat"
                                   >
@@ -9294,7 +9381,10 @@ function App() {
                                   <button
                                     type="button"
                                     className="ai-movie-screenplay-nav-button"
-                                    onClick={() => setAiMovieScreenplayViewIndex((i) => Math.min(screenplayBeats.length - 1, Math.min(i, screenplayBeats.length - 1) + 1))}
+                                    onClick={() => {
+                                      setAiMovieBeatTurnDirection('next')
+                                      setAiMovieScreenplayViewIndex((i) => Math.min(screenplayBeats.length - 1, Math.min(i, screenplayBeats.length - 1) + 1))
+                                    }}
                                     disabled={viewIndex === screenplayBeats.length - 1}
                                     aria-label="Next beat"
                                   >
@@ -9303,7 +9393,7 @@ function App() {
                                 </div>
 
                                 {(beat.status === 'not_started' || beat.status === 'generating') && (
-                                  <p className="sidebar-section-note">{t.aiMovieScreenplayBeatWritingLabel}</p>
+                                  <p className="sidebar-section-note script-reel-note">{t.aiMovieScreenplayBeatWritingLabel}</p>
                                 )}
 
                                 {beat.status === 'error' && (
@@ -9390,8 +9480,36 @@ function App() {
                                       </div>
                                     )}
 
-                                    {Array.isArray(beat.scenes) && beat.scenes.length > 0 && (
-                                      <div className="script-theme-switch" role="group" aria-label={t.scriptThemeLabel}>
+                                    {Array.isArray(beat.scenes) && beat.scenes.length > 0 && (() => {
+                                      // Step 2 of the redesign: scene list | script page | the
+                                      // selected scene's tools, so the page itself stays clean.
+                                      const sceneIndex = Math.min(aiMovieSelectedSceneIndex, beat.scenes.length - 1)
+                                      const scene = beat.scenes[sceneIndex]
+                                      const reviseKey = `${viewIndex}-${sceneIndex}`
+                                      const isReviseFormOpen = aiMovieRevisingSceneIndex === reviseKey
+                                      const isAiWriting = isWritingAiMovieDialogue || isRevisingAiMovieScreenplayScene || isGeneratingAiMovieScreenplayBeat
+                                      return (
+                                        <div className={`script-workspace${isAiWriting ? ' is-ai-writing' : ''}`}>
+                                          <aside className="script-navigator" aria-label={t.scriptScenesTitle}>
+                                            <p className="script-panel-title">{t.scriptScenesTitle}</p>
+                                            <div className="script-navigator-list">
+                                              {beat.scenes.map((navScene, navIndex) => (
+                                                <button
+                                                  key={navIndex}
+                                                  type="button"
+                                                  className={`script-nav-item${navIndex === sceneIndex ? ' is-active' : ''}`}
+                                                  onClick={() => selectAiMovieScene(navIndex, true)}
+                                                >
+                                                  <span className="script-nav-number">{sceneNumberOffset + navIndex + 1}</span>
+                                                  <span className="script-nav-heading">{navScene.sceneHeading?.en ?? ''}</span>
+                                                  <span className="script-nav-duration">{t.aiMovieShortDuration(effectiveAiMovieSceneMinutes(navScene))}</span>
+                                                </button>
+                                              ))}
+                                            </div>
+                                          </aside>
+
+                                          <div className="script-page-column">
+                                            <div className="script-theme-switch" role="group" aria-label={t.scriptThemeLabel}>
                                         {['light', 'dark'].map((mode) => (
                                           <button
                                             key={mode}
@@ -9403,32 +9521,24 @@ function App() {
                                           </button>
                                         ))}
                                       </div>
-                                    )}
-
-                                    <div className={`script-page script-page-${scriptTheme}`}>
-                                    {beat.scenes?.map((scene, sceneIndex) => {
-                                      const reviseKey = `${viewIndex}-${sceneIndex}`
-                                      const isReviseFormOpen = aiMovieRevisingSceneIndex === reviseKey
-                                      return (
-                                        <div key={sceneIndex} className="script-scene">
-                                          <p className="script-slug">
-                                            <span className="script-scene-number script-scene-number-left">{sceneNumberOffset + sceneIndex + 1}</span>
-                                            {scene.sceneHeading?.[aiMovieLanguage] ?? scene.sceneHeading?.en ?? ''}
-                                            <span className="script-scene-number script-scene-number-right">{sceneNumberOffset + sceneIndex + 1}</span>
-                                          </p>
-                                          <div className="script-scene-meta">
-                                            <span>{t.aiMovieSceneDurationLabel(effectiveAiMovieSceneMinutes(scene))}</span>
-                                            {scene.characters?.[aiMovieLanguage] && <span>{scene.characters[aiMovieLanguage]}</span>}
-                                            {scene.card && (
-                                              <span>
-                                                {t.aiMovieScenePurposeLabels[scene.card.purpose] ?? scene.card.purpose}
-                                                {' · '}
-                                                {scene.card.emotion?.[aiMovieLanguage] || scene.card.emotion?.en} {scene.card.intensity}/10
-                                                {' · '}
-                                                {scene.card.turn?.[aiMovieLanguage] || scene.card.turn?.en}
-                                              </span>
-                                            )}
-                                          </div>
+                                            <div className="script-stage">
+                                              <div
+                                                key={`beat-${viewIndex}`}
+                                                className={`script-page script-page-${scriptTheme} script-turn-${aiMovieBeatTurnDirection}`}
+                                              >
+                                                {beat.scenes.map((scene, sceneIndex) => (
+                                                  <div
+                                                    key={sceneIndex}
+                                                    id={`script-scene-${sceneIndex}`}
+                                                    className={`script-scene${sceneIndex === Math.min(aiMovieSelectedSceneIndex, beat.scenes.length - 1) ? ' is-selected' : ''}`}
+                                                    style={{ '--scene-order': sceneIndex }}
+                                                    onClick={() => selectAiMovieScene(sceneIndex, false)}
+                                                  >
+                                                    <p className="script-slug">
+                                                      <span className="script-scene-number script-scene-number-left">{sceneNumberOffset + sceneIndex + 1}</span>
+                                                      {scene.sceneHeading?.[aiMovieLanguage] ?? scene.sceneHeading?.en ?? ''}
+                                                      <span className="script-scene-number script-scene-number-right">{sceneNumberOffset + sceneIndex + 1}</span>
+                                                    </p>
                                           {Array.isArray(scene.content) && scene.content.length > 0 ? (
                                             scene.content.map((block, blockIndex) =>
                                               block.type === 'dialogue' ? (
@@ -9458,7 +9568,40 @@ function App() {
                                               ))}
                                             </>
                                           )}
-                                          <div className="script-scene-tools">
+                                                  </div>
+                                                ))}
+                                              </div>
+                                              {/* Rendered straight into <body> so no animated parent can
+                                                  stop them covering the real screen edges. */}
+                                              {createPortal(
+                                                <div className={`script-letterbox-layer${isAiWriting ? ' is-ai-writing' : ''}`} aria-hidden="true">
+                                                  <div className="script-letterbox script-letterbox-top" />
+                                                  <div className="script-letterbox script-letterbox-bottom">
+                                                    <span className="script-letterbox-label">{t.scriptAiWritingLabel}</span>
+                                                  </div>
+                                                </div>,
+                                                document.body
+                                              )}
+                                            </div>
+                                          </div>
+
+                                          <aside className="script-tools" aria-label={t.scriptSelectedSceneTitle(sceneNumberOffset + sceneIndex + 1)}>
+                                            <p className="script-panel-title">{t.scriptSelectedSceneTitle(sceneNumberOffset + sceneIndex + 1)}</p>
+                                            <p className="script-tools-heading">{scene.sceneHeading?.[aiMovieLanguage] ?? scene.sceneHeading?.en ?? ''}</p>
+                                            <div className="script-tools-meta" key={`meta-${viewIndex}-${sceneIndex}`}>
+                                            <span>{t.aiMovieSceneDurationLabel(effectiveAiMovieSceneMinutes(scene))}</span>
+                                            {scene.characters?.[aiMovieLanguage] && <span>{scene.characters[aiMovieLanguage]}</span>}
+                                            {scene.card && (
+                                              <span>
+                                                {t.aiMovieScenePurposeLabels[scene.card.purpose] ?? scene.card.purpose}
+                                                {' · '}
+                                                {scene.card.emotion?.[aiMovieLanguage] || scene.card.emotion?.en} {scene.card.intensity}/10
+                                                {' · '}
+                                                {scene.card.turn?.[aiMovieLanguage] || scene.card.turn?.en}
+                                              </span>
+                                            )}
+                                            </div>
+                                            <div className="script-tools-actions">
                                           <button
                                             type="button"
                                             className="cancel-button ai-movie-revise-scene-button"
@@ -9542,11 +9685,11 @@ function App() {
                                               </>
                                             )
                                           })()}
-                                          </div>
+                                            </div>
+                                          </aside>
                                         </div>
                                       )
-                                    })}
-                                    </div>
+                                    })()}
 
                                     {/* Song beats (the Beat Sheet says "song") get a song sheet:
                                         everything except the lyrics, which a real lyricist writes. */}

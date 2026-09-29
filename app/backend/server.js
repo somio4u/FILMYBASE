@@ -3461,8 +3461,26 @@ function aiMovieCharacterDialogueBriefsText(backfill) {
 // for it and never will again (it's a one-time event, not a stage the user
 // can re-approve). Fires in the background; the GET response doesn't wait
 // on it, same as the screenplay buffer fill.
+//
+// Guarded, because this is called on EVERY project GET -- and the screen
+// polls that every 4 seconds while beats are writing. Unguarded, a missing
+// brief started a brand-new Gemini call on every poll, overlapping ones
+// still in flight, and a brief that kept failing was retried every 4
+// seconds forever -- burning quota the real beat writing needs. Now: at
+// most one attempt per project at a time, and a failed attempt waits out a
+// cooldown before the next. (In-memory only on purpose -- a server restart
+// simply allows one fresh attempt, which is exactly right.)
+const AI_MOVIE_BRIEF_BACKFILL_RETRY_COOLDOWN_MS = 10 * 60 * 1000;
+const aiMovieBriefBackfillInFlight = new Set();
+const aiMovieBriefBackfillLastFailedAt = new Map();
+
 async function backfillAiMovieCharacterDialogueBriefsIfMissing(projectId, pastedText, backfill) {
   if (!Array.isArray(backfill?.plot) || !Array.isArray(backfill?.characterArc) || backfill.characterDialogueBriefs) return;
+  if (aiMovieBriefBackfillInFlight.has(projectId)) return;
+  const lastFailedAt = aiMovieBriefBackfillLastFailedAt.get(projectId);
+  if (lastFailedAt && Date.now() - lastFailedAt < AI_MOVIE_BRIEF_BACKFILL_RETRY_COOLDOWN_MS) return;
+
+  aiMovieBriefBackfillInFlight.add(projectId);
   try {
     const referenceMaterialText = await getAiMovieReferenceMaterialText(projectId);
     const briefs = await generateAiMovieCharacterDialogueBriefs(
@@ -3470,8 +3488,12 @@ async function backfillAiMovieCharacterDialogueBriefsIfMissing(projectId, pasted
       referenceMaterialText
     );
     await saveAiMovieBackfillField(projectId, "characterDialogueBriefs", briefs);
+    aiMovieBriefBackfillLastFailedAt.delete(projectId);
   } catch (error) {
-    console.error("Background character dialogue brief backfill failed:", error.message);
+    aiMovieBriefBackfillLastFailedAt.set(projectId, Date.now());
+    console.error("Background character dialogue brief backfill failed (next attempt after cooldown):", error.message);
+  } finally {
+    aiMovieBriefBackfillInFlight.delete(projectId);
   }
 }
 

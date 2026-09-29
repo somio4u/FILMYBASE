@@ -4316,7 +4316,7 @@ function App() {
   const [isFillingAkhadaStages, setIsFillingAkhadaStages] = useState(false)
   const [isFillingAkhadaBeatDurations, setIsFillingAkhadaBeatDurations] = useState(false)
   const [aiMovieFillBeatDurationsNote, setAiMovieFillBeatDurationsNote] = useState(null)
-  const [aiMovieLanguage, setAiMovieLanguage] = useState('en')
+  const [aiMovieLanguage, setAiMovieLanguage] = useState('hi')
   const [aiMovieExpandedStages, setAiMovieExpandedStages] = useState({})
   const [isGeneratingAiMovieScreenplayBeat, setIsGeneratingAiMovieScreenplayBeat] = useState(false)
   const [isApprovingAiMovieScreenplayBeat, setIsApprovingAiMovieScreenplayBeat] = useState(false)

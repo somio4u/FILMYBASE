@@ -3047,7 +3047,17 @@ async function generateAiMovieAssetExtraction(fullText, referenceMaterialText) {
 // agent (reading everything gathered so far) and, further below, as the
 // "approved story so far" context handed to each forward stage's own
 // generation call.
-function flattenAiMovieContentForExtraction(pastedText, backfill) {
+//
+// includeScreenplay: false is for the screenplay-writing calls themselves
+// (next beat, beat Request Changes, scene revise, Write Dialogue). Those
+// already get the scenes they should see through their own dedicated
+// "scenes already written before this beat" + "this beat's other scenes"
+// context -- adding the whole screenplay here too sent every scene twice,
+// and worse, also showed the model the OLD version of the very beat being
+// regenerated and every beat already written AFTER it. The asset
+// extractor still reads every scene (that's exactly its job), so it keeps
+// the default.
+function flattenAiMovieContentForExtraction(pastedText, backfill, { includeScreenplay = true } = {}) {
   const parts = [pastedText];
   if (backfill?.story) parts.push(`Story: ${backfill.story.title.en}\n${backfill.story.summary.en}`);
   if (backfill?.synopsis) {
@@ -3068,7 +3078,7 @@ function flattenAiMovieContentForExtraction(pastedText, backfill) {
     );
   }
   if (backfill?.plot) parts.push(`Beat Sheet:\n${backfill.plot.map((beat) => `${beat.title.en}: ${beat.description.en}`).join("\n")}`);
-  if (backfill?.screenplayBeats) {
+  if (includeScreenplay && backfill?.screenplayBeats) {
     const scenes = backfill.screenplayBeats.filter((b) => b.scenes).flatMap((b) => b.scenes);
     if (scenes.length > 0) {
       // sceneToPromptText, not a direct scene.action read -- a scene revised
@@ -3993,7 +4003,7 @@ async function generateNextAiMovieScreenplayBeat(projectId) {
 
   try {
     const referenceMaterialText = await getAiMovieReferenceMaterialText(projectId);
-    const priorContextText = flattenAiMovieContentForExtraction(project.pasted_text, project.backfill);
+    const priorContextText = flattenAiMovieContentForExtraction(project.pasted_text, project.backfill, { includeScreenplay: false });
     const scenesSoFarText = flattenAiMovieScreenplayScenesSoFar(screenplayBeats, nextIndex);
     const initialScenes = await generateAiMovieScreenplayBeat(priorContextText, referenceMaterialText, scenesSoFarText, beats[nextIndex], null);
     const scenes = await fillAiMovieScreenplayBeatToTarget(
@@ -4183,7 +4193,7 @@ app.post("/api/ai-movie/stages/screenplay/beats/:index/request-changes", require
 
   try {
     const referenceMaterialText = await getAiMovieReferenceMaterialText(projectId);
-    const priorContextText = flattenAiMovieContentForExtraction(project.pasted_text, project.backfill);
+    const priorContextText = flattenAiMovieContentForExtraction(project.pasted_text, project.backfill, { includeScreenplay: false });
     const scenesSoFarText = flattenAiMovieScreenplayScenesSoFar(screenplayBeats, beatIndex);
     const initialScenes = await generateAiMovieScreenplayBeat(priorContextText, referenceMaterialText, scenesSoFarText, beats[beatIndex], feedback || null);
     // The beat's own runtimeMinutes target (set back at the Beat Sheet
@@ -4257,7 +4267,7 @@ app.post("/api/ai-movie/stages/screenplay/beats/:beatIndex/scenes/:sceneIndex/re
 
   try {
     const referenceMaterialText = await getAiMovieReferenceMaterialText(projectId);
-    const priorContextText = flattenAiMovieContentForExtraction(project.pasted_text, project.backfill);
+    const priorContextText = flattenAiMovieContentForExtraction(project.pasted_text, project.backfill, { includeScreenplay: false });
     const scenesSoFarText = flattenAiMovieScreenplayScenesSoFar(screenplayBeats, beatIndex);
     const beatSiblingScenesText = beat.scenes
       .filter((_, i) => i !== sceneIndex)
@@ -4336,7 +4346,7 @@ app.post("/api/ai-movie/stages/screenplay/beats/:beatIndex/scenes/:sceneIndex/di
 
   try {
     const referenceMaterialText = await getAiMovieReferenceMaterialText(projectId);
-    const priorContextText = flattenAiMovieContentForExtraction(project.pasted_text, project.backfill);
+    const priorContextText = flattenAiMovieContentForExtraction(project.pasted_text, project.backfill, { includeScreenplay: false });
     const scenesSoFarText = flattenAiMovieScreenplayScenesSoFar(screenplayBeats, beatIndex);
     const beatSiblingScenesText = beat.scenes
       .filter((_, i) => i !== sceneIndex)

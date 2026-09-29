@@ -3325,6 +3325,39 @@ function sceneToPromptText(scene) {
   return `${heading}\n${scene.action.en}${legacyDialogueBlock}`;
 }
 
+// Real, checkable screen-time estimate -- replaces trusting the AI's own
+// self-reported "estimatedMinutes" guess, which tested for real came back
+// well off (a ~200-word scene labelled "~3 min" when the standard
+// page-equals-minute rule puts a scene that size at closer to 1 min).
+// Counts actual words in the scene's English text (every scene always has
+// one, regardless of the reader's chosen display language) and converts
+// with that same rule of thumb, so the number on screen is always grounded
+// in what was actually written, never a guess.
+const AI_MOVIE_WORDS_PER_MINUTE = 200;
+
+function countAiMovieSceneWords(scene) {
+  const texts = [];
+  if (Array.isArray(scene.content) && scene.content.length > 0) {
+    for (const block of scene.content) {
+      texts.push(block.type === "dialogue" ? block.line?.en ?? "" : block.text?.en ?? "");
+    }
+  } else {
+    texts.push(scene.action?.en ?? "");
+    if (Array.isArray(scene.dialogue)) {
+      for (const line of scene.dialogue) texts.push(line.line?.en ?? "");
+    }
+  }
+  return texts
+    .join(" ")
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean).length;
+}
+
+function computeAiMovieSceneMinutes(scene) {
+  return Math.round((countAiMovieSceneWords(scene) / AI_MOVIE_WORDS_PER_MINUTE) * 10) / 10;
+}
+
 // A silent, one-time "voice brief" per named character -- generated
 // automatically the moment the Beat Sheet is approved (the earliest point
 // the full cast AND the complete beat-by-beat story progression both
@@ -3479,7 +3512,94 @@ async function generateAiMovieScreenplayBeat(priorContextText, referenceMaterial
       },
     },
   });
-  return result.scenes;
+  return result.scenes.map((scene) => ({ ...scene, estimatedMinutes: computeAiMovieSceneMinutes(scene) }));
+}
+
+// The beat's own runtimeMinutes (set back at the Beat Sheet stage) is the
+// film's real, designed pacing -- fixed, never adjusted down just because
+// a first generation attempt came up short. If a beat's real (computed)
+// total falls short of its target, the fix is to write MORE screenplay for
+// it -- additional scenes, continuing directly on -- not to shrink the
+// target to match. Only used once initial generation already came in
+// short; asks for new scenes only, never touching what's already there.
+const AI_MOVIE_SCREENPLAY_BEAT_EXPAND_SYSTEM_PROMPT = `You are working on an AI Movie — a film that will be entirely AI-generated, never physically shot. Because of that, never reason about budget, cast/crew/location availability, shoot schedules, or any real-world production constraint — anything that can be imagined can be included, with no limitation.
+
+You are given the story's already-approved, locked layers, every screenplay scene already written in earlier beats, and this ONE beat's own scenes already written so far, given below as fixed, unchangeable context — do NOT repeat, summarize, or rewrite any of them. This beat's real runtime target has not been reached yet by what's there so far, so write ADDITIONAL new scenes only for this SAME beat, continuing directly from its last existing scene (same characters, same momentum, no repeats, never jumping ahead to a later beat), to cover roughly the additional screen time named at the end. Each new scene needs a scene heading and a vivid action/visual description. Do NOT write any dialogue — that is a separate, later pass. Give each new scene its own honest "estimatedMinutes."`;
+
+async function generateAiMovieScreenplayBeatExpansion(
+  priorContextText,
+  referenceMaterialText,
+  scenesSoFarText,
+  beat,
+  existingBeatScenesText,
+  remainingMinutes
+) {
+  const referenceBlock = referenceMaterialText
+    ? `\n\nThe user has also provided reference material below — treat it as authoritative grounding, stay faithful to it:\n\n${referenceMaterialText}`
+    : "";
+  const scenesBlock = scenesSoFarText ? `\n\nScreenplay scenes already written in earlier beats:\n\n${scenesSoFarText}` : "";
+
+  const result = await generateJsonContent({
+    model: GEMINI_MODEL_NAME,
+    contents: `The story's approved layers so far:\n\n${priorContextText}${referenceBlock}${scenesBlock}\n\nThis beat (${beat.title.en}: ${beat.description.en}) already has these scenes, fixed -- do not repeat them:\n\n${existingBeatScenesText}\n\nWrite additional new scenes only for this same beat, covering roughly ${remainingMinutes} more minutes of screen time.`,
+    config: {
+      systemInstruction: AI_MOVIE_SCREENPLAY_BEAT_EXPAND_SYSTEM_PROMPT,
+      responseMimeType: "application/json",
+      maxOutputTokens: 8192,
+      responseSchema: {
+        type: Type.OBJECT,
+        properties: {
+          scenes: { type: Type.ARRAY, items: AI_MOVIE_SCREENPLAY_SCENE_SCHEMA, minItems: "1" },
+        },
+        required: ["scenes"],
+      },
+    },
+  });
+  return result.scenes.map((scene) => ({ ...scene, estimatedMinutes: computeAiMovieSceneMinutes(scene) }));
+}
+
+// Keeps asking for more scenes (never touching what's already there) until
+// the beat's real, computed total reaches its fixed target -- or a small
+// bounded number of rounds is exhausted, so a stubborn shortfall can never
+// loop forever or burn unbounded Gemini calls. Accepting "close enough"
+// (90% of target) avoids an endless chase of the last few seconds.
+const AI_MOVIE_BEAT_EXPAND_MAX_ROUNDS = 2;
+const AI_MOVIE_BEAT_SHORTFALL_TOLERANCE = 0.9;
+
+async function fillAiMovieScreenplayBeatToTarget(
+  scenes,
+  targetMinutes,
+  priorContextText,
+  referenceMaterialText,
+  scenesSoFarText,
+  beat
+) {
+  let currentScenes = scenes;
+  if (typeof targetMinutes !== "number" || targetMinutes <= 0) return currentScenes;
+
+  for (let round = 0; round < AI_MOVIE_BEAT_EXPAND_MAX_ROUNDS; round++) {
+    const total = currentScenes.reduce((sum, s) => sum + (s.estimatedMinutes || 0), 0);
+    if (total >= targetMinutes * AI_MOVIE_BEAT_SHORTFALL_TOLERANCE) break;
+
+    const remaining = Math.round((targetMinutes - total) * 10) / 10;
+    const existingBeatScenesText = currentScenes.map((s) => sceneToPromptText(s)).join("\n\n");
+    try {
+      const moreScenes = await generateAiMovieScreenplayBeatExpansion(
+        priorContextText,
+        referenceMaterialText,
+        scenesSoFarText,
+        beat,
+        existingBeatScenesText,
+        remaining
+      );
+      if (!moreScenes || moreScenes.length === 0) break;
+      currentScenes = [...currentScenes, ...moreScenes];
+    } catch (error) {
+      console.error("Beat expansion round failed, keeping what's already written:", error.message);
+      break;
+    }
+  }
+  return currentScenes;
 }
 
 // Updates just the backfill JSON for one field, without touching
@@ -3556,7 +3676,7 @@ async function generateAiMovieScreenplaySceneRevision(
       },
     },
   });
-  return result.scenes;
+  return result.scenes.map((scene) => ({ ...scene, estimatedMinutes: computeAiMovieSceneMinutes(scene) }));
 }
 
 // Writes dialogue for ONE scene, only once the user asks for it -- never
@@ -3700,7 +3820,15 @@ async function generateNextAiMovieScreenplayBeat(projectId) {
     const referenceMaterialText = await getAiMovieReferenceMaterialText(projectId);
     const priorContextText = flattenAiMovieContentForExtraction(project.pasted_text, project.backfill);
     const scenesSoFarText = flattenAiMovieScreenplayScenesSoFar(screenplayBeats, nextIndex);
-    const scenes = await generateAiMovieScreenplayBeat(priorContextText, referenceMaterialText, scenesSoFarText, beats[nextIndex], null);
+    const initialScenes = await generateAiMovieScreenplayBeat(priorContextText, referenceMaterialText, scenesSoFarText, beats[nextIndex], null);
+    const scenes = await fillAiMovieScreenplayBeatToTarget(
+      initialScenes,
+      beats[nextIndex].runtimeMinutes,
+      priorContextText,
+      referenceMaterialText,
+      scenesSoFarText,
+      beats[nextIndex]
+    );
 
     const latest = (await db.query("SELECT backfill FROM ai_movie_projects WHERE id = $1", [projectId])).rows[0].backfill;
     const latestBeats = latest.screenplayBeats ?? screenplayBeats;
@@ -3881,17 +4009,24 @@ app.post("/api/ai-movie/stages/screenplay/beats/:index/request-changes", require
     const referenceMaterialText = await getAiMovieReferenceMaterialText(projectId);
     const priorContextText = flattenAiMovieContentForExtraction(project.pasted_text, project.backfill);
     const scenesSoFarText = flattenAiMovieScreenplayScenesSoFar(screenplayBeats, beatIndex);
-    const scenes = await generateAiMovieScreenplayBeat(priorContextText, referenceMaterialText, scenesSoFarText, beats[beatIndex], feedback || null);
+    const initialScenes = await generateAiMovieScreenplayBeat(priorContextText, referenceMaterialText, scenesSoFarText, beats[beatIndex], feedback || null);
+    // The beat's own runtimeMinutes target (set back at the Beat Sheet
+    // stage) never gets adjusted down to match a short regeneration -- if
+    // the new scenes come up short, more screenplay gets written for this
+    // same beat until it actually reaches that fixed target.
+    const scenes = await fillAiMovieScreenplayBeatToTarget(
+      initialScenes,
+      beats[beatIndex].runtimeMinutes,
+      priorContextText,
+      referenceMaterialText,
+      scenesSoFarText,
+      beats[beatIndex]
+    );
 
     const latest = (await db.query("SELECT backfill FROM ai_movie_projects WHERE id = $1", [projectId])).rows[0].backfill;
     const latestBeats = latest.screenplayBeats ?? screenplayBeats;
     latestBeats[beatIndex] = { scenes, status: "pending", feedback: feedback || null };
     await saveAiMovieBackfillField(projectId, "screenplayBeats", latestBeats);
-    // Keeps the beat's own runtimeMinutes target honest with whatever the
-    // feedback actually produced -- e.g. explicit "make it longer" feedback
-    // is meant to permanently raise the target, not leave it looking like a
-    // still-unresolved mismatch.
-    await syncAiMovieBeatRuntimeToScenes(projectId, beatIndex, scenes);
 
     res.json({ beatIndex, scenes, runtimeMinutes: Math.round(scenes.reduce((sum, s) => sum + (s.estimatedMinutes || 0), 0) * 10) / 10 });
   } catch (error) {
@@ -4055,7 +4190,8 @@ app.post("/api/ai-movie/stages/screenplay/beats/:beatIndex/scenes/:sceneIndex/di
     const newScenes = latestScenes.map((s, i) => {
       if (i !== sceneIndex) return s;
       const { dialogue: _legacyDialogue, ...rest } = s;
-      return { ...rest, content };
+      const updated = { ...rest, content };
+      return { ...updated, estimatedMinutes: computeAiMovieSceneMinutes(updated) };
     });
     latestBeats[beatIndex] = { ...latestBeats[beatIndex], scenes: newScenes };
     await saveAiMovieBackfillField(projectId, "screenplayBeats", latestBeats);

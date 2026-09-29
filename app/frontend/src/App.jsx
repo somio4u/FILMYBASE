@@ -5464,11 +5464,10 @@ function App() {
         setAiMovieBackfillResult((prev) => {
           const beats = [...(prev?.screenplayBeats ?? [])]
           beats[beatIndex] = { scenes: data.scenes, status: 'pending', feedback: feedback || null }
-          const plot = [...(prev?.plot ?? [])]
-          if (plot[beatIndex] && typeof data.runtimeMinutes === 'number') {
-            plot[beatIndex] = { ...plot[beatIndex], runtimeMinutes: data.runtimeMinutes }
-          }
-          return { ...(prev ?? {}), screenplayBeats: beats, plot }
+          // The beat's own runtimeMinutes target (in `plot`) stays exactly
+          // as the Beat Sheet set it -- it's the film's fixed pacing, never
+          // adjusted to match whatever a regeneration happened to produce.
+          return { ...(prev ?? {}), screenplayBeats: beats }
         })
         setShowAiMovieScreenplayBeatFeedbackForm(false)
         setAiMovieScreenplayBeatFeedbackText('')

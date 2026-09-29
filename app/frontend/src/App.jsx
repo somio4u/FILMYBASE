@@ -373,6 +373,17 @@ const LABELS = {
     aiMovieDialoguePlaceholder: 'Optional — any direction for the dialogue, e.g. "make this a tense argument" (leave blank to let the AI decide)',
     aiMovieBeatNarrationButton: 'Narration for this whole beat',
     scriptThemeLabel: 'Page colour',
+    aiMovieScriptCheckButton: '✔ Check full script',
+    aiMovieScriptCheckRunningLabel: (done, total) => `Checking beat ${Math.min(done + 1, total)} of ${total}…`,
+    aiMovieScriptCheckNote: 'When the script is written: checks every written beat — spelling, grammar and language in both Hindi and English — and keeps your content.',
+    aiMovieScriptCheckRunningNote: 'Running in the background — you can keep working. Corrected scenes appear as each beat finishes.',
+    aiMovieScriptCheckDoneNote: (finishedAt, failed) => `Last full check: ${finishedAt ? new Date(finishedAt).toLocaleString() : ''}${failed ? ` — ${failed} beat(s) could not be checked, run it again to retry` : ''}.`,
+    aiMovieScriptCheckConfirm: (beats) => `Check the full script? This checks all ${beats} written beats — about ${beats} AI calls, and it takes several minutes. It runs in the background.`,
+    aiMovieScriptCheckShowReport: (fixes, beats) => `Show report (${fixes} fixes in ${beats} beats)`,
+    aiMovieScriptCheckHideReport: 'Hide report',
+    aiMovieScriptCheckBeatLabel: (number, title) => `Beat ${number}: ${title ?? ''}`,
+    aiMovieScriptCheckSceneLabel: (number) => `Scene ${number}`,
+    aiMovieScriptCheckBeatFailed: 'This beat could not be checked — run the check again to retry.',
     scriptEditStartButton: '✎ Edit scene',
     scriptEditEditingNote: 'Editing on the page — type straight into the script, then press Submit under the scene.',
     scriptEditDoubleClickHint: 'Double-click to edit this scene',
@@ -1024,6 +1035,17 @@ const LABELS = {
     aiMovieDialoguePlaceholder: 'ଇଚ୍ଛାଧୀନ — ସଂଳାପ ପାଇଁ କୌଣସି ନିର୍ଦ୍ଦେଶ, ଯଥା "ଏହାକୁ ଏକ ଉତ୍ତେଜନାପୂର୍ଣ୍ଣ ବିବାଦ କରନ୍ତୁ" (ଖାଲି ଛାଡ଼ିଲେ AI ନିଜେ ନିଷ୍ପତ୍ତି ନେବ)',
     aiMovieBeatNarrationButton: 'ଏହି ସମ୍ପୂର୍ଣ୍ଣ ବିଟ୍ ପାଇଁ ବର୍ଣ୍ଣନା',
     scriptThemeLabel: 'ପୃଷ୍ଠାର ରଙ୍ଗ',
+    aiMovieScriptCheckButton: '✔ ସମ୍ପୂର୍ଣ୍ଣ ସ୍କ୍ରିପ୍ଟ ଯାଞ୍ଚ',
+    aiMovieScriptCheckRunningLabel: (done, total) => `ବିଟ୍ ${Math.min(done + 1, total)} / ${total} ଯାଞ୍ଚ ହେଉଛି…`,
+    aiMovieScriptCheckNote: 'ସ୍କ୍ରିପ୍ଟ ଲେଖା ସରିବା ପରେ: ପ୍ରତ୍ୟେକ ଲେଖାଯାଇଥିବା ବିଟ୍‌ର ବନାନ, ବ୍ୟାକରଣ ଓ ଭାଷା ହିନ୍ଦୀ ଓ ଇଂରାଜୀରେ ଯାଞ୍ଚ କରେ, ଆପଣଙ୍କ ବିଷୟବସ୍ତୁ ରଖେ।',
+    aiMovieScriptCheckRunningNote: 'ପଛରେ ଚାଲୁଛି — ଆପଣ କାମ ଜାରି ରଖିପାରିବେ।',
+    aiMovieScriptCheckDoneNote: (finishedAt, failed) => `ଶେଷ ସମ୍ପୂର୍ଣ୍ଣ ଯାଞ୍ଚ: ${finishedAt ? new Date(finishedAt).toLocaleString() : ''}${failed ? ` — ${failed}ଟି ବିଟ୍ ଯାଞ୍ଚ ହୋଇପାରିଲା ନାହିଁ` : ''}।`,
+    aiMovieScriptCheckConfirm: (beats) => `ସମ୍ପୂର୍ଣ୍ଣ ସ୍କ୍ରିପ୍ଟ ଯାଞ୍ଚ କରିବେ? ${beats}ଟି ବିଟ୍ — ପ୍ରାୟ ${beats}ଟି AI କଲ୍, କିଛି ମିନିଟ୍ ଲାଗିବ।`,
+    aiMovieScriptCheckShowReport: (fixes, beats) => `ରିପୋର୍ଟ ଦେଖନ୍ତୁ (${beats}ଟି ବିଟ୍‌ରେ ${fixes}ଟି ସଂଶୋଧନ)`,
+    aiMovieScriptCheckHideReport: 'ରିପୋର୍ଟ ଲୁଚାନ୍ତୁ',
+    aiMovieScriptCheckBeatLabel: (number, title) => `ବିଟ୍ ${number}: ${title ?? ''}`,
+    aiMovieScriptCheckSceneLabel: (number) => `ଦୃଶ୍ୟ ${number}`,
+    aiMovieScriptCheckBeatFailed: 'ଏହି ବିଟ୍ ଯାଞ୍ଚ ହୋଇପାରିଲା ନାହିଁ — ପୁଣି ଚଲାନ୍ତୁ।',
     scriptEditStartButton: '✎ ଦୃଶ୍ୟ ସମ୍ପାଦନ',
     scriptEditEditingNote: 'ପୃଷ୍ଠାରେ ସମ୍ପାଦନା ଚାଲିଛି — ସିଧା ସ୍କ୍ରିପ୍ଟରେ ଲେଖନ୍ତୁ, ତାପରେ ଦୃଶ୍ୟ ତଳେ Submit ଦବାନ୍ତୁ।',
     scriptEditDoubleClickHint: 'ଏହି ଦୃଶ୍ୟ ସମ୍ପାଦନ ପାଇଁ ଦୁଇଥର କ୍ଲିକ୍ କରନ୍ତୁ',
@@ -5353,6 +5375,7 @@ function App() {
       // reload) resumes polling on its own rather than leaving a stale
       // "generating" beat on screen until the user happens to click
       // something.
+      if (data.backfill?.scriptCheck?.status === 'running') pollAiMovieScriptCheck(data.id)
       const screenplayBeats = data.backfill?.screenplayBeats ?? []
       const currentBeat = screenplayBeats.find((b) => b.status !== 'approved')
       const firstUnfinishedIndex = screenplayBeats.findIndex((b) => b.status !== 'approved')
@@ -6234,6 +6257,48 @@ function App() {
         </div>
       </div>
     )
+  }
+
+  // Full script check (the user's choice): starts it in the background,
+  // then quietly refreshes its progress (and the corrected scenes) every
+  // few seconds until it's done.
+  const [aiMovieScriptCheckError, setAiMovieScriptCheckError] = useState(null)
+  const [showAiMovieScriptCheckReport, setShowAiMovieScriptCheckReport] = useState(false)
+
+  async function pollAiMovieScriptCheck(projectId) {
+    try {
+      const response = await fetch(`${BACKEND_URL}/api/ai-movie/projects/${projectId}`)
+      const data = await response.json()
+      if (!response.ok) return
+      setAiMovieBackfillResult((prev) => ({
+        ...(prev ?? {}),
+        screenplayBeats: data.backfill?.screenplayBeats ?? prev?.screenplayBeats ?? [],
+        scriptCheck: data.backfill?.scriptCheck ?? null,
+      }))
+      if (data.backfill?.scriptCheck?.status === 'running') {
+        setTimeout(() => pollAiMovieScriptCheck(projectId), 5000)
+      }
+    } catch {
+      setTimeout(() => pollAiMovieScriptCheck(projectId), 10000)
+    }
+  }
+
+  async function handleStartAiMovieScriptCheckClick(writtenBeatCount) {
+    if (!aiMovieProjectId) return
+    if (!window.confirm(t.aiMovieScriptCheckConfirm(writtenBeatCount))) return
+    setAiMovieScriptCheckError(null)
+    try {
+      const response = await fetch(`${BACKEND_URL}/api/ai-movie/projects/${aiMovieProjectId}/script-check`, { method: 'POST' })
+      const data = await response.json()
+      if (!response.ok) {
+        setAiMovieScriptCheckError(data.error || t.genericError)
+        return
+      }
+      setShowAiMovieScriptCheckReport(false)
+      pollAiMovieScriptCheck(aiMovieProjectId)
+    } catch {
+      setAiMovieScriptCheckError(t.genericError)
+    }
   }
 
   function shownAiMovieStage() {
@@ -9545,6 +9610,67 @@ function App() {
                             {/* Whole-film, industry-format screenplay PDF, in whichever
                                 language is currently being read. Shown as soon as any beat
                                 has scenes -- it's a working draft, not only a final export. */}
+                            {(() => {
+                              const writtenBeatCount = screenplayBeats.filter((b) => Array.isArray(b.scenes) && b.scenes.length > 0).length
+                              if (writtenBeatCount === 0) return null
+                              const check = aiMovieBackfillResult.scriptCheck
+                              const isRunning = check?.status === 'running'
+                              const total = check?.beatIndexes?.length ?? 0
+                              const report = Array.isArray(check?.report) ? check.report : []
+                              const fixCount = report.reduce((n, r) => n + (r.fixes?.length ?? 0), 0)
+                              const failed = report.filter((r) => r.error).length
+                              return (
+                                <div className={`script-check${isRunning ? ' is-running' : ''}`}>
+                                  <div className="script-check-row">
+                                    <button
+                                      type="button"
+                                      className="choose-button"
+                                      onClick={() => handleStartAiMovieScriptCheckClick(writtenBeatCount)}
+                                      disabled={isRunning}
+                                    >
+                                      {isRunning ? t.aiMovieScriptCheckRunningLabel(check.done, total) : t.aiMovieScriptCheckButton}
+                                    </button>
+                                    {!isRunning && check?.status === 'done' && (
+                                      <button type="button" className="cancel-button" onClick={() => setShowAiMovieScriptCheckReport((v) => !v)}>
+                                        {showAiMovieScriptCheckReport ? t.aiMovieScriptCheckHideReport : t.aiMovieScriptCheckShowReport(fixCount, report.length)}
+                                      </button>
+                                    )}
+                                  </div>
+                                  {isRunning && (
+                                    <div className="script-check-progress" aria-hidden="true">
+                                      <span style={{ width: `${total ? Math.round((check.done / total) * 100) : 0}%` }} />
+                                    </div>
+                                  )}
+                                  <p className="script-check-note">
+                                    {isRunning ? t.aiMovieScriptCheckRunningNote : check?.status === 'done' ? t.aiMovieScriptCheckDoneNote(check.finishedAt, failed) : t.aiMovieScriptCheckNote}
+                                  </p>
+                                  {aiMovieScriptCheckError && <p className="feedback-note">{aiMovieScriptCheckError}</p>}
+                                  {showAiMovieScriptCheckReport && !isRunning && (
+                                    <div className="script-check-report">
+                                      {report.map((entry) => (
+                                        <div key={entry.beat} className="script-check-report-beat">
+                                          <p className="script-check-report-title">
+                                            {t.aiMovieScriptCheckBeatLabel(entry.beat, beatsPlot[entry.beat - 1]?.title?.[aiMovieLanguage] || beatsPlot[entry.beat - 1]?.title?.en)}
+                                          </p>
+                                          {entry.error ? (
+                                            <p className="feedback-note">{t.aiMovieScriptCheckBeatFailed}</p>
+                                          ) : entry.fixes?.length ? (
+                                            <ul>
+                                              {entry.fixes.map((fix, i) => (
+                                                <li key={i}>{fix.scene ? `${t.aiMovieScriptCheckSceneLabel(fix.scene)} — ` : ''}{fix.fix}</li>
+                                              ))}
+                                            </ul>
+                                          ) : (
+                                            <p className="script-check-note">{t.scriptEditNoFixesNote}</p>
+                                          )}
+                                        </div>
+                                      ))}
+                                    </div>
+                                  )}
+                                </div>
+                              )
+                            })()}
+
                             {screenplayBeats.some((b) => Array.isArray(b.scenes) && b.scenes.length > 0) && (
                               <a
                                 className="breakdown-pdf-link"

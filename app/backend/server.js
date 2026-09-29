@@ -5420,7 +5420,7 @@ const AI_MOVIE_SCENE_EDIT_SYSTEM_PROMPT = `You are a careful script editor on a 
 
 1. Fix spelling, grammar and punctuation.
 2. Fix the language of the edited version:
-   - If the edited version is HINDI: every Hindi field must be natural, everyday spoken Hindi in Devanagari. Anything the writer typed in full English sentences, in Hindi written with English letters (romanized Hindi, e.g. "aaj hum chalte hain"), or in another language (e.g. Odia) must be rewritten as natural Hindi with exactly the same meaning. Words people in India really say in English may stay in English, following the limits below — and such a word is written in ENGLISH LETTERS inside the Hindi sentence ("Samir अपना ship चला रहा है", "एक और delivery"), never spelled out in Devanagari ("शिप", "डिलीवरी").
+   - If the edited version is HINDI: every Hindi field must be natural, everyday spoken Hindi in Devanagari. Anything the writer typed in full English sentences, in Hindi written with English letters (romanized Hindi, e.g. "aaj hum chalte hain"), or in another language (e.g. Odia) must be rewritten as natural Hindi with exactly the same meaning. Words people in India really say in English may stay in English, following the limits below — and such a word is written in ENGLISH LETTERS inside the Hindi sentence ("Samir अपना ship चला रहा है", "एक और delivery"), never spelled out in Devanagari ("शिप", "डिलीवरी"). NEVER replace a correct Hindi word with an English one — a real Hindi word ("चेतावनी", "स्पष्ट", "लाल", "ज़िले", "बिजली") always stays Hindi. The only English-for-Hindi change allowed is turning an English word that was spelled out in Devanagari ("कंसोल", "डिस्प्ले") into English letters ("console", "display").
    - If the edited version is ENGLISH: every English field must be simple, natural English. Anything typed in Hindi, Odia or any other language must be translated into English with the same meaning.
 3. Keep EVERYTHING else the writer wrote: the same events, the same lines, the same order, the same characters, the same scene heading. Do not add new events or lines, do not remove any, and do not "improve" the style, the wording or the drama. If a sentence is already correct, leave it exactly as it is.
 4. Keep the standard screenplay format: the scene heading is a standard English slugline in capitals; a character's name is in capital English letters; an acting note is 1 to 4 words. Keep every block as the kind of block it is (action stays action, dialogue stays dialogue).
@@ -5604,6 +5604,201 @@ app.post("/api/ai-movie/stages/screenplay/beats/:beatIndex/scenes/:sceneIndex/ed
     console.error(`Screenplay beat ${beatIndex} scene ${sceneIndex} edit failed:`, error.message);
     res.status(502).json({ error: error.message });
   }
+});
+
+// "Check full script" (the user's choice, alongside the per-scene Submit):
+// once the screenplay is written, one button checks every written beat --
+// one AI call per beat, in the background -- and corrects BOTH languages
+// of every scene in place: natural Hindi in the Hindi version (English
+// sentences, romanized Hindi or Odia become Hindi), simple correct English
+// in the English version, spelling / grammar / punctuation everywhere.
+// Content is never rewritten. Like the per-scene editor, the AI only
+// returns corrected text for numbered pieces, and the scenes are updated
+// in code piece by piece -- nothing can be dropped or added. Progress and
+// the report live in backfill.scriptCheck, so the screen can show them.
+const AI_MOVIE_SCRIPT_CHECK_SYSTEM_PROMPT = `You are a careful script editor doing a final language check on a finished film screenplay, one beat at a time. Every piece of text comes in two versions, English ("en") and Hindi ("hi"). CORRECT each version in place — never rewrite.
+
+1. Fix spelling, grammar and punctuation in both versions.
+2. Hindi version: must be natural, everyday spoken Hindi in Devanagari. Any part written in full English sentences, in Hindi written with English letters (romanized Hindi), or in another language (e.g. Odia) must become natural Hindi with exactly the same meaning. Words people in India really say in English may stay in English, following the limits below — written in ENGLISH LETTERS inside the Hindi sentence, never spelled out in Devanagari.
+3. English version: must be simple, natural English. Any part in Hindi, Odia or another language must be translated into English.
+   NEVER replace a correct Hindi word with an English one — a real Hindi word ("चेतावनी", "स्पष्ट", "लाल", "ज़िले", "बिजली") always stays Hindi. The only English-for-Hindi change allowed is turning an English word that was spelled out in Devanagari ("कंसोल", "डिस्प्ले") into English letters ("console", "display").
+4. The two versions must say the same thing. If they clearly differ, correct the English to match the Hindi.
+5. Keep everything else exactly as it is: the same events, lines, meaning, order and characters. Do not improve style, wording or drama. If a piece is already correct in both versions, leave it out of your answer.
+6. "fixes": a short list per scene, in simple English, of what you corrected.
+
+${AI_MOVIE_HINDI_SWITCH_LIMITS_RULE}
+
+${AI_MOVIE_HEADING_AND_NAMES_RULE}`;
+
+// Every correctable piece of text in a beat's scenes, with an id like
+// "S2.3" (scene 2, piece 3) and a function that writes a correction back.
+function aiMovieScriptCheckPieces(scenes) {
+  const pieces = [];
+  scenes.forEach((scene, sceneIndex) => {
+    const add = (kind, label, get, set) => {
+      const value = get();
+      if (!value || (!value.en?.trim() && !value.hi?.trim())) return;
+      pieces.push({ id: `S${sceneIndex + 1}.${pieces.filter((p) => p.sceneIndex === sceneIndex).length + 1}`, sceneIndex, kind, label, value, set });
+    };
+    if (Array.isArray(scene.content) && scene.content.length > 0) {
+      scene.content.forEach((block, blockIndex) => {
+        if (block.type === "dialogue") {
+          add("line", `DIALOGUE line of ${block.character}`, () => block.line, (v) => (scene.content[blockIndex] = { ...scene.content[blockIndex], line: v }));
+          if (block.parenthetical) {
+            add("note", `acting note of ${block.character}`, () => block.parenthetical, (v) => (scene.content[blockIndex] = { ...scene.content[blockIndex], parenthetical: v }));
+          }
+        } else if (block.type === "action") {
+          add("action", "ACTION", () => block.text, (v) => (scene.content[blockIndex] = { ...scene.content[blockIndex], text: v }));
+        }
+      });
+    } else {
+      add("action", "ACTION", () => scene.action, (v) => (scene.action = v));
+      (scene.dialogue ?? []).forEach((line, lineIndex) => {
+        add("line", `DIALOGUE line of ${line.character}`, () => line.line, (v) => (scene.dialogue[lineIndex] = { ...scene.dialogue[lineIndex], line: v }));
+      });
+    }
+  });
+  return pieces;
+}
+
+async function generateAiMovieScriptCheckCorrections(beatMeta, beatNumber, scenes, characterNames) {
+  const pieces = aiMovieScriptCheckPieces(scenes);
+  if (pieces.length === 0) return { pieces, corrections: new Map(), fixes: [] };
+  const text = scenes
+    .map((scene, sceneIndex) => {
+      const own = pieces.filter((p) => p.sceneIndex === sceneIndex);
+      return `SCENE ${sceneIndex + 1} — ${scene.sceneHeading?.en ?? ""}\n${own.map((p) => `[${p.id}] ${p.label}\n  en: ${p.value.en}\n  hi: ${p.value.hi}`).join("\n")}`;
+    })
+    .join("\n\n");
+  const result = await generateJsonContent({
+    model: AI_MOVIE_DIALOGUE_MODEL_NAME,
+    contents: `The film's characters (spell their names exactly like this): ${characterNames.join(", ") || "(none listed)"}.\n\nBeat ${beatNumber} — ${beatMeta.title.en}: ${beatMeta.description.en}\n\n${text}\n\nReturn "corrections": one entry for each piece that needed a correction, with its exact id and BOTH corrected versions ("en" and "hi"). Leave out pieces that are already correct.`,
+    config: {
+      systemInstruction: AI_MOVIE_SCRIPT_CHECK_SYSTEM_PROMPT,
+      responseMimeType: "application/json",
+      maxOutputTokens: 32768,
+      responseSchema: {
+        type: Type.OBJECT,
+        properties: {
+          corrections: {
+            type: Type.ARRAY,
+            items: {
+              type: Type.OBJECT,
+              properties: { id: { type: Type.STRING }, en: { type: Type.STRING }, hi: { type: Type.STRING } },
+              required: ["id", "en", "hi"],
+            },
+          },
+          fixes: {
+            type: Type.ARRAY,
+            items: {
+              type: Type.OBJECT,
+              properties: { scene: { type: Type.NUMBER }, fix: { type: Type.STRING } },
+              required: ["scene", "fix"],
+            },
+          },
+        },
+        required: ["corrections", "fixes"],
+      },
+    },
+  });
+  const corrections = new Map(
+    (Array.isArray(result.corrections) ? result.corrections : [])
+      .filter((c) => typeof c?.id === "string" && typeof c.en === "string" && typeof c.hi === "string" && c.en.trim() && c.hi.trim())
+      .map((c) => [c.id.trim(), { en: c.en, hi: c.hi }])
+  );
+  const fixes = (Array.isArray(result.fixes) ? result.fixes : []).filter((f) => typeof f?.fix === "string" && f.fix.trim());
+  return { pieces, corrections, fixes };
+}
+
+// Only one check runs per project at a time in this server process.
+const aiMovieScriptChecksRunning = new Set();
+
+async function saveAiMovieScriptCheckState(projectId, state) {
+  await db.query("UPDATE ai_movie_projects SET backfill = jsonb_set(backfill, '{scriptCheck}', $1::jsonb) WHERE id = $2", [JSON.stringify(state), projectId]);
+}
+
+async function runAiMovieScriptCheck(projectId, state) {
+  aiMovieScriptChecksRunning.add(projectId);
+  try {
+    for (;;) {
+      const project = (await db.query("SELECT backfill FROM ai_movie_projects WHERE id = $1", [projectId])).rows[0];
+      if (!project) return;
+      const beats = project.backfill?.plot ?? [];
+      const screenplayBeats = project.backfill?.screenplayBeats ?? [];
+      const beatIndex = state.beatIndexes[state.done];
+      if (beatIndex === undefined) break;
+      const scenes = (screenplayBeats[beatIndex]?.scenes ?? []).map((scene) => JSON.parse(JSON.stringify(scene)));
+      const characterNames = (project.backfill?.characterArc ?? []).map((c) => c?.name).filter(Boolean);
+      try {
+        const { pieces, corrections, fixes } = await generateAiMovieScriptCheckCorrections(beats[beatIndex], beatIndex + 1, scenes, characterNames);
+        let changed = 0;
+        for (const piece of pieces) {
+          const correction = corrections.get(piece.id);
+          if (!correction) continue;
+          if (correction.en === piece.value.en && correction.hi === piece.value.hi) continue;
+          piece.set(correction);
+          changed++;
+        }
+        if (changed > 0) {
+          const updatedScenes = scenes.map((scene) => ({ ...scene, estimatedMinutes: computeAiMovieSceneMinutes(normalizeAiMovieSceneFormat(scene)) }));
+          // Written into just this beat's scenes, so work saved elsewhere
+          // in the project meanwhile isn't overwritten.
+          await db.query(
+            "UPDATE ai_movie_projects SET backfill = jsonb_set(backfill, ARRAY['screenplayBeats', $1::text, 'scenes'], $2::jsonb), updated_at = now() WHERE id = $3",
+            [String(beatIndex), JSON.stringify(updatedScenes), projectId]
+          );
+        }
+        state.report.push({ beat: beatIndex + 1, changed, fixes: fixes.map((f) => ({ scene: Math.round(Number(f.scene)) || null, fix: f.fix })) });
+      } catch (error) {
+        console.error(`Full script check: beat ${beatIndex + 1} failed:`, error.message);
+        state.report.push({ beat: beatIndex + 1, changed: 0, fixes: [], error: error.message });
+      }
+      state.done += 1;
+      state.updatedAt = new Date().toISOString();
+      await saveAiMovieScriptCheckState(projectId, state);
+    }
+    state.status = "done";
+    state.finishedAt = new Date().toISOString();
+    await saveAiMovieScriptCheckState(projectId, state);
+  } catch (error) {
+    console.error("Full script check stopped:", error.message);
+    state.status = "error";
+    state.error = error.message;
+    await saveAiMovieScriptCheckState(projectId, state).catch(() => {});
+  } finally {
+    aiMovieScriptChecksRunning.delete(projectId);
+  }
+}
+
+app.post("/api/ai-movie/projects/:id/script-check", requireRole("admin"), async (req, res) => {
+  const projectId = Number(req.params.id);
+  const project = (await db.query("SELECT backfill FROM ai_movie_projects WHERE id = $1", [projectId])).rows[0];
+  if (!project) {
+    res.status(404).json({ error: "Project not found." });
+    return;
+  }
+  if (aiMovieScriptChecksRunning.has(projectId)) {
+    res.json({ started: false, alreadyRunning: true });
+    return;
+  }
+  const previous = project.backfill?.scriptCheck;
+  // A check cut off by a server restart picks up where it stopped.
+  if (previous?.status === "running" && Array.isArray(previous.beatIndexes) && previous.done < previous.beatIndexes.length) {
+    runAiMovieScriptCheck(projectId, previous);
+    res.json({ started: true, resumed: true });
+    return;
+  }
+  const beatIndexes = (project.backfill?.screenplayBeats ?? [])
+    .map((beat, index) => (Array.isArray(beat?.scenes) && beat.scenes.length > 0 ? index : null))
+    .filter((index) => index !== null);
+  if (beatIndexes.length === 0) {
+    res.status(400).json({ error: "No beats are written yet -- there's nothing to check." });
+    return;
+  }
+  const state = { status: "running", startedAt: new Date().toISOString(), updatedAt: new Date().toISOString(), beatIndexes, done: 0, report: [] };
+  await saveAiMovieScriptCheckState(projectId, state);
+  runAiMovieScriptCheck(projectId, state);
+  res.json({ started: true });
 });
 
 // Beat-wide narration (user request): one NARRATOR voice-over that flows

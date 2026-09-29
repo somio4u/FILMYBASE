@@ -5563,3 +5563,76 @@ button:not(:disabled):active {
     max-width: 100%;
   }
 }
+
+/* Full script check: button, progress bar and the fix report. */
+.script-check {
+  margin: 12px auto 4px;
+  max-width: 760px;
+  text-align: center;
+}
+
+.script-check-row {
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.script-check-note {
+  margin: 6px 0 0;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.script-check-progress {
+  height: 4px;
+  margin: 10px auto 0;
+  max-width: 420px;
+  border-radius: 999px;
+  background: var(--border-subtle);
+  overflow: hidden;
+}
+
+.script-check-progress span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--accent-gradient);
+  transition: width 0.8s var(--ease-spring);
+}
+
+.script-check.is-running .script-check-progress span {
+  animation: letterbox-pulse 1.8s ease-in-out infinite;
+}
+
+.script-check-report {
+  margin-top: 12px;
+  max-height: 420px;
+  overflow-y: auto;
+  padding: 12px 16px;
+  border: 1px solid var(--glass-border);
+  border-radius: 14px;
+  background: var(--glass-bg);
+  text-align: left;
+  animation: stage-rise 0.45s var(--ease-spring) both;
+}
+
+.script-check-report-beat + .script-check-report-beat {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.script-check-report-title {
+  margin: 0 0 4px;
+  font-weight: 600;
+  font-size: 13px;
+}
+
+.script-check-report ul {
+  margin: 0;
+  padding-left: 18px;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--text-secondary);
+}

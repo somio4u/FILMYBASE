@@ -3118,8 +3118,17 @@ function approvedStageStatusUpTo(index) {
 // error message). Keeps whole documents up to the budget rather than
 // slicing mid-document, so whatever's included stays coherent; newest
 // first, since that's most likely to be the current/active material.
-const AI_MOVIE_REFERENCE_MATERIAL_CHAR_BUDGET = 60_000;
-const AI_MOVIE_REFERENCE_DOCUMENT_CHAR_CAP = 20_000;
+//
+// The per-document cap used to be 20,000 characters, which silently cut
+// Akhada's own Scenic Breakdown (~33,000 characters, all 46 scenes) off at
+// Scene 28 -- so every beat from 29 onward (Granthaloka through the
+// Samudra Manthan climax) was being written without the user's own visual
+// description of it. 40,000 fits a full-length scene breakdown whole, and
+// the bigger total leaves room for extra attachments before the project's
+// core documents would ever be pushed out. (~100,000 characters is roughly
+// 25,000 tokens -- small next to what Gemini can take in one call.)
+const AI_MOVIE_REFERENCE_MATERIAL_CHAR_BUDGET = 100_000;
+const AI_MOVIE_REFERENCE_DOCUMENT_CHAR_CAP = 40_000;
 
 async function getAiMovieReferenceMaterialText(projectId) {
   if (!projectId) return "";

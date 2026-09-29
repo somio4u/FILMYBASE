@@ -8890,6 +8890,12 @@ function App() {
                     const viewIndex = Math.min(aiMovieScreenplayViewIndex, Math.max(screenplayBeats.length - 1, 0))
                     const beat = screenplayBeats[viewIndex]
                     const beatMeta = beatsPlot[viewIndex]
+                    // Real scripts number every scene in one running sequence
+                    // across the whole film -- this beat's first scene
+                    // continues from however many scenes all earlier beats hold.
+                    const sceneNumberOffset = screenplayBeats
+                      .slice(0, viewIndex)
+                      .reduce((count, b) => count + (Array.isArray(b.scenes) ? b.scenes.length : 0), 0)
 
                     return (
                       <div className="three-act-structure" id="ai-movie-stage-screenplay">
@@ -9008,7 +9014,9 @@ function App() {
                                       const isReviseFormOpen = aiMovieRevisingSceneIndex === reviseKey
                                       return (
                                         <div key={sceneIndex} className="bit-row">
-                                          <p className="bit-heading">{scene.sceneHeading?.[aiMovieLanguage] ?? scene.sceneHeading?.en ?? ''}</p>
+                                          <p className="bit-heading">
+                                            {sceneNumberOffset + sceneIndex + 1}. {scene.sceneHeading?.[aiMovieLanguage] ?? scene.sceneHeading?.en ?? ''}
+                                          </p>
                                           <p className="ai-movie-scene-duration">
                                             {t.aiMovieSceneDurationLabel(effectiveAiMovieSceneMinutes(scene))}
                                           </p>

@@ -3364,15 +3364,31 @@ function ensureAiMovieBilingualText(value) {
 // "INT. AKHADA RING - TIMELESS Rakhyaka पांचों के सामने...") is trimmed off.
 // Applied to every scene the writers return AND on the way out of a project
 // load, so headings already saved as "अंत. ..." display correctly too.
+// Splits a standard English slugline into its three parts -- needed later
+// by Production to group scenes by location and time of day, the way a
+// real script breakdown does. The LAST " - " part is the time ("INT.
+// AKHADA RING - FAILED UNITY - TIMELESS" -> place "AKHADA RING - FAILED
+// UNITY", time "TIMELESS"). Returns null when the heading doesn't start
+// with INT./EXT. at all, rather than guessing.
+function parseAiMovieSlugline(heading) {
+  const match = heading.match(/^(INT\.?\s*\/\s*EXT\.?|EXT\.?\s*\/\s*INT\.?|I\/E\.?|INT\.?|EXT\.?)\s+(.+)$/);
+  if (!match) return null;
+  const intExt = /\//.test(match[1]) ? "INT/EXT" : match[1].startsWith("INT") ? "INT" : "EXT";
+  const parts = match[2].split(/\s+[-–—]\s+/);
+  const timeOfDay = parts.length > 1 ? parts.pop().trim() : "";
+  return { intExt, location: parts.join(" - ").trim(), timeOfDay };
+}
+
 function normalizeAiMovieSceneFormat(scene) {
-  const heading = (scene?.sceneHeading?.en ?? "").trim();
+  // Standard screenplay sluglines are always in capitals.
+  const heading = (scene?.sceneHeading?.en ?? "").trim().toUpperCase();
   const stripHeading = (text) =>
-    typeof text === "string" && heading && text.trimStart().startsWith(heading)
+    typeof text === "string" && heading && text.trimStart().toUpperCase().startsWith(heading)
       ? text.trimStart().slice(heading.length).trimStart()
       : text;
   const stripBilingual = (value) => (value ? { ...value, en: stripHeading(value.en), hi: stripHeading(value.hi) } : value);
 
-  const normalized = { ...scene, sceneHeading: { en: heading, hi: heading } };
+  const normalized = { ...scene, sceneHeading: { en: heading, hi: heading }, slugline: parseAiMovieSlugline(heading) };
   if (scene?.action) normalized.action = stripBilingual(scene.action);
   if (Array.isArray(scene?.content) && scene.content.length > 0 && scene.content[0].type !== "dialogue") {
     normalized.content = [{ ...scene.content[0], text: stripBilingual(scene.content[0].text) }, ...scene.content.slice(1)];

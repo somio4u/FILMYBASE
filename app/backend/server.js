@@ -3369,6 +3369,26 @@ async function generateAiMovieCharacterDialogueBriefs(priorContextText, referenc
   return result.briefs;
 }
 
+// Same "just open the project" self-heal already used for a stuck
+// screenplay beat -- covers a project whose Beat Sheet was already approved
+// BEFORE this brief existed, so the normal approval-time trigger never ran
+// for it and never will again (it's a one-time event, not a stage the user
+// can re-approve). Fires in the background; the GET response doesn't wait
+// on it, same as the screenplay buffer fill.
+async function backfillAiMovieCharacterDialogueBriefsIfMissing(projectId, pastedText, backfill) {
+  if (!Array.isArray(backfill?.plot) || !Array.isArray(backfill?.characterArc) || backfill.characterDialogueBriefs) return;
+  try {
+    const referenceMaterialText = await getAiMovieReferenceMaterialText(projectId);
+    const briefs = await generateAiMovieCharacterDialogueBriefs(
+      flattenAiMovieContentForExtraction(pastedText, backfill),
+      referenceMaterialText
+    );
+    await saveAiMovieBackfillField(projectId, "characterDialogueBriefs", briefs);
+  } catch (error) {
+    console.error("Background character dialogue brief backfill failed:", error.message);
+  }
+}
+
 async function generateAiMovieForwardStage(stageKey, priorContextText, referenceMaterialText, feedback) {
   const referenceBlock = referenceMaterialText
     ? `\n\nThe user has also provided reference material below — treat it as authoritative grounding, stay faithful to it:\n\n${referenceMaterialText}`
@@ -4125,6 +4145,12 @@ app.get("/api/ai-movie/projects/:id", requireRole("admin"), async (req, res) => 
       fillAiMovieScreenplayBuffer(row.id);
     }
   }
+
+  // Same idea: a project whose Beat Sheet was already approved before the
+  // character dialogue brief existed never got one and never will through
+  // the normal trigger -- backfill it quietly in the background, no redo
+  // of anything already done.
+  backfillAiMovieCharacterDialogueBriefsIfMissing(row.id, row.pasted_text, row.backfill);
 
   res.json({
     id: row.id,

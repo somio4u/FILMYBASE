@@ -3287,6 +3287,20 @@ const AI_MOVIE_FORWARD_STAGE_SCHEMAS = {
   screenplay: { type: Type.ARRAY, items: AI_MOVIE_SCREENPLAY_SCENE_SCHEMA },
 };
 
+// Dialogue lives entirely outside AI_MOVIE_SCREENPLAY_SCENE_SCHEMA on
+// purpose -- normal scene generation and the general scene-revise action
+// both stay dialogue-free, matching the deliberate "no dialogue yet" design
+// above. This is its own separate, opt-in field a scene only gets once the
+// user explicitly asks for it, one scene at a time.
+const AI_MOVIE_SCENE_DIALOGUE_LINE_SCHEMA = {
+  type: Type.OBJECT,
+  properties: {
+    character: { type: Type.STRING },
+    line: AI_MOVIE_BILINGUAL_TEXT_SCHEMA,
+  },
+  required: ["character", "line"],
+};
+
 async function generateAiMovieForwardStage(stageKey, priorContextText, referenceMaterialText, feedback) {
   const referenceBlock = referenceMaterialText
     ? `\n\nThe user has also provided reference material below — treat it as authoritative grounding, stay faithful to it:\n\n${referenceMaterialText}`
@@ -3406,18 +3420,19 @@ async function syncAiMovieBeatRuntimeToScenes(projectId, beatIndex, scenes) {
   await saveAiMovieBackfillField(projectId, "plot", beats);
 }
 
-// Extending one scene (the user asking to slow down/elongate a specific
-// moment) never touches its siblings -- only the beat's OTHER scenes are
-// given as fixed, unchangeable context, alongside every scene written in
-// earlier beats. Allowed to return more than one scene: if the added
-// material genuinely earns a scene break (e.g. a location or time change
-// mid-expansion), splitting is fine, but it should stay one scene whenever
-// the expansion is really just "more of the same scene."
-const AI_MOVIE_SCREENPLAY_SCENE_EXTEND_SYSTEM_PROMPT = `You are working on an AI Movie — a film that will be entirely AI-generated, never physically shot. Because of that, never reason about budget, cast/crew/location availability, shoot schedules, or any real-world production constraint — anything that can be imagined can be included, with no limitation.
+// Revising one scene never touches its siblings -- only the beat's OTHER
+// scenes are given as fixed, unchangeable context, alongside every scene
+// written in earlier beats. General-purpose: covers making it longer/
+// shorter, a tone or content change, fixing a detail, or anything else --
+// one box per scene rather than a separate button per kind of change. Allowed to
+// return more than one scene: if the change genuinely earns a scene break
+// (e.g. a location or time change mid-revision), splitting is fine, but it
+// should stay one scene whenever the change doesn't call for that.
+const AI_MOVIE_SCREENPLAY_SCENE_REVISE_SYSTEM_PROMPT = `You are working on an AI Movie — a film that will be entirely AI-generated, never physically shot. Because of that, never reason about budget, cast/crew/location availability, shoot schedules, or any real-world production constraint — anything that can be imagined can be included, with no limitation.
 
-You are given the story's already-approved, locked layers below, every screenplay scene already written in earlier beats, and the current beat's own other scenes (fixed context — do not rewrite them). The user has deliberately chosen to extend or elongate ONE specific scene, named at the end, because it currently feels too short or rushed — making the story longer is always allowed and expected here, never resist it or try to stay close to any earlier length target. Rewrite that one scene with more visual/action detail, more beats of business, a slower and richer sense of time passing — genuinely more screen time, not padding with repetition. If the added material naturally needs a scene break (a real change of location, time, or focus partway through), it is fine to return two or more scenes in its place instead of one longer scene — otherwise keep it as a single scene. Do NOT write any dialogue — that is a separate, later pass; describe what happens and what's said only in action-line terms, never as quoted lines. Keep full continuity with the fixed scenes around it (same characters, same momentum) — this is a deeper version of the same moment, not a new direction. Give each returned scene its own honest, updated "estimatedMinutes."`;
+You are given the story's already-approved, locked layers below, every screenplay scene already written in earlier beats, and the current beat's own other scenes (fixed context — do not rewrite them). The user wants ONE specific scene, named at the end, revised — this could be almost anything: longer, shorter, a different tone, different content or focus, a fixed detail, or anything else the instruction below asks for. If the instruction asks for more screen time, making the story longer is always allowed and expected here — never resist it or try to stay close to any earlier length target. If no specific instruction is given, use your own judgment to genuinely improve the scene (richer detail, better pacing, a stronger beat) rather than leaving it unchanged. If the change naturally needs a scene break (a real change of location, time, or focus partway through), it is fine to return two or more scenes in its place instead of one — otherwise keep it as a single scene. Do NOT write any dialogue — that is a separate, later pass; describe what happens and what's said only in action-line terms, never as quoted lines. Keep full continuity with the fixed scenes around it (same characters, same momentum) unless the instruction specifically asks to change that. Give each returned scene its own honest, updated "estimatedMinutes."`;
 
-async function generateAiMovieScreenplaySceneExtension(
+async function generateAiMovieScreenplaySceneRevision(
   priorContextText,
   referenceMaterialText,
   scenesSoFarText,
@@ -3435,13 +3450,13 @@ async function generateAiMovieScreenplaySceneExtension(
     : "";
   const instructionBlock = instruction
     ? ` The user specifically asked for: ${instruction}`
-    : "";
+    : " No specific instruction was given -- use your own judgment to genuinely improve the scene.";
 
   const result = await generateJsonContent({
     model: GEMINI_MODEL_NAME,
-    contents: `The story's approved layers so far:\n\n${priorContextText}${referenceBlock}${scenesBlock}${siblingBlock}\n\nExtend this one scene, making it genuinely longer:\n\n${targetSceneText}${instructionBlock}`,
+    contents: `The story's approved layers so far:\n\n${priorContextText}${referenceBlock}${scenesBlock}${siblingBlock}\n\nRevise this one scene:\n\n${targetSceneText}${instructionBlock}`,
     config: {
-      systemInstruction: AI_MOVIE_SCREENPLAY_SCENE_EXTEND_SYSTEM_PROMPT,
+      systemInstruction: AI_MOVIE_SCREENPLAY_SCENE_REVISE_SYSTEM_PROMPT,
       responseMimeType: "application/json",
       maxOutputTokens: 4096,
       responseSchema: {
@@ -3454,6 +3469,51 @@ async function generateAiMovieScreenplaySceneExtension(
     },
   });
   return result.scenes;
+}
+
+// Writes dialogue for ONE scene, only once the user asks for it -- never
+// forced into every scene just because the button exists. A pure action/
+// visual scene is allowed to come back with an empty dialogue list; that's
+// a real, honest answer here, not a failure to try.
+const AI_MOVIE_SCENE_DIALOGUE_SYSTEM_PROMPT = `You are working on an AI Movie — a film that will be entirely AI-generated, never physically shot. Because of that, never reason about budget, cast/crew/location availability, shoot schedules, or any real-world production constraint — anything that can be imagined can be included, with no limitation.
+
+You are given the story's already-approved, locked layers below (including full Characters), every screenplay scene already written in earlier beats, and the current beat's own other scenes (fixed context — do not write dialogue for them, only the one scene named at the end). Decide honestly whether this ONE scene genuinely needs spoken dialogue to work: many purely visual, physical, or transitional scenes are complete with NO dialogue at all — if that's true here, return an empty dialogue list rather than inventing lines just to fill the space. When dialogue is warranted, write tight, naturalistic screenplay dialogue — never expository ("as you know…") or overwritten — consistent with each speaking character's established personality, wants, and voice from the Characters layer above. Use each character's name exactly as it appears in that layer. Keep the scene's existing action/visual description completely unchanged — you are only adding spoken lines on top of it, never altering what happens or rewriting the scene itself.`;
+
+async function generateAiMovieSceneDialogue(
+  priorContextText,
+  referenceMaterialText,
+  scenesSoFarText,
+  beatSiblingScenesText,
+  beat,
+  targetSceneText,
+  instruction
+) {
+  const referenceBlock = referenceMaterialText
+    ? `\n\nThe user has also provided reference material below — treat it as authoritative grounding, stay faithful to it:\n\n${referenceMaterialText}`
+    : "";
+  const scenesBlock = scenesSoFarText ? `\n\nScreenplay scenes already written in earlier beats:\n\n${scenesSoFarText}` : "";
+  const siblingBlock = beatSiblingScenesText
+    ? `\n\nThis scene's own beat (${beat.title.en}: ${beat.description.en}) also has these other scenes, fixed context only:\n\n${beatSiblingScenesText}`
+    : "";
+  const instructionBlock = instruction ? ` The user specifically asked for: ${instruction}` : "";
+
+  const result = await generateJsonContent({
+    model: GEMINI_MODEL_NAME,
+    contents: `The story's approved layers so far:\n\n${priorContextText}${referenceBlock}${scenesBlock}${siblingBlock}\n\nWrite dialogue (or decide none is needed) for this one scene:\n\n${targetSceneText}${instructionBlock}`,
+    config: {
+      systemInstruction: AI_MOVIE_SCENE_DIALOGUE_SYSTEM_PROMPT,
+      responseMimeType: "application/json",
+      maxOutputTokens: 2048,
+      responseSchema: {
+        type: Type.OBJECT,
+        properties: {
+          dialogue: { type: Type.ARRAY, items: AI_MOVIE_SCENE_DIALOGUE_LINE_SCHEMA },
+        },
+        required: ["dialogue"],
+      },
+    },
+  });
+  return result.dialogue;
 }
 
 // Builds the "scenes already written" context text out of every beat before
@@ -3690,19 +3750,23 @@ app.post("/api/ai-movie/stages/screenplay/beats/:index/request-changes", require
   }
 });
 
-// Extends ONE scene within an already-written beat -- the user is free to
-// decide any scene came out too short/rushed and ask for more screen time,
-// even well after the beat itself was approved. Splices the result (usually
-// one scene, occasionally more if the expansion earns a real scene break)
-// back into that beat's scenes in place, leaving every other scene in the
-// beat untouched, and puts the beat back to "pending" since its content has
-// genuinely changed and deserves one more look before being final again.
-app.post("/api/ai-movie/stages/screenplay/beats/:beatIndex/scenes/:sceneIndex/extend", requireRole("admin"), async (req, res) => {
+// Revises ONE scene within an already-written beat -- general purpose (make
+// it longer/shorter, change its tone or content, fix a detail, or anything
+// else), even well after the beat itself was approved. Splices the result
+// (usually one scene, occasionally more if the change earns a real scene
+// break) back into that beat's scenes in place, leaving every other scene
+// in the beat untouched, and puts the beat back to "pending" since its
+// content has genuinely changed and deserves one more look before being
+// final again. Also drops any dialogue already written for this scene --
+// dialogue written for content that no longer exists would go stale
+// silently, so the scene simply goes back to needing "Write Dialogue"
+// again after a real content revision.
+app.post("/api/ai-movie/stages/screenplay/beats/:beatIndex/scenes/:sceneIndex/revise", requireRole("admin"), async (req, res) => {
   const beatIndex = Number(req.params.beatIndex);
   const sceneIndex = Number(req.params.sceneIndex);
   const { projectId, instruction } = req.body;
   if (!projectId) {
-    res.status(400).json({ error: "No project to extend into." });
+    res.status(400).json({ error: "No project to revise into." });
     return;
   }
 
@@ -3721,7 +3785,7 @@ app.post("/api/ai-movie/stages/screenplay/beats/:beatIndex/scenes/:sceneIndex/ex
   }
   const beat = screenplayBeats[beatIndex];
   if (!beat || (beat.status !== "pending" && beat.status !== "approved") || !Array.isArray(beat.scenes)) {
-    res.status(400).json({ error: "This beat has no written scenes to extend yet." });
+    res.status(400).json({ error: "This beat has no written scenes to revise yet." });
     return;
   }
   if (!Number.isInteger(sceneIndex) || sceneIndex < 0 || sceneIndex >= beat.scenes.length) {
@@ -3740,7 +3804,7 @@ app.post("/api/ai-movie/stages/screenplay/beats/:beatIndex/scenes/:sceneIndex/ex
     const targetScene = beat.scenes[sceneIndex];
     const targetSceneText = `${targetScene.sceneHeading.en}\n${targetScene.action.en}`;
 
-    const replacementScenes = await generateAiMovieScreenplaySceneExtension(
+    const replacementScenes = await generateAiMovieScreenplaySceneRevision(
       priorContextText,
       referenceMaterialText,
       scenesSoFarText,
@@ -3764,7 +3828,81 @@ app.post("/api/ai-movie/stages/screenplay/beats/:beatIndex/scenes/:sceneIndex/ex
       runtimeMinutes: Math.round(newScenes.reduce((sum, s) => sum + (s.estimatedMinutes || 0), 0) * 10) / 10,
     });
   } catch (error) {
-    console.error(`Screenplay beat ${beatIndex} scene ${sceneIndex} extension failed:`, error.message);
+    console.error(`Screenplay beat ${beatIndex} scene ${sceneIndex} revision failed:`, error.message);
+    res.status(502).json({ error: error.message });
+  }
+});
+
+// Writes (or rewrites) dialogue for ONE scene -- only once its beat is
+// approved, per the user's own spec: dialogue is a refinement made on
+// already-finalized scenes, right there in place, not a separate pass done
+// after the whole screenplay. Unlike a scene revision, this deliberately
+// does NOT put the beat back to "pending" -- the scene's actual content
+// (heading/action) isn't touched, only dialogue layered on top of it, so
+// there's nothing there that needs a fresh review pass.
+app.post("/api/ai-movie/stages/screenplay/beats/:beatIndex/scenes/:sceneIndex/dialogue", requireRole("admin"), async (req, res) => {
+  const beatIndex = Number(req.params.beatIndex);
+  const sceneIndex = Number(req.params.sceneIndex);
+  const { projectId, instruction } = req.body;
+  if (!projectId) {
+    res.status(400).json({ error: "No project to write dialogue into." });
+    return;
+  }
+
+  const projectResult = await db.query("SELECT pasted_text, backfill FROM ai_movie_projects WHERE id = $1", [projectId]);
+  const project = projectResult.rows[0];
+  if (!project) {
+    res.status(404).json({ error: "Project not found." });
+    return;
+  }
+
+  const beats = project.backfill?.plot ?? [];
+  const screenplayBeats = project.backfill?.screenplayBeats ?? [];
+  if (!Number.isInteger(beatIndex) || beatIndex < 0 || beatIndex >= beats.length) {
+    res.status(400).json({ error: "Not a valid beat." });
+    return;
+  }
+  const beat = screenplayBeats[beatIndex];
+  if (!beat || beat.status !== "approved" || !Array.isArray(beat.scenes)) {
+    res.status(400).json({ error: "Approve this beat first before writing dialogue for its scenes." });
+    return;
+  }
+  if (!Number.isInteger(sceneIndex) || sceneIndex < 0 || sceneIndex >= beat.scenes.length) {
+    res.status(400).json({ error: "Not a valid scene." });
+    return;
+  }
+
+  try {
+    const referenceMaterialText = await getAiMovieReferenceMaterialText(projectId);
+    const priorContextText = flattenAiMovieContentForExtraction(project.pasted_text, project.backfill);
+    const scenesSoFarText = flattenAiMovieScreenplayScenesSoFar(screenplayBeats, beatIndex);
+    const beatSiblingScenesText = beat.scenes
+      .filter((_, i) => i !== sceneIndex)
+      .map((s) => `${s.sceneHeading.en}\n${s.action.en}`)
+      .join("\n\n");
+    const targetScene = beat.scenes[sceneIndex];
+    const targetSceneText = `${targetScene.sceneHeading.en}\n${targetScene.action.en}`;
+
+    const dialogue = await generateAiMovieSceneDialogue(
+      priorContextText,
+      referenceMaterialText,
+      scenesSoFarText,
+      beatSiblingScenesText,
+      beats[beatIndex],
+      targetSceneText,
+      instruction || null
+    );
+
+    const latest = (await db.query("SELECT backfill FROM ai_movie_projects WHERE id = $1", [projectId])).rows[0].backfill;
+    const latestBeats = latest.screenplayBeats ?? screenplayBeats;
+    const latestScenes = latestBeats[beatIndex]?.scenes ?? beat.scenes;
+    const newScenes = latestScenes.map((s, i) => (i === sceneIndex ? { ...s, dialogue } : s));
+    latestBeats[beatIndex] = { ...latestBeats[beatIndex], scenes: newScenes };
+    await saveAiMovieBackfillField(projectId, "screenplayBeats", latestBeats);
+
+    res.json({ beatIndex, sceneIndex, dialogue });
+  } catch (error) {
+    console.error(`Screenplay beat ${beatIndex} scene ${sceneIndex} dialogue failed:`, error.message);
     res.status(502).json({ error: error.message });
   }
 });

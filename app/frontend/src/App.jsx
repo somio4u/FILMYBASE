@@ -322,12 +322,19 @@ const LABELS = {
     aiMovieScreenplayRetryButton: 'Retry',
     aiMovieScreenplayBeatOfLabel: (index, total) => `Beat ${index} of ${total}`,
     aiMovieScreenplayAllApprovedNote: 'Full screenplay draft complete — every beat approved.',
-    aiMovieExtendSceneButton: 'Extend this scene',
-    aiMovieExtendSceneCancelButton: 'Cancel',
-    aiMovieExtendScenePlaceholder: 'Optional — say how to extend it, e.g. "slow this down, let the moment breathe" (leave blank to just make it longer)',
-    aiMovieExtendSceneSubmitButton: 'Extend Scene',
-    aiMovieExtendingSceneLabel: 'Extending…',
+    aiMovieReviseSceneButton: 'Request Changes',
+    aiMovieReviseSceneCancelButton: 'Cancel',
+    aiMovieReviseScenePlaceholder: 'Optional — say what to change, e.g. "make it longer", "change the mood", "fix the ending" (leave blank to let the AI improve it)',
+    aiMovieReviseSceneSubmitButton: 'Submit',
+    aiMovieRevisingSceneLabel: 'Revising…',
     aiMovieSceneDurationLabel: (minutes) => `Duration: ~${minutes} min`,
+    aiMovieWriteDialogueButton: 'Write Dialogue',
+    aiMovieRewriteDialogueButton: 'Rewrite Dialogue',
+    aiMovieDialogueCancelButton: 'Cancel',
+    aiMovieDialoguePlaceholder: 'Optional — any direction for the dialogue, e.g. "make this a tense argument" (leave blank to let the AI decide)',
+    aiMovieDialogueSubmitButton: 'Write Dialogue',
+    aiMovieWritingDialogueLabel: 'Writing…',
+    aiMovieNoDialogueNeededNote: 'No dialogue needed for this scene.',
     formatQuestion: 'Is this a film, a web series, or a vertical drama?',
     filmOption: 'Film',
     seriesOption: 'Web Series',
@@ -896,12 +903,19 @@ const LABELS = {
     aiMovieScreenplayRetryButton: 'ପୁଣି ଚେଷ୍ଟା କରନ୍ତୁ',
     aiMovieScreenplayBeatOfLabel: (index, total) => `ବିଟ୍ ${index} / ${total}`,
     aiMovieScreenplayAllApprovedNote: 'ସମ୍ପୂର୍ଣ୍ଣ ସ୍କ୍ରିନପ୍ଲେ ଡ୍ରାଫ୍ଟ ସରିଲା — ପ୍ରତ୍ୟେକ ବିଟ୍ ଅନୁମୋଦିତ।',
-    aiMovieExtendSceneButton: 'ଏହି ଦୃଶ୍ୟକୁ ବଢ଼ାନ୍ତୁ',
-    aiMovieExtendSceneCancelButton: 'ବାତିଲ୍',
-    aiMovieExtendScenePlaceholder: 'ଇଚ୍ଛାଧୀନ — କେମିତି ବଢ଼ାଇବେ କୁହନ୍ତୁ, ଯଥା "ଏହାକୁ ଧୀର କରନ୍ତୁ" (ଖାଲି ଛାଡ଼ିଲେ ସାଧାରଣ ଭାବେ ବଡ଼ ହେବ)',
-    aiMovieExtendSceneSubmitButton: 'ଦୃଶ୍ୟ ବଢ଼ାନ୍ତୁ',
-    aiMovieExtendingSceneLabel: 'ବଢ଼ାଯାଉଛି…',
+    aiMovieReviseSceneButton: 'ପରିବର୍ତ୍ତନ ପାଇଁ ଅନୁରୋଧ',
+    aiMovieReviseSceneCancelButton: 'ବାତିଲ୍',
+    aiMovieReviseScenePlaceholder: 'ଇଚ୍ଛାଧୀନ — କଣ ବଦଳାଇବେ କୁହନ୍ତୁ, ଯଥା "ଏହାକୁ ଲମ୍ବା କରନ୍ତୁ" (ଖାଲି ଛାଡ଼ିଲେ AI ନିଜେ ଉନ୍ନତ କରିବ)',
+    aiMovieReviseSceneSubmitButton: 'ଦାଖଲ କରନ୍ତୁ',
+    aiMovieRevisingSceneLabel: 'ପରିବର୍ତ୍ତନ ହେଉଛି…',
     aiMovieSceneDurationLabel: (minutes) => `ଅବଧି: ~${minutes} ମିନିଟ୍`,
+    aiMovieWriteDialogueButton: 'ସଂଳାପ ଲେଖନ୍ତୁ',
+    aiMovieRewriteDialogueButton: 'ସଂଳାପ ପୁନଃ ଲେଖନ୍ତୁ',
+    aiMovieDialogueCancelButton: 'ବାତିଲ୍',
+    aiMovieDialoguePlaceholder: 'ଇଚ୍ଛାଧୀନ — ସଂଳାପ ପାଇଁ କୌଣସି ନିର୍ଦ୍ଦେଶ, ଯଥା "ଏହାକୁ ଏକ ଉତ୍ତେଜନାପୂର୍ଣ୍ଣ ବିବାଦ କରନ୍ତୁ" (ଖାଲି ଛାଡ଼ିଲେ AI ନିଜେ ନିଷ୍ପତ୍ତି ନେବ)',
+    aiMovieDialogueSubmitButton: 'ସଂଳାପ ଲେଖନ୍ତୁ',
+    aiMovieWritingDialogueLabel: 'ଲେଖାଯାଉଛି…',
+    aiMovieNoDialogueNeededNote: 'ଏହି ଦୃଶ୍ୟ ପାଇଁ ସଂଳାପ ଆବଶ୍ୟକ ନାହିଁ।',
     formatQuestion: 'ଏହା ଏକ ଚଳଚ୍ଚିତ୍ର, ୱେବ ସିରିଜ୍ କିମ୍ବା ଭର୍ଟିକାଲ୍ ଡ୍ରାମା?',
     filmOption: 'ଚଳଚ୍ଚିତ୍ର',
     seriesOption: 'ୱେବ ସିରିଜ୍',
@@ -4309,9 +4323,12 @@ function App() {
   const [aiMovieScreenplayBeatFeedbackText, setAiMovieScreenplayBeatFeedbackText] = useState('')
   const [showAiMovieScreenplayBeatFeedbackForm, setShowAiMovieScreenplayBeatFeedbackForm] = useState(false)
   const [aiMovieScreenplayViewIndex, setAiMovieScreenplayViewIndex] = useState(0)
-  const [isExtendingAiMovieScreenplayScene, setIsExtendingAiMovieScreenplayScene] = useState(false)
-  const [aiMovieExtendingSceneIndex, setAiMovieExtendingSceneIndex] = useState(null)
-  const [aiMovieExtendSceneText, setAiMovieExtendSceneText] = useState('')
+  const [isRevisingAiMovieScreenplayScene, setIsRevisingAiMovieScreenplayScene] = useState(false)
+  const [aiMovieRevisingSceneIndex, setAiMovieRevisingSceneIndex] = useState(null)
+  const [aiMovieReviseSceneText, setAiMovieReviseSceneText] = useState('')
+  const [isWritingAiMovieDialogue, setIsWritingAiMovieDialogue] = useState(false)
+  const [aiMovieDialogueSceneIndex, setAiMovieDialogueSceneIndex] = useState(null)
+  const [aiMovieDialogueInstructionText, setAiMovieDialogueInstructionText] = useState('')
   const [isExportingAiMovieProject, setIsExportingAiMovieProject] = useState(false)
   const aiMovieImportFileInputRef = useRef(null)
 
@@ -5462,19 +5479,21 @@ function App() {
     setIsGeneratingAiMovieScreenplayBeat(false)
   }
 
-  // Lets the user pick any one scene (approved beat or not) and ask for it
-  // specifically to be longer -- the beat's own runtimeMinutes target is
-  // then raised to match, so the story is allowed to genuinely grow rather
-  // than the new length being flagged as a mismatch afterward.
-  async function handleExtendAiMovieScreenplaySceneClick(beatIndex, sceneIndex, instruction) {
+  // Lets the user pick any one scene (approved beat or not) and ask for any
+  // kind of change -- longer, shorter, different tone/content, a fixed
+  // detail, or anything else -- scoped to that one scene only, leaving its
+  // siblings in the same beat untouched. The beat's own runtimeMinutes
+  // target is recalculated to match afterward, so a real length change is
+  // never left looking like an unresolved mismatch.
+  async function handleReviseAiMovieScreenplaySceneClick(beatIndex, sceneIndex, instruction) {
     if (!aiMovieProjectId) return
     const projectId = aiMovieProjectId
 
-    setIsExtendingAiMovieScreenplayScene(true)
+    setIsRevisingAiMovieScreenplayScene(true)
     setAiMovieStageError(null)
     try {
       const response = await fetch(
-        `${BACKEND_URL}/api/ai-movie/stages/screenplay/beats/${beatIndex}/scenes/${sceneIndex}/extend`,
+        `${BACKEND_URL}/api/ai-movie/stages/screenplay/beats/${beatIndex}/scenes/${sceneIndex}/revise`,
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -5495,13 +5514,54 @@ function App() {
           }
           return { ...(prev ?? {}), screenplayBeats: beats, plot }
         })
-        setAiMovieExtendingSceneIndex(null)
-        setAiMovieExtendSceneText('')
+        setAiMovieRevisingSceneIndex(null)
+        setAiMovieReviseSceneText('')
       }
     } catch {
       setAiMovieStageError(t.genericError)
     }
-    setIsExtendingAiMovieScreenplayScene(false)
+    setIsRevisingAiMovieScreenplayScene(false)
+  }
+
+  // Only available once the beat is approved -- dialogue is a refinement
+  // made on an already-finalized scene, right in place, never a separate
+  // pass done after the whole screenplay. Doesn't touch the scene's own
+  // heading/action, so unlike a revision this never puts the beat back to
+  // "pending."
+  async function handleWriteAiMovieDialogueClick(beatIndex, sceneIndex, instruction) {
+    if (!aiMovieProjectId) return
+    const projectId = aiMovieProjectId
+
+    setIsWritingAiMovieDialogue(true)
+    setAiMovieStageError(null)
+    try {
+      const response = await fetch(
+        `${BACKEND_URL}/api/ai-movie/stages/screenplay/beats/${beatIndex}/scenes/${sceneIndex}/dialogue`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ projectId, instruction: instruction || undefined }),
+        }
+      )
+      const data = await response.json()
+      if (!response.ok) {
+        setAiMovieStageError(data.error || t.genericError)
+      } else {
+        setAiMovieBackfillResult((prev) => {
+          const beats = [...(prev?.screenplayBeats ?? [])]
+          const existing = beats[beatIndex]
+          if (!existing) return prev ?? {}
+          const scenes = existing.scenes.map((s, i) => (i === sceneIndex ? { ...s, dialogue: data.dialogue } : s))
+          beats[beatIndex] = { ...existing, scenes }
+          return { ...(prev ?? {}), screenplayBeats: beats }
+        })
+        setAiMovieDialogueSceneIndex(null)
+        setAiMovieDialogueInstructionText('')
+      }
+    } catch {
+      setAiMovieStageError(t.genericError)
+    }
+    setIsWritingAiMovieDialogue(false)
   }
 
   // Fallback duration for a beat or scene written before runtimeMinutes/
@@ -8892,8 +8952,8 @@ function App() {
                                     />
 
                                     {beat.scenes?.map((scene, sceneIndex) => {
-                                      const extendKey = `${viewIndex}-${sceneIndex}`
-                                      const isExtendFormOpen = aiMovieExtendingSceneIndex === extendKey
+                                      const reviseKey = `${viewIndex}-${sceneIndex}`
+                                      const isReviseFormOpen = aiMovieRevisingSceneIndex === reviseKey
                                       return (
                                         <div key={sceneIndex} className="bit-row">
                                           <p className="bit-heading">{scene.sceneHeading[aiMovieLanguage]}</p>
@@ -8903,33 +8963,90 @@ function App() {
                                           <p>{scene.action[aiMovieLanguage]}</p>
                                           <button
                                             type="button"
-                                            className="cancel-button ai-movie-extend-scene-button"
+                                            className="cancel-button ai-movie-revise-scene-button"
                                             onClick={() => {
-                                              setAiMovieExtendingSceneIndex(isExtendFormOpen ? null : extendKey)
-                                              setAiMovieExtendSceneText('')
+                                              setAiMovieRevisingSceneIndex(isReviseFormOpen ? null : reviseKey)
+                                              setAiMovieReviseSceneText('')
                                             }}
-                                            disabled={isExtendingAiMovieScreenplayScene}
+                                            disabled={isRevisingAiMovieScreenplayScene}
                                           >
-                                            {isExtendFormOpen ? t.aiMovieExtendSceneCancelButton : t.aiMovieExtendSceneButton}
+                                            {isReviseFormOpen ? t.aiMovieReviseSceneCancelButton : t.aiMovieReviseSceneButton}
                                           </button>
-                                          {isExtendFormOpen && (
+                                          {isReviseFormOpen && (
                                             <div className="feedback-form">
                                               <textarea
                                                 className="feedback-textarea"
-                                                value={aiMovieExtendSceneText}
-                                                onChange={(e) => setAiMovieExtendSceneText(e.target.value)}
-                                                placeholder={t.aiMovieExtendScenePlaceholder}
+                                                value={aiMovieReviseSceneText}
+                                                onChange={(e) => setAiMovieReviseSceneText(e.target.value)}
+                                                placeholder={t.aiMovieReviseScenePlaceholder}
                                               />
                                               <button
                                                 type="button"
                                                 className="choose-button"
-                                                onClick={() => handleExtendAiMovieScreenplaySceneClick(viewIndex, sceneIndex, aiMovieExtendSceneText)}
-                                                disabled={isExtendingAiMovieScreenplayScene}
+                                                onClick={() => handleReviseAiMovieScreenplaySceneClick(viewIndex, sceneIndex, aiMovieReviseSceneText)}
+                                                disabled={isRevisingAiMovieScreenplayScene}
                                               >
-                                                {isExtendingAiMovieScreenplayScene ? t.aiMovieExtendingSceneLabel : t.aiMovieExtendSceneSubmitButton}
+                                                {isRevisingAiMovieScreenplayScene ? t.aiMovieRevisingSceneLabel : t.aiMovieReviseSceneSubmitButton}
                                               </button>
                                             </div>
                                           )}
+
+                                          {beat.status === 'approved' && (() => {
+                                            const dialogueKey = `${viewIndex}-${sceneIndex}`
+                                            const isDialogueFormOpen = aiMovieDialogueSceneIndex === dialogueKey
+                                            const hasDialogueResult = Array.isArray(scene.dialogue)
+                                            return (
+                                              <>
+                                                {hasDialogueResult && (
+                                                  scene.dialogue.length > 0 ? (
+                                                    scene.dialogue.map((line, lineIndex) => (
+                                                      <div key={lineIndex} className="ai-movie-dialogue-line">
+                                                        <p className="ai-movie-dialogue-character">{line.character}</p>
+                                                        <p>{line.line[aiMovieLanguage]}</p>
+                                                      </div>
+                                                    ))
+                                                  ) : (
+                                                    <p className="ai-movie-scene-duration">{t.aiMovieNoDialogueNeededNote}</p>
+                                                  )
+                                                )}
+                                                <button
+                                                  type="button"
+                                                  className="cancel-button ai-movie-revise-scene-button"
+                                                  onClick={() => {
+                                                    setAiMovieDialogueSceneIndex(isDialogueFormOpen ? null : dialogueKey)
+                                                    setAiMovieDialogueInstructionText('')
+                                                  }}
+                                                  disabled={isWritingAiMovieDialogue}
+                                                >
+                                                  {isDialogueFormOpen
+                                                    ? t.aiMovieDialogueCancelButton
+                                                    : hasDialogueResult
+                                                      ? t.aiMovieRewriteDialogueButton
+                                                      : t.aiMovieWriteDialogueButton}
+                                                </button>
+                                                {isDialogueFormOpen && (
+                                                  <div className="feedback-form">
+                                                    <textarea
+                                                      className="feedback-textarea"
+                                                      value={aiMovieDialogueInstructionText}
+                                                      onChange={(e) => setAiMovieDialogueInstructionText(e.target.value)}
+                                                      placeholder={t.aiMovieDialoguePlaceholder}
+                                                    />
+                                                    <button
+                                                      type="button"
+                                                      className="choose-button"
+                                                      onClick={() =>
+                                                        handleWriteAiMovieDialogueClick(viewIndex, sceneIndex, aiMovieDialogueInstructionText)
+                                                      }
+                                                      disabled={isWritingAiMovieDialogue}
+                                                    >
+                                                      {isWritingAiMovieDialogue ? t.aiMovieWritingDialogueLabel : t.aiMovieDialogueSubmitButton}
+                                                    </button>
+                                                  </div>
+                                                )}
+                                              </>
+                                            )
+                                          })()}
                                         </div>
                                       )
                                     })}

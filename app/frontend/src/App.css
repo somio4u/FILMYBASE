@@ -1720,10 +1720,25 @@ button, input, textarea, select {
   text-align: left;
 }
 
-.ai-movie-extend-scene-button {
+.ai-movie-revise-scene-button {
   margin-top: 6px;
   font-size: 12px;
   padding: 3px 10px;
+}
+
+.ai-movie-dialogue-line {
+  margin: 8px 0 8px 12px;
+  text-align: left;
+}
+
+.ai-movie-dialogue-character {
+  margin: 0 0 2px;
+  font-weight: bold;
+  font-size: 12px;
+  letter-spacing: 0.3px;
+  text-transform: uppercase;
+  color: var(--text-primary);
+  text-align: left;
 }
 
 .bit-type-badge {

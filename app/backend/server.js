@@ -3325,6 +3325,50 @@ function sceneToPromptText(scene) {
   return `${heading}\n${scene.action.en}${legacyDialogueBlock}`;
 }
 
+// A silent, one-time "voice brief" per named character -- generated
+// automatically the moment the Beat Sheet is approved (the earliest point
+// the full cast AND the complete beat-by-beat story progression both
+// exist), never a separate button or approval screen the user has to deal
+// with. Feeds "Write Dialogue" with more than just want/need/arc: an
+// inferred background, profession, and speech-cadence brief a dialogue
+// writer can actually use to keep each character's spoken voice distinct.
+const AI_MOVIE_CHARACTER_DIALOGUE_BRIEF_SCHEMA = {
+  type: Type.OBJECT,
+  properties: {
+    name: { type: Type.STRING },
+    brief: AI_MOVIE_BILINGUAL_TEXT_SCHEMA,
+  },
+  required: ["name", "brief"],
+};
+
+const AI_MOVIE_CHARACTER_DIALOGUE_BRIEF_SYSTEM_PROMPT = `You are a character and dialect analyst working on an AI Movie — a film that will be entirely AI-generated, never physically shot.
+
+You are given the story's approved Story, Synopsis, Character Arc (want/need/arc for every character), Three-Act Structure, and complete Beat Sheet (the whole story's beat-by-beat progression) below. For EVERY named character in the Character Arc layer, write a short, practical brief a dialogue writer can use later to make that character's spoken lines sound distinct and authentic — not a biography, just what actually shapes how they talk: their likely socio-economic background and social milieu, their profession or role and any vocabulary that comes naturally with it, their speech cadence and habits (talkative or terse, blunt or polite, confident or hesitant, any verbal tics), and how their voice should shift across the story given their own arc (e.g. more guarded early on, more direct once they've changed by the end). Base every detail on what the story, beats, and their own want/need/arc actually imply — never invent unrelated backstory. Keep each brief tight (a few sentences) and immediately usable, not exhaustive.`;
+
+async function generateAiMovieCharacterDialogueBriefs(priorContextText, referenceMaterialText) {
+  const referenceBlock = referenceMaterialText
+    ? `\n\nThe user has also provided reference material below — treat it as authoritative grounding, stay faithful to it:\n\n${referenceMaterialText}`
+    : "";
+
+  const result = await generateJsonContent({
+    model: GEMINI_MODEL_NAME,
+    contents: `The story's approved layers so far:\n\n${priorContextText}${referenceBlock}\n\nNow write a dialogue voice brief for every named character.`,
+    config: {
+      systemInstruction: AI_MOVIE_CHARACTER_DIALOGUE_BRIEF_SYSTEM_PROMPT,
+      responseMimeType: "application/json",
+      maxOutputTokens: 4096,
+      responseSchema: {
+        type: Type.OBJECT,
+        properties: {
+          briefs: { type: Type.ARRAY, items: AI_MOVIE_CHARACTER_DIALOGUE_BRIEF_SCHEMA },
+        },
+        required: ["briefs"],
+      },
+    },
+  });
+  return result.briefs;
+}
+
 async function generateAiMovieForwardStage(stageKey, priorContextText, referenceMaterialText, feedback) {
   const referenceBlock = referenceMaterialText
     ? `\n\nThe user has also provided reference material below — treat it as authoritative grounding, stay faithful to it:\n\n${referenceMaterialText}`
@@ -3526,10 +3570,14 @@ async function generateAiMovieSceneDialogue(
   beatSiblingScenesText,
   beat,
   targetSceneText,
-  instruction
+  instruction,
+  characterDialogueBriefsText
 ) {
   const referenceBlock = referenceMaterialText
     ? `\n\nThe user has also provided reference material below — treat it as authoritative grounding, stay faithful to it:\n\n${referenceMaterialText}`
+    : "";
+  const briefsBlock = characterDialogueBriefsText
+    ? `\n\nCharacter dialogue voice briefs — inferred from the full story and beat progression, use these to keep each character's spoken voice distinct and authentic:\n\n${characterDialogueBriefsText}`
     : "";
   const scenesBlock = scenesSoFarText ? `\n\nScreenplay scenes already written in earlier beats:\n\n${scenesSoFarText}` : "";
   const siblingBlock = beatSiblingScenesText
@@ -3539,7 +3587,7 @@ async function generateAiMovieSceneDialogue(
 
   const result = await generateJsonContent({
     model: GEMINI_MODEL_NAME,
-    contents: `The story's approved layers so far:\n\n${priorContextText}${referenceBlock}${scenesBlock}${siblingBlock}\n\nWrite dialogue (or decide none is needed) for this one scene:\n\n${targetSceneText}${instructionBlock}`,
+    contents: `The story's approved layers so far:\n\n${priorContextText}${referenceBlock}${briefsBlock}${scenesBlock}${siblingBlock}\n\nWrite dialogue (or decide none is needed) for this one scene:\n\n${targetSceneText}${instructionBlock}`,
     config: {
       systemInstruction: AI_MOVIE_SCENE_DIALOGUE_SYSTEM_PROMPT,
       responseMimeType: "application/json",
@@ -3955,6 +4003,9 @@ app.post("/api/ai-movie/stages/screenplay/beats/:beatIndex/scenes/:sceneIndex/di
       .join("\n\n");
     const targetScene = beat.scenes[sceneIndex];
     const targetSceneText = sceneToPromptText(targetScene);
+    const characterDialogueBriefsText = Array.isArray(project.backfill?.characterDialogueBriefs)
+      ? project.backfill.characterDialogueBriefs.map((b) => `${b.name}: ${b.brief.en}`).join("\n\n")
+      : "";
 
     const content = await generateAiMovieSceneDialogue(
       priorContextText,
@@ -3963,7 +4014,8 @@ app.post("/api/ai-movie/stages/screenplay/beats/:beatIndex/scenes/:sceneIndex/di
       beatSiblingScenesText,
       beats[beatIndex],
       targetSceneText,
-      instruction || null
+      instruction || null,
+      characterDialogueBriefsText
     );
 
     const latest = (await db.query("SELECT backfill FROM ai_movie_projects WHERE id = $1", [projectId])).rows[0].backfill;
@@ -4004,22 +4056,41 @@ app.post("/api/ai-movie/stages/:stage/approve", requireRole("admin"), async (req
     [JSON.stringify({ [stageKey]: { status: "approved", feedback: null } }), projectId]
   );
 
+  const projectResult = await db.query("SELECT pasted_text, backfill FROM ai_movie_projects WHERE id = $1", [projectId]);
+  const project = projectResult.rows[0];
+  const referenceMaterialText = await getAiMovieReferenceMaterialText(projectId);
+
   // Refresh the silent asset list with whatever's newly locked in — best
   // effort: approval itself must still succeed even if this call fails.
+  let assets = null;
   try {
-    const projectResult = await db.query("SELECT pasted_text, backfill FROM ai_movie_projects WHERE id = $1", [projectId]);
-    const project = projectResult.rows[0];
-    const referenceMaterialText = await getAiMovieReferenceMaterialText(projectId);
-    const assets = await generateAiMovieAssetExtraction(
+    assets = await generateAiMovieAssetExtraction(
       flattenAiMovieContentForExtraction(project.pasted_text, project.backfill),
       referenceMaterialText
     );
     await db.query("UPDATE ai_movie_projects SET assets = $1, updated_at = now() WHERE id = $2", [JSON.stringify(assets), projectId]);
-    res.json({ ok: true, assets });
   } catch (error) {
     console.error("Silent asset refresh failed after approval (approval itself still succeeded):", error.message);
-    res.json({ ok: true, assets: null });
   }
+
+  // Same silent, no-approval-screen treatment, independent of the asset
+  // refresh above -- run only once the Beat Sheet is approved, the earliest
+  // point the full cast AND the whole beat-by-beat progression both exist,
+  // which is exactly what this brief needs. Re-approving a regenerated Beat
+  // Sheet later naturally refreshes it again through this same code path.
+  if (stageKey === "plot") {
+    try {
+      const briefs = await generateAiMovieCharacterDialogueBriefs(
+        flattenAiMovieContentForExtraction(project.pasted_text, project.backfill),
+        referenceMaterialText
+      );
+      await saveAiMovieBackfillField(projectId, "characterDialogueBriefs", briefs);
+    } catch (error) {
+      console.error("Silent character dialogue brief generation failed after Beat Sheet approval (approval itself still succeeded):", error.message);
+    }
+  }
+
+  res.json({ ok: true, assets });
 });
 
 app.get("/api/ai-movie/projects", requireRole("admin"), async (req, res) => {

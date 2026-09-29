@@ -3786,7 +3786,10 @@ async function generateAiMovieScreenplaySceneRevision(
     config: {
       systemInstruction: AI_MOVIE_SCREENPLAY_SCENE_REVISE_SYSTEM_PROMPT,
       responseMimeType: "application/json",
-      maxOutputTokens: 4096,
+      // Raised from 4096 for the same reason as Write Dialogue below: a
+      // revise can now return dialogue-bearing content, sometimes across
+      // more than one scene, in both languages.
+      maxOutputTokens: 8192,
       responseSchema: {
         type: Type.OBJECT,
         properties: {
@@ -3882,7 +3885,14 @@ async function generateAiMovieSceneDialogue(
     config: {
       systemInstruction: AI_MOVIE_SCENE_DIALOGUE_SYSTEM_PROMPT,
       responseMimeType: "application/json",
-      maxOutputTokens: 2048,
+      // Was 2048 -- too small once a scene carries interleaved dialogue,
+      // camera direction, AND a full separate Hindi version of every block
+      // (Devanagari costs noticeably more tokens than English). A long
+      // scene got cut off mid-JSON, and every retry hit the same wall, so
+      // the longest scenes (exactly the ones fill-to-target sends here to
+      // lengthen) were the likeliest to fail. A ceiling only -- normal
+      // scenes still cost exactly what they write.
+      maxOutputTokens: 8192,
       responseSchema: {
         type: Type.OBJECT,
         properties: {

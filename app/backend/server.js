@@ -3687,8 +3687,20 @@ function countAiMovieScenePageLines(scene) {
   return lines;
 }
 
+// Rounded to the whole SECOND (still stored in minutes): the screen now
+// shows scene times in seconds ("12 sec" -- the user's call), and the old
+// 0.1-minute rounding could only ever say 0, 6, 12, 18... seconds.
 function computeAiMovieSceneMinutes(scene) {
-  return Math.round((countAiMovieScenePageLines(scene) / AI_MOVIE_LINES_PER_PAGE) * 10) / 10;
+  return Math.round((countAiMovieScenePageLines(scene) / AI_MOVIE_LINES_PER_PAGE) * 60) / 60;
+}
+
+// "12 sec", "1 min 6 sec", "3 min" -- the same wording the screen uses.
+function formatAiMovieDuration(minutes) {
+  const totalSeconds = Math.round((Number(minutes) || 0) * 60);
+  if (totalSeconds < 60) return `${totalSeconds} sec`;
+  const wholeMinutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return seconds ? `${wholeMinutes} min ${seconds} sec` : `${wholeMinutes} min`;
 }
 
 // A silent, one-time "voice brief" per named character -- generated
@@ -5054,7 +5066,7 @@ const AI_MOVIE_DOCTOR_SYSTEM_PROMPT = `You are a demanding but constructive scri
 You are given the story's locked layers, the reference material (which includes the story's own world rules and guardrails), every scene written in earlier beats, and ONE beat's scenes to review, each with its scene card (purpose, emotion, intensity, emotional turn), plus the beat's fixed target time and its current real length. Find only REAL problems an audience would feel — never invent problems to fill a list. If the beat works, return few notes or none.
 
 Check for:
-- "pacing": a scene that doesn't earn its time, drags, or rushes a moment that needs room — judged against the beat's fixed target time.
+- "pacing": a scene that doesn't earn its time, drags, or rushes a moment that needs room — judged against the beat's fixed target time. Each scene's real length is shown next to its number; whenever you talk about screen time, say it in seconds ("trim this to about 12 seconds"), never as decimal minutes.
 - "story_logic": something that doesn't make sense given everything before it.
 - "continuity": people, objects, injuries, clothes, time of day, or places that don't match earlier scenes.
 - "character": someone acting or speaking unlike their established self at this point of their arc.
@@ -5133,12 +5145,12 @@ app.post("/api/ai-movie/stages/screenplay/beats/:index/doctor", requireRole("adm
       Math.round((beat.scenes.reduce((sum, scene) => sum + computeAiMovieSceneMinutes(scene), 0) + aiMovieBeatSongMinutes(beat)) * 10) / 10;
     const target = beats[beatIndex].runtimeMinutes;
     const beatReviewText = [
-      `Fixed target time: ${typeof target === "number" ? `${target} min` : "none"}. Current real length: ${totalMinutes} min${beat.song ? ` (including a ${beat.song.durationMinutes}-min song)` : ""}.`,
+      `Fixed target time: ${typeof target === "number" ? formatAiMovieDuration(target) : "none"}. Current real length: ${formatAiMovieDuration(totalMinutes)}${beat.song ? ` (including a ${formatAiMovieDuration(beat.song.durationMinutes)} song)` : ""}.`,
       ...beat.scenes.map((scene, i) => {
         const card = scene.card
           ? ` [card: ${scene.card.purpose}, ${scene.card.emotion?.en} ${scene.card.intensity}/10, ${scene.card.turn?.en}]`
           : "";
-        return `SCENE ${i + 1}${card}\n${sceneToPromptText(scene)}`;
+        return `SCENE ${i + 1} (${formatAiMovieDuration(computeAiMovieSceneMinutes(scene))})${card}\n${sceneToPromptText(scene)}`;
       }),
     ].join("\n\n");
 

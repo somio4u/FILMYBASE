@@ -354,7 +354,7 @@ const LABELS = {
     aiMovieIntervalMarker: '— INTERVAL after this beat —',
     aiMovieScenePurposeLabels: { plot_advancing: 'Plot', character_revealing: 'Character', both: 'Plot + Character' },
     aiMovieScreenplayPdfButton: (lang) => `Download Screenplay PDF (${lang === 'hi' ? 'Hindi' : 'English'})`,
-    aiMovieExtendToTargetButton: (target) => `Extend to ${target} min`,
+    aiMovieExtendToTargetButton: (target) => `Extend to ${aiMovieDurationText(target, 'sec', 'min')}`,
     aiMovieExtendingToTargetLabel: 'Extending this beat…',
     aiMovieExtendToTargetNote: 'Keeps every scene and line already written — only adds more screenplay (dialogue first, then new scenes) until the beat reaches its Beat Sheet time.',
     aiMovieScreenplayBeatOfLabel: (index, total) => `Beat ${index} of ${total}`,
@@ -364,7 +364,8 @@ const LABELS = {
     aiMovieReviseScenePlaceholder: 'Optional — say what to change, e.g. "make it longer", "change the mood", "fix the ending" (leave blank to let the AI improve it)',
     aiMovieReviseSceneSubmitButton: 'Submit',
     aiMovieRevisingSceneLabel: 'Revising…',
-    aiMovieSceneDurationLabel: (minutes) => `Duration: ~${minutes} min`,
+    aiMovieSceneDurationLabel: (minutes) => `Duration: ~${aiMovieDurationText(minutes, 'sec', 'min')}`,
+    aiMovieTotalRuntimeLabel: (total, target) => `Estimated total: ${aiMovieDurationText(total, 'sec', 'min')} (target: ${aiMovieDurationText(target, 'sec', 'min')})`,
     aiMovieWriteDialogueButton: 'Write Dialogue',
     aiMovieRewriteDialogueButton: 'Rewrite Dialogue',
     aiMovieDialogueCancelButton: 'Cancel',
@@ -972,7 +973,7 @@ const LABELS = {
     aiMovieIntervalMarker: '— ଏହି ବିଟ୍ ପରେ ଇଣ୍ଟରଭାଲ୍ —',
     aiMovieScenePurposeLabels: { plot_advancing: 'କାହାଣୀ', character_revealing: 'ଚରିତ୍ର', both: 'କାହାଣୀ + ଚରିତ୍ର' },
     aiMovieScreenplayPdfButton: (lang) => `ସ୍କ୍ରିନପ୍ଲେ PDF ଡାଉନଲୋଡ୍ କରନ୍ତୁ (${lang === 'hi' ? 'ହିନ୍ଦୀ' : 'ଇଂରାଜୀ'})`,
-    aiMovieExtendToTargetButton: (target) => `${target} ମିନିଟ୍ ପର୍ଯ୍ୟନ୍ତ ବଢ଼ାନ୍ତୁ`,
+    aiMovieExtendToTargetButton: (target) => `${aiMovieDurationText(target, 'ସେକେଣ୍ଡ', 'ମିନିଟ୍')} ପର୍ଯ୍ୟନ୍ତ ବଢ଼ାନ୍ତୁ`,
     aiMovieExtendingToTargetLabel: 'ଏହି ବିଟ୍ ବଢ଼ାଯାଉଛି…',
     aiMovieExtendToTargetNote: "ଲେଖାଯାଇଥିବା ପ୍ରତ୍ୟେକ ଦୃଶ୍ୟ ଓ ସଂଳାପ ରହିବ — ବିଟ୍ ସିଟ୍‌ର ସମୟ ପର୍ଯ୍ୟନ୍ତ କେବଳ ଅଧିକ ସ୍କ୍ରିନପ୍ଲେ ଯୋଡ଼ାଯିବ (ପ୍ରଥମେ ସଂଳାପ, ତା'ପରେ ନୂଆ ଦୃଶ୍ୟ)।",
     aiMovieScreenplayBeatOfLabel: (index, total) => `ବିଟ୍ ${index} / ${total}`,
@@ -982,7 +983,8 @@ const LABELS = {
     aiMovieReviseScenePlaceholder: 'ଇଚ୍ଛାଧୀନ — କଣ ବଦଳାଇବେ କୁହନ୍ତୁ, ଯଥା "ଏହାକୁ ଲମ୍ବା କରନ୍ତୁ" (ଖାଲି ଛାଡ଼ିଲେ AI ନିଜେ ଉନ୍ନତ କରିବ)',
     aiMovieReviseSceneSubmitButton: 'ଦାଖଲ କରନ୍ତୁ',
     aiMovieRevisingSceneLabel: 'ପରିବର୍ତ୍ତନ ହେଉଛି…',
-    aiMovieSceneDurationLabel: (minutes) => `ଅବଧି: ~${minutes} ମିନିଟ୍`,
+    aiMovieSceneDurationLabel: (minutes) => `ଅବଧି: ~${aiMovieDurationText(minutes, 'ସେକେଣ୍ଡ', 'ମିନିଟ୍')}`,
+    aiMovieTotalRuntimeLabel: (total, target) => `ଆକଳିତ ସମୁଦାୟ: ${aiMovieDurationText(total, 'ସେକେଣ୍ଡ', 'ମିନିଟ୍')} (ଲକ୍ଷ୍ୟ: ${aiMovieDurationText(target, 'ସେକେଣ୍ଡ', 'ମିନିଟ୍')})`,
     aiMovieWriteDialogueButton: 'ସଂଳାପ ଲେଖନ୍ତୁ',
     aiMovieRewriteDialogueButton: 'ସଂଳାପ ପୁନଃ ଲେଖନ୍ତୁ',
     aiMovieDialogueCancelButton: 'ବାତିଲ୍',
@@ -1652,6 +1654,17 @@ function aiMovieIntervalAllowedAfterBeat(beats, beatIndex) {
   if (beatIndex >= beats.length - 1) return false
   if (!beats.some((beat) => Number(beat?.runtimeMinutes) > 0)) return true
   return aiMovieMinutesAtEndOfBeat(beats, beatIndex) >= AI_MOVIE_EARLIEST_INTERVAL_MINUTES
+}
+
+// AI Movie screen times are shown in seconds (the user's call: "12 sec",
+// never "0.2 min"); anything a minute or longer reads as minutes and
+// seconds ("1 min 6 sec"), so a 3-minute song or beat stays readable.
+function aiMovieDurationText(minutes, secUnit, minUnit) {
+  const totalSeconds = Math.round((Number(minutes) || 0) * 60)
+  if (totalSeconds < 60) return `${totalSeconds} ${secUnit}`
+  const wholeMinutes = Math.floor(totalSeconds / 60)
+  const seconds = totalSeconds % 60
+  return seconds ? `${wholeMinutes} ${minUnit} ${seconds} ${secUnit}` : `${wholeMinutes} ${minUnit}`
 }
 
 function formatExportTimestamp(date = new Date()) {
@@ -2392,14 +2405,14 @@ function aiMovieSongMinutes(screenplayBeat) {
 // AI Movie screen points to Extend (short) or a scene's Request Changes
 // (long) rather than the generic "Request Changes" advice, which there
 // would regenerate the whole beat and throw its dialogue away.
-function RuntimeSummary({ total, target, t, mismatchNote }) {
+function RuntimeSummary({ total, target, t, mismatchNote, label }) {
   if (typeof total !== 'number' || !target) return null
   const isMismatch = Math.abs(total - target) / target > 0.25
   const note = typeof mismatchNote === 'function' ? mismatchNote(total < target) : t.runtimeMismatchNote
 
   return (
     <p className={isMismatch ? 'feedback-note' : 'runtime-summary'}>
-      {t.totalRuntimeLabel(total, target)}
+      {(label ?? t.totalRuntimeLabel)(total, target)}
       {isMismatch && (
         <>
           <br />
@@ -5839,7 +5852,7 @@ function App() {
     const scenes = screenplayBeatEntry?.scenes
     if (Array.isArray(scenes) && scenes.length > 0) {
       const total = scenes.reduce((sum, scene) => sum + effectiveAiMovieSceneMinutes(scene), 0)
-      return Math.round(total * 10) / 10
+      return total
     }
     return estimateAiMovieMinutesFromText(beat?.description?.en)
   }
@@ -9213,12 +9226,12 @@ function App() {
                                   <>
                                     <RuntimeSummary
                                       total={
-                                        beat.scenes && Math.round(
-                                          (beat.scenes.reduce((sum, scene) => sum + effectiveAiMovieSceneMinutes(scene), 0) + aiMovieSongMinutes(beat)) * 10
-                                        ) / 10
+                                        beat.scenes &&
+                                        beat.scenes.reduce((sum, scene) => sum + effectiveAiMovieSceneMinutes(scene), 0) + aiMovieSongMinutes(beat)
                                       }
                                       target={effectiveAiMovieBeatMinutes(beatMeta, beat)}
                                       t={t}
+                                      label={t.aiMovieTotalRuntimeLabel}
                                       mismatchNote={(isShort) => (isShort ? t.aiMovieBeatShortNote : t.aiMovieBeatLongNote)}
                                     />
 

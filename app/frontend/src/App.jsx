@@ -8955,7 +8955,7 @@ function App() {
                                       const isReviseFormOpen = aiMovieRevisingSceneIndex === reviseKey
                                       return (
                                         <div key={sceneIndex} className="bit-row">
-                                          <p className="bit-heading">{scene.sceneHeading[aiMovieLanguage]}</p>
+                                          <p className="bit-heading">{scene.sceneHeading?.[aiMovieLanguage] ?? scene.sceneHeading?.en ?? ''}</p>
                                           <p className="ai-movie-scene-duration">
                                             {t.aiMovieSceneDurationLabel(effectiveAiMovieSceneMinutes(scene))}
                                           </p>
@@ -8967,19 +8967,19 @@ function App() {
                                               block.type === 'dialogue' ? (
                                                 <div key={blockIndex} className="ai-movie-dialogue-line">
                                                   <p className="ai-movie-dialogue-character">{block.character}</p>
-                                                  <p>{block.line[aiMovieLanguage]}</p>
+                                                  <p>{block.line?.[aiMovieLanguage] ?? block.line?.en ?? ''}</p>
                                                 </div>
                                               ) : (
-                                                <p key={blockIndex}>{block.text[aiMovieLanguage]}</p>
+                                                <p key={blockIndex}>{block.text?.[aiMovieLanguage] ?? block.text?.en ?? ''}</p>
                                               )
                                             )
                                           ) : (
                                             <>
-                                              <p>{scene.action[aiMovieLanguage]}</p>
+                                              <p>{scene.action?.[aiMovieLanguage] ?? scene.action?.en ?? ''}</p>
                                               {Array.isArray(scene.dialogue) && scene.dialogue.map((line, lineIndex) => (
                                                 <div key={lineIndex} className="ai-movie-dialogue-line">
                                                   <p className="ai-movie-dialogue-character">{line.character}</p>
-                                                  <p>{line.line[aiMovieLanguage]}</p>
+                                                  <p>{line.line?.[aiMovieLanguage] ?? line.line?.en ?? ''}</p>
                                                 </div>
                                               ))}
                                             </>

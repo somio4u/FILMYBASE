@@ -3306,6 +3306,27 @@ const AI_MOVIE_SCENE_CONTENT_BLOCK_SCHEMA = {
   required: ["type"],
 };
 
+// Only "type" is actually required above (text/character/line all vary by
+// type), so a real Gemini response has come back missing one -- the screen
+// then crashed reading ".en" off of undefined. Guarantees every block that
+// reaches the frontend has a real, safe bilingual object, falling back to
+// the other language (or an empty string) rather than ever being missing
+// outright.
+function ensureAiMovieBilingualText(value) {
+  const en = typeof value?.en === "string" ? value.en : "";
+  const hi = typeof value?.hi === "string" && value.hi ? value.hi : en;
+  return { en, hi };
+}
+
+function sanitizeAiMovieContentBlocks(blocks) {
+  if (!Array.isArray(blocks)) return blocks;
+  return blocks.map((block) =>
+    block?.type === "dialogue"
+      ? { type: "dialogue", character: typeof block.character === "string" ? block.character : "", line: ensureAiMovieBilingualText(block.line) }
+      : { type: "action", text: ensureAiMovieBilingualText(block.text) }
+  );
+}
+
 // Renders one scene as plain text for prompt context -- covers all three
 // shapes a scene can be in: still action-only, the new interleaved
 // action/dialogue "content" blocks, or older data saved with the earlier
@@ -3753,7 +3774,10 @@ async function generateAiMovieScreenplaySceneRevision(
     },
   });
   return result.scenes.map((scene) => {
-    const cleaned = Array.isArray(scene.content) && scene.content.length > 0 ? { ...scene, content: scene.content } : { ...scene, content: undefined };
+    const hasContent = Array.isArray(scene.content) && scene.content.length > 0;
+    const cleaned = hasContent
+      ? { ...scene, sceneHeading: ensureAiMovieBilingualText(scene.sceneHeading), content: sanitizeAiMovieContentBlocks(scene.content) }
+      : { ...scene, sceneHeading: ensureAiMovieBilingualText(scene.sceneHeading), action: ensureAiMovieBilingualText(scene.action), content: undefined };
     return { ...cleaned, estimatedMinutes: computeAiMovieSceneMinutes(cleaned) };
   });
 }
@@ -3794,11 +3818,13 @@ This is the FINAL on-screen text the audience actually hears, so both the dialog
 
 This pass also gives the scene its final cinematic shape, on top of the dialogue itself:
 - Character roster: also return "characters" — one line naming every character present in this scene, plus a short note on any background presence (e.g. "RUDRA, OM, plus a dozen temple worshippers in the background"). Names only, no new plot detail.
-- Camera direction: within the action blocks, reach for real screenplay camera-directive language where it earns its place — TIGHT CLOSE-UP ON, SLOW DOLLY IN ON, CAMERA HOLDS ON, FOCUS SHIFTS TO, CUT TO:, SHARP CUT TO: — guiding the reader's eye like an actual shot list, not just descriptive prose.
+- Camera direction: within the action blocks, reach for real screenplay camera-directive language where it earns its place — TIGHT CLOSE-UP ON, SLOW DOLLY IN ON, CAMERA HOLDS ON, FOCUS SHIFTS TO, CUT TO:, SHARP CUT TO: — guiding the reader's eye like an actual shot list, not just descriptive prose. These specific directive terms are conventionally English even in a Hindi script, exactly like the loanwords in the script-switching rule above — but that is NOT license to write the rest of the Hindi field in English: everything around those terms must still be genuine, natural Hindi.
 - The held reaction: don't always cut to whoever's speaking or moving — sometimes the stronger choice is to hold on a silent face while everything else happens around or off-screen from them (a swallowed sob, a blank stare, a tightening jaw). Use it where the moment earns it, not in every scene.
 - Object symbolism: let tension or stillness show up in a tangible nearby detail (drifting smoke, spilled water, fallen ash, torn cloth) as well as in a face.
 - Subtext: let lines carry what a character is concealing, not only what they say outright — warm on the surface, colder underneath, when the story calls for it. Dead air (a character who deliberately doesn't answer) is a valid, often stronger choice than a line.
-- The button: end the scene on a decisive beat — a loaded look, an unanswered question, FREEZE FRAME:, or SHARP CUT TO: — never let it just trail off.`;
+- The button: end the scene on a decisive beat — a loaded look, an unanswered question, FREEZE FRAME:, or SHARP CUT TO: — never let it just trail off.
+
+The "characters" field, and every "hi" field in every block above, still needs its own real, separately-written Hindi text — never the English copied over, left blank, or written in English. This matters even more now that there's more to juggle per scene: treat the Hindi field as just as important as the English one, for every single field, every time.`;
 
 async function generateAiMovieSceneDialogue(
   priorContextText,
@@ -3844,7 +3870,7 @@ async function generateAiMovieSceneDialogue(
       },
     },
   });
-  return { characters: result.characters, content: result.content };
+  return { characters: ensureAiMovieBilingualText(result.characters), content: sanitizeAiMovieContentBlocks(result.content) };
 }
 
 // A beat's "generating" status is only ever meant to be transient, within

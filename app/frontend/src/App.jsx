@@ -8960,7 +8960,28 @@ function App() {
                                           <p className="ai-movie-scene-duration">
                                             {t.aiMovieSceneDurationLabel(effectiveAiMovieSceneMinutes(scene))}
                                           </p>
-                                          <p>{scene.action[aiMovieLanguage]}</p>
+                                          {Array.isArray(scene.content) ? (
+                                            scene.content.map((block, blockIndex) =>
+                                              block.type === 'dialogue' ? (
+                                                <div key={blockIndex} className="ai-movie-dialogue-line">
+                                                  <p className="ai-movie-dialogue-character">{block.character}</p>
+                                                  <p>{block.line[aiMovieLanguage]}</p>
+                                                </div>
+                                              ) : (
+                                                <p key={blockIndex}>{block.text[aiMovieLanguage]}</p>
+                                              )
+                                            )
+                                          ) : (
+                                            <>
+                                              <p>{scene.action[aiMovieLanguage]}</p>
+                                              {Array.isArray(scene.dialogue) && scene.dialogue.map((line, lineIndex) => (
+                                                <div key={lineIndex} className="ai-movie-dialogue-line">
+                                                  <p className="ai-movie-dialogue-character">{line.character}</p>
+                                                  <p>{line.line[aiMovieLanguage]}</p>
+                                                </div>
+                                              ))}
+                                            </>
+                                          )}
                                           <button
                                             type="button"
                                             className="cancel-button ai-movie-revise-scene-button"
@@ -8994,20 +9015,14 @@ function App() {
                                           {beat.status === 'approved' && (() => {
                                             const dialogueKey = `${viewIndex}-${sceneIndex}`
                                             const isDialogueFormOpen = aiMovieDialogueSceneIndex === dialogueKey
-                                            const hasDialogueResult = Array.isArray(scene.dialogue)
+                                            const hasDialogueResult = Array.isArray(scene.content) || Array.isArray(scene.dialogue)
+                                            const hasAnyDialogueLines = Array.isArray(scene.content)
+                                              ? scene.content.some((block) => block.type === 'dialogue')
+                                              : Array.isArray(scene.dialogue) && scene.dialogue.length > 0
                                             return (
                                               <>
-                                                {hasDialogueResult && (
-                                                  scene.dialogue.length > 0 ? (
-                                                    scene.dialogue.map((line, lineIndex) => (
-                                                      <div key={lineIndex} className="ai-movie-dialogue-line">
-                                                        <p className="ai-movie-dialogue-character">{line.character}</p>
-                                                        <p>{line.line[aiMovieLanguage]}</p>
-                                                      </div>
-                                                    ))
-                                                  ) : (
-                                                    <p className="ai-movie-scene-duration">{t.aiMovieNoDialogueNeededNote}</p>
-                                                  )
+                                                {hasDialogueResult && !hasAnyDialogueLines && (
+                                                  <p className="ai-movie-scene-duration">{t.aiMovieNoDialogueNeededNote}</p>
                                                 )}
                                                 <button
                                                   type="button"

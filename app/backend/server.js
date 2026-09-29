@@ -3290,16 +3290,40 @@ const AI_MOVIE_FORWARD_STAGE_SCHEMAS = {
 // Dialogue lives entirely outside AI_MOVIE_SCREENPLAY_SCENE_SCHEMA on
 // purpose -- normal scene generation and the general scene-revise action
 // both stay dialogue-free, matching the deliberate "no dialogue yet" design
-// above. This is its own separate, opt-in field a scene only gets once the
-// user explicitly asks for it, one scene at a time.
-const AI_MOVIE_SCENE_DIALOGUE_LINE_SCHEMA = {
+// above. A scene only gets this structure once the user explicitly asks for
+// dialogue, one scene at a time: an ORDERED list of blocks, action and
+// dialogue interleaved exactly as they happen (action, a line, more action,
+// a reply...), matching how a real screenplay reads -- never a separate
+// action paragraph followed by a stacked list of lines.
+const AI_MOVIE_SCENE_CONTENT_BLOCK_SCHEMA = {
   type: Type.OBJECT,
   properties: {
+    type: { type: Type.STRING, enum: ["action", "dialogue"] },
+    text: AI_MOVIE_BILINGUAL_TEXT_SCHEMA,
     character: { type: Type.STRING },
     line: AI_MOVIE_BILINGUAL_TEXT_SCHEMA,
   },
-  required: ["character", "line"],
+  required: ["type"],
 };
+
+// Renders one scene as plain text for prompt context -- covers all three
+// shapes a scene can be in: still action-only, the new interleaved
+// action/dialogue "content" blocks, or older data saved with the earlier
+// separate flat "dialogue" list (still readable, just not re-split).
+function sceneToPromptText(scene) {
+  const heading = scene.sceneHeading.en;
+  if (Array.isArray(scene.content) && scene.content.length > 0) {
+    const body = scene.content
+      .map((block) => (block.type === "dialogue" ? `${block.character}\n${block.line.en}` : block.text.en))
+      .join("\n\n");
+    return `${heading}\n${body}`;
+  }
+  const legacyDialogueBlock =
+    Array.isArray(scene.dialogue) && scene.dialogue.length > 0
+      ? `\n\n${scene.dialogue.map((d) => `${d.character}\n${d.line.en}`).join("\n\n")}`
+      : "";
+  return `${heading}\n${scene.action.en}${legacyDialogueBlock}`;
+}
 
 async function generateAiMovieForwardStage(stageKey, priorContextText, referenceMaterialText, feedback) {
   const referenceBlock = referenceMaterialText
@@ -3473,11 +3497,14 @@ async function generateAiMovieScreenplaySceneRevision(
 
 // Writes dialogue for ONE scene, only once the user asks for it -- never
 // forced into every scene just because the button exists. A pure action/
-// visual scene is allowed to come back with an empty dialogue list; that's
-// a real, honest answer here, not a failure to try.
+// visual scene is allowed to come back as a single unchanged action block;
+// that's a real, honest answer here, not a failure to try. Unlike a plain
+// bolt-on list, this re-splits the scene's own action text around the
+// inserted lines so the result reads as one continuous interleaved
+// screenplay, not two separate sections.
 const AI_MOVIE_SCENE_DIALOGUE_SYSTEM_PROMPT = `You are working on an AI Movie — a film that will be entirely AI-generated, never physically shot. Because of that, never reason about budget, cast/crew/location availability, shoot schedules, or any real-world production constraint — anything that can be imagined can be included, with no limitation.
 
-You are given the story's already-approved, locked layers below (including full Characters), every screenplay scene already written in earlier beats, and the current beat's own other scenes (fixed context — do not write dialogue for them, only the one scene named at the end). Decide honestly whether this ONE scene genuinely needs spoken dialogue to work: many purely visual, physical, or transitional scenes are complete with NO dialogue at all — if that's true here, return an empty dialogue list rather than inventing lines just to fill the space. When dialogue is warranted, write tight, naturalistic screenplay dialogue — never expository ("as you know…") or overwritten — consistent with each speaking character's established personality, wants, and voice from the Characters layer above. Use each character's name exactly as it appears in that layer. Keep the scene's existing action/visual description completely unchanged — you are only adding spoken lines on top of it, never altering what happens or rewriting the scene itself.`;
+You are given the story's already-approved, locked layers below (including full Characters), every screenplay scene already written in earlier beats, and the current beat's own other scenes (fixed context — do not touch them, only the one scene named at the end). Break this ONE scene's existing action description into an ORDERED sequence of blocks — action and dialogue interleaved exactly as they naturally occur (a bit of action, then a line, more action, a reply, and so on) — matching how a real screenplay actually reads, never a block of action followed by a separate stack of dialogue. Decide honestly whether this scene genuinely needs spoken dialogue at all: many purely visual, physical, or transitional scenes are complete with NO dialogue — if that's true here, return the scene as a single "action" block containing its full original text, unchanged, rather than inventing lines just to fill the space. When dialogue is warranted, write tight, naturalistic screenplay dialogue — never expository ("as you know…") or overwritten — consistent with each speaking character's established personality, wants, and voice from the Characters layer above. Use each character's name exactly as it appears in that layer. Preserve every bit of the scene's existing substance — never remove, shorten, or invent new plot content; you are only re-splitting the SAME action text around the dialogue you insert, never rewriting what happens.`;
 
 async function generateAiMovieSceneDialogue(
   priorContextText,
@@ -3507,13 +3534,13 @@ async function generateAiMovieSceneDialogue(
       responseSchema: {
         type: Type.OBJECT,
         properties: {
-          dialogue: { type: Type.ARRAY, items: AI_MOVIE_SCENE_DIALOGUE_LINE_SCHEMA },
+          content: { type: Type.ARRAY, items: AI_MOVIE_SCENE_CONTENT_BLOCK_SCHEMA, minItems: "1" },
         },
-        required: ["dialogue"],
+        required: ["content"],
       },
     },
   });
-  return result.dialogue;
+  return result.content;
 }
 
 // A beat's "generating" status is only ever meant to be transient, within
@@ -3557,7 +3584,7 @@ function flattenAiMovieScreenplayScenesSoFar(screenplayBeats, beforeIndex) {
     .slice(0, beforeIndex)
     .filter((b) => b.scenes)
     .flatMap((b) => b.scenes)
-    .map((s) => `${s.sceneHeading.en}\n${s.action.en}`)
+    .map((s) => sceneToPromptText(s))
     .join("\n\n");
 }
 
@@ -3832,10 +3859,10 @@ app.post("/api/ai-movie/stages/screenplay/beats/:beatIndex/scenes/:sceneIndex/re
     const scenesSoFarText = flattenAiMovieScreenplayScenesSoFar(screenplayBeats, beatIndex);
     const beatSiblingScenesText = beat.scenes
       .filter((_, i) => i !== sceneIndex)
-      .map((s) => `${s.sceneHeading.en}\n${s.action.en}`)
+      .map((s) => sceneToPromptText(s))
       .join("\n\n");
     const targetScene = beat.scenes[sceneIndex];
-    const targetSceneText = `${targetScene.sceneHeading.en}\n${targetScene.action.en}`;
+    const targetSceneText = sceneToPromptText(targetScene);
 
     const replacementScenes = await generateAiMovieScreenplaySceneRevision(
       priorContextText,
@@ -3911,12 +3938,12 @@ app.post("/api/ai-movie/stages/screenplay/beats/:beatIndex/scenes/:sceneIndex/di
     const scenesSoFarText = flattenAiMovieScreenplayScenesSoFar(screenplayBeats, beatIndex);
     const beatSiblingScenesText = beat.scenes
       .filter((_, i) => i !== sceneIndex)
-      .map((s) => `${s.sceneHeading.en}\n${s.action.en}`)
+      .map((s) => sceneToPromptText(s))
       .join("\n\n");
     const targetScene = beat.scenes[sceneIndex];
-    const targetSceneText = `${targetScene.sceneHeading.en}\n${targetScene.action.en}`;
+    const targetSceneText = sceneToPromptText(targetScene);
 
-    const dialogue = await generateAiMovieSceneDialogue(
+    const content = await generateAiMovieSceneDialogue(
       priorContextText,
       referenceMaterialText,
       scenesSoFarText,
@@ -3929,11 +3956,17 @@ app.post("/api/ai-movie/stages/screenplay/beats/:beatIndex/scenes/:sceneIndex/di
     const latest = (await db.query("SELECT backfill FROM ai_movie_projects WHERE id = $1", [projectId])).rows[0].backfill;
     const latestBeats = latest.screenplayBeats ?? screenplayBeats;
     const latestScenes = latestBeats[beatIndex]?.scenes ?? beat.scenes;
-    const newScenes = latestScenes.map((s, i) => (i === sceneIndex ? { ...s, dialogue } : s));
+    // Drops any older flat "dialogue" list this scene might still carry --
+    // "content" is now the one authoritative shape once dialogue exists.
+    const newScenes = latestScenes.map((s, i) => {
+      if (i !== sceneIndex) return s;
+      const { dialogue: _legacyDialogue, ...rest } = s;
+      return { ...rest, content };
+    });
     latestBeats[beatIndex] = { ...latestBeats[beatIndex], scenes: newScenes };
     await saveAiMovieBackfillField(projectId, "screenplayBeats", latestBeats);
 
-    res.json({ beatIndex, sceneIndex, dialogue });
+    res.json({ beatIndex, sceneIndex, content });
   } catch (error) {
     console.error(`Screenplay beat ${beatIndex} scene ${sceneIndex} dialogue failed:`, error.message);
     res.status(502).json({ error: error.message });

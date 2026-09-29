@@ -4118,6 +4118,8 @@ const AI_MOVIE_HINDI_SWITCH_LIMITS_RULE = `LIMITS ON ENGLISH INSIDE HINDI: switc
 - WRONG: "तीर्थयात्रियों का ocean" RIGHT: "तीर्थयात्रियों का समंदर"
 - WRONG: "saffron रंग के कपड़े" RIGHT: "केसरिया कपड़े"
 - WRONG: "कृपया patience बनाए रखने का अनुरोध है" RIGHT: "थोड़ा सब्र रखिए"
+- Faith words are ALWAYS Hindi — god, temple, pray, prayer, devotee, worship, soul, blessing: WRONG "हमारे god यहीं रहे", "उनके temple", "pray करने की जगह" RIGHT "हमारे भगवान यहीं रहे", "उनके मंदिर", "पूजा करने की जगह". Same for everyday feeling words: WRONG "पृथ्वी एक memory है", "एक ghost की तरह" RIGHT "पृथ्वी एक याद है", "वीरान".
+- The NARRATOR's Hindi is plain spoken Hindi with very few English words at all.
 Keep the Hindi around the English words casual and spoken — never a formal, bookish word ("अनुरोध", "कृपया", "प्रतीक्षा") next to an English one. In ACTION text, even fewer switches: plain, simple Hindi, with English only for camera directions and the story's own tech names.`;
 
 // How a beat is meant to reach its fixed time. The same test run showed
@@ -4499,6 +4501,7 @@ ${AI_MOVIE_SCREEN_ONLY_RULE}
 ${AI_MOVIE_HEADING_AND_NAMES_RULE}
 
 ${AI_MOVIE_CONTENT_BLOCK_FORMAT_RULE}
+NEVER bring pictures or events from this beat's other scenes into this one — they already have their own scenes and would play on screen twice. If narration (or dialogue) needs more screen time than this scene's own pictures give, let it play over this scene's own images for longer — a slower camera move, a held shot, a small extra detail of the same moment — never over the next scene's.
 Also: this is the pass where speech gets written, so any speech the original action only DESCRIBES ("he asks for more information", "she pleads with him", "they argue") must become real dialogue lines in your output — never leave a spoken moment as a description, unless it is genuinely inaudible (background murmuring). And every character you list as present must visibly DO something in the scene (an action, a reaction, or a line) — otherwise leave them out of the list.`;
 
 async function generateAiMovieSceneDialogue(
@@ -4555,26 +4558,53 @@ async function generateAiMovieSceneDialogue(
   });
   const content = sanitizeAiMovieContentBlocks(result.content);
   // A real test run had this pass paste its neighbouring scenes into the
-  // answer (Beat 2's third scene came back as scenes 1 + 2 + itself, with
-  // their headings stuck in the middle). When much of the new text comes
-  // from the OTHER scenes rather than this one, the answer is refused, so
-  // the scene keeps its original version.
-  if (aiMovieCopiesOtherScenes(content, targetSceneText, `${scenesSoFarText ?? ""}\n\n${beatSiblingScenesText ?? ""}`)) {
+  // answer (Beat 2's third scene came back as scenes 1 + 2 + itself). And
+  // when the user asked for a long narrator voice-over on Beat 1's first
+  // scene, it pulled in scene 2's pictures to make room for it -- they'd
+  // have played on screen twice. Refusing the whole answer threw away
+  // good narration too (the user saw only an error), so now just the
+  // copied parts are taken out and everything new is kept.
+  const trimmed = removeAiMovieCopiedText(content, targetSceneText, `${scenesSoFarText ?? ""}\n\n${beatSiblingScenesText ?? ""}`);
+  if (trimmed.length === 0) {
     throw new Error("The dialogue came back repeating other scenes instead of this one -- please try again.");
   }
-  return { characters: ensureAiMovieBilingualText(result.characters), content };
+  if (trimmed.length !== content.length || JSON.stringify(trimmed) !== JSON.stringify(content)) {
+    console.log(`${beat?.beatNumber ? `Beat ${beat.beatNumber}: ` : ""}Write Dialogue -- took out text copied from other scenes, kept the rest.`);
+  }
+  return { characters: ensureAiMovieBilingualText(result.characters), content: trimmed };
 }
 
-// How much of a rewritten scene is text taken from OTHER scenes: its
-// three-word runs that appear in those scenes but not in the scene's own
-// original text. Same 40% limit as the repeat catcher.
-function aiMovieCopiesOtherScenes(content, ownSceneText, otherScenesText) {
-  const newTriples = aiMovieWordTriples(sceneToPromptText({ content }));
+// Takes out of a rewritten scene the action text that really belongs to
+// OTHER scenes: an action paragraph is kept when less than 40% of its
+// three-word runs come from the other scenes (and not from this scene's
+// own original text). A mixed paragraph -- this scene's own lines plus
+// copied ones -- keeps its own sentences, when the English and Hindi
+// split into the same number of sentences so they can be matched up;
+// otherwise the whole copied paragraph goes. Dialogue lines are always
+// kept.
+function removeAiMovieCopiedText(content, ownSceneText, otherScenesText) {
   const own = aiMovieWordTriples(ownSceneText);
   const others = aiMovieWordTriples(otherScenesText);
-  let copied = 0;
-  for (const triple of newTriples) if (others.has(triple) && !own.has(triple)) copied++;
-  return newTriples.size > 0 && copied / newTriples.size >= AI_MOVIE_REPEAT_OVERLAP_LIMIT;
+  const copiedShare = (text) => {
+    const triples = aiMovieWordTriples(text);
+    if (triples.size === 0) return 0;
+    let copied = 0;
+    for (const triple of triples) if (others.has(triple) && !own.has(triple)) copied++;
+    return copied / triples.size;
+  };
+  const sentences = (text) => (text ?? "").split(/(?<=[.!?।])\s+/).filter((sentence) => sentence.trim());
+  return content.flatMap((block) => {
+    if (block.type !== "action" || copiedShare(block.text?.en) < AI_MOVIE_REPEAT_OVERLAP_LIMIT) return [block];
+    const en = sentences(block.text.en);
+    const hi = sentences(block.text.hi);
+    if (en.length > 1 && en.length === hi.length) {
+      const keep = en.map((sentence) => copiedShare(sentence) < AI_MOVIE_REPEAT_OVERLAP_LIMIT);
+      if (keep.some(Boolean)) {
+        return [{ ...block, text: { en: en.filter((_, i) => keep[i]).join(" "), hi: hi.filter((_, i) => keep[i]).join(" ") } }];
+      }
+    }
+    return [];
+  });
 }
 
 // A beat's "generating" status is only ever meant to be transient, within
@@ -5378,10 +5408,26 @@ app.post("/api/ai-movie/stages/screenplay/beats/:beatIndex/scenes/:sceneIndex/re
 // does NOT put the beat back to "pending" -- the scene's actual content
 // (heading/action) isn't touched, only dialogue layered on top of it, so
 // there's nothing there that needs a fresh review pass.
+// Beat-wide narration (user request): one NARRATOR voice-over that flows
+// across 3, 4, 5 consecutive scenes, described once for the whole beat.
+// The screen sends the beat's scenes one at a time, in order, through the
+// normal Write Dialogue call, each carrying the same brief -- so every
+// scene is written after the one before it is saved, and sees that
+// scene's narration as context to continue from.
+function aiMovieNarrationInstruction(narrationBrief, sceneIndex, sceneCount) {
+  if (typeof narrationBrief !== "string" || !narrationBrief.trim()) return null;
+  const number = sceneIndex + 1;
+  const ending =
+    number >= sceneCount
+      ? "This is the beat's last scene: bring the narration to a clean close here."
+      : "Leave the rest of the narration for the scenes after this one.";
+  return `ONE CONTINUOUS NARRATION ACROSS THIS BEAT: the user wants a single NARRATOR voice-over that flows across this beat's scenes, in order. This is scene ${number} of ${sceneCount}. The user's brief for the whole narration: "${narrationBrief.trim()}". Write ONLY the part of it that plays over THIS scene: pick up exactly where the narration in the earlier scenes of this beat (shown above) left off, never repeat a line already said, and move it one step further. ${ending} Keep any dialogue this scene already has, word for word.`;
+}
+
 app.post("/api/ai-movie/stages/screenplay/beats/:beatIndex/scenes/:sceneIndex/dialogue", requireRole("admin"), async (req, res) => {
   const beatIndex = Number(req.params.beatIndex);
   const sceneIndex = Number(req.params.sceneIndex);
-  const { projectId, instruction } = req.body;
+  const { projectId, instruction, narrationBrief } = req.body;
   if (!projectId) {
     res.status(400).json({ error: "No project to write dialogue into." });
     return;
@@ -5433,7 +5479,7 @@ app.post("/api/ai-movie/stages/screenplay/beats/:beatIndex/scenes/:sceneIndex/di
       beatSiblingScenesText,
       aiMovieBeatForWriters(beats, beatIndex),
       targetSceneText,
-      instruction || null,
+      aiMovieNarrationInstruction(narrationBrief, sceneIndex, beat.scenes.length) || instruction || null,
       characterDialogueBriefsText
     );
 
@@ -5451,7 +5497,7 @@ app.post("/api/ai-movie/stages/screenplay/beats/:beatIndex/scenes/:sceneIndex/di
     latestBeats[beatIndex] = { ...latestBeats[beatIndex], scenes: newScenes };
     await saveAiMovieBackfillField(projectId, "screenplayBeats", latestBeats);
 
-    res.json({ beatIndex, sceneIndex, content, characters });
+    res.json({ beatIndex, sceneIndex, content, characters, estimatedMinutes: newScenes[sceneIndex].estimatedMinutes });
   } catch (error) {
     console.error(`Screenplay beat ${beatIndex} scene ${sceneIndex} dialogue failed:`, error.message);
     res.status(502).json({ error: error.message });

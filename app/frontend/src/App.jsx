@@ -370,6 +370,12 @@ const LABELS = {
     aiMovieRewriteDialogueButton: 'Rewrite Dialogue',
     aiMovieDialogueCancelButton: 'Cancel',
     aiMovieDialoguePlaceholder: 'Optional — any direction for the dialogue, e.g. "make this a tense argument" (leave blank to let the AI decide)',
+    aiMovieBeatNarrationButton: 'Narration for this whole beat',
+    aiMovieBeatNarrationNote: 'Writes one continuous narrator voice-over that flows across every scene of this beat, in order. Dialogue already written is kept.',
+    aiMovieBeatNarrationPlaceholder: 'Describe the narration for this beat, e.g. "Narrator explains how war and pollution emptied Earth, people left for colonies, and only the gods and temples remained."',
+    aiMovieBeatNarrationSubmitButton: 'Write Narration',
+    aiMovieBeatNarrationProgress: (scene, total) => `Writing narration — scene ${scene} of ${total}…`,
+    aiMovieBeatNarrationSceneError: (scene, message) => `Scene ${scene}: ${message}`,
     aiMovieDialogueSubmitButton: 'Write Dialogue',
     aiMovieWritingDialogueLabel: 'Writing…',
     aiMovieNoDialogueNeededNote: 'No dialogue needed for this scene.',
@@ -989,6 +995,12 @@ const LABELS = {
     aiMovieRewriteDialogueButton: 'ସଂଳାପ ପୁନଃ ଲେଖନ୍ତୁ',
     aiMovieDialogueCancelButton: 'ବାତିଲ୍',
     aiMovieDialoguePlaceholder: 'ଇଚ୍ଛାଧୀନ — ସଂଳାପ ପାଇଁ କୌଣସି ନିର୍ଦ୍ଦେଶ, ଯଥା "ଏହାକୁ ଏକ ଉତ୍ତେଜନାପୂର୍ଣ୍ଣ ବିବାଦ କରନ୍ତୁ" (ଖାଲି ଛାଡ଼ିଲେ AI ନିଜେ ନିଷ୍ପତ୍ତି ନେବ)',
+    aiMovieBeatNarrationButton: 'ଏହି ସମ୍ପୂର୍ଣ୍ଣ ବିଟ୍ ପାଇଁ ବର୍ଣ୍ଣନା',
+    aiMovieBeatNarrationNote: 'ଏହି ବିଟ୍‌ର ସମସ୍ତ ଦୃଶ୍ୟ ଦେଇ କ୍ରମରେ ବହୁଥିବା ଗୋଟିଏ ନିରନ୍ତର ବର୍ଣ୍ଣନାକାରୀ ଭଏସ୍-ଓଭର ଲେଖେ। ପୂର୍ବରୁ ଲେଖାଯାଇଥିବା ସଂଳାପ ରହିଯାଏ।',
+    aiMovieBeatNarrationPlaceholder: 'ଏହି ବିଟ୍ ପାଇଁ ବର୍ଣ୍ଣନା ବିଷୟରେ ଲେଖନ୍ତୁ, ଯଥା "ଯୁଦ୍ଧ ଓ ପ୍ରଦୂଷଣ କିପରି ପୃଥିବୀକୁ ଖାଲି କଲା, ଏବଂ କେବଳ ଭଗବାନ ଓ ମନ୍ଦିର ରହିଗଲେ, ବର୍ଣ୍ଣନାକାରୀ କହନ୍ତି।"',
+    aiMovieBeatNarrationSubmitButton: 'ବର୍ଣ୍ଣନା ଲେଖନ୍ତୁ',
+    aiMovieBeatNarrationProgress: (scene, total) => `ବର୍ଣ୍ଣନା ଲେଖାଯାଉଛି — ଦୃଶ୍ୟ ${scene} / ${total}…`,
+    aiMovieBeatNarrationSceneError: (scene, message) => `ଦୃଶ୍ୟ ${scene}: ${message}`,
     aiMovieDialogueSubmitButton: 'ସଂଳାପ ଲେଖନ୍ତୁ',
     aiMovieWritingDialogueLabel: 'ଲେଖାଯାଉଛି…',
     aiMovieNoDialogueNeededNote: 'ଏହି ଦୃଶ୍ୟ ପାଇଁ ସଂଳାପ ଆବଶ୍ୟକ ନାହିଁ।',
@@ -4491,6 +4503,17 @@ function App() {
   const [isWritingAiMovieDialogue, setIsWritingAiMovieDialogue] = useState(false)
   const [aiMovieDialogueSceneIndex, setAiMovieDialogueSceneIndex] = useState(null)
   const [aiMovieDialogueInstructionText, setAiMovieDialogueInstructionText] = useState('')
+  // Write Dialogue's error is shown right under that scene's own button
+  // ({ key: "beat-scene", message }) -- it used to go to the bottom of the
+  // whole Screenplay section, so a failed request looked like "nothing
+  // happens".
+  const [aiMovieDialogueError, setAiMovieDialogueError] = useState(null)
+  // Beat-wide narration: which beat's box is open, its text, progress
+  // ({ scene, total }) while it runs, and any error.
+  const [aiMovieNarrationBeatIndex, setAiMovieNarrationBeatIndex] = useState(null)
+  const [aiMovieNarrationText, setAiMovieNarrationText] = useState('')
+  const [aiMovieNarrationProgress, setAiMovieNarrationProgress] = useState(null)
+  const [aiMovieNarrationError, setAiMovieNarrationError] = useState(null)
   const [isExportingAiMovieProject, setIsExportingAiMovieProject] = useState(false)
   const aiMovieImportFileInputRef = useRef(null)
 
@@ -5793,40 +5816,92 @@ function App() {
   // pass done after the whole screenplay. Doesn't touch the scene's own
   // heading/action, so unlike a revision this never puts the beat back to
   // "pending."
+  function applyAiMovieSceneDialogue(beatIndex, sceneIndex, data) {
+    setAiMovieBackfillResult((prev) => {
+      const beats = [...(prev?.screenplayBeats ?? [])]
+      const existing = beats[beatIndex]
+      if (!existing) return prev ?? {}
+      const scenes = existing.scenes.map((s, i) => (i === sceneIndex
+          ? {
+              ...s,
+              content: data.content,
+              characters: data.characters,
+              ...(typeof data.estimatedMinutes === 'number' ? { estimatedMinutes: data.estimatedMinutes } : {}),
+            }
+          : s))
+      beats[beatIndex] = { ...existing, scenes }
+      return { ...(prev ?? {}), screenplayBeats: beats }
+    })
+  }
+
+  async function postAiMovieSceneDialogue(projectId, beatIndex, sceneIndex, body) {
+    const response = await fetch(
+      `${BACKEND_URL}/api/ai-movie/stages/screenplay/beats/${beatIndex}/scenes/${sceneIndex}/dialogue`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ projectId, ...body }),
+      }
+    )
+    const data = await response.json()
+    return { ok: response.ok, data }
+  }
+
   async function handleWriteAiMovieDialogueClick(beatIndex, sceneIndex, instruction) {
     if (!aiMovieProjectId) return
     const projectId = aiMovieProjectId
 
     setIsWritingAiMovieDialogue(true)
-    setAiMovieStageError(null)
+    setAiMovieDialogueError(null)
     try {
-      const response = await fetch(
-        `${BACKEND_URL}/api/ai-movie/stages/screenplay/beats/${beatIndex}/scenes/${sceneIndex}/dialogue`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ projectId, instruction: instruction || undefined }),
-        }
-      )
-      const data = await response.json()
-      if (!response.ok) {
-        setAiMovieStageError(data.error || t.genericError)
+      const { ok, data } = await postAiMovieSceneDialogue(projectId, beatIndex, sceneIndex, { instruction: instruction || undefined })
+      if (!ok) {
+        setAiMovieDialogueError({ key: `${beatIndex}-${sceneIndex}`, message: data.error || t.genericError })
       } else {
-        setAiMovieBackfillResult((prev) => {
-          const beats = [...(prev?.screenplayBeats ?? [])]
-          const existing = beats[beatIndex]
-          if (!existing) return prev ?? {}
-          const scenes = existing.scenes.map((s, i) => (i === sceneIndex ? { ...s, content: data.content, characters: data.characters } : s))
-          beats[beatIndex] = { ...existing, scenes }
-          return { ...(prev ?? {}), screenplayBeats: beats }
-        })
+        applyAiMovieSceneDialogue(beatIndex, sceneIndex, data)
         setAiMovieDialogueSceneIndex(null)
         setAiMovieDialogueInstructionText('')
       }
     } catch {
-      setAiMovieStageError(t.genericError)
+      setAiMovieDialogueError({ key: `${beatIndex}-${sceneIndex}`, message: t.genericError })
     }
     setIsWritingAiMovieDialogue(false)
+  }
+
+  // One narrator voice-over across the whole beat (user request): the
+  // scenes go through Write Dialogue one at a time, in order, with the
+  // same brief, so each scene continues the narration saved in the one
+  // before it. Stops at the first scene that fails, keeping what's done.
+  async function handleWriteAiMovieBeatNarrationClick(beatIndex, brief) {
+    if (!aiMovieProjectId || !brief.trim()) return
+    const projectId = aiMovieProjectId
+    const sceneCount = aiMovieBackfillResult?.screenplayBeats?.[beatIndex]?.scenes?.length ?? 0
+
+    setIsWritingAiMovieDialogue(true)
+    setAiMovieNarrationError(null)
+    let failed = false
+    for (let sceneIndex = 0; sceneIndex < sceneCount; sceneIndex++) {
+      setAiMovieNarrationProgress({ scene: sceneIndex + 1, total: sceneCount })
+      try {
+        const { ok, data } = await postAiMovieSceneDialogue(projectId, beatIndex, sceneIndex, { narrationBrief: brief })
+        if (!ok) {
+          setAiMovieNarrationError(t.aiMovieBeatNarrationSceneError(sceneIndex + 1, data.error || t.genericError))
+          failed = true
+          break
+        }
+        applyAiMovieSceneDialogue(beatIndex, sceneIndex, data)
+      } catch {
+        setAiMovieNarrationError(t.aiMovieBeatNarrationSceneError(sceneIndex + 1, t.genericError))
+        failed = true
+        break
+      }
+    }
+    setAiMovieNarrationProgress(null)
+    setIsWritingAiMovieDialogue(false)
+    if (!failed) {
+      setAiMovieNarrationBeatIndex(null)
+      setAiMovieNarrationText('')
+    }
   }
 
   // Fallback duration for a beat or scene written before runtimeMinutes/
@@ -9254,6 +9329,44 @@ function App() {
                                       )
                                     })()}
 
+                                    {beat.status === 'approved' && Array.isArray(beat.scenes) && beat.scenes.length > 0 && (
+                                      <div className="ai-movie-beat-narration">
+                                        <button
+                                          type="button"
+                                          className="cancel-button ai-movie-revise-scene-button"
+                                          onClick={() => {
+                                            setAiMovieNarrationBeatIndex(aiMovieNarrationBeatIndex === viewIndex ? null : viewIndex)
+                                            setAiMovieNarrationError(null)
+                                          }}
+                                          disabled={isWritingAiMovieDialogue}
+                                        >
+                                          {aiMovieNarrationBeatIndex === viewIndex ? t.aiMovieDialogueCancelButton : t.aiMovieBeatNarrationButton}
+                                        </button>
+                                        {aiMovieNarrationBeatIndex === viewIndex && (
+                                          <div className="feedback-form">
+                                            <p className="ai-movie-scene-duration">{t.aiMovieBeatNarrationNote}</p>
+                                            <textarea
+                                              className="feedback-textarea"
+                                              value={aiMovieNarrationText}
+                                              onChange={(e) => setAiMovieNarrationText(e.target.value)}
+                                              placeholder={t.aiMovieBeatNarrationPlaceholder}
+                                            />
+                                            <button
+                                              type="button"
+                                              className="choose-button"
+                                              onClick={() => handleWriteAiMovieBeatNarrationClick(viewIndex, aiMovieNarrationText)}
+                                              disabled={isWritingAiMovieDialogue || !aiMovieNarrationText.trim()}
+                                            >
+                                              {aiMovieNarrationProgress
+                                                ? t.aiMovieBeatNarrationProgress(aiMovieNarrationProgress.scene, aiMovieNarrationProgress.total)
+                                                : t.aiMovieBeatNarrationSubmitButton}
+                                            </button>
+                                            {aiMovieNarrationError && <p className="feedback-note">{aiMovieNarrationError}</p>}
+                                          </div>
+                                        )}
+                                      </div>
+                                    )}
+
                                     {beat.scenes?.map((scene, sceneIndex) => {
                                       const reviseKey = `${viewIndex}-${sceneIndex}`
                                       const isReviseFormOpen = aiMovieRevisingSceneIndex === reviseKey
@@ -9382,6 +9495,9 @@ function App() {
                                                       {isWritingAiMovieDialogue ? t.aiMovieWritingDialogueLabel : t.aiMovieDialogueSubmitButton}
                                                     </button>
                                                   </div>
+                                                )}
+                                                {aiMovieDialogueError?.key === dialogueKey && (
+                                                  <p className="feedback-note">{aiMovieDialogueError.message}</p>
                                                 )}
                                               </>
                                             )

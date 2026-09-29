@@ -3351,6 +3351,28 @@ function ensureAiMovieBilingualText(value) {
   return { en, hi };
 }
 
+// Code-level guarantee behind AI_MOVIE_HEADING_AND_NAMES_RULE: the heading
+// is always the English slugline in both languages, and a heading the model
+// repeated as the opening words of the action text (seen for real:
+// "INT. AKHADA RING - TIMELESS Rakhyaka पांचों के सामने...") is trimmed off.
+// Applied to every scene the writers return AND on the way out of a project
+// load, so headings already saved as "अंत. ..." display correctly too.
+function normalizeAiMovieSceneFormat(scene) {
+  const heading = (scene?.sceneHeading?.en ?? "").trim();
+  const stripHeading = (text) =>
+    typeof text === "string" && heading && text.trimStart().startsWith(heading)
+      ? text.trimStart().slice(heading.length).trimStart()
+      : text;
+  const stripBilingual = (value) => (value ? { ...value, en: stripHeading(value.en), hi: stripHeading(value.hi) } : value);
+
+  const normalized = { ...scene, sceneHeading: { en: heading, hi: heading } };
+  if (scene?.action) normalized.action = stripBilingual(scene.action);
+  if (Array.isArray(scene?.content) && scene.content.length > 0 && scene.content[0].type !== "dialogue") {
+    normalized.content = [{ ...scene.content[0], text: stripBilingual(scene.content[0].text) }, ...scene.content.slice(1)];
+  }
+  return normalized;
+}
+
 function sanitizeAiMovieContentBlocks(blocks) {
   if (!Array.isArray(blocks)) return blocks;
   return blocks.map((block) =>
@@ -3604,11 +3626,23 @@ const AI_MOVIE_SCREEN_ONLY_RULE = `SCREEN-ONLY WRITING (basic screenplay format 
 - WRONG: "Their low voices express shared grief and respect, signalling an agreement of ancient wisdom." RIGHT: "The clan members murmur and bow their heads."
 Every sentence must be something that takes real screen time. Never add words just to make a scene longer — to make a scene longer, add more real on-screen moments: actions, reactions, events, lines.`;
 
+// Scene headings and names, in both languages. A real Hindi scene heading
+// came back as "अंत. अखाड़ा रिंग" -- "INT." translated into "अंत.", which
+// means "the end" -- and names switched between Latin ("Rudra") and
+// Devanagari ("रुद्र") inside one scene. The user chose Latin-script names
+// everywhere: one spelling that always matches the character list and the
+// English character cue above each line. (The heading is also enforced in
+// code -- see normalizeAiMovieSceneFormat -- this just keeps the model
+// from fighting it.)
+const AI_MOVIE_HEADING_AND_NAMES_RULE = `SCENE HEADINGS AND NAMES: the scene heading is ALWAYS standard English screenplay format ("INT. AKHADA RING - TIMELESS", "EXT. GRAND ROAD - DAY") — in the "hi" field too, exactly the same English text, never translated (translating "INT." into Hindi turns it into a different word entirely). Never repeat the scene heading inside the action text. Every character name, in every "hi" field, is written in ENGLISH (Latin) letters exactly as it appears in the character list — "Rudra आगे बढ़ता है", never "रुद्र आगे बढ़ता है" — so each name has one spelling everywhere.`;
+
 const AI_MOVIE_SCREENPLAY_BEAT_SYSTEM_PROMPT = `You are working on an AI Movie — a film that will be entirely AI-generated, never physically shot. Because of that, never reason about budget, cast/crew/location availability, shoot schedules, or any real-world production constraint — anything that can be imagined can be included, with no limitation.
 
 You are given the story's already-approved, locked layers (Story, Synopsis, Characters, Three-Act Structure, full Beat Sheet) below, plus every screenplay scene already written so far. Write ONLY the scenes for the ONE beat named at the end — a beat is a pocket, not a single scene, so expand it into however many full scenes this ONE beat genuinely needs to be properly established: never fewer than 2, but no upper limit either — a simple beat might need only 2, a dense or eventful one might need 7 or more. The beat comes with its own target screen-time in minutes — use the standard screenwriting rule of thumb that one screenplay page equals about one minute of screen time to translate that target into an implied page count, and let the scene count AND each scene's own length follow from that: a beat with a small target should stay tight (fewer/shorter scenes), a beat with a large target earns more room (more and/or longer scenes). Give each scene its own honest "estimatedMinutes" estimate, and keep the sum of those estimates close to the beat's target — never pad or compress scenes just to hit the number exactly, but treat the target as the real guide for scope, not a suggestion to ignore. That target is a starting guide, not a hard ceiling: if the user's own feedback below explicitly asks for this beat (or a scene in it) to be longer, slower, or more detailed, honor that even if it pushes the total well past the original target — the user is always free to make the story longer, and a later regeneration of this same beat can simply carry forward a bigger target next time. Each scene needs a scene heading and a vivid action/visual description. Do NOT write any dialogue — that is a separate, later pass; describe what happens and what's said only in action-line terms (e.g. "she pleads with him"), never as quoted lines. Continue directly from the last scene already written (same characters, same momentum, no repeats) — never jump ahead to a later beat.
 
-${AI_MOVIE_SCREEN_ONLY_RULE}`;
+${AI_MOVIE_SCREEN_ONLY_RULE}
+
+${AI_MOVIE_HEADING_AND_NAMES_RULE}`;
 
 async function generateAiMovieScreenplayBeat(priorContextText, referenceMaterialText, scenesSoFarText, beat, feedback) {
   const referenceBlock = referenceMaterialText
@@ -3650,7 +3684,10 @@ async function generateAiMovieScreenplayBeat(priorContextText, referenceMaterial
       },
     },
   });
-  return result.scenes.map((scene) => ({ ...scene, estimatedMinutes: computeAiMovieSceneMinutes(scene) }));
+  return result.scenes.map((scene) => {
+    const normalized = normalizeAiMovieSceneFormat(scene);
+    return { ...normalized, estimatedMinutes: computeAiMovieSceneMinutes(normalized) };
+  });
 }
 
 // The beat's own runtimeMinutes (set back at the Beat Sheet stage) is the
@@ -3664,7 +3701,9 @@ const AI_MOVIE_SCREENPLAY_BEAT_EXPAND_SYSTEM_PROMPT = `You are working on an AI 
 
 You are given the story's already-approved, locked layers, every screenplay scene already written in earlier beats, and this ONE beat's own scenes already written so far, given below as fixed, unchangeable context — do NOT repeat, summarize, or rewrite any of them. This beat's real runtime target has not been reached yet by what's there so far, so write ADDITIONAL new scenes only for this SAME beat, continuing directly from its last existing scene (same characters, same momentum, no repeats, never jumping ahead to a later beat), to cover roughly the additional screen time named at the end. Each new scene needs a scene heading and a vivid action/visual description. Do NOT write any dialogue — that is a separate, later pass. Give each new scene its own honest "estimatedMinutes."
 
-${AI_MOVIE_SCREEN_ONLY_RULE}`;
+${AI_MOVIE_SCREEN_ONLY_RULE}
+
+${AI_MOVIE_HEADING_AND_NAMES_RULE}`;
 
 async function generateAiMovieScreenplayBeatExpansion(
   priorContextText,
@@ -3695,7 +3734,10 @@ async function generateAiMovieScreenplayBeatExpansion(
       },
     },
   });
-  return result.scenes.map((scene) => ({ ...scene, estimatedMinutes: computeAiMovieSceneMinutes(scene) }));
+  return result.scenes.map((scene) => {
+    const normalized = normalizeAiMovieSceneFormat(scene);
+    return { ...normalized, estimatedMinutes: computeAiMovieSceneMinutes(normalized) };
+  });
 }
 
 // Closing a beat's shortfall against its fixed target doesn't always mean
@@ -3755,7 +3797,7 @@ async function fillAiMovieScreenplayBeatToTarget(
       if (Array.isArray(content) && content.some((block) => block.type === "dialogue")) {
         currentScenes = currentScenes.map((s, j) => {
           if (j !== i) return s;
-          const updated = { ...s, content, characters };
+          const updated = normalizeAiMovieSceneFormat({ ...s, content, characters });
           return { ...updated, estimatedMinutes: computeAiMovieSceneMinutes(updated) };
         });
       }
@@ -3830,7 +3872,9 @@ You are given the story's already-approved, locked layers below, every screenpla
 
 By default, still write plain action only in the "action" field, no dialogue — that's the normal case, same as before. BUT more screen time doesn't always mean more description or an extra scene: when the instruction is asking for a longer scene (or more detail, more weight) AND the scene already has characters genuinely interacting, dialogue between them is often the more honest way to actually fill that time — use it. When you do, return the scene via "content" instead of "action": an ORDERED list of action and dialogue blocks, interleaved exactly as they happen, in the SAME natural, colloquial, code-mixed style "Write Dialogue" uses elsewhere in this app — never formal or textbook language, and for Hindi, a real script switch for everyday English words (e.g. "payment कब होगा?", never a translation like "भुगतान कब होगा?" or a transliteration like "पेमेंट कब होगा?"). Leave "content" empty when you're not adding dialogue.
 
-${AI_MOVIE_SCREEN_ONLY_RULE}`;
+${AI_MOVIE_SCREEN_ONLY_RULE}
+
+${AI_MOVIE_HEADING_AND_NAMES_RULE}`;
 
 async function generateAiMovieScreenplaySceneRevision(
   priorContextText,
@@ -3876,7 +3920,8 @@ async function generateAiMovieScreenplaySceneRevision(
     const cleaned = hasContent
       ? { ...scene, sceneHeading: ensureAiMovieBilingualText(scene.sceneHeading), content: sanitizeAiMovieContentBlocks(scene.content) }
       : { ...scene, sceneHeading: ensureAiMovieBilingualText(scene.sceneHeading), action: ensureAiMovieBilingualText(scene.action), content: undefined };
-    return { ...cleaned, estimatedMinutes: computeAiMovieSceneMinutes(cleaned) };
+    const normalized = normalizeAiMovieSceneFormat(cleaned);
+    return { ...normalized, estimatedMinutes: computeAiMovieSceneMinutes(normalized) };
   });
 }
 
@@ -3925,6 +3970,8 @@ This pass also gives the scene its final cinematic shape, on top of the dialogue
 The "characters" field, and every "hi" field in every block above, still needs its own real, separately-written Hindi text — never the English copied over, left blank, or written in English. This matters even more now that there's more to juggle per scene: treat the Hindi field as just as important as the English one, for every single field, every time.
 
 ${AI_MOVIE_SCREEN_ONLY_RULE}
+
+${AI_MOVIE_HEADING_AND_NAMES_RULE}
 Also: this is the pass where speech gets written, so any speech the original action only DESCRIBES ("he asks for more information", "she pleads with him", "they argue") must become real dialogue lines in your output — never leave a spoken moment as a description, unless it is genuinely inaudible (background murmuring). And every character you list as present must visibly DO something in the scene (an action, a reaction, or a line) — otherwise leave them out of the list.`;
 
 async function generateAiMovieSceneDialogue(
@@ -4422,7 +4469,7 @@ app.post("/api/ai-movie/stages/screenplay/beats/:beatIndex/scenes/:sceneIndex/di
     const newScenes = latestScenes.map((s, i) => {
       if (i !== sceneIndex) return s;
       const { dialogue: _legacyDialogue, ...rest } = s;
-      const updated = { ...rest, content, characters };
+      const updated = normalizeAiMovieSceneFormat({ ...rest, content, characters });
       return { ...updated, estimatedMinutes: computeAiMovieSceneMinutes(updated) };
     });
     latestBeats[beatIndex] = { ...latestBeats[beatIndex], scenes: newScenes };
@@ -4529,7 +4576,9 @@ app.get("/api/ai-movie/projects/:id", requireRole("admin"), async (req, res) => 
   // of anything already done.
   backfillAiMovieCharacterDialogueBriefsIfMissing(row.id, row.pasted_text, row.backfill);
 
-  // Every scene's duration is recomputed on the way out with the current
+  // Every scene's heading is normalized (English slugline in both
+  // languages, never repeated inside the action) and its duration is
+  // recomputed on the way out with the current
   // page-method estimate -- scenes saved under the older words/200 count
   // would otherwise sit next to new ones measured differently, making each
   // beat's "Estimated total" a mix of two rulers. Pure arithmetic on the
@@ -4539,7 +4588,13 @@ app.get("/api/ai-movie/projects/:id", requireRole("admin"), async (req, res) => 
       ...row.backfill,
       screenplayBeats: row.backfill.screenplayBeats.map((beat) =>
         Array.isArray(beat.scenes)
-          ? { ...beat, scenes: beat.scenes.map((scene) => ({ ...scene, estimatedMinutes: computeAiMovieSceneMinutes(scene) })) }
+          ? {
+              ...beat,
+              scenes: beat.scenes.map((scene) => {
+                const normalized = normalizeAiMovieSceneFormat(scene);
+                return { ...normalized, estimatedMinutes: computeAiMovieSceneMinutes(normalized) };
+              }),
+            }
           : beat
       ),
     };

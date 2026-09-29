@@ -3743,23 +3743,6 @@ async function saveAiMovieBackfillField(projectId, stageKey, content) {
   await db.query("UPDATE ai_movie_projects SET backfill = $1, updated_at = now() WHERE id = $2", [JSON.stringify(backfill), projectId]);
 }
 
-// Whenever a beat's scenes are rewritten (a full Request Changes redo, or a
-// single scene extended -- see below), the beat's own runtimeMinutes target
-// is kept honest by resetting it to whatever the new scenes actually add up
-// to. Without this, an intentionally-elongated beat would permanently show
-// as "off from target" even though the new length was exactly what was
-// asked for, and later context (other beats' own generation, the overall
-// runtime) would keep citing a stale number.
-async function syncAiMovieBeatRuntimeToScenes(projectId, beatIndex, scenes) {
-  const result = await db.query("SELECT backfill FROM ai_movie_projects WHERE id = $1", [projectId]);
-  const backfill = result.rows[0]?.backfill ?? {};
-  const beats = backfill.plot ?? [];
-  if (!beats[beatIndex]) return;
-  const total = scenes.reduce((sum, scene) => sum + (typeof scene.estimatedMinutes === "number" ? scene.estimatedMinutes : 0), 0);
-  beats[beatIndex] = { ...beats[beatIndex], runtimeMinutes: Math.round(total * 10) / 10 };
-  await saveAiMovieBackfillField(projectId, "plot", beats);
-}
-
 // Revising one scene never touches its siblings -- only the beat's OTHER
 // scenes are given as fixed, unchangeable context, alongside every scene
 // written in earlier beats. General-purpose: covers making it longer/
@@ -4292,7 +4275,11 @@ app.post("/api/ai-movie/stages/screenplay/beats/:beatIndex/scenes/:sceneIndex/re
     const newScenes = [...latestScenes.slice(0, sceneIndex), ...replacementScenes, ...latestScenes.slice(sceneIndex + 1)];
     latestBeats[beatIndex] = { ...latestBeats[beatIndex], scenes: newScenes, status: "pending" };
     await saveAiMovieBackfillField(projectId, "screenplayBeats", latestBeats);
-    await syncAiMovieBeatRuntimeToScenes(projectId, beatIndex, newScenes);
+    // The beat's own runtimeMinutes target is deliberately left alone here
+    // -- it's the film's designed pacing from the Beat Sheet and stays
+    // fixed, same as a full-beat Request Changes (user's explicit call). A
+    // revised scene that pushes the beat over its target simply shows as
+    // over target on screen, visible rather than silently rewritten.
 
     res.json({
       beatIndex,

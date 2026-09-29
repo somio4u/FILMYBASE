@@ -5482,8 +5482,8 @@ function App() {
   // kind of change -- longer, shorter, different tone/content, a fixed
   // detail, or anything else -- scoped to that one scene only, leaving its
   // siblings in the same beat untouched. The beat's own runtimeMinutes
-  // target is recalculated to match afterward, so a real length change is
-  // never left looking like an unresolved mismatch.
+  // target stays fixed (it's the Beat Sheet's designed pacing) -- a longer
+  // revised scene simply shows the beat as over target.
   async function handleReviseAiMovieScreenplaySceneClick(beatIndex, sceneIndex, instruction) {
     if (!aiMovieProjectId) return
     const projectId = aiMovieProjectId
@@ -5507,11 +5507,7 @@ function App() {
           const beats = [...(prev?.screenplayBeats ?? [])]
           const existing = beats[beatIndex] ?? {}
           beats[beatIndex] = { ...existing, scenes: data.scenes, status: 'pending' }
-          const plot = [...(prev?.plot ?? [])]
-          if (plot[beatIndex] && typeof data.runtimeMinutes === 'number') {
-            plot[beatIndex] = { ...plot[beatIndex], runtimeMinutes: data.runtimeMinutes }
-          }
-          return { ...(prev ?? {}), screenplayBeats: beats, plot }
+          return { ...(prev ?? {}), screenplayBeats: beats }
         })
         setAiMovieRevisingSceneIndex(null)
         setAiMovieReviseSceneText('')

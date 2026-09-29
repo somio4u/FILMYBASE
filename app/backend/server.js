@@ -4831,6 +4831,187 @@ app.get("/api/ai-movie/projects/:id", requireRole("admin"), async (req, res) => 
   });
 });
 
+// Industry-format screenplay PDF for an AI Movie -- the standard US
+// screenplay page, so "one page = one minute" actually holds for what gets
+// printed: Letter size, Courier 12 (10 characters per inch, ~55 lines per
+// page), 1.5" left / 1" right / 1" top and bottom margins, scene heading
+// in capitals with the scene number in both margins, character name at
+// 3.7" from the page edge, parenthetical at 3.1", dialogue in the 2.5"-6"
+// column, transitions right-aligned, a title page, and page numbers top
+// right. Same measurements the page-method duration estimate assumes.
+//
+// ?lang=hi prints the Hindi text in the Hindi font (which also carries
+// Latin letters, so embedded English words print correctly), while scene
+// headings, character names, extensions and transitions stay in English
+// Courier -- the same convention the screen uses. Every written scene is
+// included in order, approved or not: this is a working draft.
+const AI_MOVIE_PDF = {
+  pageLeft: 108,
+  pageRight: 540,
+  top: 72,
+  bottom: 72,
+  characterX: 266,
+  parentheticalX: 223,
+  parentheticalWidth: 158,
+  dialogueX: 180,
+  dialogueWidth: 252,
+  fontSize: 12,
+  // Courier's own metrics give ~9.4pt lines at 12pt; screenplays run at
+  // 6 lines per inch (12pt), so this gap makes up the difference.
+  courierLineGap: 2.6,
+};
+
+function aiMovieCueWithContd(blocks, blockIndex) {
+  const block = blocks[blockIndex];
+  let cue = (block.character ?? "").toUpperCase();
+  if (block.extension) cue += ` (${block.extension})`;
+  let sawActionBetween = false;
+  for (let i = blockIndex - 1; i >= 0; i--) {
+    if (blocks[i].type !== "dialogue") {
+      sawActionBetween = true;
+      continue;
+    }
+    if (blocks[i].character === block.character && sawActionBetween) cue += " (CONT'D)";
+    break;
+  }
+  return cue;
+}
+
+// PDF's built-in Courier only carries the basic Western character set, so
+// anything else prints as junk (the Scenic Breakdown's "DEEP SPACE → SKY
+// OVER PURI" came out as "DEEP SPACE !' SKY OVER PURI"). A few common
+// symbols get a plain-text stand-in; any other text Courier can't print
+// (e.g. a name typed in Devanagari) switches to the Hindi font, which
+// carries both scripts -- so nothing is ever silently mangled.
+const AI_MOVIE_WINANSI_EXTRAS = "€‚ƒ„…†‡ˆ‰Š‹ŒŽ‘’“”•–—˜™š›œžŸ";
+
+function aiMovieFitsCourier(text) {
+  for (const ch of text) {
+    const code = ch.codePointAt(0);
+    if (code < 128 || (code >= 160 && code <= 255) || AI_MOVIE_WINANSI_EXTRAS.includes(ch)) continue;
+    return false;
+  }
+  return true;
+}
+
+function aiMovieCourierText(text) {
+  return (text ?? "").replace(/→/g, "->").replace(/←/g, "<-").replace(/[⟶➔]/g, "->");
+}
+
+function renderAiMovieScreenplayPdf(res, { title, scenes, lang }) {
+  const P = AI_MOVIE_PDF;
+  const doc = new PDFDocument({
+    size: "LETTER",
+    margins: { top: P.top, bottom: P.bottom, left: P.pageLeft, right: 612 - P.pageRight },
+    bufferPages: true,
+  });
+  doc.registerFont("hindiRegular", FONTS.hindiRegular);
+  doc.registerFont("hindiBold", FONTS.hindiBold);
+  const bodyFont = lang === "hi" ? "hindiRegular" : "Courier";
+  // Every text write goes through here so the Courier check above always
+  // applies -- headings, names, transitions, and English action alike.
+  const write = (font, text, x, y, options) => {
+    const isCourier = font.startsWith("Courier");
+    const printable = isCourier ? aiMovieCourierText(text) : text;
+    const chosen = isCourier && !aiMovieFitsCourier(printable) ? (font === "Courier-Bold" ? "hindiBold" : "hindiRegular") : font;
+    const gap = chosen.startsWith("Courier") ? P.courierLineGap : 0;
+    return doc.font(chosen).fontSize(options?.fontSize ?? P.fontSize).text(printable, x, y, { lineGap: gap, ...options });
+  };
+  const pick = (value) => (value?.[lang] || value?.en || "").trim();
+
+  res.setHeader("Content-Type", "application/pdf");
+  res.setHeader(
+    "Content-Disposition",
+    `attachment; filename="${(title || "screenplay").replace(/[^a-z0-9]+/gi, "-")}-screenplay-${lang}-${formatExportTimestamp()}.pdf"`
+  );
+  doc.pipe(res);
+
+  // Title page.
+  write("Courier-Bold", (title || "Untitled").toUpperCase(), P.pageLeft, 260, { width: P.pageRight - P.pageLeft, align: "center", fontSize: 24 });
+  doc.moveDown(1);
+  write("Courier", "Screenplay", P.pageLeft, doc.y, { width: P.pageRight - P.pageLeft, align: "center" });
+  write("Courier", `${lang === "hi" ? "Hindi" : "English"} draft — ${new Date().toISOString().slice(0, 10)}`, P.pageLeft, 792 - P.bottom - 20, { lineBreak: false });
+
+  doc.addPage();
+  const blankLine = () => doc.font("Courier").fontSize(P.fontSize).text(" ", P.pageLeft, doc.y, { lineGap: P.courierLineGap });
+  const spaceLeft = () => doc.page.height - doc.page.margins.bottom - doc.y;
+  const lineHeight = () => doc.font("Courier").fontSize(P.fontSize).currentLineHeight(true) + P.courierLineGap;
+  // Keeps a heading or a character name from being stranded alone at the
+  // bottom of a page (standard screenplay pagination).
+  const keepLines = (n) => {
+    if (spaceLeft() < lineHeight() * n) doc.addPage();
+  };
+
+  scenes.forEach((scene, sceneIndex) => {
+    const number = String(sceneIndex + 1);
+    keepLines(4);
+    const headingY = doc.y;
+    write("Courier-Bold", pick(scene.sceneHeading).toUpperCase() || "SCENE", P.pageLeft, headingY, { width: P.pageRight - P.pageLeft - 36 });
+    const afterHeadingY = doc.y;
+    write("Courier-Bold", number, 72, headingY, { width: 30, lineBreak: false });
+    write("Courier-Bold", number, P.pageRight + 8, headingY, { width: 30, lineBreak: false });
+    doc.y = afterHeadingY;
+    blankLine();
+
+    const writeAction = (text) => {
+      for (const paragraph of (text ?? "").split(/\n+/).map((t) => t.trim()).filter(Boolean)) {
+        write(bodyFont, paragraph, P.pageLeft, doc.y, { width: P.pageRight - P.pageLeft });
+        blankLine();
+      }
+    };
+    const writeDialogue = (cue, parenthetical, line) => {
+      keepLines(parenthetical ? 4 : 3);
+      write("Courier", cue, P.characterX, doc.y, { width: P.pageRight - P.characterX });
+      if (parenthetical) write(bodyFont, `(${parenthetical})`, P.parentheticalX, doc.y, { width: P.parentheticalWidth });
+      write(bodyFont, line, P.dialogueX, doc.y, { width: P.dialogueWidth });
+      blankLine();
+    };
+
+    if (Array.isArray(scene.content) && scene.content.length > 0) {
+      scene.content.forEach((block, blockIndex) => {
+        if (block.type === "dialogue") writeDialogue(aiMovieCueWithContd(scene.content, blockIndex), pick(block.parenthetical), pick(block.line));
+        else if (block.type === "transition") {
+          write("Courier", block.transition, P.pageLeft, doc.y, { width: P.pageRight - P.pageLeft, align: "right" });
+          blankLine();
+        } else writeAction(pick(block.text));
+      });
+    } else {
+      writeAction(pick(scene.action));
+      if (Array.isArray(scene.dialogue)) {
+        for (const line of scene.dialogue) writeDialogue((line.character ?? "").toUpperCase(), "", pick(line.line));
+      }
+    }
+  });
+
+  // Page numbers, top right, from the second script page on (the title
+  // page and first page of a screenplay are conventionally unnumbered).
+  const range = doc.bufferedPageRange();
+  for (let i = range.start + 2; i < range.start + range.count; i++) {
+    doc.switchToPage(i);
+    write("Courier", `${i - range.start}.`, P.pageRight - 60, 36, { width: 60, align: "right", lineBreak: false });
+  }
+  doc.end();
+}
+
+app.get("/api/ai-movie/projects/:id/screenplay.pdf", requireRole("admin"), async (req, res) => {
+  const lang = req.query.lang === "hi" ? "hi" : "en";
+  const result = await db.query("SELECT title, backfill FROM ai_movie_projects WHERE id = $1", [req.params.id]);
+  const row = result.rows[0];
+  if (!row) {
+    res.status(404).json({ error: "Project not found." });
+    return;
+  }
+  const scenes = (row.backfill?.screenplayBeats ?? [])
+    .filter((beat) => Array.isArray(beat.scenes))
+    .flatMap((beat) => beat.scenes)
+    .map((scene) => normalizeAiMovieSceneFormat(scene));
+  if (scenes.length === 0) {
+    res.status(400).json({ error: "No screenplay scenes written yet." });
+    return;
+  }
+  renderAiMovieScreenplayPdf(res, { title: row.backfill?.story?.title?.en || row.title, scenes, lang });
+});
+
 // Deleting a project also removes its reference files — the
 // ai_movie_reference_files.project_id foreign key is ON DELETE CASCADE, so
 // one row delete here is enough.

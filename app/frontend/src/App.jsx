@@ -320,6 +320,7 @@ const LABELS = {
     aiMovieScreenplayBeatWritingLabel: "Writing this beat's scenes…",
     aiMovieScreenplayBeatErrorLabel: 'Something went wrong generating this beat.',
     aiMovieScreenplayRetryButton: 'Retry',
+    aiMovieScreenplayPdfButton: (lang) => `Download Screenplay PDF (${lang === 'hi' ? 'Hindi' : 'English'})`,
     aiMovieExtendToTargetButton: (target) => `Extend to ${target} min`,
     aiMovieExtendingToTargetLabel: 'Extending this beat…',
     aiMovieExtendToTargetNote: 'Keeps every scene and line already written — only adds more screenplay (dialogue first, then new scenes) until the beat reaches its Beat Sheet time.',
@@ -904,6 +905,7 @@ const LABELS = {
     aiMovieScreenplayBeatWritingLabel: 'ଏହି ବିଟ୍‌ର ଦୃଶ୍ୟ ଲେଖାଯାଉଛି…',
     aiMovieScreenplayBeatErrorLabel: 'ଏହି ବିଟ୍ ତିଆରି କରିବାରେ କିଛି ଭୁଲ ହେଲା।',
     aiMovieScreenplayRetryButton: 'ପୁଣି ଚେଷ୍ଟା କରନ୍ତୁ',
+    aiMovieScreenplayPdfButton: (lang) => `ସ୍କ୍ରିନପ୍ଲେ PDF ଡାଉନଲୋଡ୍ କରନ୍ତୁ (${lang === 'hi' ? 'ହିନ୍ଦୀ' : 'ଇଂରାଜୀ'})`,
     aiMovieExtendToTargetButton: (target) => `${target} ମିନିଟ୍ ପର୍ଯ୍ୟନ୍ତ ବଢ଼ାନ୍ତୁ`,
     aiMovieExtendingToTargetLabel: 'ଏହି ବିଟ୍ ବଢ଼ାଯାଉଛି…',
     aiMovieExtendToTargetNote: "ଲେଖାଯାଇଥିବା ପ୍ରତ୍ୟେକ ଦୃଶ୍ୟ ଓ ସଂଳାପ ରହିବ — ବିଟ୍ ସିଟ୍‌ର ସମୟ ପର୍ଯ୍ୟନ୍ତ କେବଳ ଅଧିକ ସ୍କ୍ରିନପ୍ଲେ ଯୋଡ଼ାଯିବ (ପ୍ରଥମେ ସଂଳାପ, ତା'ପରେ ନୂଆ ଦୃଶ୍ୟ)।",
@@ -8945,6 +8947,18 @@ function App() {
 
                             {screenplayApproved && (
                               <p className="sidebar-section-note">{t.aiMovieScreenplayAllApprovedNote}</p>
+                            )}
+
+                            {/* Whole-film, industry-format screenplay PDF, in whichever
+                                language is currently being read. Shown as soon as any beat
+                                has scenes -- it's a working draft, not only a final export. */}
+                            {screenplayBeats.some((b) => Array.isArray(b.scenes) && b.scenes.length > 0) && (
+                              <a
+                                className="breakdown-pdf-link"
+                                href={`${BACKEND_URL}/api/ai-movie/projects/${aiMovieProjectId}/screenplay.pdf?lang=${aiMovieLanguage}`}
+                              >
+                                {t.aiMovieScreenplayPdfButton(aiMovieLanguage)}
+                              </a>
                             )}
 
                             {/* One beat's card at a time, navigated with Prev/Next rather than

@@ -4570,7 +4570,8 @@ app.post("/api/ai-movie/stages/screenplay/beats/:index/request-changes", require
     const latestBeats = latest.screenplayBeats ?? screenplayBeats;
     // Keeps anything else on the beat (e.g. its song sheet) -- only the
     // scenes are being redone here.
-    latestBeats[beatIndex] = { ...latestBeats[beatIndex], scenes, status: "pending", feedback: feedback || null };
+    // Its old Script Doctor notes described scenes that no longer exist.
+    latestBeats[beatIndex] = { ...latestBeats[beatIndex], scenes, status: "pending", feedback: feedback || null, doctorNotes: null };
     await saveAiMovieBackfillField(projectId, "screenplayBeats", latestBeats);
 
     res.json({ beatIndex, scenes, runtimeMinutes: Math.round(scenes.reduce((sum, s) => sum + (s.estimatedMinutes || 0), 0) * 10) / 10 });
@@ -4742,6 +4743,143 @@ app.post("/api/ai-movie/stages/screenplay/beats/:index/song", requireRole("admin
   }
 });
 
+// Script Doctor: a per-beat review (the user's choice -- per beat, and
+// nothing changes until they click). Lists only real problems, each tied
+// to one scene (or the whole beat), with a fix phrased as a direct
+// instruction a writer can carry out -- which the screen can send straight
+// to that scene's Request Changes. Each note remembers the heading of the
+// scene it was about, so the screen can refuse to apply it once that scene
+// has changed.
+const AI_MOVIE_DOCTOR_CATEGORIES = ["pacing", "story_logic", "continuity", "character", "setup_payoff", "world_rules", "emotion", "interval"];
+
+const AI_MOVIE_DOCTOR_NOTE_SCHEMA = {
+  type: Type.OBJECT,
+  properties: {
+    sceneNumber: { type: Type.NUMBER },
+    category: { type: Type.STRING, enum: AI_MOVIE_DOCTOR_CATEGORIES },
+    severity: { type: Type.STRING, enum: ["major", "minor"] },
+    problem: AI_MOVIE_BILINGUAL_TEXT_SCHEMA,
+    fix: AI_MOVIE_BILINGUAL_TEXT_SCHEMA,
+  },
+  required: ["sceneNumber", "category", "severity", "problem", "fix"],
+};
+
+const AI_MOVIE_DOCTOR_SYSTEM_PROMPT = `You are a demanding but constructive script doctor with deep experience of both Hindi (Bollywood) and Hollywood films, working on an AI Movie — a film that will be entirely AI-generated, never physically shot, so never raise budget or feasibility concerns.
+
+You are given the story's locked layers, the reference material (which includes the story's own world rules and guardrails), every scene written in earlier beats, and ONE beat's scenes to review, each with its scene card (purpose, emotion, intensity, emotional turn), plus the beat's fixed target time and its current real length. Find only REAL problems an audience would feel — never invent problems to fill a list. If the beat works, return few notes or none.
+
+Check for:
+- "pacing": a scene that doesn't earn its time, drags, or rushes a moment that needs room — judged against the beat's fixed target time.
+- "story_logic": something that doesn't make sense given everything before it.
+- "continuity": people, objects, injuries, clothes, time of day, or places that don't match earlier scenes.
+- "character": someone acting or speaking unlike their established self at this point of their arc.
+- "setup_payoff": something set up earlier that should pay off here but doesn't, or something introduced here that will clearly need a payoff later.
+- "world_rules": breaking the story's own rules or lore, or the reference material's guardrails.
+- "emotion": a scene with no emotional turn (its card shows the same value at start and end) where the story needs one, or an emotion that doesn't fit the moment.
+- "interval": ONLY if this beat ends at the interval — whether its final scene truly cuts at a peak.
+
+For each note:
+- "sceneNumber": the scene's number WITHIN this beat (1 = its first scene); 0 if the note is about the whole beat.
+- "category": one of the above; "severity": "major" if the audience would notice or it breaks something, "minor" for polish.
+- "problem": what is wrong — specific, pointing at the exact moment.
+- "fix": ONE concrete instruction a writer can carry out directly on that scene, written as an instruction (e.g. "Make Rudra hesitate before he pushes the slider, and let Omm see it"). Keep what already works; change only what fixes the problem.
+At most 8 notes, most important first. Simple, easy English, and natural Hindi for every "hi" field.`;
+
+async function generateAiMovieScriptDoctorNotes(priorContextText, referenceMaterialText, scenesSoFarText, beat, beatReviewText) {
+  const referenceBlock = referenceMaterialText
+    ? `\n\nReference material (authoritative — including the story's own rules and guardrails):\n\n${referenceMaterialText}`
+    : "";
+  const scenesBlock = scenesSoFarText ? `\n\nScenes already written in earlier beats:\n\n${scenesSoFarText}` : "";
+  const result = await generateJsonContent({
+    model: GEMINI_MODEL_NAME,
+    contents: `The story's approved layers so far:\n\n${priorContextText}${referenceBlock}${scenesBlock}\n\nReview this beat — ${beat.title.en}: ${beat.description.en}\n\n${beatReviewText}`,
+    config: {
+      systemInstruction: AI_MOVIE_DOCTOR_SYSTEM_PROMPT,
+      responseMimeType: "application/json",
+      maxOutputTokens: 8192,
+      responseSchema: {
+        type: Type.OBJECT,
+        properties: { notes: { type: Type.ARRAY, items: AI_MOVIE_DOCTOR_NOTE_SCHEMA } },
+        required: ["notes"],
+      },
+    },
+  });
+  return Array.isArray(result.notes) ? result.notes : [];
+}
+
+app.post("/api/ai-movie/stages/screenplay/beats/:index/doctor", requireRole("admin"), async (req, res) => {
+  const beatIndex = Number(req.params.index);
+  const { projectId } = req.body;
+  if (!projectId) {
+    res.status(400).json({ error: "No project to review." });
+    return;
+  }
+  const projectResult = await db.query("SELECT pasted_text, backfill FROM ai_movie_projects WHERE id = $1", [projectId]);
+  const project = projectResult.rows[0];
+  if (!project) {
+    res.status(404).json({ error: "Project not found." });
+    return;
+  }
+  const beats = project.backfill?.plot ?? [];
+  const screenplayBeats = project.backfill?.screenplayBeats ?? [];
+  const beat = screenplayBeats[beatIndex];
+  if (!Number.isInteger(beatIndex) || !beats[beatIndex] || !beat || !Array.isArray(beat.scenes) || beat.scenes.length === 0) {
+    res.status(400).json({ error: "This beat has no written scenes to review yet." });
+    return;
+  }
+
+  try {
+    const referenceMaterialText = await getAiMovieReferenceMaterialText(projectId);
+    const priorContextText = withAiMovieIntervalNote(
+      flattenAiMovieContentForExtraction(project.pasted_text, project.backfill, { includeScreenplay: false }),
+      project.backfill,
+      beatIndex
+    );
+    const scenesSoFarText = flattenAiMovieScreenplayScenesSoFar(screenplayBeats, beatIndex);
+    const totalMinutes =
+      Math.round((beat.scenes.reduce((sum, scene) => sum + computeAiMovieSceneMinutes(scene), 0) + aiMovieBeatSongMinutes(beat)) * 10) / 10;
+    const target = beats[beatIndex].runtimeMinutes;
+    const beatReviewText = [
+      `Fixed target time: ${typeof target === "number" ? `${target} min` : "none"}. Current real length: ${totalMinutes} min${beat.song ? ` (including a ${beat.song.durationMinutes}-min song)` : ""}.`,
+      ...beat.scenes.map((scene, i) => {
+        const card = scene.card
+          ? ` [card: ${scene.card.purpose}, ${scene.card.emotion?.en} ${scene.card.intensity}/10, ${scene.card.turn?.en}]`
+          : "";
+        return `SCENE ${i + 1}${card}\n${sceneToPromptText(scene)}`;
+      }),
+    ].join("\n\n");
+
+    const rawNotes = await generateAiMovieScriptDoctorNotes(priorContextText, referenceMaterialText, scenesSoFarText, beats[beatIndex], beatReviewText);
+    // Only notes that point at a real scene (or the whole beat) survive, and
+    // each remembers the heading of its scene at review time.
+    const notes = rawNotes
+      .map((note) => {
+        const sceneNumber = Math.round(Number(note.sceneNumber));
+        if (!Number.isInteger(sceneNumber) || sceneNumber < 0 || sceneNumber > beat.scenes.length) return null;
+        return {
+          sceneNumber,
+          sceneHeading: sceneNumber > 0 ? beat.scenes[sceneNumber - 1].sceneHeading?.en ?? "" : null,
+          category: AI_MOVIE_DOCTOR_CATEGORIES.includes(note.category) ? note.category : "story_logic",
+          severity: note.severity === "major" ? "major" : "minor",
+          problem: ensureAiMovieBilingualText(note.problem),
+          fix: ensureAiMovieBilingualText(note.fix),
+          applied: false,
+        };
+      })
+      .filter((note) => note && note.fix.en.trim())
+      .slice(0, 8);
+    const doctorNotes = { notes, reviewedAt: new Date().toISOString() };
+    await db.query(
+      "UPDATE ai_movie_projects SET backfill = jsonb_set(backfill, $2::text[], $3::jsonb), updated_at = now() WHERE id = $1",
+      [projectId, ["screenplayBeats", String(beatIndex), "doctorNotes"], JSON.stringify(doctorNotes)]
+    );
+    res.json({ beatIndex, doctorNotes });
+  } catch (error) {
+    console.error(`Script Doctor for beat ${beatIndex} failed:`, error.message);
+    res.status(502).json({ error: error.message });
+  }
+});
+
 // Grows an already-written beat to its fixed Beat Sheet time WITHOUT
 // throwing anything away -- every existing scene, and any dialogue already
 // written for them, stays exactly as it is; only new material is added
@@ -4847,7 +4985,7 @@ app.post("/api/ai-movie/stages/screenplay/beats/:index/extend-to-target", requir
 app.post("/api/ai-movie/stages/screenplay/beats/:beatIndex/scenes/:sceneIndex/revise", requireRole("admin"), async (req, res) => {
   const beatIndex = Number(req.params.beatIndex);
   const sceneIndex = Number(req.params.sceneIndex);
-  const { projectId, instruction } = req.body;
+  const { projectId, instruction, doctorNoteIndex } = req.body;
   if (!projectId) {
     res.status(400).json({ error: "No project to revise into." });
     return;
@@ -4906,6 +5044,9 @@ app.post("/api/ai-movie/stages/screenplay/beats/:beatIndex/scenes/:sceneIndex/re
     const latestScenes = latestBeats[beatIndex]?.scenes ?? beat.scenes;
     const newScenes = [...latestScenes.slice(0, sceneIndex), ...replacementScenes, ...latestScenes.slice(sceneIndex + 1)];
     latestBeats[beatIndex] = { ...latestBeats[beatIndex], scenes: newScenes, status: "pending" };
+    // A fix applied from the Script Doctor is marked done in the same save.
+    const doctorNote = latestBeats[beatIndex].doctorNotes?.notes?.[doctorNoteIndex];
+    if (Number.isInteger(doctorNoteIndex) && doctorNote) doctorNote.applied = true;
     await saveAiMovieBackfillField(projectId, "screenplayBeats", latestBeats);
     // The beat's own runtimeMinutes target is deliberately left alone here
     // -- it's the film's designed pacing from the Beat Sheet and stays
@@ -4917,6 +5058,7 @@ app.post("/api/ai-movie/stages/screenplay/beats/:beatIndex/scenes/:sceneIndex/re
       beatIndex,
       scenes: newScenes,
       runtimeMinutes: Math.round(newScenes.reduce((sum, s) => sum + (s.estimatedMinutes || 0), 0) * 10) / 10,
+      doctorNotes: latestBeats[beatIndex].doctorNotes ?? null,
     });
   } catch (error) {
     console.error(`Screenplay beat ${beatIndex} scene ${sceneIndex} revision failed:`, error.message);

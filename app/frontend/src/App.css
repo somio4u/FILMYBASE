@@ -1749,6 +1749,29 @@ button, input, textarea, select {
   text-align: left;
 }
 
+/* Script Doctor notes. */
+.ai-movie-doctor {
+  margin: 12px 0;
+  text-align: left;
+}
+
+.ai-movie-doctor-note {
+  margin: 8px 0;
+  padding: 8px 10px;
+  border-left: 3px solid var(--text-secondary);
+}
+
+.ai-movie-doctor-major {
+  border-left-color: #d9822b;
+}
+
+.ai-movie-doctor-note-title {
+  margin: 0 0 4px;
+  font-size: 12px;
+  font-weight: bold;
+  letter-spacing: 0.3px;
+}
+
 /* Song sheet panel on a song beat. */
 .ai-movie-song-sheet {
   margin: 12px 0;

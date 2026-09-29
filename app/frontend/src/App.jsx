@@ -320,6 +320,22 @@ const LABELS = {
     aiMovieScreenplayBeatWritingLabel: "Writing this beat's scenes…",
     aiMovieScreenplayBeatErrorLabel: 'Something went wrong generating this beat.',
     aiMovieScreenplayRetryButton: 'Retry',
+    aiMovieDoctorButton: 'Script Doctor',
+    aiMovieDoctorRerunButton: 'Run Script Doctor again',
+    aiMovieDoctorRunningLabel: 'Reviewing this beat…',
+    aiMovieDoctorNoNotes: 'No real problems found in this beat.',
+    aiMovieDoctorMajor: 'MAJOR',
+    aiMovieDoctorMinor: 'minor',
+    aiMovieDoctorSceneLabel: (n) => `Scene ${n}`,
+    aiMovieDoctorWholeBeatLabel: 'Whole beat',
+    aiMovieDoctorCategoryLabels: { pacing: 'Pacing', story_logic: 'Story logic', continuity: 'Continuity', character: 'Character', setup_payoff: 'Setup / payoff', world_rules: 'World rules', emotion: 'Emotion', interval: 'Interval' },
+    aiMovieDoctorFixLabel: 'Fix',
+    aiMovieDoctorApplyButton: 'Apply this fix',
+    aiMovieDoctorApplyingLabel: 'Applying…',
+    aiMovieDoctorAppliedLabel: '✓ Applied',
+    aiMovieDoctorSceneChangedLabel: 'This scene has changed since the review — run Script Doctor again.',
+    aiMovieDoctorUseInRequestChangesButton: 'Use in Request Changes',
+    aiMovieDoctorWholeBeatWarning: 'This rewrites the whole beat — its scenes and dialogue will be replaced. Edit the fix if you like, then Submit.',
     aiMovieSongSheetLabel: 'Song',
     aiMovieWriteSongSheetButton: 'Write Song Sheet',
     aiMovieRewriteSongSheetButton: 'Rewrite Song Sheet',
@@ -920,6 +936,22 @@ const LABELS = {
     aiMovieScreenplayBeatWritingLabel: 'ଏହି ବିଟ୍‌ର ଦୃଶ୍ୟ ଲେଖାଯାଉଛି…',
     aiMovieScreenplayBeatErrorLabel: 'ଏହି ବିଟ୍ ତିଆରି କରିବାରେ କିଛି ଭୁଲ ହେଲା।',
     aiMovieScreenplayRetryButton: 'ପୁଣି ଚେଷ୍ଟା କରନ୍ତୁ',
+    aiMovieDoctorButton: 'ସ୍କ୍ରିପ୍ଟ ଡକ୍ଟର',
+    aiMovieDoctorRerunButton: 'ସ୍କ୍ରିପ୍ଟ ଡକ୍ଟର ପୁଣି ଚଲାନ୍ତୁ',
+    aiMovieDoctorRunningLabel: 'ଏହି ବିଟ୍ ସମୀକ୍ଷା ହେଉଛି…',
+    aiMovieDoctorNoNotes: 'ଏହି ବିଟ୍‌ରେ କୌଣସି ପ୍ରକୃତ ସମସ୍ୟା ମିଳିଲା ନାହିଁ।',
+    aiMovieDoctorMajor: 'ବଡ଼',
+    aiMovieDoctorMinor: 'ଛୋଟ',
+    aiMovieDoctorSceneLabel: (n) => `ଦୃଶ୍ୟ ${n}`,
+    aiMovieDoctorWholeBeatLabel: 'ସମ୍ପୂର୍ଣ୍ଣ ବିଟ୍',
+    aiMovieDoctorCategoryLabels: { pacing: 'ଗତି', story_logic: 'କାହାଣୀ ତର୍କ', continuity: 'ନିରନ୍ତରତା', character: 'ଚରିତ୍ର', setup_payoff: 'ସେଟଅପ୍ / ପେଅଫ୍', world_rules: 'ଦୁନିଆର ନିୟମ', emotion: 'ଭାବନା', interval: 'ଇଣ୍ଟରଭାଲ୍' },
+    aiMovieDoctorFixLabel: 'ସମାଧାନ',
+    aiMovieDoctorApplyButton: 'ଏହି ସମାଧାନ ଲାଗୁ କରନ୍ତୁ',
+    aiMovieDoctorApplyingLabel: 'ଲାଗୁ ହେଉଛି…',
+    aiMovieDoctorAppliedLabel: '✓ ଲାଗୁ ହେଲା',
+    aiMovieDoctorSceneChangedLabel: 'ସମୀକ୍ଷା ପରେ ଏହି ଦୃଶ୍ୟ ବଦଳିଛି — ସ୍କ୍ରିପ୍ଟ ଡକ୍ଟର ପୁଣି ଚଲାନ୍ତୁ।',
+    aiMovieDoctorUseInRequestChangesButton: 'ପରିବର୍ତ୍ତନ ଅନୁରୋଧରେ ବ୍ୟବହାର କରନ୍ତୁ',
+    aiMovieDoctorWholeBeatWarning: 'ଏହା ସମ୍ପୂର୍ଣ୍ଣ ବିଟ୍ ପୁଣି ଲେଖେ — ଏହାର ଦୃଶ୍ୟ ଓ ସଂଳାପ ବଦଳିଯିବ। ଇଚ୍ଛା ହେଲେ ସମାଧାନ ସମ୍ପାଦନ କରି Submit କରନ୍ତୁ।',
     aiMovieSongSheetLabel: 'ଗୀତ',
     aiMovieWriteSongSheetButton: 'ଗୀତ ସିଟ୍ ଲେଖନ୍ତୁ',
     aiMovieRewriteSongSheetButton: 'ଗୀତ ସିଟ୍ ପୁଣି ଲେଖନ୍ତୁ',
@@ -2307,6 +2339,18 @@ function aiMovieDialogueCharacterCue(blocks, blockIndex) {
     break
   }
   return cue
+}
+
+// Finds the scene a Script Doctor note is still about, by the heading it
+// remembered at review time -- preferring its original position, then any
+// scene with that heading. -1 means the scene has changed since the review,
+// so the fix must not be applied to whatever now sits in that position.
+function aiMovieDoctorNoteSceneIndex(scenes, note) {
+  const key = (heading) => (heading ?? '').trim().toUpperCase()
+  if (!Array.isArray(scenes) || !note?.sceneHeading) return -1
+  const original = note.sceneNumber - 1
+  if (key(scenes[original]?.sceneHeading?.en) === key(note.sceneHeading)) return original
+  return scenes.findIndex((scene) => key(scene.sceneHeading?.en) === key(note.sceneHeading))
 }
 
 // Same rule as the backend's isAiMovieSongBeat: the Beat Sheet itself
@@ -4378,6 +4422,10 @@ function App() {
   const [aiMovieAssets, setAiMovieAssets] = useState(null)
   const [isSavingAiMovieInterval, setIsSavingAiMovieInterval] = useState(false)
   const [isWritingAiMovieSongSheet, setIsWritingAiMovieSongSheet] = useState(false)
+  const [isRunningAiMovieScriptDoctor, setIsRunningAiMovieScriptDoctor] = useState(false)
+  // A whole-beat Script Doctor fix, pre-filled and waiting for the user's
+  // own Submit (rewriting a whole beat replaces its scenes and dialogue).
+  const [aiMovieDoctorBeatFixText, setAiMovieDoctorBeatFixText] = useState(null)
 
   // Persistence: every AI Movie project is saved to its own database row as
   // you go. null = not saved yet (a fresh, un-analyzed paste).
@@ -5517,6 +5565,33 @@ function App() {
     setIsApprovingAiMovieScreenplayBeat(false)
   }
 
+  async function handleRunAiMovieScriptDoctorClick(beatIndex) {
+    if (!aiMovieProjectId) return
+    setIsRunningAiMovieScriptDoctor(true)
+    setAiMovieDoctorBeatFixText(null)
+    setAiMovieStageError(null)
+    try {
+      const response = await fetch(`${BACKEND_URL}/api/ai-movie/stages/screenplay/beats/${beatIndex}/doctor`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ projectId: aiMovieProjectId }),
+      })
+      const data = await response.json()
+      if (!response.ok) {
+        setAiMovieStageError(data.error || t.genericError)
+      } else {
+        setAiMovieBackfillResult((prev) => {
+          const beats = [...(prev?.screenplayBeats ?? [])]
+          beats[beatIndex] = { ...(beats[beatIndex] ?? {}), doctorNotes: data.doctorNotes }
+          return { ...(prev ?? {}), screenplayBeats: beats }
+        })
+      }
+    } catch {
+      setAiMovieStageError(t.genericError)
+    }
+    setIsRunningAiMovieScriptDoctor(false)
+  }
+
   async function handleWriteAiMovieSongSheetClick(beatIndex) {
     if (!aiMovieProjectId) return
     setIsWritingAiMovieSongSheet(true)
@@ -5618,7 +5693,7 @@ function App() {
       } else {
         setAiMovieBackfillResult((prev) => {
           const beats = [...(prev?.screenplayBeats ?? [])]
-          beats[beatIndex] = { scenes: data.scenes, status: 'pending', feedback: feedback || null }
+          beats[beatIndex] = { ...(beats[beatIndex] ?? {}), scenes: data.scenes, status: 'pending', feedback: feedback || null, doctorNotes: null }
           // The beat's own runtimeMinutes target (in `plot`) stays exactly
           // as the Beat Sheet set it -- it's the film's fixed pacing, never
           // adjusted to match whatever a regeneration happened to produce.
@@ -5639,7 +5714,7 @@ function App() {
   // siblings in the same beat untouched. The beat's own runtimeMinutes
   // target stays fixed (it's the Beat Sheet's designed pacing) -- a longer
   // revised scene simply shows the beat as over target.
-  async function handleReviseAiMovieScreenplaySceneClick(beatIndex, sceneIndex, instruction) {
+  async function handleReviseAiMovieScreenplaySceneClick(beatIndex, sceneIndex, instruction, doctorNoteIndex) {
     if (!aiMovieProjectId) return
     const projectId = aiMovieProjectId
 
@@ -5651,7 +5726,7 @@ function App() {
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ projectId, instruction: instruction || undefined }),
+          body: JSON.stringify({ projectId, instruction: instruction || undefined, doctorNoteIndex }),
         }
       )
       const data = await response.json()
@@ -5661,7 +5736,7 @@ function App() {
         setAiMovieBackfillResult((prev) => {
           const beats = [...(prev?.screenplayBeats ?? [])]
           const existing = beats[beatIndex] ?? {}
-          beats[beatIndex] = { ...existing, scenes: data.scenes, status: 'pending' }
+          beats[beatIndex] = { ...existing, scenes: data.scenes, status: 'pending', doctorNotes: data.doctorNotes ?? existing.doctorNotes }
           return { ...(prev ?? {}), screenplayBeats: beats }
         })
         setAiMovieRevisingSceneIndex(null)
@@ -9315,6 +9390,95 @@ function App() {
                                               ? t.aiMovieRewriteSongSheetButton
                                               : t.aiMovieWriteSongSheetButton}
                                         </button>
+                                      </div>
+                                    )}
+
+                                    {/* Script Doctor: per-beat review, nothing changes until the user
+                                        clicks. Scene notes apply straight to that scene's Request
+                                        Changes; whole-beat notes only pre-fill a box (a whole-beat
+                                        rewrite replaces its scenes and dialogue). */}
+                                    {Array.isArray(beat.scenes) && beat.scenes.length > 0 && (
+                                      <div className="ai-movie-doctor">
+                                        <button
+                                          type="button"
+                                          className="ai-movie-revise-scene-button"
+                                          onClick={() => handleRunAiMovieScriptDoctorClick(viewIndex)}
+                                          disabled={isRunningAiMovieScriptDoctor || isRevisingAiMovieScreenplayScene}
+                                        >
+                                          {isRunningAiMovieScriptDoctor
+                                            ? t.aiMovieDoctorRunningLabel
+                                            : beat.doctorNotes
+                                              ? t.aiMovieDoctorRerunButton
+                                              : t.aiMovieDoctorButton}
+                                        </button>
+                                        {beat.doctorNotes && beat.doctorNotes.notes.length === 0 && (
+                                          <p className="ai-movie-scene-card">{t.aiMovieDoctorNoNotes}</p>
+                                        )}
+                                        {beat.doctorNotes?.notes.map((note, noteIndex) => {
+                                          const currentSceneIndex = note.sceneNumber > 0 ? aiMovieDoctorNoteSceneIndex(beat.scenes, note) : null
+                                          return (
+                                            <div key={noteIndex} className={`ai-movie-doctor-note ai-movie-doctor-${note.severity}`}>
+                                              <p className="ai-movie-doctor-note-title">
+                                                {note.severity === 'major' ? t.aiMovieDoctorMajor : t.aiMovieDoctorMinor}
+                                                {' · '}
+                                                {note.sceneNumber > 0
+                                                  ? t.aiMovieDoctorSceneLabel(sceneNumberOffset + (currentSceneIndex >= 0 ? currentSceneIndex : note.sceneNumber - 1) + 1)
+                                                  : t.aiMovieDoctorWholeBeatLabel}
+                                                {' · '}
+                                                {t.aiMovieDoctorCategoryLabels[note.category] ?? note.category}
+                                              </p>
+                                              <p>{note.problem?.[aiMovieLanguage] || note.problem?.en}</p>
+                                              <p><strong>{t.aiMovieDoctorFixLabel}:</strong> {note.fix?.[aiMovieLanguage] || note.fix?.en}</p>
+                                              {note.applied ? (
+                                                <p className="ai-movie-scene-card">{t.aiMovieDoctorAppliedLabel}</p>
+                                              ) : note.sceneNumber > 0 ? (
+                                                currentSceneIndex >= 0 ? (
+                                                  <button
+                                                    type="button"
+                                                    className="ai-movie-revise-scene-button"
+                                                    onClick={() => handleReviseAiMovieScreenplaySceneClick(viewIndex, currentSceneIndex, note.fix.en, noteIndex)}
+                                                    disabled={isRevisingAiMovieScreenplayScene}
+                                                  >
+                                                    {isRevisingAiMovieScreenplayScene ? t.aiMovieDoctorApplyingLabel : t.aiMovieDoctorApplyButton}
+                                                  </button>
+                                                ) : (
+                                                  <p className="ai-movie-scene-card">{t.aiMovieDoctorSceneChangedLabel}</p>
+                                                )
+                                              ) : (
+                                                <button
+                                                  type="button"
+                                                  className="ai-movie-revise-scene-button"
+                                                  onClick={() => setAiMovieDoctorBeatFixText(note.fix?.en ?? '')}
+                                                >
+                                                  {t.aiMovieDoctorUseInRequestChangesButton}
+                                                </button>
+                                              )}
+                                            </div>
+                                          )
+                                        })}
+                                        {aiMovieDoctorBeatFixText !== null && (
+                                          <div className="feedback-form">
+                                            <p className="feedback-note">{t.aiMovieDoctorWholeBeatWarning}</p>
+                                            <textarea
+                                              className="feedback-textarea"
+                                              value={aiMovieDoctorBeatFixText}
+                                              onChange={(e) => setAiMovieDoctorBeatFixText(e.target.value)}
+                                            />
+                                            <button
+                                              className="choose-button"
+                                              onClick={async () => {
+                                                await handleRegenerateAiMovieScreenplayBeatClick(viewIndex, aiMovieDoctorBeatFixText)
+                                                setAiMovieDoctorBeatFixText(null)
+                                              }}
+                                              disabled={isGeneratingAiMovieScreenplayBeat || !aiMovieDoctorBeatFixText.trim()}
+                                            >
+                                              {isGeneratingAiMovieScreenplayBeat ? t.submittingFeedback : t.submitFeedback}
+                                            </button>
+                                            <button type="button" className="cancel-button" onClick={() => setAiMovieDoctorBeatFixText(null)}>
+                                              {t.aiMovieReviseSceneCancelButton}
+                                            </button>
+                                          </div>
+                                        )}
                                       </div>
                                     )}
 

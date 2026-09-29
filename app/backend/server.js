@@ -3379,37 +3379,72 @@ function sceneToPromptText(scene) {
   return `${heading}\n${scene.action?.en ?? ""}${legacyDialogueBlock}`;
 }
 
-// Real, checkable screen-time estimate -- replaces trusting the AI's own
-// self-reported "estimatedMinutes" guess, which tested for real came back
-// well off (a ~200-word scene labelled "~3 min" when the standard
-// page-equals-minute rule puts a scene that size at closer to 1 min).
-// Counts actual words in the scene's English text (every scene always has
-// one, regardless of the reader's chosen display language) and converts
-// with that same rule of thumb, so the number on screen is always grounded
-// in what was actually written, never a guess.
-const AI_MOVIE_WORDS_PER_MINUTE = 200;
+// Real, checkable screen-time estimate -- never the AI's own self-reported
+// "estimatedMinutes" guess, which tested for real came back well off.
+//
+// Uses the industry's own "one page = one minute" method the way
+// screenwriting software (Final Draft etc.) actually measures a page: a
+// standard page is ~55 lines of 12pt Courier; action lines wrap at ~60
+// characters, dialogue sits in a narrow ~35-character column under a
+// one-line character name, and a blank line separates every element.
+// This replaced a plain words / 200 count, which a real scene proved
+// wrong: its ~270 words said "~1.5 min", but laid out as a real page it's
+// ~0.8 of a page -- matching the ~50-60 seconds it would actually run.
+// Measured on the English text (every scene always has one, whatever the
+// reader's display language).
+const AI_MOVIE_LINES_PER_PAGE = 55;
+const AI_MOVIE_ACTION_CHARS_PER_LINE = 60;
+const AI_MOVIE_DIALOGUE_CHARS_PER_LINE = 35;
 
-function countAiMovieSceneWords(scene) {
-  const texts = [];
-  if (Array.isArray(scene.content) && scene.content.length > 0) {
-    for (const block of scene.content) {
-      texts.push(block.type === "dialogue" ? block.line?.en ?? "" : block.text?.en ?? "");
-    }
-  } else {
-    texts.push(scene.action?.en ?? "");
-    if (Array.isArray(scene.dialogue)) {
-      for (const line of scene.dialogue) texts.push(line.line?.en ?? "");
+// How many printed lines this text takes when wrapped at `width`
+// characters, one paragraph per line break -- whole words only, like a
+// real screenplay page.
+function countAiMovieWrappedLines(text, width) {
+  let lines = 0;
+  for (const paragraph of (text ?? "").split(/\n+/)) {
+    const words = paragraph.trim().split(/\s+/).filter(Boolean);
+    if (words.length === 0) continue;
+    let lineLength = 0;
+    lines++;
+    for (const word of words) {
+      if (lineLength > 0 && lineLength + 1 + word.length > width) {
+        lines++;
+        lineLength = word.length;
+      } else {
+        lineLength += (lineLength > 0 ? 1 : 0) + word.length;
+      }
     }
   }
-  return texts
-    .join(" ")
-    .trim()
-    .split(/\s+/)
-    .filter(Boolean).length;
+  return lines;
+}
+
+function countAiMovieScenePageLines(scene) {
+  // Scene heading + the blank line after it.
+  let lines = 2;
+  const addAction = (text) => {
+    const n = countAiMovieWrappedLines(text, AI_MOVIE_ACTION_CHARS_PER_LINE);
+    if (n > 0) lines += n + 1;
+  };
+  const addDialogue = (text) => {
+    // Character name line + the wrapped line itself + a blank line.
+    lines += 1 + Math.max(1, countAiMovieWrappedLines(text, AI_MOVIE_DIALOGUE_CHARS_PER_LINE)) + 1;
+  };
+  if (Array.isArray(scene.content) && scene.content.length > 0) {
+    for (const block of scene.content) {
+      if (block.type === "dialogue") addDialogue(block.line?.en);
+      else addAction(block.text?.en);
+    }
+  } else {
+    addAction(scene.action?.en);
+    if (Array.isArray(scene.dialogue)) {
+      for (const line of scene.dialogue) addDialogue(line.line?.en);
+    }
+  }
+  return lines;
 }
 
 function computeAiMovieSceneMinutes(scene) {
-  return Math.round((countAiMovieSceneWords(scene) / AI_MOVIE_WORDS_PER_MINUTE) * 10) / 10;
+  return Math.round((countAiMovieScenePageLines(scene) / AI_MOVIE_LINES_PER_PAGE) * 10) / 10;
 }
 
 // A silent, one-time "voice brief" per named character -- generated
@@ -4493,6 +4528,22 @@ app.get("/api/ai-movie/projects/:id", requireRole("admin"), async (req, res) => 
   // the normal trigger -- backfill it quietly in the background, no redo
   // of anything already done.
   backfillAiMovieCharacterDialogueBriefsIfMissing(row.id, row.pasted_text, row.backfill);
+
+  // Every scene's duration is recomputed on the way out with the current
+  // page-method estimate -- scenes saved under the older words/200 count
+  // would otherwise sit next to new ones measured differently, making each
+  // beat's "Estimated total" a mix of two rulers. Pure arithmetic on the
+  // scene's own text (no AI call), and nothing stored is changed.
+  if (Array.isArray(row.backfill?.screenplayBeats)) {
+    row.backfill = {
+      ...row.backfill,
+      screenplayBeats: row.backfill.screenplayBeats.map((beat) =>
+        Array.isArray(beat.scenes)
+          ? { ...beat, scenes: beat.scenes.map((scene) => ({ ...scene, estimatedMinutes: computeAiMovieSceneMinutes(scene) })) }
+          : beat
+      ),
+    };
+  }
 
   res.json({
     id: row.id,

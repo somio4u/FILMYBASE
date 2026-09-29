@@ -8959,7 +8959,7 @@ function App() {
                                           <p className="ai-movie-scene-duration">
                                             {t.aiMovieSceneDurationLabel(effectiveAiMovieSceneMinutes(scene))}
                                           </p>
-                                          {Array.isArray(scene.content) ? (
+                                          {Array.isArray(scene.content) && scene.content.length > 0 ? (
                                             scene.content.map((block, blockIndex) =>
                                               block.type === 'dialogue' ? (
                                                 <div key={blockIndex} className="ai-movie-dialogue-line">

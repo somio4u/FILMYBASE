@@ -3402,6 +3402,15 @@ async function generateAiMovieCharacterDialogueBriefs(priorContextText, referenc
   return result.briefs;
 }
 
+// Shared by every place that feeds a dialogue writer the character voice
+// briefs -- the manual "Write Dialogue" endpoint and the automatic
+// fill-to-target dialogue phase alike.
+function aiMovieCharacterDialogueBriefsText(backfill) {
+  return Array.isArray(backfill?.characterDialogueBriefs)
+    ? backfill.characterDialogueBriefs.map((b) => `${b.name}: ${b.brief.en}`).join("\n\n")
+    : "";
+}
+
 // Same "just open the project" self-heal already used for a stuck
 // screenplay beat -- covers a project whose Beat Sheet was already approved
 // BEFORE this brief existed, so the normal approval-time trigger never ran
@@ -3558,12 +3567,20 @@ async function generateAiMovieScreenplayBeatExpansion(
   return result.scenes.map((scene) => ({ ...scene, estimatedMinutes: computeAiMovieSceneMinutes(scene) }));
 }
 
-// Keeps asking for more scenes (never touching what's already there) until
-// the beat's real, computed total reaches its fixed target -- or a small
-// bounded number of rounds is exhausted, so a stubborn shortfall can never
-// loop forever or burn unbounded Gemini calls. Accepting "close enough"
-// (90% of target) avoids an endless chase of the last few seconds.
+// Closing a beat's shortfall against its fixed target doesn't always mean
+// more description or more scenes -- sometimes the honest way to genuinely
+// fill more screen time is dialogue between characters already in a scene.
+// So before ever writing new scenes, this first tries adding real dialogue
+// to existing scenes that don't have any yet (reusing the exact same
+// dialogue writer "Write Dialogue" uses, so it's held to the same quality
+// bar -- natural, colloquial, code-mixed, and free to genuinely decide a
+// given scene doesn't need dialogue, same as always). Only once that's
+// been tried does it fall back to writing more scenes. Both phases are
+// bounded so a stubborn shortfall can never loop forever or burn unbounded
+// Gemini calls, and "close enough" (90% of target) avoids an endless chase
+// of the last few seconds.
 const AI_MOVIE_BEAT_EXPAND_MAX_ROUNDS = 2;
+const AI_MOVIE_BEAT_DIALOGUE_FILL_MAX_SCENES = 3;
 const AI_MOVIE_BEAT_SHORTFALL_TOLERANCE = 0.9;
 
 async function fillAiMovieScreenplayBeatToTarget(
@@ -3572,15 +3589,54 @@ async function fillAiMovieScreenplayBeatToTarget(
   priorContextText,
   referenceMaterialText,
   scenesSoFarText,
-  beat
+  beat,
+  characterDialogueBriefsText
 ) {
   let currentScenes = scenes;
   if (typeof targetMinutes !== "number" || targetMinutes <= 0) return currentScenes;
 
-  for (let round = 0; round < AI_MOVIE_BEAT_EXPAND_MAX_ROUNDS; round++) {
-    const total = currentScenes.reduce((sum, s) => sum + (s.estimatedMinutes || 0), 0);
-    if (total >= targetMinutes * AI_MOVIE_BEAT_SHORTFALL_TOLERANCE) break;
+  const isShort = () => currentScenes.reduce((sum, s) => sum + (s.estimatedMinutes || 0), 0) < targetMinutes * AI_MOVIE_BEAT_SHORTFALL_TOLERANCE;
 
+  // Phase 1: dialogue on existing dialogue-less scenes.
+  let dialogueAttempts = 0;
+  for (let i = 0; i < currentScenes.length && dialogueAttempts < AI_MOVIE_BEAT_DIALOGUE_FILL_MAX_SCENES && isShort(); i++) {
+    const scene = currentScenes[i];
+    if (Array.isArray(scene.content) && scene.content.length > 0) continue;
+    dialogueAttempts++;
+    try {
+      const beatSiblingScenesText = currentScenes
+        .filter((_, j) => j !== i)
+        .map((s) => sceneToPromptText(s))
+        .join("\n\n");
+      const content = await generateAiMovieSceneDialogue(
+        priorContextText,
+        referenceMaterialText,
+        scenesSoFarText,
+        beatSiblingScenesText,
+        beat,
+        sceneToPromptText(scene),
+        null,
+        characterDialogueBriefsText
+      );
+      // Only counts as progress when the model actually added dialogue --
+      // its honest "this scene doesn't need any" answer leaves the scene
+      // untouched and moves on to the next candidate.
+      if (Array.isArray(content) && content.some((block) => block.type === "dialogue")) {
+        currentScenes = currentScenes.map((s, j) => {
+          if (j !== i) return s;
+          const updated = { ...s, content };
+          return { ...updated, estimatedMinutes: computeAiMovieSceneMinutes(updated) };
+        });
+      }
+    } catch (error) {
+      console.error("Beat dialogue-fill attempt failed, moving on:", error.message);
+    }
+  }
+
+  // Phase 2: still short after trying dialogue -- write more scenes,
+  // continuing directly on, never touching what's already there.
+  for (let round = 0; round < AI_MOVIE_BEAT_EXPAND_MAX_ROUNDS && isShort(); round++) {
+    const total = currentScenes.reduce((sum, s) => sum + (s.estimatedMinutes || 0), 0);
     const remaining = Math.round((targetMinutes - total) * 10) / 10;
     const existingBeatScenesText = currentScenes.map((s) => sceneToPromptText(s)).join("\n\n");
     try {
@@ -3636,9 +3692,29 @@ async function syncAiMovieBeatRuntimeToScenes(projectId, beatIndex, scenes) {
 // return more than one scene: if the change genuinely earns a scene break
 // (e.g. a location or time change mid-revision), splitting is fine, but it
 // should stay one scene whenever the change doesn't call for that.
+//
+// Unlike normal screenplay generation, revise IS allowed to reach for
+// dialogue -- lengthening a scene doesn't always mean more description or
+// more scenes; sometimes the honest way to genuinely fill more screen time
+// is dialogue between characters already there. Returns EITHER a plain
+// action-only scene (the default) OR a full interleaved action/dialogue
+// scene via "content" (same shape "Write Dialogue" produces), never both.
+const AI_MOVIE_SCREENPLAY_SCENE_REVISE_RESULT_SCHEMA = {
+  type: Type.OBJECT,
+  properties: {
+    sceneHeading: AI_MOVIE_BILINGUAL_TEXT_SCHEMA,
+    action: AI_MOVIE_BILINGUAL_TEXT_SCHEMA,
+    content: { type: Type.ARRAY, items: AI_MOVIE_SCENE_CONTENT_BLOCK_SCHEMA },
+    estimatedMinutes: { type: Type.NUMBER },
+  },
+  required: ["sceneHeading", "estimatedMinutes"],
+};
+
 const AI_MOVIE_SCREENPLAY_SCENE_REVISE_SYSTEM_PROMPT = `You are working on an AI Movie — a film that will be entirely AI-generated, never physically shot. Because of that, never reason about budget, cast/crew/location availability, shoot schedules, or any real-world production constraint — anything that can be imagined can be included, with no limitation.
 
-You are given the story's already-approved, locked layers below, every screenplay scene already written in earlier beats, and the current beat's own other scenes (fixed context — do not rewrite them). The user wants ONE specific scene, named at the end, revised — this could be almost anything: longer, shorter, a different tone, different content or focus, a fixed detail, or anything else the instruction below asks for. If the instruction asks for more screen time, making the story longer is always allowed and expected here — never resist it or try to stay close to any earlier length target. If no specific instruction is given, use your own judgment to genuinely improve the scene (richer detail, better pacing, a stronger beat) rather than leaving it unchanged. If the change naturally needs a scene break (a real change of location, time, or focus partway through), it is fine to return two or more scenes in its place instead of one — otherwise keep it as a single scene. Do NOT write any dialogue — that is a separate, later pass; describe what happens and what's said only in action-line terms, never as quoted lines. Keep full continuity with the fixed scenes around it (same characters, same momentum) unless the instruction specifically asks to change that. Give each returned scene its own honest, updated "estimatedMinutes."`;
+You are given the story's already-approved, locked layers below, every screenplay scene already written in earlier beats, and the current beat's own other scenes (fixed context — do not rewrite them). The user wants ONE specific scene, named at the end, revised — this could be almost anything: longer, shorter, a different tone, different content or focus, a fixed detail, or anything else the instruction below asks for. If the instruction asks for more screen time, making the story longer is always allowed and expected here — never resist it or try to stay close to any earlier length target. If no specific instruction is given, use your own judgment to genuinely improve the scene (richer detail, better pacing, a stronger beat) rather than leaving it unchanged. If the change naturally needs a scene break (a real change of location, time, or focus partway through), it is fine to return two or more scenes in its place instead of one — otherwise keep it as a single scene. Keep full continuity with the fixed scenes around it (same characters, same momentum) unless the instruction specifically asks to change that. Give each returned scene its own honest, updated "estimatedMinutes."
+
+By default, still write plain action only in the "action" field, no dialogue — that's the normal case, same as before. BUT more screen time doesn't always mean more description or an extra scene: when the instruction is asking for a longer scene (or more detail, more weight) AND the scene already has characters genuinely interacting, dialogue between them is often the more honest way to actually fill that time — use it. When you do, return the scene via "content" instead of "action": an ORDERED list of action and dialogue blocks, interleaved exactly as they happen, in the SAME natural, colloquial, code-mixed style "Write Dialogue" uses elsewhere in this app — never formal or textbook language, and for Hindi, a real script switch for everyday English words (e.g. "payment कब होगा?", never a translation like "भुगतान कब होगा?" or a transliteration like "पेमेंट कब होगा?"). Leave "content" empty when you're not adding dialogue.`;
 
 async function generateAiMovieScreenplaySceneRevision(
   priorContextText,
@@ -3670,13 +3746,16 @@ async function generateAiMovieScreenplaySceneRevision(
       responseSchema: {
         type: Type.OBJECT,
         properties: {
-          scenes: { type: Type.ARRAY, items: AI_MOVIE_SCREENPLAY_SCENE_SCHEMA, minItems: "1" },
+          scenes: { type: Type.ARRAY, items: AI_MOVIE_SCREENPLAY_SCENE_REVISE_RESULT_SCHEMA, minItems: "1" },
         },
         required: ["scenes"],
       },
     },
   });
-  return result.scenes.map((scene) => ({ ...scene, estimatedMinutes: computeAiMovieSceneMinutes(scene) }));
+  return result.scenes.map((scene) => {
+    const cleaned = Array.isArray(scene.content) && scene.content.length > 0 ? { ...scene, content: scene.content } : { ...scene, content: undefined };
+    return { ...cleaned, estimatedMinutes: computeAiMovieSceneMinutes(cleaned) };
+  });
 }
 
 // Writes dialogue for ONE scene, only once the user asks for it -- never
@@ -3827,7 +3906,8 @@ async function generateNextAiMovieScreenplayBeat(projectId) {
       priorContextText,
       referenceMaterialText,
       scenesSoFarText,
-      beats[nextIndex]
+      beats[nextIndex],
+      aiMovieCharacterDialogueBriefsText(project.backfill)
     );
 
     const latest = (await db.query("SELECT backfill FROM ai_movie_projects WHERE id = $1", [projectId])).rows[0].backfill;
@@ -4020,7 +4100,8 @@ app.post("/api/ai-movie/stages/screenplay/beats/:index/request-changes", require
       priorContextText,
       referenceMaterialText,
       scenesSoFarText,
-      beats[beatIndex]
+      beats[beatIndex],
+      aiMovieCharacterDialogueBriefsText(project.backfill)
     );
 
     const latest = (await db.query("SELECT backfill FROM ai_movie_projects WHERE id = $1", [projectId])).rows[0].backfill;
@@ -4167,9 +4248,7 @@ app.post("/api/ai-movie/stages/screenplay/beats/:beatIndex/scenes/:sceneIndex/di
       .join("\n\n");
     const targetScene = beat.scenes[sceneIndex];
     const targetSceneText = sceneToPromptText(targetScene);
-    const characterDialogueBriefsText = Array.isArray(project.backfill?.characterDialogueBriefs)
-      ? project.backfill.characterDialogueBriefs.map((b) => `${b.name}: ${b.brief.en}`).join("\n\n")
-      : "";
+    const characterDialogueBriefsText = aiMovieCharacterDialogueBriefsText(project.backfill);
 
     const content = await generateAiMovieSceneDialogue(
       priorContextText,

@@ -373,6 +373,18 @@ const LABELS = {
     aiMovieDialoguePlaceholder: 'Optional — any direction for the dialogue, e.g. "make this a tense argument" (leave blank to let the AI decide)',
     aiMovieBeatNarrationButton: 'Narration for this whole beat',
     scriptThemeLabel: 'Page colour',
+    movieScriptNotWrittenLabel: 'not written yet',
+    movieScriptNotWrittenShort: 'not written',
+    movieScriptOutlineLabel: 'Outline',
+    movieScriptApproveFirstNote: 'Approve the scene list (below) to start writing scenes.',
+    movieScriptEditSubmitNote: 'Submit — the AI fixes spelling, grammar and language (action lines in English, dialogue in this scene\'s language — e.g. English or romanized text in an Odia scene), keeps your words and events, and saves it as a new version.',
+    movieScriptCheckNote: 'When the script is written: checks every written scene — spelling, grammar and language — and keeps your content. Each corrected scene is saved as a new version.',
+    movieScriptCheckConfirm: (scenes, calls) => `Check the full script? This checks all ${scenes} written scenes — about ${calls} AI call${calls === 1 ? '' : 's'}, and it can take several minutes. It runs in the background.`,
+    movieScriptCheckRunningLabel: (done, total) => `Checking scenes… ${done} of ${total || '…'}`,
+    movieScriptCheckShowReport: (fixes, scenes) => `Show report (${fixes} fixes in ${scenes} scenes)`,
+    movieScriptCheckSceneLabel: (number, heading) => `Scene ${number}: ${heading}`,
+    movieScriptCheckChangedNote: (count) => `${count} line(s) corrected.`,
+    movieBreakdownStaleNote: 'The script has changed since the Script Breakdown was made — re-run the breakdown in Production to bring it up to date.',
     aiMovieScriptCheckButton: '✔ Check full script',
     aiMovieScriptCheckRunningLabel: (done, total) => `Checking beat ${Math.min(done + 1, total)} of ${total}…`,
     aiMovieScriptCheckNote: 'When the script is written: checks every written beat — spelling, grammar and language in both Hindi and English — and keeps your content.',
@@ -1035,6 +1047,18 @@ const LABELS = {
     aiMovieDialoguePlaceholder: 'ଇଚ୍ଛାଧୀନ — ସଂଳାପ ପାଇଁ କୌଣସି ନିର୍ଦ୍ଦେଶ, ଯଥା "ଏହାକୁ ଏକ ଉତ୍ତେଜନାପୂର୍ଣ୍ଣ ବିବାଦ କରନ୍ତୁ" (ଖାଲି ଛାଡ଼ିଲେ AI ନିଜେ ନିଷ୍ପତ୍ତି ନେବ)',
     aiMovieBeatNarrationButton: 'ଏହି ସମ୍ପୂର୍ଣ୍ଣ ବିଟ୍ ପାଇଁ ବର୍ଣ୍ଣନା',
     scriptThemeLabel: 'ପୃଷ୍ଠାର ରଙ୍ଗ',
+    movieScriptNotWrittenLabel: 'ଏପର୍ଯ୍ୟନ୍ତ ଲେଖାଯାଇନାହିଁ',
+    movieScriptNotWrittenShort: 'ଲେଖାଯାଇନାହିଁ',
+    movieScriptOutlineLabel: 'ରୂପରେଖ',
+    movieScriptApproveFirstNote: 'ଦୃଶ୍ୟ ଲେଖିବା ଆରମ୍ଭ କରିବାକୁ ତଳେ ଦୃଶ୍ୟ ତାଲିକା ଅନୁମୋଦନ କରନ୍ତୁ।',
+    movieScriptEditSubmitNote: 'Submit — AI ବନାନ, ବ୍ୟାକରଣ ଓ ଭାଷା ଠିକ୍ କରେ (ଆକ୍ସନ ଇଂରାଜୀରେ, ସଂଳାପ ଏହି ଦୃଶ୍ୟର ଭାଷାରେ), ଆପଣଙ୍କ ଶବ୍ଦ ଓ ଘଟଣା ରଖେ, ଏବଂ ନୂଆ ସଂସ୍କରଣ ଭାବେ ସେଭ୍ କରେ।',
+    movieScriptCheckNote: 'ସ୍କ୍ରିପ୍ଟ ଲେଖା ସରିବା ପରେ: ପ୍ରତ୍ୟେକ ଲେଖାଯାଇଥିବା ଦୃଶ୍ୟର ବନାନ, ବ୍ୟାକରଣ ଓ ଭାଷା ଯାଞ୍ଚ କରେ।',
+    movieScriptCheckConfirm: (scenes, calls) => `ସମ୍ପୂର୍ଣ୍ଣ ସ୍କ୍ରିପ୍ଟ ଯାଞ୍ଚ କରିବେ? ${scenes}ଟି ଦୃଶ୍ୟ — ପ୍ରାୟ ${calls}ଟି AI କଲ୍।`,
+    movieScriptCheckRunningLabel: (done, total) => `ଦୃଶ୍ୟ ଯାଞ୍ଚ ହେଉଛି… ${done} / ${total || '…'}`,
+    movieScriptCheckShowReport: (fixes, scenes) => `ରିପୋର୍ଟ ଦେଖନ୍ତୁ (${scenes}ଟି ଦୃଶ୍ୟରେ ${fixes}ଟି ସଂଶୋଧନ)`,
+    movieScriptCheckSceneLabel: (number, heading) => `ଦୃଶ୍ୟ ${number}: ${heading}`,
+    movieScriptCheckChangedNote: (count) => `${count}ଟି ଧାଡ଼ି ସଂଶୋଧିତ।`,
+    movieBreakdownStaleNote: 'ସ୍କ୍ରିପ୍ଟ ବ୍ରେକଡାଉନ୍ ତିଆରି ହେବା ପରେ ସ୍କ୍ରିପ୍ଟ ବଦଳିଛି — Production ରେ ବ୍ରେକଡାଉନ୍ ପୁଣି ଚଲାନ୍ତୁ।',
     aiMovieScriptCheckButton: '✔ ସମ୍ପୂର୍ଣ୍ଣ ସ୍କ୍ରିପ୍ଟ ଯାଞ୍ଚ',
     aiMovieScriptCheckRunningLabel: (done, total) => `ବିଟ୍ ${Math.min(done + 1, total)} / ${total} ଯାଞ୍ଚ ହେଉଛି…`,
     aiMovieScriptCheckNote: 'ସ୍କ୍ରିପ୍ଟ ଲେଖା ସରିବା ପରେ: ପ୍ରତ୍ୟେକ ଲେଖାଯାଇଥିବା ବିଟ୍‌ର ବନାନ, ବ୍ୟାକରଣ ଓ ଭାଷା ହିନ୍ଦୀ ଓ ଇଂରାଜୀରେ ଯାଞ୍ଚ କରେ, ଆପଣଙ୍କ ବିଷୟବସ୍ତୁ ରଖେ।',
@@ -1875,7 +1899,7 @@ function ScreenplayElements({ elements, language }) {
   )
 }
 
-function ScreenplayBlock({ episodeIndex, sceneIndex, t, language, screenplay }) {
+function ScreenplayBlock({ episodeIndex, sceneIndex, t, language, screenplay, toolsOnly = false }) {
   if (!screenplay) return null
 
   const key = screenplayKey(episodeIndex, sceneIndex)
@@ -1911,11 +1935,11 @@ function ScreenplayBlock({ episodeIndex, sceneIndex, t, language, screenplay }) 
   }
 
   return (
-    <div className="screenplay-block">
-      {draft.charactersPresent?.length > 0 && (
+    <div className={toolsOnly ? 'screenplay-block screenplay-block-tools' : 'screenplay-block'}>
+      {!toolsOnly && draft.charactersPresent?.length > 0 && (
         <p className="screenplay-characters-line">{t.screenplayCharactersLabel}: {draft.charactersPresent.join(', ')}</p>
       )}
-      <ScreenplayElements elements={draft.elements} language={language} />
+      {!toolsOnly && <ScreenplayElements elements={draft.elements} language={language} />}
 
       {draft.previousFeedback && (
         <p className="feedback-note">
@@ -2507,6 +2531,437 @@ function RuntimeSummary({ total, target, t, mismatchNote, label }) {
         </>
       )}
     </p>
+  )
+}
+
+// Movie's screenplay, in the same working layout as AI Movie (the user's
+// request): scene list | script page | the selected scene's tools, a
+// Light/Dark page, typing straight into a written scene with Submit (the
+// AI corrects grammar and language -- action in English, dialogue in the
+// scene's own language), "Check full script", and a note when the script
+// has changed since Production's breakdown was made. Series and vertical
+// dramas show one episode's page at a time, with an episode bar.
+function movieSlugline(scene) {
+  const place = (scene.location?.en ?? scene.location ?? '').toString().toUpperCase()
+  return `${scene.intExt ?? 'INT'}. ${place} - ${scene.timeOfDay === 'NIGHT' ? 'NIGHT' : 'DAY'}`
+}
+
+// Production's breakdown is built from the written scenes: when a scene
+// changed after the breakdown was made, say so at the top of the
+// Script Breakdown.
+function MovieBreakdownFreshnessNote({ sceneListId, t }) {
+  const [stale, setStale] = useState(false)
+  useEffect(() => {
+    if (!sceneListId) return
+    fetch(`${BACKEND_URL}/api/scene-lists/${sceneListId}/breakdown-freshness`)
+      .then((response) => response.json())
+      .then((data) => setStale(Boolean(data?.stale)))
+      .catch(() => {})
+  }, [sceneListId])
+  return stale ? <p className="feedback-note movie-breakdown-stale-note">{t.movieBreakdownStaleNote}</p> : null
+}
+
+function MovieScreenplayWorkspace({
+  sceneList, episodes, t, language, screenplay, scriptTheme, onChangeScriptTheme, onSceneSaved, onReloadScenes,
+}) {
+  const groups = sceneList.episodeScenes
+    ? sceneList.episodeScenes.map((episodeScene, index) => ({
+        episodeIndex: index,
+        title: episodes?.[index]?.title?.[language] ?? episodes?.[index]?.title?.en ?? '',
+        scenes: episodeScene.scenes ?? [],
+        total: episodeScene.totalEstimatedMinutes,
+        target: episodeScene.targetMinutes,
+      }))
+    : [{ episodeIndex: null, title: '', scenes: sceneList.scenes ?? [], total: sceneList.totalEstimatedMinutes, target: sceneList.targetMinutes }]
+  const [groupIndex, setGroupIndex] = useState(0)
+  const [turn, setTurn] = useState('open')
+  const [selectedIndex, setSelectedIndex] = useState(0)
+  const [editing, setEditing] = useState(null)
+  const [isSubmittingEdit, setIsSubmittingEdit] = useState(false)
+  const [editError, setEditError] = useState(null)
+  const [editFixes, setEditFixes] = useState(null)
+  const [check, setCheck] = useState(null)
+  const [checkError, setCheckError] = useState(null)
+  const [showReport, setShowReport] = useState(false)
+  const [breakdownStale, setBreakdownStale] = useState(false)
+
+  const group = groups[Math.min(groupIndex, groups.length - 1)] ?? groups[0]
+  const scenes = group.scenes
+  const sceneIndex = Math.min(selectedIndex, Math.max(scenes.length - 1, 0))
+  const scene = scenes[sceneIndex]
+  const keyOf = (index) => screenplayKey(group.episodeIndex, index)
+  const draftOf = (index) => screenplay?.scenesByKey?.[keyOf(index)]
+  const numberOf = (s, index) => (s?.sceneNumber ? cleanSceneNumber(s.sceneNumber) : index + 1)
+  const selectedKey = keyOf(sceneIndex)
+  const draft = draftOf(sceneIndex)
+  const allDrafts = Object.values(screenplay?.scenesByKey ?? {}).filter((d) => Array.isArray(d?.elements) && d.elements.length > 0)
+  const isAiWriting =
+    Boolean(screenplay?.generatingKey) || Boolean(screenplay?.submittingFeedbackKey) || isSubmittingEdit
+
+  async function refreshBreakdownFreshness() {
+    try {
+      const response = await fetch(`${BACKEND_URL}/api/scene-lists/${sceneList.id}/breakdown-freshness`)
+      const data = await response.json()
+      setBreakdownStale(Boolean(data?.stale))
+    } catch {
+      // Only a hint -- a missed check just shows no note.
+    }
+  }
+
+  async function pollCheck() {
+    try {
+      const response = await fetch(`${BACKEND_URL}/api/scene-lists/${sceneList.id}/script-check`)
+      const data = await response.json()
+      setCheck(data)
+      if (data?.status === 'running') {
+        setTimeout(pollCheck, 4000)
+      } else if (data?.status === 'done') {
+        onReloadScenes?.()
+        refreshBreakdownFreshness()
+      }
+    } catch {
+      setTimeout(pollCheck, 8000)
+    }
+  }
+
+  useEffect(() => {
+    refreshBreakdownFreshness()
+    pollCheck()
+    // Only when a different scene list is opened.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sceneList.id])
+
+  useEffect(() => {
+    setSelectedIndex(0)
+    setEditing(null)
+  }, [groupIndex])
+
+  function selectScene(index, scrollToIt) {
+    setSelectedIndex(index)
+    if (scrollToIt) document.getElementById(`movie-script-scene-${index}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }
+
+  function startEditing(index) {
+    const d = draftOf(index)
+    if (!d) return
+    setEditing({
+      key: keyOf(index),
+      draftId: d.id,
+      elements: d.elements.map((e) => ({
+        type: e.type === 'flashback' ? 'flashback' : e.type,
+        character: e.character ?? '',
+        characterModifier: e.characterModifier ?? 'none',
+        parenthetical: screenplayText(e.parenthetical, language),
+        text: screenplayText(e.text, language),
+      })),
+    })
+    setEditError(null)
+    setEditFixes(null)
+    setSelectedIndex(index)
+  }
+
+  const updateElement = (i, patch) => setEditing((prev) => prev && { ...prev, elements: prev.elements.map((e, j) => (j === i ? { ...e, ...patch } : e)) })
+  const insertElement = (after, type) =>
+    setEditing((prev) => prev && {
+      ...prev,
+      elements: [...prev.elements.slice(0, after + 1), { type, character: '', characterModifier: 'none', parenthetical: '', text: '' }, ...prev.elements.slice(after + 1)],
+    })
+  const removeElement = (i) => setEditing((prev) => prev && { ...prev, elements: prev.elements.filter((_, j) => j !== i) })
+
+  async function submitEdit() {
+    if (!editing) return
+    setIsSubmittingEdit(true)
+    setEditError(null)
+    try {
+      const response = await fetch(`${BACKEND_URL}/api/screenplay/scene/${editing.draftId}/edit`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ elements: editing.elements }),
+      })
+      const data = await response.json()
+      if (!response.ok) {
+        setEditError(data.error || t.genericError)
+      } else {
+        onSceneSaved?.(editing.key, data.scene)
+        setEditFixes({ key: editing.key, fixes: data.fixes ?? [] })
+        setEditing(null)
+        refreshBreakdownFreshness()
+      }
+    } catch {
+      setEditError(t.genericError)
+    }
+    setIsSubmittingEdit(false)
+  }
+
+  async function startCheck() {
+    // Same batching as the server: scenes are checked 4 at a time, one language per batch.
+    const perLanguage = {}
+    allDrafts.forEach((d) => { const lang = d.dialogueLanguage || 'en'; perLanguage[lang] = (perLanguage[lang] ?? 0) + 1 })
+    const calls = Math.max(1, Object.values(perLanguage).reduce((n, count) => n + Math.ceil(count / 4), 0))
+    if (!window.confirm(t.movieScriptCheckConfirm(allDrafts.length, calls))) return
+    setCheckError(null)
+    setShowReport(false)
+    try {
+      const response = await fetch(`${BACKEND_URL}/api/scene-lists/${sceneList.id}/script-check`, { method: 'POST' })
+      const data = await response.json()
+      if (!response.ok) {
+        setCheckError(data.error || t.genericError)
+        return
+      }
+      pollCheck()
+    } catch {
+      setCheckError(t.genericError)
+    }
+  }
+
+  const rowsFor = (text, width) => Math.max(1, (text ?? '').split('\n').reduce((n, line) => n + Math.max(1, Math.ceil(line.length / width)), 0))
+
+  function renderElements(elements) {
+    return elements.map((element, index) => {
+      const text = screenplayText(element.text, language)
+      const parenthetical = screenplayText(element.parenthetical, language)
+      if (element.type === 'dialogue') {
+        const modifier = element.characterModifier && element.characterModifier !== 'none' ? ` (${element.characterModifier})` : ''
+        return (
+          <div key={index} className="script-dialogue">
+            <p className="script-character">{element.character}{modifier}</p>
+            {parenthetical && <p className="script-parenthetical">({parenthetical})</p>}
+            <p className="script-line">{text}</p>
+          </div>
+        )
+      }
+      if (element.type === 'transition') return <p key={index} className="script-transition">{text}</p>
+      if (element.type === 'flashback') {
+        return (
+          <p key={index} className="script-action"><strong>FLASH - {element.character}'S POV:</strong> {text}</p>
+        )
+      }
+      return <p key={index} className="script-action">{text}</p>
+    })
+  }
+
+  function renderEditableScene(index, s) {
+    return (
+      <div key={index} id={`movie-script-scene-${index}`} className="script-scene is-selected is-editing">
+        <p className="script-slug">
+          <span className="script-scene-number script-scene-number-left">{numberOf(s, index)}</span>
+          {movieSlugline(s)}
+          <span className="script-scene-number script-scene-number-right">{numberOf(s, index)}</span>
+        </p>
+        {editing.elements.map((element, i) => (
+          <div key={i} className={`script-edit-block script-edit-block-${element.type}`}>
+            {element.type === 'dialogue' ? (
+              <div className="script-dialogue">
+                <input className="script-edit-field script-character" value={element.character} onChange={(e) => updateElement(i, { character: e.target.value.toUpperCase() })} placeholder={t.scriptEditCharacterPlaceholder} />
+                <input className="script-edit-field script-parenthetical" value={element.parenthetical} onChange={(e) => updateElement(i, { parenthetical: e.target.value })} placeholder={t.scriptEditParentheticalPlaceholder} />
+                <textarea className="script-edit-field script-line" value={element.text} rows={rowsFor(element.text, 35)} onChange={(e) => updateElement(i, { text: e.target.value })} placeholder={t.scriptEditLinePlaceholder} />
+              </div>
+            ) : element.type === 'transition' ? (
+              <input className="script-edit-field script-transition" value={element.text} onChange={(e) => updateElement(i, { text: e.target.value.toUpperCase() })} />
+            ) : (
+              <textarea className="script-edit-field script-action" value={element.text} rows={rowsFor(element.text, 60)} onChange={(e) => updateElement(i, { text: e.target.value })} placeholder={t.scriptEditActionPlaceholder} />
+            )}
+            <div className="script-edit-controls">
+              <button type="button" onClick={() => insertElement(i, 'action')} title={t.scriptEditAddActionButton}>+ {t.scriptEditActionShort}</button>
+              <button type="button" onClick={() => insertElement(i, 'dialogue')} title={t.scriptEditAddDialogueButton}>+ {t.scriptEditDialogueShort}</button>
+              <button type="button" onClick={() => removeElement(i)} title={t.scriptEditRemoveButton} aria-label={t.scriptEditRemoveButton}>×</button>
+            </div>
+          </div>
+        ))}
+        {editing.elements.length === 0 && (
+          <div className="script-edit-controls is-visible">
+            <button type="button" onClick={() => insertElement(-1, 'action')}>+ {t.scriptEditActionShort}</button>
+            <button type="button" onClick={() => insertElement(-1, 'dialogue')}>+ {t.scriptEditDialogueShort}</button>
+          </div>
+        )}
+        <div className="script-edit-submit-bar">
+          <p>{t.movieScriptEditSubmitNote}</p>
+          <div>
+            <button type="button" className="cancel-button" onClick={() => setEditing(null)} disabled={isSubmittingEdit}>{t.aiMovieReviseSceneCancelButton}</button>
+            <button type="button" className="choose-button" onClick={submitEdit} disabled={isSubmittingEdit}>
+              {isSubmittingEdit ? t.scriptEditSubmittingLabel : t.scriptEditSubmitButton}
+            </button>
+          </div>
+          {editError && <p className="feedback-note">{editError}</p>}
+        </div>
+      </div>
+    )
+  }
+
+  const isChecking = check?.status === 'running'
+  // In script order (the check itself runs one language at a time).
+  const report = (Array.isArray(check?.report) ? [...check.report] : []).sort(
+    (a, b) => (a.episodeIndex ?? -1) - (b.episodeIndex ?? -1) || a.sceneIndex - b.sceneIndex
+  )
+  const reportFixCount = report.reduce((n, r) => n + (r.fixes?.length ?? 0), 0)
+  const sceneLabelFor = (entry) => {
+    const g = groups.find((x) => x.episodeIndex === entry.episodeIndex) ?? groups[0]
+    const s = g?.scenes?.[entry.sceneIndex]
+    return t.movieScriptCheckSceneLabel(numberOf(s, entry.sceneIndex), s ? movieSlugline(s) : '')
+  }
+
+  return (
+    <div className="movie-screenplay">
+      {breakdownStale && <p className="feedback-note movie-breakdown-stale-note">{t.movieBreakdownStaleNote}</p>}
+
+      {allDrafts.length > 0 && (
+        <div className={`script-check${isChecking ? ' is-running' : ''}`}>
+          <div className="script-check-row">
+            <button type="button" className="choose-button" onClick={startCheck} disabled={isChecking}>
+              {isChecking ? t.movieScriptCheckRunningLabel(check.doneScenes, check.totalScenes) : t.aiMovieScriptCheckButton}
+            </button>
+            {!isChecking && check?.status === 'done' && (
+              <button type="button" className="cancel-button" onClick={() => setShowReport((v) => !v)}>
+                {showReport ? t.aiMovieScriptCheckHideReport : t.movieScriptCheckShowReport(reportFixCount, report.length)}
+              </button>
+            )}
+          </div>
+          {isChecking && (
+            <div className="script-check-progress" aria-hidden="true">
+              <span style={{ width: `${check.totalScenes ? Math.round((check.doneScenes / check.totalScenes) * 100) : 5}%` }} />
+            </div>
+          )}
+          <p className="script-check-note">{isChecking ? t.aiMovieScriptCheckRunningNote : t.movieScriptCheckNote}</p>
+          {checkError && <p className="feedback-note">{checkError}</p>}
+          {showReport && !isChecking && (
+            <div className="script-check-report">
+              {report.map((entry, i) => (
+                <div key={i} className="script-check-report-beat">
+                  <p className="script-check-report-title">{sceneLabelFor(entry)}</p>
+                  {entry.error ? (
+                    <p className="feedback-note">{t.aiMovieScriptCheckBeatFailed}</p>
+                  ) : entry.fixes?.length ? (
+                    <ul>{entry.fixes.map((fix, j) => <li key={j}>{fix}</li>)}</ul>
+                  ) : (
+                    <p className="script-check-note">{entry.changed ? t.movieScriptCheckChangedNote(entry.changed) : t.scriptEditNoFixesNote}</p>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      <div className="ai-movie-screenplay-current-card">
+        {groups.length > 1 && (
+          <div className="ai-movie-screenplay-nav">
+            <button type="button" className="ai-movie-screenplay-nav-button" aria-label="Previous episode" disabled={groupIndex === 0}
+              onClick={() => { setTurn('prev'); setGroupIndex((i) => Math.max(0, i - 1)) }}>‹</button>
+            <p className="bit-heading ai-movie-screenplay-nav-title">{t.episodeLabel} {groupIndex + 1} / {groups.length}{group.title ? `: ${group.title}` : ''}</p>
+            <button type="button" className="ai-movie-screenplay-nav-button" aria-label="Next episode" disabled={groupIndex === groups.length - 1}
+              onClick={() => { setTurn('next'); setGroupIndex((i) => Math.min(groups.length - 1, i + 1)) }}>›</button>
+          </div>
+        )}
+        <RuntimeSummary total={group.total} target={group.target} t={t} />
+
+        {scenes.length > 0 && (
+          <div className="script-workspace">
+            <aside className="script-navigator" aria-label={t.scriptScenesTitle}>
+              <p className="script-panel-title">{t.scriptScenesTitle}</p>
+              <div className="script-navigator-list">
+                {scenes.map((s, index) => (
+                  <button key={index} type="button" className={`script-nav-item${index === sceneIndex ? ' is-active' : ''}${draftOf(index) ? ' is-written' : ''}`} onClick={() => selectScene(index, true)}>
+                    <span className="script-nav-number">{numberOf(s, index)}</span>
+                    <span className="script-nav-heading">{movieSlugline(s)}</span>
+                    <span className="script-nav-duration">
+                      {typeof s.estimatedMinutes === 'number' ? t.aiMovieShortDuration(s.estimatedMinutes) : ''}
+                      {draftOf(index) ? '' : ` · ${t.movieScriptNotWrittenShort}`}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </aside>
+
+            <div className="script-page-column">
+              <div className="script-theme-switch" role="group" aria-label={t.scriptThemeLabel}>
+                {['light', 'dark'].map((mode) => (
+                  <button key={mode} type="button" className={`script-theme-option${scriptTheme === mode ? ' is-active' : ''}`} onClick={() => onChangeScriptTheme(mode)}>
+                    {mode === 'light' ? t.scriptThemeLight : t.scriptThemeDark}
+                  </button>
+                ))}
+              </div>
+              <div className="script-stage">
+                <div key={`group-${groupIndex}`} className={`script-page script-page-${scriptTheme} script-turn-${turn}`}>
+                  {scenes.map((s, index) => {
+                    if (editing?.key === keyOf(index)) return renderEditableScene(index, s)
+                    const d = draftOf(index)
+                    return (
+                      <div
+                        key={index}
+                        id={`movie-script-scene-${index}`}
+                        className={`script-scene${index === sceneIndex ? ' is-selected' : ''}${d ? '' : ' is-unwritten'}`}
+                        style={{ '--scene-order': index }}
+                        onClick={() => selectScene(index, false)}
+                        onDoubleClick={() => d && !editing && startEditing(index)}
+                        title={d ? t.scriptEditDoubleClickHint : undefined}
+                      >
+                        <p className="script-slug">
+                          <span className="script-scene-number script-scene-number-left">{numberOf(s, index)}</span>
+                          {movieSlugline(s)}
+                          <span className="script-scene-number script-scene-number-right">{numberOf(s, index)}</span>
+                        </p>
+                        {d && Array.isArray(d.elements) ? (
+                          renderElements(d.elements)
+                        ) : (
+                          <p className="script-outline">{s.oneLiner?.[language] ?? s.oneLiner?.en ?? ''} <span>— {t.movieScriptNotWrittenLabel}</span></p>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            </div>
+
+            <aside className="script-tools" aria-label={t.scriptSelectedSceneTitle(numberOf(scene, sceneIndex))}>
+              <p className="script-panel-title">{t.scriptSelectedSceneTitle(numberOf(scene, sceneIndex))}</p>
+              <p className="script-tools-heading">{scene ? movieSlugline(scene) : ''}</p>
+              <div className="script-tools-meta" key={`meta-${groupIndex}-${sceneIndex}`}>
+                {typeof scene?.estimatedMinutes === 'number' && <span>{t.aiMovieSceneDurationLabel(scene.estimatedMinutes)}</span>}
+                {scene?.purpose && <span>{t.scenePurposeLabels[scene.purpose]}</span>}
+                {scene?.oneLiner && <span><strong>{t.movieScriptOutlineLabel}:</strong> {scene.oneLiner[language] ?? scene.oneLiner.en}</span>}
+                {scene?.turn && <span>{t.sceneTurnLabel}: {scene.turn[language] ?? scene.turn.en}</span>}
+                {draft?.charactersPresent?.length > 0 && <span>{t.screenplayCharactersLabel}: {draft.charactersPresent.join(', ')}</span>}
+                {draft?.dialogueLanguage && <span>{draft.dialogueLanguage === 'or' ? t.dialogueLanguageOdia : draft.dialogueLanguage === 'hi' ? t.dialogueLanguageHindi : t.dialogueLanguageEnglish}</span>}
+              </div>
+              <div className="script-tools-actions">
+                {!screenplay ? (
+                  <p className="script-tools-editing-note">{t.movieScriptApproveFirstNote}</p>
+                ) : !draft ? (
+                  <ScreenplayBlock episodeIndex={group.episodeIndex} sceneIndex={sceneIndex} t={t} language={language} screenplay={screenplay} />
+                ) : (
+                  <>
+                    {editing?.key === selectedKey ? (
+                      <p className="script-tools-editing-note">{t.scriptEditEditingNote}</p>
+                    ) : (
+                      <button type="button" className="choose-button script-edit-start-button" onClick={() => startEditing(sceneIndex)} disabled={Boolean(editing) || isAiWriting || isChecking}>
+                        {t.scriptEditStartButton}
+                      </button>
+                    )}
+                    {editFixes?.key === selectedKey && (
+                      <div className="script-edit-fixes">
+                        <p className="script-panel-title">{t.scriptEditFixesTitle}</p>
+                        {editFixes.fixes.length === 0 ? <p>{t.scriptEditNoFixesNote}</p> : <ul>{editFixes.fixes.map((fix, i) => <li key={i}>{fix}</li>)}</ul>}
+                      </div>
+                    )}
+                    <ScreenplayBlock episodeIndex={group.episodeIndex} sceneIndex={sceneIndex} t={t} language={language} screenplay={screenplay} toolsOnly />
+                  </>
+                )}
+              </div>
+            </aside>
+          </div>
+        )}
+      </div>
+
+      {createPortal(
+        <div className={`script-letterbox-layer${isAiWriting ? ' is-ai-writing' : ''}`} aria-hidden="true">
+          <div className="script-letterbox script-letterbox-top" />
+          <div className="script-letterbox script-letterbox-bottom">
+            <span className="script-letterbox-label">{t.scriptAiWritingLabel}</span>
+          </div>
+        </div>,
+        document.body
+      )}
+    </div>
   )
 }
 
@@ -11466,11 +11921,15 @@ function App() {
         <div className="three-act-structure" id="stage-screenplay">
           <h2>{t.sceneListHeading}</h2>
 
-          <SceneListView
+          <MovieScreenplayWorkspace
             sceneList={sceneList}
             episodes={pitchDeck?.episodes}
             t={t}
             language={language}
+            scriptTheme={scriptTheme}
+            onChangeScriptTheme={changeScriptTheme}
+            onSceneSaved={(key, scene) => setScreenplayScenesByKey((prev) => ({ ...prev, [key]: scene }))}
+            onReloadScenes={() => loadScreenplayScenes(sceneList.id)}
             screenplay={
               sceneList.status === 'approved'
                 ? {
@@ -11799,6 +12258,7 @@ function App() {
 
       {activeAgent === 'production' && sceneList && sceneList.status === 'approved' && (
         <div className="three-act-structure" id="stage-breakdown">
+          <MovieBreakdownFreshnessNote sceneListId={sceneList.id} t={t} />
           <h2>{t.scriptBreakdownHeading}</h2>
 
           {scriptBreakdown?.autoBackfillStatus === 'in_progress' && (

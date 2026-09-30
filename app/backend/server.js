@@ -9550,7 +9550,26 @@ function sanitizeScreenplayElements(elements, dialogueLanguage) {
     cleaned.shift();
   }
 
-  return cleaned;
+  // Same two safety fixes as AI Movie: a line typed straight into an
+  // action paragraph ("KALIA\n(softly)\nAma, the bell...") becomes a real
+  // dialogue element, and a dialogue element with no words is dropped
+  // (it would print as an empty speech).
+  return cleaned
+    .map((element) => {
+      if (element.type !== "action" || typeof element.text !== "string") return element;
+      const lines = element.text.split("\n").map((line) => line.trim()).filter(Boolean);
+      const cue = lines.length >= 2 && lines[0].match(/^([A-Z][A-Z0-9 .'-]{0,30}?)(?:\s*\((V\.O\.|O\.S\.)\))?$/);
+      if (!cue || AI_MOVIE_NOT_A_CUE.test(cue[1])) return element;
+      const hasNote = lines.length >= 3 && /^\(.*\)$/.test(lines[1]);
+      return {
+        type: "dialogue",
+        character: cue[1].trim(),
+        characterModifier: cue[2] ?? "none",
+        parenthetical: hasNote ? lines[1].replace(/^\(\s*|\s*\)$/g, "") : "",
+        text: lines.slice(hasNote ? 2 : 1).join(" "),
+      };
+    })
+    .filter((element) => element.type !== "dialogue" || (typeof element.text === "string" && element.text.trim()));
 }
 
 // Builds the full screenplay content — action lines and dialogue — for ONE
@@ -9811,6 +9830,261 @@ app.post("/api/screenplay/scene", requireRole("admin"), async (req, res) => {
     console.error("Gemini API call failed:", error.message);
     res.status(502).json({ error: error.message });
   }
+});
+
+// ---------------------------------------------------------------------
+// Movie: typing straight into the script + Submit, and "Check full
+// script" -- the same two tools AI Movie has, adapted to Movie's scenes:
+// action lines are always English, dialogue (and acting notes) are in the
+// scene's own dialogue language (English / Odia / Hindi), one language
+// per scene. The corrector judges the dialogue by Movie's OWN language
+// rules (SCREENPLAY_DIALOGUE_CRAFT -- e.g. Odia and Hindi loanwords in
+// the local script), not AI Movie's. As in AI Movie, the AI only returns
+// corrected text for numbered pieces and the scene is rebuilt in code
+// from the writer's own elements, so no line can be lost or added. Every
+// change is saved as a new version of the scene, like Request Changes.
+const MOVIE_LANGUAGE_NAMES = { en: "English", or: "Odia", hi: "Hindi" };
+
+function buildMovieScriptCorrectorPrompt(dialogueLanguage) {
+  const languageName = MOVIE_LANGUAGE_NAMES[dialogueLanguage] ?? "English";
+  return `You are a careful script editor on a film screenplay. You CORRECT the text you are given — you never rewrite it.
+
+1. Fix spelling, grammar and punctuation.
+2. ACTION lines are always simple, natural English. Any part of an action line written in another language (Odia, Hindi, or romanized Indian languages) must be translated into English with the same meaning.
+3. DIALOGUE lines and ACTING NOTES are in ${languageName}. Any part written in another language, or written with English letters (romanized ${languageName}), must become proper ${languageName} in its own script with the same meaning — except a minor character the story clearly marks as speaking another language, whose line stays as it is.${dialogueLanguage === "en" ? "" : `
+   No English letters may be left in a ${languageName} dialogue line or acting note. An English word the character would really say (like "phone" or "seriously") can stay as that English word, but spelled out in ${languageName} script — never in English letters.`}
+4. Judge what correct, natural ${languageName} dialogue looks like by the writer's own dialogue style guide below — use it ONLY to spot real mistakes; never rewrite a line that is already fine.
+5. Keep everything else exactly as it is: the same events, lines, meaning, order and characters. Do not add or remove anything, and do not improve the style, the wording or the drama.
+6. "fixes": a short list, in simple English, of what you corrected.
+
+THE WRITER'S DIALOGUE STYLE GUIDE:
+${SCREENPLAY_DIALOGUE_CRAFT[dialogueLanguage] ?? SCREENPLAY_DIALOGUE_CRAFT.en}`;
+}
+
+// Numbered pieces of one or more scenes: every action line, dialogue
+// line and acting note.
+function movieScriptPieces(scenes) {
+  const pieces = [];
+  scenes.forEach((scene, sceneIndex) => {
+    let count = 0;
+    (scene.elements ?? []).forEach((element, elementIndex) => {
+      const id = () => `S${sceneIndex + 1}.${++count}`;
+      if (element.type === "dialogue") {
+        if (element.text?.trim()) pieces.push({ id: id(), sceneIndex, elementIndex, field: "text", label: `DIALOGUE line of ${element.character}`, value: element.text });
+        if (element.parenthetical?.trim()) pieces.push({ id: id(), sceneIndex, elementIndex, field: "parenthetical", label: `ACTING NOTE of ${element.character}`, value: element.parenthetical });
+      } else if (element.type === "action" || element.type === "flashback") {
+        if (element.text?.trim()) pieces.push({ id: id(), sceneIndex, elementIndex, field: "text", label: "ACTION", value: element.text });
+      }
+    });
+  });
+  return pieces;
+}
+
+async function generateMovieScriptCorrections(scenes, dialogueLanguage, characterNames) {
+  const pieces = movieScriptPieces(scenes);
+  if (pieces.length === 0) return { pieces, corrections: new Map(), fixes: [] };
+  const text = scenes
+    .map((scene, sceneIndex) => {
+      const own = pieces.filter((p) => p.sceneIndex === sceneIndex);
+      return `SCENE ${sceneIndex + 1}${scene.heading ? ` — ${scene.heading}` : ""}\n${own.map((p) => `[${p.id}] ${p.label}: ${p.value}`).join("\n")}`;
+    })
+    .join("\n\n");
+  const result = await generateJsonContent({
+    model: AI_MOVIE_DIALOGUE_MODEL_NAME,
+    contents: `The story's characters (spell their names exactly like this): ${characterNames.join(", ") || "(none listed)"}.\n\n${text}\n\nReturn "corrections": one entry for each piece that needed a correction, with its exact id and the corrected text. Leave out pieces that are already correct.`,
+    config: {
+      systemInstruction: buildMovieScriptCorrectorPrompt(dialogueLanguage),
+      responseMimeType: "application/json",
+      maxOutputTokens: 32768,
+      responseSchema: {
+        type: Type.OBJECT,
+        properties: {
+          corrections: {
+            type: Type.ARRAY,
+            items: { type: Type.OBJECT, properties: { id: { type: Type.STRING }, text: { type: Type.STRING } }, required: ["id", "text"] },
+          },
+          fixes: {
+            type: Type.ARRAY,
+            items: { type: Type.OBJECT, properties: { scene: { type: Type.NUMBER }, fix: { type: Type.STRING } }, required: ["scene", "fix"] },
+          },
+        },
+        required: ["corrections", "fixes"],
+      },
+    },
+  });
+  const corrections = new Map(
+    (Array.isArray(result.corrections) ? result.corrections : [])
+      .filter((c) => typeof c?.id === "string" && typeof c.text === "string" && c.text.trim())
+      .map((c) => [c.id.trim(), c.text])
+  );
+  const fixes = (Array.isArray(result.fixes) ? result.fixes : []).filter((f) => typeof f?.fix === "string" && f.fix.trim());
+  return { pieces, corrections, fixes };
+}
+
+// Applies the corrections to copies of the scenes' elements; returns the
+// new elements per scene and how many pieces changed in each.
+function applyMovieScriptCorrections(scenes, pieces, corrections) {
+  const elementsByScene = scenes.map((scene) => (scene.elements ?? []).map((element) => ({ ...element })));
+  const changedByScene = scenes.map(() => 0);
+  for (const piece of pieces) {
+    const corrected = corrections.get(piece.id);
+    if (typeof corrected !== "string" || corrected === piece.value) continue;
+    elementsByScene[piece.sceneIndex][piece.elementIndex][piece.field] = corrected;
+    changedByScene[piece.sceneIndex]++;
+  }
+  return { elementsByScene, changedByScene };
+}
+
+async function movieCharacterNamesForSceneList(sceneListId) {
+  const result = await db.query(
+    `SELECT cs.content FROM scene_lists sl
+     JOIN bit_sheets bs ON bs.id = sl.bit_sheet_id
+     JOIN three_act_structures tas ON tas.id = bs.three_act_structure_id
+     JOIN character_sheets cs ON cs.pitch_deck_id = tas.pitch_deck_id
+     WHERE sl.id = $1 ORDER BY cs.created_at DESC LIMIT 1`,
+    [sceneListId]
+  );
+  const characters = result.rows[0]?.content?.characters ?? [];
+  return characters.map((c) => (typeof c?.name === "string" ? c.name : c?.name?.en)).filter(Boolean);
+}
+
+// The elements as the screen sends them after typing: plain strings.
+function cleanMovieEditedElements(elements) {
+  if (!Array.isArray(elements)) return [];
+  const text = (value) => (typeof value === "string" ? value.trim() : "");
+  const modifiers = ["none", "CONT'D", "O.S.", "V.O.", "ECHOING"];
+  return elements
+    .map((element) => {
+      const type = ["action", "dialogue", "transition", "flashback"].includes(element?.type) ? element.type : "action";
+      const cleaned = { type, character: text(element?.character).toUpperCase(), text: text(element?.text) };
+      if (type === "dialogue") {
+        cleaned.characterModifier = modifiers.includes(element?.characterModifier) ? element.characterModifier : "none";
+        cleaned.parenthetical = text(element?.parenthetical).replace(/^\(\s*|\s*\)$/g, "");
+        return cleaned.character && cleaned.text ? cleaned : null;
+      }
+      return cleaned.text ? cleaned : null;
+    })
+    .filter(Boolean)
+    .slice(0, 300);
+}
+
+async function insertMovieScreenplayVersion(previousRow, elements, extra = {}) {
+  const content = { ...previousRow.content, elements, ...extra };
+  const inserted = await db.query(
+    "INSERT INTO screenplay_scenes (scene_list_id, episode_index, scene_index, content) VALUES ($1, $2, $3, $4) RETURNING id, episode_index, scene_index, status, feedback, created_at",
+    [previousRow.scene_list_id, previousRow.episode_index, previousRow.scene_index, JSON.stringify(content)]
+  );
+  const row = inserted.rows[0];
+  return { id: row.id, episodeIndex: row.episode_index, sceneIndex: row.scene_index, status: row.status, feedback: row.feedback, createdAt: row.created_at, ...content };
+}
+
+app.post("/api/screenplay/scene/:id/edit", requireRole("admin"), async (req, res) => {
+  const elements = cleanMovieEditedElements(req.body.elements);
+  if (elements.length === 0) {
+    res.status(400).json({ error: "The scene is empty -- write at least one line before submitting." });
+    return;
+  }
+  const existing = await db.query("SELECT id, scene_list_id, episode_index, scene_index, content FROM screenplay_scenes WHERE id = $1", [req.params.id]);
+  const previousRow = existing.rows[0];
+  if (!previousRow) {
+    res.status(404).json({ error: "Screenplay scene not found" });
+    return;
+  }
+  try {
+    const dialogueLanguage = ["en", "or", "hi"].includes(previousRow.content?.dialogueLanguage) ? previousRow.content.dialogueLanguage : "en";
+    const characterNames = await movieCharacterNamesForSceneList(previousRow.scene_list_id);
+    const scenes = [{ elements }];
+    const { pieces, corrections, fixes } = await generateMovieScriptCorrections(scenes, dialogueLanguage, characterNames);
+    const { elementsByScene } = applyMovieScriptCorrections(scenes, pieces, corrections);
+    const saved = await insertMovieScreenplayVersion(previousRow, sanitizeScreenplayElements(elementsByScene[0], dialogueLanguage), { editedByUser: true });
+    res.json({ scene: saved, fixes: fixes.map((f) => f.fix) });
+  } catch (error) {
+    console.error(`Movie screenplay scene ${req.params.id} edit failed:`, error.message);
+    res.status(502).json({ error: error.message });
+  }
+});
+
+// Full script check: in the background, a few scenes per AI call, grouped
+// by dialogue language. Progress and the report are kept in memory (a
+// server restart clears them; every scene already corrected stays saved,
+// and running it again simply finds little left to fix).
+const movieScriptChecks = new Map();
+const MOVIE_SCRIPT_CHECK_BATCH = 4;
+
+async function runMovieScriptCheck(sceneListId, state) {
+  try {
+    const rows = (
+      await db.query(
+        `SELECT DISTINCT ON (episode_index, scene_index) id, scene_list_id, episode_index, scene_index, content
+         FROM screenplay_scenes WHERE scene_list_id = $1 ORDER BY episode_index, scene_index, created_at DESC`,
+        [sceneListId]
+      )
+    ).rows.filter((row) => Array.isArray(row.content?.elements) && row.content.elements.length > 0);
+    const characterNames = await movieCharacterNamesForSceneList(sceneListId);
+    const batches = [];
+    for (const language of ["en", "or", "hi"]) {
+      const ofLanguage = rows.filter((row) => (row.content?.dialogueLanguage ?? "en") === language);
+      for (let i = 0; i < ofLanguage.length; i += MOVIE_SCRIPT_CHECK_BATCH) batches.push({ language, rows: ofLanguage.slice(i, i + MOVIE_SCRIPT_CHECK_BATCH) });
+    }
+    state.totalScenes = rows.length;
+    for (const batch of batches) {
+      const scenes = batch.rows.map((row) => ({ elements: row.content.elements }));
+      try {
+        const { pieces, corrections, fixes } = await generateMovieScriptCorrections(scenes, batch.language, characterNames);
+        const { elementsByScene, changedByScene } = applyMovieScriptCorrections(scenes, pieces, corrections);
+        for (let i = 0; i < batch.rows.length; i++) {
+          const row = batch.rows[i];
+          if (changedByScene[i] > 0) await insertMovieScreenplayVersion(row, sanitizeScreenplayElements(elementsByScene[i], batch.language));
+          state.report.push({
+            episodeIndex: row.episode_index,
+            sceneIndex: row.scene_index,
+            changed: changedByScene[i],
+            fixes: fixes.filter((f) => Math.round(Number(f.scene)) === i + 1).map((f) => f.fix),
+          });
+        }
+      } catch (error) {
+        console.error("Movie full script check: a batch failed:", error.message);
+        for (const row of batch.rows) state.report.push({ episodeIndex: row.episode_index, sceneIndex: row.scene_index, changed: 0, fixes: [], error: true });
+      }
+      state.doneScenes += batch.rows.length;
+    }
+    state.status = "done";
+    state.finishedAt = new Date().toISOString();
+  } catch (error) {
+    console.error("Movie full script check stopped:", error.message);
+    state.status = "error";
+    state.error = error.message;
+  }
+}
+
+app.post("/api/scene-lists/:id/script-check", requireRole("admin"), async (req, res) => {
+  const sceneListId = Number(req.params.id);
+  if (movieScriptChecks.get(sceneListId)?.status === "running") {
+    res.json({ started: false, alreadyRunning: true });
+    return;
+  }
+  const state = { status: "running", startedAt: new Date().toISOString(), totalScenes: 0, doneScenes: 0, report: [] };
+  movieScriptChecks.set(sceneListId, state);
+  runMovieScriptCheck(sceneListId, state);
+  res.json({ started: true });
+});
+
+app.get("/api/scene-lists/:id/script-check", requireLogin, (req, res) => {
+  res.json(movieScriptChecks.get(Number(req.params.id)) ?? { status: "none" });
+});
+
+// Production's script breakdown is built from the written scenes -- so a
+// scene edited (or corrected by the full check) after the breakdown was
+// made leaves the breakdown out of date. The screen asks this and shows
+// a plain note rather than letting the two drift apart silently.
+app.get("/api/scene-lists/:id/breakdown-freshness", requireLogin, async (req, res) => {
+  const result = await db.query(
+    `SELECT (SELECT max(created_at) FROM script_breakdowns WHERE scene_list_id = $1) AS breakdown_at,
+            (SELECT max(created_at) FROM screenplay_scenes WHERE scene_list_id = $1) AS script_at`,
+    [req.params.id]
+  );
+  const { breakdown_at: breakdownAt, script_at: scriptAt } = result.rows[0] ?? {};
+  res.json({ breakdownAt, scriptAt, stale: Boolean(breakdownAt && scriptAt && new Date(scriptAt) > new Date(breakdownAt)) });
 });
 
 app.get("/api/screenplay/scenes", requireLogin, async (req, res) => {

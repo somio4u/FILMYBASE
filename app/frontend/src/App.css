@@ -4656,7 +4656,8 @@ button, input, textarea, select {
    on the same column, leaving room for the sidebar. Centred with a
    negative margin rather than a transform, so the full-screen cinematic
    bars (position: fixed) inside it still cover the real screen. */
-#ai-movie-stage-screenplay {
+#ai-movie-stage-screenplay,
+.movie-editor #stage-screenplay {
   --screenplay-width: min(1680px, calc(100vw - 340px));
   width: var(--screenplay-width);
   margin-left: calc((100% - var(--screenplay-width)) / 2);
@@ -4664,7 +4665,8 @@ button, input, textarea, select {
 }
 
 @media (max-width: 768px) {
-  #ai-movie-stage-screenplay {
+  #ai-movie-stage-screenplay,
+  .movie-editor #stage-screenplay {
     --screenplay-width: calc(100vw - 32px);
   }
 }
@@ -5655,4 +5657,53 @@ button:not(:disabled):active {
 .movie-editor .pitch-deck h2 {
   font-family: var(--font-display);
   letter-spacing: 0.2px;
+}
+
+
+/* Movie screenplay workspace extras: a scene not written yet shows its
+   one-line outline, quietly, where its script will go. */
+.script-page .script-outline {
+  margin: 0 0 1em;
+  font-family: var(--font-body);
+  font-size: 13px;
+  font-style: italic;
+  line-height: 1.5;
+  color: var(--script-ink-soft);
+}
+
+.script-page .script-outline span {
+  font-style: normal;
+  opacity: 0.8;
+}
+
+.script-scene.is-unwritten .script-slug {
+  opacity: 0.7;
+}
+
+.script-nav-item:not(.is-written) .script-nav-heading {
+  opacity: 0.65;
+}
+
+.screenplay-block-tools {
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: none;
+}
+
+.script-tools-actions .write-scene-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+}
+
+.script-tools-actions .screenplay-block-actions .cancel-button {
+  width: 100%;
+}
+
+.movie-breakdown-stale-note {
+  margin: 12px auto;
+  max-width: 760px;
+  text-align: center;
 }

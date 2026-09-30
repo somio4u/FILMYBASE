@@ -9694,12 +9694,17 @@ async function generateScreenplaySceneContent(deck, allScenes, sceneIndex, previ
 
   async function callGemini(promptContents) {
     const parsed = await generateJsonContent({
-      model: GEMINI_MODEL_NAME,
+      // Gemini 2.5 Flash, same as AI Movie's screenplay writer (the user's
+      // call): it follows the long dialogue-craft rules far better than
+      // Flash-Lite. It "thinks" before answering, and that thinking counts
+      // against the output ceiling, hence the extra headroom -- only a
+      // ceiling, a call costs what it actually uses.
+      model: AI_MOVIE_SCREENPLAY_WRITER_MODEL_NAME,
       contents: promptContents,
       config: {
         systemInstruction: buildScreenplaySystemPrompt(dialogueLanguage),
         responseMimeType: "application/json",
-        maxOutputTokens: Math.min(16384, Math.max(4096, suggestedWords * 4)),
+        maxOutputTokens: Math.min(32768, Math.max(16384, suggestedWords * 6)),
         responseSchema: {
           type: Type.OBJECT,
           properties: {

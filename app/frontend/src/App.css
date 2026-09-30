@@ -4902,10 +4902,10 @@ button, input, textarea, select {
 /* ============================================================
    Step 3 -- premium look for the AI Movie screen: layered glass
    surfaces, a display font for titles, gradient accents, and
-   buttons with real depth. Scoped to .ai-movie-editor so the Movie
+   buttons with real depth. Scoped to :is(.ai-movie-editor, .movie-editor) so the Movie
    side is untouched.
    ============================================================ */
-.ai-movie-editor .three-act-structure {
+:is(.ai-movie-editor, .movie-editor) .three-act-structure {
   position: relative;
   border: 1px solid var(--glass-border);
   border-radius: 18px;
@@ -4916,32 +4916,32 @@ button, input, textarea, select {
   transition: box-shadow 0.35s var(--ease-spring), border-color 0.35s var(--ease-spring), transform 0.35s var(--ease-spring);
 }
 
-.ai-movie-editor .three-act-structure:hover {
+:is(.ai-movie-editor, .movie-editor) .three-act-structure:hover {
   border-color: rgba(138, 180, 248, 0.18);
   box-shadow: var(--shadow-lift);
 }
 
-.ai-movie-editor .collapsible-stage-header h3 {
+:is(.ai-movie-editor, .movie-editor) .collapsible-stage-header h3 {
   font-family: var(--font-display);
   font-size: 20px;
   letter-spacing: 0.2px;
 }
 
-.ai-movie-editor .collapsible-stage-header {
+:is(.ai-movie-editor, .movie-editor) .collapsible-stage-header {
   transition: opacity 0.2s ease;
 }
 
-.ai-movie-editor .collapsible-caret {
+:is(.ai-movie-editor, .movie-editor) .collapsible-caret {
   display: inline-block;
   transition: transform 0.35s var(--ease-spring), color 0.25s ease;
 }
 
-.ai-movie-editor .collapsible-stage-header:hover .collapsible-caret {
+:is(.ai-movie-editor, .movie-editor) .collapsible-stage-header:hover .collapsible-caret {
   color: var(--accent);
   transform: scale(1.25);
 }
 
-.ai-movie-editor .ai-movie-screenplay-current-card {
+:is(.ai-movie-editor, .movie-editor) .ai-movie-screenplay-current-card {
   padding: 22px;
   border: 1px solid var(--glass-border);
   border-radius: 16px;
@@ -4950,7 +4950,7 @@ button, input, textarea, select {
 
 /* Beat bar: the beat's title in the display font between two round
    page-turn buttons. */
-.ai-movie-editor .ai-movie-screenplay-nav {
+:is(.ai-movie-editor, .movie-editor) .ai-movie-screenplay-nav {
   padding: 10px 12px;
   border: 1px solid var(--glass-border);
   border-radius: 999px;
@@ -4959,28 +4959,28 @@ button, input, textarea, select {
   -webkit-backdrop-filter: blur(12px);
 }
 
-.ai-movie-editor .ai-movie-screenplay-nav-title {
+:is(.ai-movie-editor, .movie-editor) .ai-movie-screenplay-nav-title {
   justify-content: center;
   font-family: var(--font-display);
   font-size: 19px;
   font-weight: 600;
 }
 
-.ai-movie-editor .ai-movie-screenplay-nav-button {
+:is(.ai-movie-editor, .movie-editor) .ai-movie-screenplay-nav-button {
   width: 40px;
   height: 40px;
   border-radius: 50%;
   transition: background 0.3s var(--ease-spring), box-shadow 0.3s var(--ease-spring), transform 0.3s var(--ease-spring);
 }
 
-.ai-movie-editor .ai-movie-screenplay-nav-button:not(:disabled):hover {
+:is(.ai-movie-editor, .movie-editor) .ai-movie-screenplay-nav-button:not(:disabled):hover {
   background: var(--accent-gradient);
   color: #111;
   box-shadow: var(--glow-accent);
   transform: scale(1.08);
 }
 
-.ai-movie-editor .choose-button {
+:is(.ai-movie-editor, .movie-editor) .choose-button {
   border: none;
   border-radius: 999px;
   background: var(--accent-gradient);
@@ -4990,48 +4990,48 @@ button, input, textarea, select {
   transition: transform 0.25s var(--ease-spring), box-shadow 0.25s var(--ease-spring), filter 0.25s ease;
 }
 
-.ai-movie-editor .choose-button:not(:disabled):hover {
+:is(.ai-movie-editor, .movie-editor) .choose-button:not(:disabled):hover {
   transform: translateY(-1px);
   box-shadow: 0 10px 28px rgba(197, 138, 249, 0.3);
   filter: brightness(1.05);
 }
 
-.ai-movie-editor .choose-button:disabled {
+:is(.ai-movie-editor, .movie-editor) .choose-button:disabled {
   opacity: 0.55;
   box-shadow: none;
 }
 
-.ai-movie-editor .cancel-button {
+:is(.ai-movie-editor, .movie-editor) .cancel-button {
   border-radius: 999px;
   border-color: var(--glass-border);
   background: rgba(255, 255, 255, 0.03);
   transition: border-color 0.25s ease, background-color 0.25s ease, color 0.25s ease, transform 0.25s var(--ease-spring);
 }
 
-.ai-movie-editor .cancel-button:not(:disabled):hover {
+:is(.ai-movie-editor, .movie-editor) .cancel-button:not(:disabled):hover {
   border-color: rgba(138, 180, 248, 0.45);
   background: rgba(138, 180, 248, 0.08);
   color: var(--text-primary);
 }
 
-.ai-movie-editor .feedback-textarea {
+:is(.ai-movie-editor, .movie-editor) .feedback-textarea {
   border-radius: 12px;
   transition: border-color 0.25s ease, box-shadow 0.25s ease;
 }
 
-.ai-movie-editor .feedback-textarea:focus {
+:is(.ai-movie-editor, .movie-editor) .feedback-textarea:focus {
   border-color: rgba(138, 180, 248, 0.6);
   box-shadow: 0 0 0 3px rgba(138, 180, 248, 0.15);
   outline: none;
 }
 
-.ai-movie-editor .approved-badge {
+:is(.ai-movie-editor, .movie-editor) .approved-badge {
   border-radius: 999px;
   box-shadow: 0 0 0 1px rgba(129, 201, 149, 0.25), 0 0 18px rgba(129, 201, 149, 0.12);
 }
 
-.ai-movie-editor .feedback-note,
-.ai-movie-editor .runtime-summary {
+:is(.ai-movie-editor, .movie-editor) .feedback-note,
+:is(.ai-movie-editor, .movie-editor) .runtime-summary {
   border-radius: 12px;
 }
 
@@ -5075,7 +5075,7 @@ button:not(:disabled):active {
 }
 
 /* Stages rise into place when opened. */
-.ai-movie-editor .three-act-structure > :not(.collapsible-stage-header) {
+:is(.ai-movie-editor, .movie-editor) .three-act-structure > :not(.collapsible-stage-header) {
   animation: stage-rise 0.55s var(--ease-spring) both;
 }
 
@@ -5301,7 +5301,7 @@ button:not(:disabled):active {
 }
 
 /* Switching stages: the new one fades up into the centre. */
-.ai-movie-editor .three-act-structure {
+:is(.ai-movie-editor, .movie-editor) .three-act-structure {
   animation: stage-swap 0.55s var(--ease-spring) both;
 }
 
@@ -5330,7 +5330,7 @@ button:not(:disabled):active {
 /* Beat-level buttons (Script Doctor, Song Sheet, interval, ...) that
    only ever had spacing, never a look of their own: the same glass
    ghost style as the others. */
-.ai-movie-editor .ai-movie-revise-scene-button:not(.cancel-button) {
+:is(.ai-movie-editor, .movie-editor) .ai-movie-revise-scene-button:not(.cancel-button) {
   padding: 6px 14px;
   border: 1px solid var(--glass-border);
   border-radius: 999px;
@@ -5341,13 +5341,13 @@ button:not(:disabled):active {
   transition: border-color 0.25s ease, background-color 0.25s ease, color 0.25s ease, transform 0.18s var(--ease-spring);
 }
 
-.ai-movie-editor .ai-movie-revise-scene-button:not(.cancel-button):not(:disabled):hover {
+:is(.ai-movie-editor, .movie-editor) .ai-movie-revise-scene-button:not(.cancel-button):not(:disabled):hover {
   border-color: rgba(138, 180, 248, 0.45);
   background: rgba(138, 180, 248, 0.08);
   color: var(--text-primary);
 }
 
-.ai-movie-editor .approve-button {
+:is(.ai-movie-editor, .movie-editor) .approve-button {
   border: none;
   border-radius: 999px;
   background: linear-gradient(135deg, #81c995 0%, #5bb974 100%);
@@ -5357,7 +5357,7 @@ button:not(:disabled):active {
   transition: transform 0.25s var(--ease-spring), box-shadow 0.25s var(--ease-spring), filter 0.25s ease;
 }
 
-.ai-movie-editor .approve-button:not(:disabled):hover {
+:is(.ai-movie-editor, .movie-editor) .approve-button:not(:disabled):hover {
   transform: translateY(-1px);
   box-shadow: 0 10px 28px rgba(129, 201, 149, 0.35);
   filter: brightness(1.05);
@@ -5635,4 +5635,24 @@ button:not(:disabled):active {
   font-size: 12.5px;
   line-height: 1.5;
   color: var(--text-secondary);
+}
+
+
+/* Movie (Story & Screenplay side) shares the AI Movie look: its stage
+   cards (incl. the synopsis "pitch deck" card) and titles get the same
+   glass surface, display font and entrance. Production keeps its own
+   look -- the team accounts that only use Production see no change. */
+.movie-editor .pitch-deck {
+  position: relative;
+  border: 1px solid var(--glass-border);
+  border-radius: 18px;
+  box-shadow: var(--shadow-soft);
+  animation: stage-swap 0.55s var(--ease-spring) both;
+}
+
+.movie-editor .three-act-structure > h2,
+.movie-editor .pitch-deck > h2,
+.movie-editor .pitch-deck h2 {
+  font-family: var(--font-display);
+  letter-spacing: 0.2px;
 }

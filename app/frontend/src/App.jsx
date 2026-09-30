@@ -530,8 +530,8 @@ const LABELS = {
     approveSceneListButton: 'Approve Scene List',
     sceneListApprovedBadge: '✅ Scene List Approved',
     sceneListFeedbackPlaceholder: 'What would you like changed? e.g. "Scene 4 needs more tension" or "Merge scenes 2 and 3"',
-    approxMinutesUnit: (minutes) => `~${minutes} min`,
-    totalRuntimeLabel: (total, target) => `Estimated total: ${total} min (target: ${target} min)`,
+    approxMinutesUnit: (minutes) => `~${aiMovieDurationText(minutes, 'sec', 'min')}`,
+    totalRuntimeLabel: (total, target) => `Estimated total: ${aiMovieDurationText(total, 'sec', 'min')} (target: ${aiMovieDurationText(target, 'sec', 'min')})`,
     runtimeMismatchNote: 'This is off from the target runtime — use "Request Changes" below to ask for more or fewer scenes.',
     writeSceneButton: 'Write This Scene',
     generatingScreenplayScene: 'Writing scene...',
@@ -1192,8 +1192,8 @@ const LABELS = {
     approveSceneListButton: 'ଦୃଶ୍ୟ ତାଲିକା ଅନୁମୋଦନ କରନ୍ତୁ',
     sceneListApprovedBadge: '✅ ଦୃଶ୍ୟ ତାଲିକା ଅନୁମୋଦିତ',
     sceneListFeedbackPlaceholder: 'ଆପଣ କଣ ପରିବର୍ତ୍ତନ ଚାହୁଁଛନ୍ତି?',
-    approxMinutesUnit: (minutes) => `~${minutes} ମିନିଟ୍`,
-    totalRuntimeLabel: (total, target) => `ଆକଳିତ ସମୁଦାୟ: ${total} ମିନିଟ୍ (ଲକ୍ଷ୍ୟ: ${target} ମିନିଟ୍)`,
+    approxMinutesUnit: (minutes) => `~${aiMovieDurationText(minutes, 'ସେକେଣ୍ଡ', 'ମିନିଟ୍')}`,
+    totalRuntimeLabel: (total, target) => `ଆକଳିତ ସମୁଦାୟ: ${aiMovieDurationText(total, 'ସେକେଣ୍ଡ', 'ମିନିଟ୍')} (ଲକ୍ଷ୍ୟ: ${aiMovieDurationText(target, 'ସେକେଣ୍ଡ', 'ମିନିଟ୍')})`,
     runtimeMismatchNote: 'ଏହା ଲକ୍ଷ୍ୟ ଅବଧିଠାରୁ ଭିନ୍ନ ଅଛି — ତଳେ "ପରିବର୍ତ୍ତନ ପାଇଁ ଅନୁରୋଧ" ବ୍ୟବହାର କରନ୍ତୁ।',
     writeSceneButton: 'ଏହି ଦୃଶ୍ୟ ଲେଖନ୍ତୁ',
     generatingScreenplayScene: 'ଦୃଶ୍ୟ ଲେଖାଯାଉଛି...',
@@ -8872,8 +8872,22 @@ function App() {
     return item.conceptText.slice(0, 40) + (item.conceptText.length > 40 ? '…' : '')
   }
 
+  // Movie's Story & Screenplay menu works as switches, like AI Movie's
+  // (the user's request): one stage in the centre at a time. null = follow
+  // the stage being worked on right now. Production keeps its own
+  // scroll-to menu, unchanged.
+  const [movieFocusedStage, setMovieFocusedStage] = useState(null)
+  const MOVIE_STAGE_BY_ANCHOR = { 'stage-idea': 'idea', 'stage-synopsis': 'synopsis', 'stage-characters': 'characters', 'stage-bitsheet': 'bitsheet', 'stage-screenplay': 'screenplay' }
+
   function handleStageClick(anchorId) {
     setIsSidebarOpen(false)
+    if (MOVIE_STAGE_BY_ANCHOR[anchorId] && activeAgent === 'story') {
+      setMovieFocusedStage(MOVIE_STAGE_BY_ANCHOR[anchorId])
+      if (anchorId === 'stage-idea' && !storylines?.length) setOpenChangesChatSignal((n) => n + 1)
+      window.scrollTo({ top: 0, behavior: 'smooth' })
+      document.querySelector('.chat-viewport')?.scrollTo?.({ top: 0, behavior: 'smooth' })
+      return
+    }
     if (anchorId === 'stage-breakdown') setChatFocusStage('breakdown')
     if (anchorId === 'stage-schedule') setChatFocusStage('schedule')
     // Clicking "Idea" before anything's been generated yet pops the Changes
@@ -8893,6 +8907,27 @@ function App() {
         ? 'current'
         : 'upcoming'
   const stageScreenplay = bitSheet?.status === 'approved' ? 'current' : 'upcoming'
+  // The Movie stage being worked on now -- where the screen opens, and
+  // where it moves on to after each approval.
+  const movieCurrentStage =
+    !pitchDeck && !isGeneratingPitchDeck
+      ? 'idea'
+      : pitchDeck?.status !== 'approved'
+        ? 'synopsis'
+        : characterSheet?.status !== 'approved'
+          ? 'characters'
+          : bitSheet?.status !== 'approved'
+            ? 'bitsheet'
+            : 'screenplay'
+  const shownMovieStage = movieFocusedStage ?? movieCurrentStage
+  // Projects that aren't the step-by-step "story" kind keep showing every
+  // stage, exactly as before.
+  const movieShows = (stageKey) => (conceptId && projectType !== 'story') || shownMovieStage === stageKey
+  // After an approval (or opening another project) the screen follows the
+  // work again, the way the long column used to.
+  useEffect(() => {
+    setMovieFocusedStage(null)
+  }, [movieCurrentStage, conceptId])
   const stageBreakdown =
     scriptBreakdown?.status === 'approved' ? 'done' : sceneList?.status === 'approved' ? 'current' : 'upcoming'
   const stageSchedule =
@@ -10517,23 +10552,23 @@ function App() {
             )}
             {activeAgent === 'story' && currentUser.role === 'admin' && (
               <div className="stage-progress agent-substages">
-                <button className={`stage-progress-item stage-${stageIdea}`} onClick={() => handleStageClick('stage-idea')}>
+                <button className={`stage-progress-item stage-${stageIdea}${shownMovieStage === 'idea' ? ' is-shown' : ''}`} onClick={() => handleStageClick('stage-idea')}>
                   <span className="stage-progress-dot" />
                   {t.stageIdeaLabel}
                 </button>
-                <button className={`stage-progress-item stage-${stageSynopsis}`} onClick={() => handleStageClick('stage-synopsis')}>
+                <button className={`stage-progress-item stage-${stageSynopsis}${shownMovieStage === 'synopsis' ? ' is-shown' : ''}`} onClick={() => handleStageClick('stage-synopsis')}>
                   <span className="stage-progress-dot" />
                   {t.stageSynopsisLabel}
                 </button>
-                <button className={`stage-progress-item stage-${stageCharacters}`} onClick={() => handleStageClick('stage-characters')}>
+                <button className={`stage-progress-item stage-${stageCharacters}${shownMovieStage === 'characters' ? ' is-shown' : ''}`} onClick={() => handleStageClick('stage-characters')}>
                   <span className="stage-progress-dot" />
                   {t.stageCharactersLabel}
                 </button>
-                <button className={`stage-progress-item stage-${stageBitSheet}`} onClick={() => handleStageClick('stage-bitsheet')}>
+                <button className={`stage-progress-item stage-${stageBitSheet}${shownMovieStage === 'bitsheet' ? ' is-shown' : ''}`} onClick={() => handleStageClick('stage-bitsheet')}>
                   <span className="stage-progress-dot" />
                   {t.stageBitSheetLabel}
                 </button>
-                <button className={`stage-progress-item stage-${stageScreenplay}`} onClick={() => handleStageClick('stage-screenplay')}>
+                <button className={`stage-progress-item stage-${stageScreenplay}${shownMovieStage === 'screenplay' ? ' is-shown' : ''}`} onClick={() => handleStageClick('stage-screenplay')}>
                   <span className="stage-progress-dot" />
                   {t.stageScreenplayLabel}
                 </button>
@@ -10623,7 +10658,7 @@ function App() {
       </aside>
 
       <main className="chat-viewport">
-    <div className="concept-page" id="stage-idea">
+    <div className={`concept-page${activeAgent === 'story' ? ' movie-editor' : ''}`} id="stage-idea">
       {errorMessage && <div className="error-banner">{errorMessage}</div>}
       {toastMessage && <div className="success-banner">{toastMessage}</div>}
 
@@ -10761,7 +10796,7 @@ function App() {
 
       {activeAgent === 'story' && (
       <>
-      {!storylines && !(conceptId && projectType === 'story') && (
+      {movieShows('idea') && !storylines && !(conceptId && projectType === 'story') && (
         <div className="empty-state">
           {startStage === 'idea' && (
             <div className="format-picker">
@@ -10943,13 +10978,13 @@ function App() {
         </div>
       )}
 
-      {projectType === 'story' && (concept || storylines?.length > 0) && (
+      {movieShows('idea') && projectType === 'story' && (concept || storylines?.length > 0) && (
         <div className="ai-bubble">
           <p>{t.instruction}</p>
         </div>
       )}
 
-      {storylines?.length > 0 && (pendingStoryline || !pitchDeck) && (
+      {movieShows('idea') && storylines?.length > 0 && (pendingStoryline || !pitchDeck) && (
         <div className="concept-result">
           <strong>{t.storylineSuggestions}</strong>
           <div className="storyline-options-row">
@@ -10981,7 +11016,7 @@ function App() {
         </div>
       )}
 
-      {isGeneratingPitchDeck && (
+      {movieShows('synopsis') && isGeneratingPitchDeck && (
         <div className="ai-bubble">
           <p>{t.buildingPitchDeck}</p>
           <AnalyzingProgressBar active={isGeneratingPitchDeck} label={t.buildingPitchDeck} estimatedSeconds={30} />
@@ -10992,7 +11027,7 @@ function App() {
 
       {activeAgent === 'story' && (
       <>
-      {pitchDeck && (
+      {movieShows('synopsis') && pitchDeck && (
         <div className="pitch-deck" id="stage-synopsis">
           <span className="format-badge">{formatBadgeText(pitchDeck.format, t)}</span>
           <h2>{pitchDeck.title[language]}</h2>
@@ -11125,7 +11160,7 @@ function App() {
         </div>
       )}
 
-      {pitchDeck && pitchDeck.status === 'approved' && !characterSheet && (
+      {movieShows('characters') && pitchDeck && pitchDeck.status === 'approved' && !characterSheet && (
         <button
           className="choose-button generate-structure-button"
           onClick={handleGenerateCharacterSheetClick}
@@ -11136,7 +11171,7 @@ function App() {
       )}
       <AnalyzingProgressBar active={isGeneratingCharacterSheet} label={t.generatingCharacterSheetLabel} estimatedSeconds={30} />
 
-      {characterSheet && (
+      {movieShows('characters') && characterSheet && (
         <div className="three-act-structure" id="stage-characters">
           <h2>{t.characterSheetHeading}</h2>
 
@@ -11220,7 +11255,7 @@ function App() {
         </div>
       )}
 
-      {characterSheet && characterSheet.status === 'approved' && !threeActStructure && (
+      {movieShows('bitsheet') && characterSheet && characterSheet.status === 'approved' && !threeActStructure && (
         <button
           className="choose-button generate-structure-button"
           onClick={handleGenerateStructureClick}
@@ -11231,7 +11266,7 @@ function App() {
       )}
       <AnalyzingProgressBar active={isGeneratingStructure} label={t.generatingThreeAct} estimatedSeconds={30} />
 
-      {threeActStructure && (
+      {movieShows('bitsheet') && threeActStructure && (
         <div className="three-act-structure">
           <h2>{t.threeActHeading}</h2>
 
@@ -11349,7 +11384,7 @@ function App() {
         </div>
       )}
 
-      {threeActStructure && threeActStructure.status === 'locked' && !bitSheet && (
+      {movieShows('bitsheet') && threeActStructure && threeActStructure.status === 'locked' && !bitSheet && (
         <button
           className="choose-button generate-structure-button"
           onClick={handleGenerateBitSheetClick}
@@ -11360,7 +11395,7 @@ function App() {
       )}
       <AnalyzingProgressBar active={isGeneratingBitSheet} label={t.generatingBitSheet} estimatedSeconds={35} />
 
-      {bitSheet && (
+      {movieShows('bitsheet') && bitSheet && (
         <div className="three-act-structure" id="stage-bitsheet">
           <h2>{t.bitSheetHeading}</h2>
 
@@ -11416,7 +11451,7 @@ function App() {
         </div>
       )}
 
-      {bitSheet && bitSheet.status === 'approved' && !sceneList && (
+      {movieShows('screenplay') && bitSheet && bitSheet.status === 'approved' && !sceneList && (
         <button
           className="choose-button generate-structure-button"
           onClick={handleGenerateSceneListClick}
@@ -11427,7 +11462,7 @@ function App() {
       )}
       <AnalyzingProgressBar active={isGeneratingSceneList} label={t.generatingSceneList} estimatedSeconds={35} />
 
-      {sceneList && projectType === 'story' && (
+      {movieShows('screenplay') && sceneList && projectType === 'story' && (
         <div className="three-act-structure" id="stage-screenplay">
           <h2>{t.sceneListHeading}</h2>
 

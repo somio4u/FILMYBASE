@@ -9430,6 +9430,17 @@ async function generateSceneListContent(bitSheet, deck, revision) {
     const partScenes = await generateFilmSceneListPart(bitSheet, part, partIndex, parts.length, filmTargetMinutes, scenes, revision);
     scenes = scenes.concat(partScenes);
   }
+  // Written in parts, each part numbered its scenes slightly differently
+  // (seen for real: "1.17", then "2.01", then "3.1") -- renumber the joined
+  // list one way: act.scene, counting from 1 inside each act.
+  if (parts.length > 1) {
+    const countPerAct = {};
+    scenes = scenes.map((scene) => {
+      const act = scene.actNumber || 1;
+      countPerAct[act] = (countPerAct[act] ?? 0) + 1;
+      return { ...scene, sceneNumber: `${act}.${countPerAct[act]}` };
+    });
+  }
   const content = annotateSceneListTotals({ scenes }, false, null, filmTargetMinutes);
 
   // Carry the Controlling Idea forward so the screenplay-writing stage can

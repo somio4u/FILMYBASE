@@ -15998,7 +15998,11 @@ async function runScreenplayAndQualityPass(runId, deck, sceneList, sceneListId, 
         // systemic problem without a per-scene AI review cost. Whole-script
         // repetition is caught separately below, after every scene is written.
         // A failed review or rewrite just keeps the scene as it is.
-        if (sceneIndex === 0 && episodeIndex % 5 === 0) {
+        // A scene with no dialogue at all is skipped: seen for real, the judge
+        // scored a silent opening 1/10 "because there is no dialogue" and
+        // forced lines into it, which made it worse.
+        const hasDialogue = content.elements.some((el) => el.type === "dialogue" && el.text?.trim());
+        if (sceneIndex === 0 && episodeIndex % 5 === 0 && hasDialogue) {
           try {
             const stageLabel = episodeIndex === null ? "screenplay" : `screenplay-ep${episodeIndex + 1}`;
             for (let round = 0; round < MAX_AUTO_PIPELINE_REVISION_ROUNDS; round++) {
@@ -16008,7 +16012,7 @@ async function runScreenplayAndQualityPass(runId, deck, sceneList, sceneListId, 
                 .slice(0, 4)
                 .map((el) => `${el.character}: ${el.text}`)
                 .join(" / ");
-              const judged = await scorePipelineStage("Screenplay dialogue", sampleLines || "(no dialogue in this scene)", dialogueReview.issues);
+              const judged = await scorePipelineStage("Screenplay dialogue", sampleLines, dialogueReview.issues);
               await appendAutoPipelineNote(runId, stageLabel, `Judge score: ${judged.score}/10 — ${judged.verdict}`);
               if (judged.score >= 8 || round === MAX_AUTO_PIPELINE_REVISION_ROUNDS - 1) break;
               const feedback = [...dialogueReview.issues, judged.verdict].filter(Boolean).join(" ");

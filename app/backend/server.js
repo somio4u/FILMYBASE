@@ -227,6 +227,8 @@ async function generateContentWithRetry(params, { retries = 4, fallbackDelayMs =
 // This retries the WHOLE generation call (a fresh attempt usually doesn't
 // repeat the same glitch) whenever JSON.parse itself fails, on top of that
 // existing transient-error retry.
+const MAX_GEMINI_OUTPUT_TOKENS = 65536;
+
 async function generateJsonContent(params, { jsonRetries = 3 } = {}) {
   let lastError;
   for (let attempt = 0; attempt <= jsonRetries; attempt++) {
@@ -244,6 +246,17 @@ async function generateJsonContent(params, { jsonRetries = 3 } = {}) {
       return JSON.parse(response.text);
     } catch (error) {
       lastError = error;
+      // Cut off for running out of room (finish reason MAX_TOKENS): the same
+      // request would just be cut off again, so the next try gets double
+      // the room, up to the models' 65,536 maximum. Seen for real: a long
+      // film's English/Odia/Hindi scene list stopping mid-answer, all 4 tries.
+      const cutOff = response?.candidates?.[0]?.finishReason === "MAX_TOKENS";
+      const currentLimit = params.config?.maxOutputTokens;
+      if (cutOff && currentLimit && currentLimit < MAX_GEMINI_OUTPUT_TOKENS) {
+        const biggerLimit = Math.min(MAX_GEMINI_OUTPUT_TOKENS, currentLimit * 2);
+        console.error(`Answer was cut off at ${currentLimit} tokens -- retrying with room for ${biggerLimit}.`);
+        params = { ...params, config: { ...params.config, maxOutputTokens: biggerLimit } };
+      }
       // Log a bounded snippet of the actual broken text (not just the parse
       // error) — the error alone only ever says "unterminated string at
       // position N", which isn't enough on its own to tell a genuine
@@ -255,7 +268,7 @@ async function generateJsonContent(params, { jsonRetries = 3 } = {}) {
       if (response) {
         const snippetStart = Math.max(0, (error.message.match(/position (\d+)/)?.[1] ?? 0) - 120);
         console.error(
-          `JSON parse failed (attempt ${attempt + 1}/${jsonRetries + 1}): ${error.message}\nNear-failure snippet: ${response.text?.slice(snippetStart, snippetStart + 240)}\nResponse length: ${response.text?.length}`
+          `JSON parse failed (attempt ${attempt + 1}/${jsonRetries + 1}, finish reason: ${response.candidates?.[0]?.finishReason ?? "unknown"}): ${error.message}\nNear-failure snippet: ${response.text?.slice(snippetStart, snippetStart + 240)}\nResponse length: ${response.text?.length}`
         );
       } else {
         console.error(`Gemini call failed (attempt ${attempt + 1}/${jsonRetries + 1}): ${error.message}`);
@@ -328,7 +341,7 @@ When given a raw concept, generate exactly 3 distinct storyline directions groun
 const PITCH_DECK_SYSTEM_PROMPT = `You are the Story & Screenplay Agent, specializing in Odia (Odisha) cinema. Once a storyline is chosen, format it into a full, producer-ready pitch deck — detailed enough that a producer could actually evaluate and greenlight it, not just a one-line plot summary. Include:
 - A one-page (or two-page, only if genuinely needed) narrative "story" section — the single most important part of the whole deck, since a real producer will read this closely and skim everything else. See detailed instructions below.
 - A one-paragraph premise, the tone/genre, and the target audience.
-- 3-5 major characters who actually drive the story (not a full cast list). For each: a name (a proper noun, stays the same in both languages), a short role/descriptor (e.g. "the reluctant elder brother"), their emotional core (what they secretly want or fear beneath the surface), and their central conflict (what stands in their way, internally or externally).
+- The major characters who actually drive the story (not a full cast list; how many is given in the request). For each: a name (a proper noun, stays the same in both languages), a short role/descriptor (e.g. "the reluctant elder brother"), their emotional core (what they secretly want or fear beneath the surface), and their central conflict (what stands in their way, internally or externally).
 - For a web series, an elaborated synopsis per episode that genuinely establishes the whole episode — what it opens on, the complication that develops through it, and how it turns or ends (ideally on a hook into the next episode) — long enough that someone could actually picture the episode, not just guess its topic from one line.
 Keep it grounded in authentic Odia cultural context. Write everything in THREE languages — English, Odia (Odia script), and Hindi (Devanagari script) — each a natural, native-quality version, not a literal translation of the others.
 Write the ENGLISH text in plain, everyday words throughout — every section, not just the story pages. This will often be read by someone who isn't a fluent English speaker, so avoid literary or "impressive" vocabulary (no words like "ostracized", "ubiquitous", "harbinger", "ineffable", "salvage", "utilize", "myriad") — use the simple word a person would actually say out loud instead ("left out", "everywhere", "sign", "save", "use", "many"). Keep sentences short and direct. This is about word choice, not about making the story simple or less engaging — the story itself should still be vivid and gripping, just told in plain language anyone can follow on a first read.`;
@@ -7668,10 +7681,13 @@ async function generatePitchDeckContent(storyline, format, revision) {
 
 BUDGET-FRIENDLY PRODUCTION CONSTRAINT — this is a low-budget format meant to shoot in just 2-3 days total, so the story itself must be conceived to need very little: around 5 main characters (plus a little background crowd at most, never a large cast), and a small, contained setting — a single family home (its rooms — kitchen, bedroom, drawing room, dining room — count as one location) plus at most one more interior (like a shop or restaurant) and a couple of simple free exterior spots. Never invent a plot that requires many locations, a big cast, or spectacle — the drama must come from dialogue, relationships, and what happens between these few people in this one small world.`
     : isSeries
-      ? `Format: web series, exactly ${format.episodeCount} episodes of ${format.episodeMinutes} minutes each.`
-      : "Format: feature film.";
+      ? `Format: web series, exactly ${format.episodeCount} episodes of ${format.episodeMinutes} minutes each.\n\n${NO_BUDGET_LIMIT_INSTRUCTION}`
+      : `Format: feature film.\n\n${NO_BUDGET_LIMIT_INSTRUCTION}`;
+  const majorCharactersInstruction = isVerticalDrama
+    ? "Also give 3-5 major characters who actually drive this story (name, role, emotional core, central conflict)."
+    : "Also give every major character who actually drives this story — as many as the story genuinely needs, typically 4-10 for a film or web series (hero, antagonist, love interest, family, allies, rivals...) — each with name, role, emotional core, central conflict. Don't trim the cast to save money.";
 
-  let contents = `Storyline title (English): ${storyline.title.en}\nLogline (English): ${storyline.logline.en}\nSummary (English): ${storyline.summary.en}\n${formatInstruction}\n\nAlso give 3-5 major characters who actually drive this story (name, role, emotional core, central conflict).\n\nAlso give: "genre" — a SHORT genre label, just 2-4 words (e.g. "Crime Drama", "Romantic Comedy", "Family Slice-of-Life"), distinct from the longer "toneGenre" prose description; "targetAudience" — cover the age group, the region/market this is aimed at, and what specifically appeals to that audience (not just an age range alone); "highlights" — exactly 4 short, punchy bullet points (5-15 words each) on what makes this story stand out from similar shows — genuinely distinctive hooks, not generic praise; "sponsorshipAngle" — a short paragraph aimed at a potential brand sponsor: why a brand should back this specific story, and at least one concrete branding/placement idea (e.g. title sponsorship, a natural product-placement moment, a brand-integrated segment) grounded in this story's actual content, not a generic pitch.\n\nEvery one of those fields — premise, genre, toneGenre, targetAudience, highlights, sponsorshipAngle — must ALSO be in plain, simple, everyday English, exactly like storyPages below: no literary or "impressive" words (nothing like "prodigy", "despises", "backdrop", "backlash", "navigate a turbulent landscape"), just the plain way a person would actually say it out loud. This is a hard requirement across every field, not only the story pages.\n\n${PITCH_DECK_STORY_PAGES_INSTRUCTION}`;
+  let contents = `Storyline title (English): ${storyline.title.en}\nLogline (English): ${storyline.logline.en}\nSummary (English): ${storyline.summary.en}\n${formatInstruction}\n\n${majorCharactersInstruction}\n\nAlso give: "genre" — a SHORT genre label, just 2-4 words (e.g. "Crime Drama", "Romantic Comedy", "Family Slice-of-Life"), distinct from the longer "toneGenre" prose description; "targetAudience" — cover the age group, the region/market this is aimed at, and what specifically appeals to that audience (not just an age range alone); "highlights" — exactly 4 short, punchy bullet points (5-15 words each) on what makes this story stand out from similar shows — genuinely distinctive hooks, not generic praise; "sponsorshipAngle" — a short paragraph aimed at a potential brand sponsor: why a brand should back this specific story, and at least one concrete branding/placement idea (e.g. title sponsorship, a natural product-placement moment, a brand-integrated segment) grounded in this story's actual content, not a generic pitch.\n\nEvery one of those fields — premise, genre, toneGenre, targetAudience, highlights, sponsorshipAngle — must ALSO be in plain, simple, everyday English, exactly like storyPages below: no literary or "impressive" words (nothing like "prodigy", "despises", "backdrop", "backlash", "navigate a turbulent landscape"), just the plain way a person would actually say it out loud. This is a hard requirement across every field, not only the story pages.\n\n${PITCH_DECK_STORY_PAGES_INSTRUCTION}`;
 
   if (revision) {
     contents += `\n\nThis is a REVISION of a previous draft. The producer reviewed it and requested changes.\nProducer's feedback: "${revision.feedback}"\nPrevious premise (English): ${revision.previous.premise.en}\nPrevious tone/genre (English): ${revision.previous.toneGenre.en}\nRevise the pitch deck to address the producer's feedback directly, while keeping the same title and logline.`;
@@ -9160,8 +9176,10 @@ function buildRetryCorrectionNote(content) {
 function estimateTokenBudget(totalTargetMinutes, isSeries) {
   const fallback = isSeries ? 16384 : 8192;
   if (!totalTargetMinutes) return fallback;
-  const estimated = Math.ceil(totalTargetMinutes * 150);
-  return Math.min(32768, Math.max(fallback, estimated));
+  // 300, not the old 150: every scene is now written in English, Odia AND
+  // Hindi, and Odia/Hindi text takes far more tokens than English.
+  const estimated = Math.ceil(totalTargetMinutes * 300);
+  return Math.min(MAX_GEMINI_OUTPUT_TOKENS, Math.max(fallback, estimated));
 }
 
 async function callSceneListGemini(contents, isSeries, totalTargetMinutes) {
@@ -9229,6 +9247,8 @@ async function generateSceneListEpisodeBatch(deck, bitSheet, episodesChunk, star
 - At most one more interior location (e.g. one restaurant/shop/office) and a couple of simple, easy-to-access exterior locations (a street, a terrace, a park) that need no permission or set dressing — never multiple different houses or multiple different exterior neighborhoods.
 - The story must be carried by dialogue and character drama happening WITHIN this small set of locations, not by moving the story to new places or spectacle — favor confrontations, revelations, and emotional beats that naturally happen at home, at the one shop, or on the street outside, over anything that would require a new set.
 - Give each location a clear, reusable English name (e.g. "House — Kitchen", "House — Drawing Room", "Street Outside House", "The Shop") that later batches of episodes will match exactly.`;
+  } else {
+    contents += `\n\n${NO_BUDGET_LIMIT_INSTRUCTION}`;
   }
 
   if (bitSheet.controllingIdea) {
@@ -9260,6 +9280,75 @@ async function generateSceneListEpisodeBatch(deck, bitSheet, episodesChunk, star
   }
 
   return content.episodeScenes;
+}
+
+// Films and (non-vertical) web series have no budget cap -- the user's
+// call: only a vertical micro-drama is written to a small shoot (about 5
+// characters, 4-5 locations). Everything else uses as many characters and
+// places as its story needs.
+const NO_BUDGET_LIMIT_INSTRUCTION = "NO BUDGET LIMIT for this format: use as many characters and as many different locations as the story genuinely needs. Never shrink the cast or keep the story in a few places just to save money.";
+
+// A feature film's scene list used to be ONE answer covering the whole
+// film, every scene in English, Odia and Hindi -- for a 2-hour film that
+// ran past the model's room and was cut off mid-answer (seen for real in
+// the automatic pipeline). It's now written in parts of about 30 minutes
+// each, in story order; a short film is still a single part.
+const FILM_SCENE_LIST_PART_MINUTES = 30;
+
+function splitFilmBitsIntoParts(bits, filmTargetMinutes) {
+  const partCount = Math.max(1, Math.min(bits.length, Math.ceil((filmTargetMinutes || 0) / FILM_SCENE_LIST_PART_MINUTES)));
+  const parts = [];
+  for (let p = 0; p < partCount; p++) {
+    const start = Math.round((p * bits.length) / partCount);
+    const end = Math.round(((p + 1) * bits.length) / partCount);
+    // This part's share of the runtime, in proportion to its number of bits.
+    const targetMinutes = filmTargetMinutes && bits.length > 0 ? Math.round(((filmTargetMinutes * (end - start)) / bits.length) * 10) / 10 : null;
+    parts.push({ start, end, targetMinutes: targetMinutes ?? filmTargetMinutes ?? null });
+  }
+  return parts;
+}
+
+async function generateFilmSceneListPart(bitSheet, part, partIndex, partCount, filmTargetMinutes, scenesSoFar, revision) {
+  const isOnlyPart = partCount === 1;
+  const targetLine = part.targetMinutes
+    ? isOnlyPart
+      ? `Target on-screen runtime for the whole film: ${filmTargetMinutes} minutes (aim for roughly ${suggestSceneCount(filmTargetMinutes)} scenes, adjusted as pacing requires).`
+      : `This part covers about ${part.targetMinutes} minutes of the film's ${filmTargetMinutes}-minute runtime (aim for roughly ${suggestSceneCount(part.targetMinutes)} scenes, adjusted as pacing requires).`
+    : "";
+  let contents = isOnlyPart
+    ? `Here is the film's Bit Sheet — its major plot-point beats, already verified, in order:\n${bitSheetOutlineText(bitSheet.bits)}\n${targetLine}\n\nExpand this Bit Sheet into a full scene-by-scene list for the entire film — each bit typically becomes 1-3 scenes — whose scenes' combined "estimatedMinutes" add up to approximately the target runtime given above. Return "scenes": a single array covering the whole film.`
+    : `Here is the film's whole Bit Sheet — its major plot-point beats, already verified, in order:\n${bitSheetOutlineText(bitSheet.bits)}\n\nThe film's scene list is being written in ${partCount} parts, in story order. This is PART ${partIndex + 1} of ${partCount}: write scenes ONLY for bits ${part.start + 1} to ${part.end} above — each bit typically becomes 1-3 scenes. Do not write any scene for a bit outside that range; earlier and later bits are written in their own parts.\n${targetLine} The scenes' combined "estimatedMinutes" should add up to approximately that. Return "scenes": the array for this part only.`;
+
+  if (scenesSoFar.length > 0) {
+    const lastScenes = scenesSoFar
+      .slice(-3)
+      .map((scene) => `- ${scene.sceneNumber ? `[${scene.sceneNumber}] ` : ""}${scene.intExt}. ${scene.location.en} — ${scene.timeOfDay}: ${scene.oneLiner.en}`)
+      .join("\n");
+    const placesSoFar = [...new Set(scenesSoFar.map((scene) => scene.location.en))].join("; ");
+    contents += `\n\nThe last scenes already written, just before this part — carry straight on from them, never repeat them:\n${lastScenes}\n\nPlaces already used in the film (when the story returns to one of these, use exactly the same name; new places are fine wherever the story needs them): ${placesSoFar}\n\nContinue the scene numbering from the last scene above in the same style.`;
+  }
+
+  contents += `\n\n${NO_BUDGET_LIMIT_INSTRUCTION}`;
+
+  if (bitSheet.controllingIdea) {
+    contents += `\n\nThe story's Controlling Idea (theme) is: "${bitSheet.controllingIdea.en}" — keep scenes true to it.`;
+  }
+
+  if (revision) {
+    contents += `\n\nThis is a REVISION of a previous scene list. The Screenplay Writer reviewed it and requested changes.\nFeedback: "${revision.feedback}"\nRevise the scene list to address this feedback directly, keeping the same overall structure otherwise.`;
+  }
+
+  let content = await callSceneListGemini(contents, false, part.targetMinutes);
+  content = annotateSceneListTotals(content, false, null, part.targetMinutes);
+
+  // If the estimated total is far from the target runtime, give the model one
+  // chance to correct itself — capped at a single retry so a persistently
+  // stubborn response can't burn through the daily API quota.
+  if (sceneListNeedsRetry(content)) {
+    const correctionNote = buildRetryCorrectionNote(content);
+    content = await callSceneListGemini(contents + correctionNote, false, part.targetMinutes);
+  }
+  return content.scenes ?? [];
 }
 
 async function generateSceneListContent(bitSheet, deck, revision) {
@@ -9334,30 +9423,14 @@ async function generateSceneListContent(bitSheet, deck, revision) {
     return bitSheet.controllingIdea ? { ...content, controllingIdea: bitSheet.controllingIdea } : content;
   }
 
-  const targetLine = filmTargetMinutes
-    ? `Target on-screen runtime for the whole film: ${filmTargetMinutes} minutes (aim for roughly ${suggestSceneCount(filmTargetMinutes)} scenes, adjusted as pacing requires).`
-    : "";
-  let contents = `Here is the film's Bit Sheet — its major plot-point beats, already verified, in order:\n${bitSheetOutlineText(bitSheet.bits)}\n${targetLine}\n\nExpand this Bit Sheet into a full scene-by-scene list for the entire film — each bit typically becomes 1-3 scenes — whose scenes' combined "estimatedMinutes" add up to approximately the target runtime given above. Return "scenes": a single array covering the whole film.`;
-
-  if (bitSheet.controllingIdea) {
-    contents += `\n\nThe story's Controlling Idea (theme) is: "${bitSheet.controllingIdea.en}" — keep scenes true to it.`;
+  const parts = splitFilmBitsIntoParts(bitSheet.bits, filmTargetMinutes);
+  let scenes = [];
+  for (let partIndex = 0; partIndex < parts.length; partIndex++) {
+    const part = parts[partIndex];
+    const partScenes = await generateFilmSceneListPart(bitSheet, part, partIndex, parts.length, filmTargetMinutes, scenes, revision);
+    scenes = scenes.concat(partScenes);
   }
-
-  if (revision) {
-    contents += `\n\nThis is a REVISION of a previous scene list. The Screenplay Writer reviewed it and requested changes.\nFeedback: "${revision.feedback}"\nRevise the scene list to address this feedback directly, keeping the same overall structure otherwise.`;
-  }
-
-  let content = await callSceneListGemini(contents, false, filmTargetMinutes);
-  content = annotateSceneListTotals(content, false, null, filmTargetMinutes);
-
-  // If the estimated total is far from the target runtime, give the model one
-  // chance to correct itself — capped at a single retry so a persistently
-  // stubborn response can't burn through the daily API quota.
-  if (sceneListNeedsRetry(content)) {
-    const correctionNote = buildRetryCorrectionNote(content);
-    content = await callSceneListGemini(contents + correctionNote, false, filmTargetMinutes);
-    content = annotateSceneListTotals(content, false, null, filmTargetMinutes);
-  }
+  const content = annotateSceneListTotals({ scenes }, false, null, filmTargetMinutes);
 
   // Carry the Controlling Idea forward so the screenplay-writing stage can
   // reference it too, without an extra database join.
@@ -9716,14 +9789,15 @@ async function generateScreenplaySceneContent(deck, allScenes, sceneIndex, previ
       // Gemini 2.5 Flash, same as AI Movie's screenplay writer (the user's
       // call): it follows the long dialogue-craft rules far better than
       // Flash-Lite. It "thinks" before answering, and that thinking counts
-      // against the output ceiling, hence the extra headroom -- only a
+      // against the output ceiling, hence the extra headroom (more again
+      // for Odia/Hindi, which take far more tokens per word) -- only a
       // ceiling, a call costs what it actually uses.
       model: AI_MOVIE_SCREENPLAY_WRITER_MODEL_NAME,
       contents: promptContents,
       config: {
         systemInstruction: buildScreenplaySystemPrompt(dialogueLanguage),
         responseMimeType: "application/json",
-        maxOutputTokens: Math.min(32768, Math.max(16384, suggestedWords * 6)),
+        maxOutputTokens: Math.min(MAX_GEMINI_OUTPUT_TOKENS, Math.max(24576, suggestedWords * 12)),
         responseSchema: {
           type: Type.OBJECT,
           properties: {
@@ -15816,7 +15890,12 @@ async function runAutoPipeline(runId, conceptText, format, dialogueLanguage, res
     if (!sceneList) {
       await updateAutoPipelineRun(runId, { progress_stage: "scene-list" });
       sceneList = await generateSceneListContent(bitSheet, deck);
-      for (let round = 0; round < MAX_AUTO_PIPELINE_REVISION_ROUNDS; round++) {
+      // The budget review + judge only means something for a vertical
+      // micro-drama (a 2-3 day shoot). Films and series have no budget cap
+      // (the user's call), so for them this round would only score the
+      // story on its location count -- skipped.
+      const budgetRounds = deck.format?.type === "vertical" ? MAX_AUTO_PIPELINE_REVISION_ROUNDS : 0;
+      for (let round = 0; round < budgetRounds; round++) {
         const budgetReview = reviewSceneListBudget(deck, sceneList);
         const locationCount = new Set(
           (sceneList.episodeScenes ?? [{ scenes: sceneList.scenes }]).flatMap((es) => es.scenes.map((s) => s.location.en))
@@ -15824,7 +15903,7 @@ async function runAutoPipeline(runId, conceptText, format, dialogueLanguage, res
         const summary = `${locationCount} distinct locations used across the series; ${deck.majorCharacters?.length ?? 0} major characters.`;
         const judged = await scorePipelineStage("Scene List (budget feasibility)", summary, budgetReview.issues);
         await appendAutoPipelineNote(runId, "scene-list", `Judge score: ${judged.score}/10 — ${judged.verdict}`);
-        if (judged.score >= 8 || round === MAX_AUTO_PIPELINE_REVISION_ROUNDS - 1) break;
+        if (judged.score >= 8 || round === budgetRounds - 1) break;
         const feedback = [...budgetReview.issues, judged.verdict].filter(Boolean).join(" ");
         sceneList = await generateSceneListContent(bitSheet, deck, { feedback, previous: sceneList });
       }
@@ -15875,6 +15954,7 @@ async function runScreenplayAndQualityPass(runId, deck, sceneList, sceneListId, 
     // off phrases already leaned on earlier in the same script.
     const phraseTracker = createPhraseTracker();
     for (const content of alreadyWritten.values()) phraseTracker.recordElements(content.elements);
+    const skippedScenes = [];
 
     async function writeEpisodeScenes(scenes, episodeIndex) {
       let previousElements = null;
@@ -15885,30 +15965,50 @@ async function runScreenplayAndQualityPass(runId, deck, sceneList, sceneListId, 
           continue;
         }
         const avoidPhrases = phraseTracker.topOverused();
-        let content = await generateScreenplaySceneContent(
-          deck, scenes, sceneIndex, previousElements, sceneList.controllingIdea, undefined, dialogueLanguage, avoidPhrases
-        );
+        const sceneLabel = episodeIndex === null ? `Scene ${sceneIndex + 1}` : `Episode ${episodeIndex + 1}, scene ${sceneIndex + 1}`;
+        let content;
+        try {
+          content = await generateScreenplaySceneContent(
+            deck, scenes, sceneIndex, previousElements, sceneList.controllingIdea, undefined, dialogueLanguage, avoidPhrases
+          );
+        } catch (error) {
+          // One scene that still fails after every retry no longer stops the
+          // whole run (seen for real: a cut-off answer killed a run). It's
+          // skipped and noted; it shows as "not written" on the Movie screen
+          // (one click to write it there). If the run fails later anyway,
+          // Resume tries it again.
+          console.error(`Auto-pipeline ${runId}: ${sceneLabel} could not be written:`, error.message);
+          skippedScenes.push(sceneLabel);
+          await appendAutoPipelineNote(runId, "screenplay", `${sceneLabel} could not be written (${friendlyGeminiErrorMessage(error.message)}) — skipped; the rest of the script carries on.`);
+          continue;
+        }
         // Spot-check dialogue authenticity on just the first scene of every
         // 5th episode (or every 5th scene for a film) — enough to catch a
         // systemic problem without a per-scene AI review cost. Whole-script
         // repetition is caught separately below, after every scene is written.
+        // A failed review or rewrite just keeps the scene as it is.
         if (sceneIndex === 0 && episodeIndex % 5 === 0) {
-          const stageLabel = episodeIndex === null ? "screenplay" : `screenplay-ep${episodeIndex + 1}`;
-          for (let round = 0; round < MAX_AUTO_PIPELINE_REVISION_ROUNDS; round++) {
-            const dialogueReview = await reviewDialogueAuthenticity(content.elements, dialogueLanguage);
-            const sampleLines = content.elements
-              .filter((el) => el.type === "dialogue")
-              .slice(0, 4)
-              .map((el) => `${el.character}: ${el.text}`)
-              .join(" / ");
-            const judged = await scorePipelineStage("Screenplay dialogue", sampleLines || "(no dialogue in this scene)", dialogueReview.issues);
-            await appendAutoPipelineNote(runId, stageLabel, `Judge score: ${judged.score}/10 — ${judged.verdict}`);
-            if (judged.score >= 8 || round === MAX_AUTO_PIPELINE_REVISION_ROUNDS - 1) break;
-            const feedback = [...dialogueReview.issues, judged.verdict].filter(Boolean).join(" ");
-            content = await generateScreenplaySceneContent(
-              deck, scenes, sceneIndex, previousElements, sceneList.controllingIdea,
-              { feedback, previous: content }, dialogueLanguage, avoidPhrases
-            );
+          try {
+            const stageLabel = episodeIndex === null ? "screenplay" : `screenplay-ep${episodeIndex + 1}`;
+            for (let round = 0; round < MAX_AUTO_PIPELINE_REVISION_ROUNDS; round++) {
+              const dialogueReview = await reviewDialogueAuthenticity(content.elements, dialogueLanguage);
+              const sampleLines = content.elements
+                .filter((el) => el.type === "dialogue")
+                .slice(0, 4)
+                .map((el) => `${el.character}: ${el.text}`)
+                .join(" / ");
+              const judged = await scorePipelineStage("Screenplay dialogue", sampleLines || "(no dialogue in this scene)", dialogueReview.issues);
+              await appendAutoPipelineNote(runId, stageLabel, `Judge score: ${judged.score}/10 — ${judged.verdict}`);
+              if (judged.score >= 8 || round === MAX_AUTO_PIPELINE_REVISION_ROUNDS - 1) break;
+              const feedback = [...dialogueReview.issues, judged.verdict].filter(Boolean).join(" ");
+              content = await generateScreenplaySceneContent(
+                deck, scenes, sceneIndex, previousElements, sceneList.controllingIdea,
+                { feedback, previous: content }, dialogueLanguage, avoidPhrases
+              );
+            }
+          } catch (error) {
+            console.error(`Auto-pipeline ${runId}: dialogue review of ${sceneLabel} failed:`, error.message);
+            await appendAutoPipelineNote(runId, "screenplay", `The dialogue review of ${sceneLabel} failed — the scene was kept as written.`);
           }
         }
         phraseTracker.recordElements(content.elements);
@@ -15942,41 +16042,62 @@ async function runScreenplayAndQualityPass(runId, deck, sceneList, sceneListId, 
     // finished screenplay and can trigger a targeted rewrite of just the
     // worst-offending scenes rather than a full regeneration.
     await updateAutoPipelineRun(runId, { progress_stage: "quality-pass" });
-    for (let round = 0; round < MAX_AUTO_PIPELINE_REVISION_ROUNDS; round++) {
-      const allScenesResult = await db.query(
-        `SELECT DISTINCT ON (episode_index, scene_index) id, episode_index, scene_index, content
-         FROM screenplay_scenes WHERE scene_list_id = $1
-         ORDER BY episode_index, scene_index, created_at DESC`,
-        [sceneListId]
-      );
-      const repetitionReview = reviewScreenplayRepetition(allScenesResult.rows);
-      const summary = `${allScenesResult.rows.length} scenes checked across the full finished screenplay for reused stock description.`;
-      const judged = await scorePipelineStage("Screenplay prose variety (full script)", summary, repetitionReview.issues);
-      await appendAutoPipelineNote(runId, "screenplay", `Judge score: ${judged.score}/10 — ${judged.verdict}`);
-      if (judged.score >= 8 || repetitionReview.offendingScenes.length === 0 || round === MAX_AUTO_PIPELINE_REVISION_ROUNDS - 1) break;
+    // A failure in this final polish never throws away the finished script:
+    // the scenes already written simply stay as they are.
+    try {
+      for (let round = 0; round < MAX_AUTO_PIPELINE_REVISION_ROUNDS; round++) {
+        const allScenesResult = await db.query(
+          `SELECT DISTINCT ON (episode_index, scene_index) id, episode_index, scene_index, content
+           FROM screenplay_scenes WHERE scene_list_id = $1
+           ORDER BY episode_index, scene_index, created_at DESC`,
+          [sceneListId]
+        );
+        const repetitionReview = reviewScreenplayRepetition(allScenesResult.rows);
+        const summary = `${allScenesResult.rows.length} scenes checked across the full finished screenplay for reused stock description.`;
+        const judged = await scorePipelineStage("Screenplay prose variety (full script)", summary, repetitionReview.issues);
+        await appendAutoPipelineNote(runId, "screenplay", `Judge score: ${judged.score}/10 — ${judged.verdict}`);
+        if (judged.score >= 8 || repetitionReview.offendingScenes.length === 0 || round === MAX_AUTO_PIPELINE_REVISION_ROUNDS - 1) break;
 
-      // Cap how many scenes get rewritten in one round — a handful of the
-      // worst offenders is enough to break the pattern without redoing the
-      // whole script every round.
-      const scenesToRewrite = repetitionReview.offendingScenes.slice(0, 15);
-      for (const row of scenesToRewrite) {
-        const scenesForEpisode =
-          row.episode_index === null ? sceneList.scenes : sceneList.episodeScenes[row.episode_index].scenes;
-        const revised = await generateScreenplaySceneContent(
-          deck, scenesForEpisode, row.scene_index, null, sceneList.controllingIdea,
-          {
-            feedback: `This scene reuses generic description already overused elsewhere in the script: ${repetitionReview.overusedPhrases.join(", ")}. Rewrite the action lines with fresh, specific description grounded in this scene's own moment.`,
-            previous: row.content,
-          },
-          dialogueLanguage,
-          repetitionReview.overusedPhrases
-        );
-        await db.query(
-          "INSERT INTO screenplay_scenes (scene_list_id, episode_index, scene_index, content) VALUES ($1, $2, $3, $4)",
-          [sceneListId, row.episode_index, row.scene_index, JSON.stringify(revised)]
-        );
-        await touchAutoPipelineRun(runId);
+        // Cap how many scenes get rewritten in one round — a handful of the
+        // worst offenders is enough to break the pattern without redoing the
+        // whole script every round.
+        const scenesToRewrite = repetitionReview.offendingScenes.slice(0, 15);
+        for (const row of scenesToRewrite) {
+          const scenesForEpisode =
+            row.episode_index === null ? sceneList.scenes : sceneList.episodeScenes[row.episode_index].scenes;
+          let revised;
+          try {
+            revised = await generateScreenplaySceneContent(
+              deck, scenesForEpisode, row.scene_index, null, sceneList.controllingIdea,
+              {
+                feedback: `This scene reuses generic description already overused elsewhere in the script: ${repetitionReview.overusedPhrases.join(", ")}. Rewrite the action lines with fresh, specific description grounded in this scene's own moment.`,
+                previous: row.content,
+              },
+              dialogueLanguage,
+              repetitionReview.overusedPhrases
+            );
+          } catch (error) {
+            console.error(`Auto-pipeline ${runId}: quality-pass rewrite failed:`, error.message);
+            continue; // keep this scene as it was
+          }
+          await db.query(
+            "INSERT INTO screenplay_scenes (scene_list_id, episode_index, scene_index, content) VALUES ($1, $2, $3, $4)",
+            [sceneListId, row.episode_index, row.scene_index, JSON.stringify(revised)]
+          );
+          await touchAutoPipelineRun(runId);
+        }
       }
+    } catch (error) {
+      console.error(`Auto-pipeline ${runId}: quality pass failed:`, error.message);
+      await appendAutoPipelineNote(runId, "quality-pass", "The final quality pass could not finish — the script is kept as written.");
+    }
+
+    if (skippedScenes.length > 0) {
+      await appendAutoPipelineNote(
+        runId,
+        "screenplay",
+        `${skippedScenes.length} scene(s) could not be written: ${skippedScenes.join("; ")}. Open this project's Screenplay to write them — they show as "not written", with a Write This Scene button.`
+      );
     }
 }
 

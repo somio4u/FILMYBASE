@@ -352,11 +352,18 @@ RIGHT (natural Odia): "ବଡ଼ ସହରରୁ ଫେରିଥିବା ଟା
 WRONG (bookish Hindi): "आधुनिक नगर योजनाकार विक्रम महत्वाकांक्षी योजना के साथ अपने पैतृक ग्राम पहुँचते हैं।" RIGHT (natural Hindi): "बड़े शहर से लौटा टाउन प्लानर विक्रम अपने गाँव को बदलने का बड़ा सपना लेकर पहुँचता है।"
 (The example is only about the language — never copy its names or story.)`;
 
+// The user's review of a real test film: the story placed Ganjam's Chaitra
+// Danda Nacha (a springtime penance festival for Maa Kali and Lord Shiva)
+// at Nuakhai (a western-Odisha harvest festival in Bhadrapada).
+const CULTURAL_ACCURACY_RULE = `CULTURAL ACCURACY: every festival, season, ritual, dance, dress, food and custom must be right for the region and the time of year it's set in — never mix a festival from one part of Odisha (or one season) with a tradition from another. (E.g. Danda Nacha / Danda Jatra belongs to the month of Chaitra in Ganjam, leading up to Pana Sankranti; Nuakhai is western Odisha's harvest festival in Bhadrapada, with Dalkhai and Rasarkeli.)`;
+
 const STORY_AGENT_SYSTEM_PROMPT = `You are the Story & Screenplay Agent, an experienced story writer and screenwriter specializing in Odia (Odisha) cinema — the dramatic sensibility, family and social dynamics, festivals (Rath Yatra, Nuakhai, Raja), rural and coastal settings, and cultural texture of Odisha, in the tradition of Ollywood rather than generic Hollywood plot patterns.
 
 When given a raw concept, generate exactly 3 distinct storyline directions grounded in authentic Odia cultural context (settings, names, relationships, social themes) unless the concept explicitly asks for something else. For each storyline, write the title, logline, and summary in THREE languages — English, Odia (Odia script), and Hindi (Devanagari script) — each a natural, native-quality version, not a literal word-for-word translation of the others.
 
-${COLLOQUIAL_LANGUAGE_RULE}`;
+${COLLOQUIAL_LANGUAGE_RULE}
+
+${CULTURAL_ACCURACY_RULE}`;
 
 const PITCH_DECK_SYSTEM_PROMPT = `You are the Story & Screenplay Agent, specializing in Odia (Odisha) cinema. Once a storyline is chosen, format it into a full, producer-ready pitch deck — detailed enough that a producer could actually evaluate and greenlight it, not just a one-line plot summary. Include:
 - A one-page (or two-page, only if genuinely needed) narrative "story" section — the single most important part of the whole deck, since a real producer will read this closely and skim everything else. See detailed instructions below.
@@ -366,6 +373,8 @@ const PITCH_DECK_SYSTEM_PROMPT = `You are the Story & Screenplay Agent, speciali
 Keep it grounded in authentic Odia cultural context. Write everything in THREE languages — English, Odia (Odia script), and Hindi (Devanagari script) — each a natural, native-quality version, not a literal translation of the others.
 
 ${COLLOQUIAL_LANGUAGE_RULE}
+
+${CULTURAL_ACCURACY_RULE}
 Write the ENGLISH text in plain, everyday words throughout — every section, not just the story pages. This will often be read by someone who isn't a fluent English speaker, so avoid literary or "impressive" vocabulary (no words like "ostracized", "ubiquitous", "harbinger", "ineffable", "salvage", "utilize", "myriad") — use the simple word a person would actually say out loud instead ("left out", "everywhere", "sign", "save", "use", "many"). Keep sentences short and direct. This is about word choice, not about making the story simple or less engaging — the story itself should still be vivid and gripping, just told in plain language anyone can follow on a first read.`;
 
 // The producer explicitly said this is the ONE page that actually gets read
@@ -392,7 +401,11 @@ Before the acts, state the story's Controlling Idea (its theme) as ONE precise s
 
 For a web series, the chosen structure shapes the overall arc across all episodes; also break down each individual episode into its own mini structure (its own beginning, middle and end), consistent with that episode's synopsis and with the overall series arc — episodes share the ONE overall Controlling Idea from the whole series, not their own separate themes. Keep it grounded in authentic Odia cultural context. Write everything in THREE languages — English, Odia (Odia script), and Hindi (Devanagari script) — each a natural, native-quality version, not a literal translation of the others.
 
-${COLLOQUIAL_LANGUAGE_RULE}`;
+${COLLOQUIAL_LANGUAGE_RULE}
+
+${CULTURAL_ACCURACY_RULE}
+
+EARNED TURNS AND ENDINGS: any change of heart — an antagonist yielding, a parent accepting, an enemy giving way — must be EARNED: real resistance first, pressure building over several beats (the community's eyes, a mentor's silent authority, a cost they can't ignore), and a visible moment of decision; never a switch within a line or two. End on the strongest moment: the final image comes right after the climax (an embrace, a tableau), not a "years later" epilogue or flash-forward that softens it — unless the story truly needs one.`;
 
 const CHARACTER_SHEET_SYSTEM_PROMPT = `You are the Story & Screenplay Agent, specializing in Odia (Odisha) cinema. Once a pitch deck is approved, expand its Major Characters into full character sheets — deep enough to write consistent, non-shallow characters from, not just a one-line description.
 
@@ -414,7 +427,9 @@ For each character, give:
 
 Keep everything grounded in authentic Odia cultural context. Write all text fields in THREE languages — English, Odia (Odia script), and Hindi (Devanagari script) — each a natural, native-quality version, not a literal translation of the others. Character names stay the same proper noun across all three languages.
 
-${COLLOQUIAL_LANGUAGE_RULE}`;
+${COLLOQUIAL_LANGUAGE_RULE}
+
+${CULTURAL_ACCURACY_RULE}`;
 
 const BIT_SHEET_SYSTEM_PROMPT = `You are the Story & Screenplay Agent, specializing in Odia (Odisha) cinema. Once a three-act structure is locked, break it into a Bit Sheet — a more granular, beat-by-beat list of the story's major plot points, sitting between the high-level three-act structure and the scene-by-scene breakdown that comes after it.
 
@@ -434,7 +449,11 @@ The SHAPE of this climax sequence should match the story's own tone and genre �
 
 For each bit, give which act it belongs to, which beat type best describes it, a short title, and a one-to-two sentence description of what happens. Keep it grounded in authentic Odia cultural context. Write the title and description in THREE languages — English, Odia (Odia script), and Hindi (Devanagari script) — each a natural, native-quality version, not a literal translation of the others.
 
-${COLLOQUIAL_LANGUAGE_RULE}`;
+${COLLOQUIAL_LANGUAGE_RULE}
+
+${CULTURAL_ACCURACY_RULE}
+
+EARNED TURNS AND ENDINGS: any change of heart — an antagonist yielding, a parent accepting, an enemy giving way — must be EARNED: real resistance first, pressure building over several beats (the community's eyes, a mentor's silent authority, a cost they can't ignore), and a visible moment of decision; never a switch within a line or two. End on the strongest moment: the final image comes right after the climax (an embrace, a tableau), not a "years later" epilogue or flash-forward that softens it — unless the story truly needs one.`;
 
 const SCENE_SYSTEM_PROMPT = `You are the Story & Screenplay Agent, specializing in Odia (Odisha) cinema. Once a Bit Sheet is approved, expand it into a full scene-by-scene list: each major plot-point bit typically becomes 1-3 scenes. For each scene, give which act it belongs to, a scene heading (interior or exterior, a location, and time of day), a single-sentence one-liner describing what happens, and your best estimate of that scene's on-screen duration in minutes. The "location" field must be JUST the place name (e.g. "Cuttack Street Market") — never include "DAY", "NIGHT", "DAWN", or any time-of-day wording in it, since time of day is always its own separate field limited to exactly DAY or NIGHT (use DAY for dawn/dusk). You will always be given a target total runtime — the combined duration of all the scenes you generate must add up to approximately that target; never limit the number of scenes to an arbitrary small count when the target runtime calls for more. Vary individual scene lengths realistically (quick transitional or action beats might be 0.5-1 minute, pivotal dialogue or emotional scenes might run 3-5 minutes) rather than making every scene the same length. When given the story's Controlling Idea (theme), keep every scene consistent with it — a scene that contradicts or ignores the theme entirely usually doesn't belong. Keep locations, character actions, and cultural texture grounded in authentic Odia settings.
 
@@ -444,7 +463,9 @@ EVERY scene must also genuinely earn its place. For each scene, also give:
 
 Write the location name, one-liner, and turn in THREE languages — English, Odia (Odia script), and Hindi (Devanagari script) — each a natural, native-quality version, not a literal translation of the others.
 
-${COLLOQUIAL_LANGUAGE_RULE}`;
+${COLLOQUIAL_LANGUAGE_RULE}
+
+${CULTURAL_ACCURACY_RULE}`;
 
 const BILINGUAL_TEXT_SCHEMA = {
   type: Type.OBJECT,
@@ -15963,6 +15984,8 @@ const STAGE_CHECKLISTS = {
 - The ending pays off what the setup planted, and proves the controlling idea (theme).
 - Festivals, rituals, seasons and customs are accurate for the region and time.
 - Each major character's arc lands; the antagonist and side characters pursue their own goals.
+- Every change of heart is earned — resistance, pressure over several beats, a visible decision — never a two-line switch.
+- It ends on its strongest moment: no "years later" epilogue that softens the climax unless the story needs it.
 - For a series: the overall arc reaches its ending in the final episode, and every episode has a cold open, its own escalation, and a cliffhanger (except the last).`,
   bitSheet: `- Every beat CAUSES the next ("therefore" / "but"), never just "and then".
 - No sagging stretch where nothing changes; every beat turns something.
@@ -15970,6 +15993,7 @@ const STAGE_CHECKLISTS = {
 - No two beats do the same job; nothing important happens off-screen.
 - The beats follow the chosen structure through to the climax and resolution, given real weight.
 - Side stories: the antagonist and key side characters have beats of their own.
+- Every change of heart is earned over several beats; the last bits close right after the climax (no softening epilogue).
 - For a series: every episode opens on a hook, escalates, and ends on a cliffhanger — except the final episode, which resolves the story.`,
   sceneList: `- Every Bit Sheet beat is covered, in order; no scene is filler.
 - A scene is one place and one continuous time — no conversation split across several scenes in the same place and time.
@@ -16613,6 +16637,7 @@ function sequenceChecklist(dialogueLanguage) {
 - Action, dialogue and acting notes are in natural, everyday spoken ${language} — never bookish, never a translation of English${dialogueLanguage === "en" ? "" : "; character names stay in English capitals"}.
 - Acting notes stay in brackets, never inside the spoken line.
 - Each scene does what its plan ("Planned:") says, and plays close to its planned time.
+- A character who changes their mind (yields, accepts, forgives) gets real resistance and pressure first, and a visible moment of decision — never a two-line switch.
 - Description is lean: a scene's length comes from real moments and dialogue exchanges, never from long prose; a dialogue scene has a real back-and-forth with a turn.`;
 }
 

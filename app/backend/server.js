@@ -1274,6 +1274,25 @@ app.get("/api/test-gemini", requireRole("admin"), async (req, res) => {
   }
 });
 
+// A revision used to show the writer little or nothing of its previous
+// draft (for a film: no Bit Sheet, Scene List or Character Sheet at all,
+// only one-line summaries of a Three-Act Structure) — so every "revision"
+// was really a fresh rewrite, often breaking what already worked (seen for
+// real: a Three-Act draft went 6/10 -> 5/10 with brand-new problems). Now
+// every story writer gets its full previous draft — in English only, to
+// save room — plus this rule.
+function previousDraftForRevision(previous, omitKeys = []) {
+  const englishOnly = (value) => {
+    if (Array.isArray(value)) return value.map(englishOnly);
+    if (value && typeof value === "object") {
+      if (typeof value.en === "string" && ("or" in value || "hi" in value)) return value.en;
+      return Object.fromEntries(Object.entries(value).filter(([key]) => !omitKeys.includes(key)).map(([key, v]) => [key, englishOnly(v)]));
+    }
+    return value;
+  };
+  return `Your previous draft (English):\n${JSON.stringify(englishOnly(previous))}\n\nKeep everything in it that already works — the same characters, events and order — and change only what the feedback asks for. Do not rewrite the story from scratch.`;
+}
+
 async function generateStorylinesContent(concept, format) {
   const formatInstruction =
     format?.type === "vertical"
@@ -7696,7 +7715,7 @@ BUDGET-FRIENDLY PRODUCTION CONSTRAINT — this is a low-budget format meant to s
   let contents = `Storyline title (English): ${storyline.title.en}\nLogline (English): ${storyline.logline.en}\nSummary (English): ${storyline.summary.en}\n${formatInstruction}\n\n${majorCharactersInstruction}\n\nAlso give: "genre" — a SHORT genre label, just 2-4 words (e.g. "Crime Drama", "Romantic Comedy", "Family Slice-of-Life"), distinct from the longer "toneGenre" prose description; "targetAudience" — cover the age group, the region/market this is aimed at, and what specifically appeals to that audience (not just an age range alone); "highlights" — exactly 4 short, punchy bullet points (5-15 words each) on what makes this story stand out from similar shows — genuinely distinctive hooks, not generic praise; "sponsorshipAngle" — a short paragraph aimed at a potential brand sponsor: why a brand should back this specific story, and at least one concrete branding/placement idea (e.g. title sponsorship, a natural product-placement moment, a brand-integrated segment) grounded in this story's actual content, not a generic pitch.\n\nEvery one of those fields — premise, genre, toneGenre, targetAudience, highlights, sponsorshipAngle — must ALSO be in plain, simple, everyday English, exactly like storyPages below: no literary or "impressive" words (nothing like "prodigy", "despises", "backdrop", "backlash", "navigate a turbulent landscape"), just the plain way a person would actually say it out loud. This is a hard requirement across every field, not only the story pages.\n\n${PITCH_DECK_STORY_PAGES_INSTRUCTION}`;
 
   if (revision) {
-    contents += `\n\nThis is a REVISION of a previous draft. The producer reviewed it and requested changes.\nProducer's feedback: "${revision.feedback}"\nPrevious premise (English): ${revision.previous.premise.en}\nPrevious tone/genre (English): ${revision.previous.toneGenre.en}\nRevise the pitch deck to address the producer's feedback directly, while keeping the same title and logline.`;
+    contents += `\n\nThis is a REVISION of a previous draft. The producer reviewed it and requested changes.\nProducer's feedback: "${revision.feedback}"\n${previousDraftForRevision(revision.previous, ["episodes"])}\nRevise the pitch deck to address the producer's feedback directly, while keeping the same title and logline.`;
   }
 
   const core = sanitizeBilingualContent(
@@ -8383,7 +8402,7 @@ async function generateCharacterSheetContent(deck, revision) {
   let contents = `Title (English): ${deck.title.en}\nLogline (English): ${deck.logline.en}\nPremise (English): ${deck.premise.en}\nTone/Genre (English): ${deck.toneGenre.en}\n${isSeries ? `Format: web series, ${deck.episodes.length} episodes.` : "Format: feature film."}\n\nPitch deck's Major Characters to deepen:\n${seedCharacters}`;
 
   if (revision) {
-    contents += `\n\nThis is a REVISION of a previous character sheet. The Story Writer reviewed it and requested changes.\nFeedback: "${revision.feedback}"\nRevise the character sheet to address the feedback directly.`;
+    contents += `\n\nThis is a REVISION of a previous character sheet. The Story Writer reviewed it and requested changes.\nFeedback: "${revision.feedback}"\n${revision.previous ? `${previousDraftForRevision(revision.previous)}\n` : ""}Revise the character sheet to address the feedback directly.`;
   }
 
   // 11 trilingual (en/or/hi) fields per character, up to 5 characters —
@@ -8624,7 +8643,7 @@ async function generateThreeActContent(deck, characterSheet, revision) {
   }
 
   if (revision) {
-    contents += `\n\nThis is a REVISION of a previous three-act structure. The Story Writer reviewed it and requested changes.\nStory Writer's feedback: "${revision.feedback}"\nPrevious setup summary (English): ${revision.previous.setup.summary.en}\nPrevious confrontation summary (English): ${revision.previous.confrontation.summary.en}\nPrevious resolution summary (English): ${revision.previous.resolution.summary.en}\nRevise the three-act structure to address the feedback directly.`;
+    contents += `\n\nThis is a REVISION of a previous three-act structure. The Story Writer reviewed it and requested changes.\nStory Writer's feedback: "${revision.feedback}"\n${previousDraftForRevision(revision.previous, ["episodeStructures"])}\nRevise the three-act structure to address the feedback directly.`;
   }
 
   const overall = sanitizeBilingualContent(
@@ -8968,7 +8987,7 @@ async function generateBitSheetContent(threeAct, deck, revision) {
   }
 
   if (revision) {
-    contents += `\n\nThis is a REVISION of a previous Bit Sheet. The Story Writer reviewed it and requested changes.\nFeedback: "${revision.feedback}"\nRevise the Bit Sheet to address the feedback directly.`;
+    contents += `\n\nThis is a REVISION of a previous Bit Sheet. The Story Writer reviewed it and requested changes.\nFeedback: "${revision.feedback}"\n${revision.previous ? `${previousDraftForRevision({ bits: revision.previous.bits })}\n` : ""}Revise the Bit Sheet to address the feedback directly.`;
   }
 
   const content = sanitizeBilingualContent(
@@ -9342,7 +9361,7 @@ async function generateFilmSceneListPart(bitSheet, part, partIndex, partCount, f
   }
 
   if (revision) {
-    contents += `\n\nThis is a REVISION of a previous scene list. The Screenplay Writer reviewed it and requested changes.\nFeedback: "${revision.feedback}"\nRevise the scene list to address this feedback directly, keeping the same overall structure otherwise.`;
+    contents += `\n\nThis is a REVISION of a previous scene list. The Screenplay Writer reviewed it and requested changes.\nFeedback: "${revision.feedback}"\n${revision.previous?.scenes ? `${previousDraftForRevision({ scenes: revision.previous.scenes })}\n${partCount > 1 ? "(That is the whole film's previous list; write only this part's scenes.)\n" : ""}` : ""}Revise the scene list to address this feedback directly, keeping the same overall structure otherwise.`;
   }
 
   let content = await callSceneListGemini(contents, false, part.targetMinutes);

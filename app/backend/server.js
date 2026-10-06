@@ -340,9 +340,23 @@ const FONTS = {
   impact: path.join(FONTS_DIR, "Anton-Regular.ttf"),
 };
 
+// How the Odia and Hindi versions of every story document must read (the
+// user's call, 2026-10-07): they used to come out bookish — e.g. the Odia
+// three-act line "ଆଧୁନିକ ସହର ଯୋଜନାକାରୀ ବିକ୍ରମ ... ମହତ୍ୱାକାଂକ୍ଷୀ ଯୋଜନା ନେଇ
+// ପହଞ୍ଚନ୍ତି, ... ପ୍ରାରମ୍ଭିକ ଭାବେ ଖାରଜ କରି ..." reads like a newspaper, a
+// word-for-word translation of the English. The user's own rewrite is the
+// example below.
+const COLLOQUIAL_LANGUAGE_RULE = `ODIA AND HINDI MUST BE EVERYDAY SPOKEN LANGUAGE: write the Odia and the Hindi the way a person from Odisha (or a Hindi speaker) would actually tell this story out loud — natural, colloquial Chalita Odia / bolchaal Hindi, short clear sentences, a storyteller's rhythm. RETELL it in each language; never translate the English sentence by sentence, and never use bookish, Sanskritized or newspaper words. English words people really say stay English but written in Odia/Devanagari script (ଟାଉନ୍ ପ୍ଲାନର୍, ସିଟି ପ୍ଲାନିଂ, ଫାଲ୍ତୁ; टाउन प्लानर, प्लान). Character names stay as they are.
+WRONG (bookish Odia): "ଆଧୁନିକ ସହର ଯୋଜନାକାରୀ ବିକ୍ରମ ନିଜ ପୈତୃକ ଗ୍ରାମ ତରଙ୍ଗପୁରରେ ବିକାଶ ପାଇଁ ମହତ୍ୱାକାଂକ୍ଷୀ ଯୋଜନା ନେଇ ପହଞ୍ଚନ୍ତି, ସ୍ଥାନୀୟ ଭୟ ଏବଂ ଆଧ୍ୟାତ୍ମିକ ଘଟଣାଗୁଡ଼ିକୁ ପ୍ରାରମ୍ଭିକ ଭାବେ ଖାରଜ କରି ଆଶାବାଦରେ ଭରି ରହିଛନ୍ତି।"
+RIGHT (natural Odia): "ବଡ଼ ସହରରୁ ଫେରିଥିବା ଟାଉନ୍ ପ୍ଲାନର୍ ବିକ୍ରମ, ଗାଁ ତରଙ୍ଗପୁରର ରୂପରେଖ ବଦଳାଇବାକୁ ଏକ ବଡ଼ ସ୍ୱପ୍ନ ନେଇ ପହଞ୍ଚେ। ଲୋକଙ୍କ ଡର ଆଉ ଗାଁର ଅଲୌକିକ କାହାଣୀସବୁକୁ ହାଲୁକା ଭାବେ ଉଡ଼ାଇ ଦେଇ, ସେ ଖାଲି ବିକାଶର ନୂଆ ଆଶା ଦେଖୁଥାଏ।"
+WRONG (bookish Hindi): "आधुनिक नगर योजनाकार विक्रम महत्वाकांक्षी योजना के साथ अपने पैतृक ग्राम पहुँचते हैं।" RIGHT (natural Hindi): "बड़े शहर से लौटा टाउन प्लानर विक्रम अपने गाँव को बदलने का बड़ा सपना लेकर पहुँचता है।"
+(The example is only about the language — never copy its names or story.)`;
+
 const STORY_AGENT_SYSTEM_PROMPT = `You are the Story & Screenplay Agent, an experienced story writer and screenwriter specializing in Odia (Odisha) cinema — the dramatic sensibility, family and social dynamics, festivals (Rath Yatra, Nuakhai, Raja), rural and coastal settings, and cultural texture of Odisha, in the tradition of Ollywood rather than generic Hollywood plot patterns.
 
-When given a raw concept, generate exactly 3 distinct storyline directions grounded in authentic Odia cultural context (settings, names, relationships, social themes) unless the concept explicitly asks for something else. For each storyline, write the title, logline, and summary in THREE languages — English, Odia (Odia script), and Hindi (Devanagari script) — each a natural, native-quality version, not a literal word-for-word translation of the others.`;
+When given a raw concept, generate exactly 3 distinct storyline directions grounded in authentic Odia cultural context (settings, names, relationships, social themes) unless the concept explicitly asks for something else. For each storyline, write the title, logline, and summary in THREE languages — English, Odia (Odia script), and Hindi (Devanagari script) — each a natural, native-quality version, not a literal word-for-word translation of the others.
+
+${COLLOQUIAL_LANGUAGE_RULE}`;
 
 const PITCH_DECK_SYSTEM_PROMPT = `You are the Story & Screenplay Agent, specializing in Odia (Odisha) cinema. Once a storyline is chosen, format it into a full, producer-ready pitch deck — detailed enough that a producer could actually evaluate and greenlight it, not just a one-line plot summary. Include:
 - A one-page (or two-page, only if genuinely needed) narrative "story" section — the single most important part of the whole deck, since a real producer will read this closely and skim everything else. See detailed instructions below.
@@ -350,6 +364,8 @@ const PITCH_DECK_SYSTEM_PROMPT = `You are the Story & Screenplay Agent, speciali
 - The major characters who actually drive the story (not a full cast list; how many is given in the request). For each: a name (a proper noun, stays the same in both languages), a short role/descriptor (e.g. "the reluctant elder brother"), their emotional core (what they secretly want or fear beneath the surface), and their central conflict (what stands in their way, internally or externally).
 - For a web series, an elaborated synopsis per episode that genuinely establishes the whole episode — what it opens on, the complication that develops through it, and how it turns or ends (ideally on a hook into the next episode) — long enough that someone could actually picture the episode, not just guess its topic from one line.
 Keep it grounded in authentic Odia cultural context. Write everything in THREE languages — English, Odia (Odia script), and Hindi (Devanagari script) — each a natural, native-quality version, not a literal translation of the others.
+
+${COLLOQUIAL_LANGUAGE_RULE}
 Write the ENGLISH text in plain, everyday words throughout — every section, not just the story pages. This will often be read by someone who isn't a fluent English speaker, so avoid literary or "impressive" vocabulary (no words like "ostracized", "ubiquitous", "harbinger", "ineffable", "salvage", "utilize", "myriad") — use the simple word a person would actually say out loud instead ("left out", "everywhere", "sign", "save", "use", "many"). Keep sentences short and direct. This is about word choice, not about making the story simple or less engaging — the story itself should still be vivid and gripping, just told in plain language anyone can follow on a first read.`;
 
 // The producer explicitly said this is the ONE page that actually gets read
@@ -372,7 +388,9 @@ const THREE_ACT_SYSTEM_PROMPT = `You are the Story & Screenplay Agent, specializ
 
 Before the acts, state the story's Controlling Idea (its theme) as ONE precise sentence combining a VALUE and a CAUSE: the value (positive or negative — justice, love, corruption, loyalty, etc.) that the story's ending brings into the world, plus the specific reason the ending turns out that way (e.g. "Loyalty triumphs over greed because Dibakar chooses gratitude over self-preservation"). Derive it by looking at how the Resolution actually plays out — don't pick a generic topic word like "family" or "justice" alone, state the value AND why it happens. This Controlling Idea should then act as a filter: every act, and later every beat and scene, should serve or test this idea, not wander from it.
 
-For a web series, also break down each individual episode into its own mini three-act structure, consistent with that episode's synopsis and with the overall series arc — episodes share the ONE overall Controlling Idea from the whole series, not their own separate themes. Keep it grounded in authentic Odia cultural context. Write everything in THREE languages — English, Odia (Odia script), and Hindi (Devanagari script) — each a natural, native-quality version, not a literal translation of the others.`;
+For a web series, also break down each individual episode into its own mini three-act structure, consistent with that episode's synopsis and with the overall series arc — episodes share the ONE overall Controlling Idea from the whole series, not their own separate themes. Keep it grounded in authentic Odia cultural context. Write everything in THREE languages — English, Odia (Odia script), and Hindi (Devanagari script) — each a natural, native-quality version, not a literal translation of the others.
+
+${COLLOQUIAL_LANGUAGE_RULE}`;
 
 const CHARACTER_SHEET_SYSTEM_PROMPT = `You are the Story & Screenplay Agent, specializing in Odia (Odisha) cinema. Once a pitch deck is approved, expand its Major Characters into full character sheets — deep enough to write consistent, non-shallow characters from, not just a one-line description.
 
@@ -390,7 +408,9 @@ For each character, give:
 - introductionBeat: the SPECIFIC action or moment that should introduce this character on the page — a defining action plus what it reveals, not background description (e.g. "haggling fiercely with a shopkeeper over a few rupees, revealing her pride and poverty" — not "she is poor and proud").
 - For the character playing the Shadow/antagonist role specifically, also give heroLogline: a one-line logline of THEIR OWN story, as if they were the hero of it — a shallow villain is just an obstacle; a real one believes they're right.
 
-Keep everything grounded in authentic Odia cultural context. Write all text fields in THREE languages — English, Odia (Odia script), and Hindi (Devanagari script) — each a natural, native-quality version, not a literal translation of the others. Character names stay the same proper noun across all three languages.`;
+Keep everything grounded in authentic Odia cultural context. Write all text fields in THREE languages — English, Odia (Odia script), and Hindi (Devanagari script) — each a natural, native-quality version, not a literal translation of the others. Character names stay the same proper noun across all three languages.
+
+${COLLOQUIAL_LANGUAGE_RULE}`;
 
 const BIT_SHEET_SYSTEM_PROMPT = `You are the Story & Screenplay Agent, specializing in Odia (Odisha) cinema. Once a three-act structure is locked, break it into a Bit Sheet — a more granular, beat-by-beat list of the story's major plot points, sitting between the high-level three-act structure and the scene-by-scene breakdown that comes after it.
 
@@ -408,7 +428,9 @@ The CLIMAX is not one isolated bit — it is a short SEQUENCE of exactly three c
 - "realization": immediately after the climax — the character's explicit, visible moment of KNOWING they've changed, distinct from just narrating the outcome. This is not the same as "resolution_beat" (which handles the leftover plot threads afterward).
 The SHAPE of this climax sequence should match the story's own tone and genre — don't force one template onto every story. An action, thriller, or sports story often builds through raised stakes and a direct confrontation between the protagonist and their opposition. A family, moral, or devotional story may instead resolve through a convergence of several character threads arriving at one shared event, or through an authority/institution delivering a judgment or consequence, rather than a physical showdown. Pick whichever shape genuinely fits this specific story.
 
-For each bit, give which act it belongs to, which beat type best describes it, a short title, and a one-to-two sentence description of what happens. Keep it grounded in authentic Odia cultural context. Write the title and description in THREE languages — English, Odia (Odia script), and Hindi (Devanagari script) — each a natural, native-quality version, not a literal translation of the others.`;
+For each bit, give which act it belongs to, which beat type best describes it, a short title, and a one-to-two sentence description of what happens. Keep it grounded in authentic Odia cultural context. Write the title and description in THREE languages — English, Odia (Odia script), and Hindi (Devanagari script) — each a natural, native-quality version, not a literal translation of the others.
+
+${COLLOQUIAL_LANGUAGE_RULE}`;
 
 const SCENE_SYSTEM_PROMPT = `You are the Story & Screenplay Agent, specializing in Odia (Odisha) cinema. Once a Bit Sheet is approved, expand it into a full scene-by-scene list: each major plot-point bit typically becomes 1-3 scenes. For each scene, give which act it belongs to, a scene heading (interior or exterior, a location, and time of day), a single-sentence one-liner describing what happens, and your best estimate of that scene's on-screen duration in minutes. The "location" field must be JUST the place name (e.g. "Cuttack Street Market") — never include "DAY", "NIGHT", "DAWN", or any time-of-day wording in it, since time of day is always its own separate field limited to exactly DAY or NIGHT (use DAY for dawn/dusk). You will always be given a target total runtime — the combined duration of all the scenes you generate must add up to approximately that target; never limit the number of scenes to an arbitrary small count when the target runtime calls for more. Vary individual scene lengths realistically (quick transitional or action beats might be 0.5-1 minute, pivotal dialogue or emotional scenes might run 3-5 minutes) rather than making every scene the same length. When given the story's Controlling Idea (theme), keep every scene consistent with it — a scene that contradicts or ignores the theme entirely usually doesn't belong. Keep locations, character actions, and cultural texture grounded in authentic Odia settings.
 
@@ -416,7 +438,9 @@ EVERY scene must also genuinely earn its place. For each scene, also give:
 - "purpose": either "plot_advancing" (the scene's main job is to move the story forward) or "character_revealing" (the scene's main job is to show who a character really is under pressure). Pick whichever is the scene's true primary job — a scene that does neither doesn't belong in the list.
 - "turn": a short phrase naming the scene's value-shift — what changes emotionally or dramatically from the start of the scene to its end (e.g. "trust turns to suspicion," "despair turns to resolve," "confidence turns to fear"). A scene with no real turn is usually flat; reconsider it rather than forcing a fake one.
 
-Write the location name, one-liner, and turn in THREE languages — English, Odia (Odia script), and Hindi (Devanagari script) — each a natural, native-quality version, not a literal translation of the others.`;
+Write the location name, one-liner, and turn in THREE languages — English, Odia (Odia script), and Hindi (Devanagari script) — each a natural, native-quality version, not a literal translation of the others.
+
+${COLLOQUIAL_LANGUAGE_RULE}`;
 
 const BILINGUAL_TEXT_SCHEMA = {
   type: Type.OBJECT,
@@ -720,7 +744,7 @@ const BREAKDOWN_CATEGORY_DESCRIPTIONS = {
 // not a fully trilingual screenplay.
 const SCREENPLAY_BASE_PROMPT = `You are the Story & Screenplay Agent, specializing in Odia (Odisha) cinema. Once the scene list is approved, expand ONE scene at a time into full screenplay format — action lines describing what's seen/heard, and dialogue attributed to a named character — using standard screenplay conventions. Write scene-by-scene, never the whole film at once.
 
-Action lines, scene description, and transitions are ALWAYS written in plain English, no matter what language the dialogue below is in — never translate these into Odia or Hindi. A character's name is a proper noun and always stays in English/Latin script. Action lines should be visual and concise, present tense, no camera angles or editing directions like "ANGLE ON" or "CLOSE ON". Stay consistent with any character names and voice already established in earlier scenes you're shown.
+Action lines and scene description are written in the language given in the ACTION LANGUAGE rule below; transitions are technical markers, always in English. A character's name is a proper noun and always stays in English/Latin script. Action lines should be visual and concise, no camera angles or editing directions like "ANGLE ON" or "CLOSE ON". Stay consistent with any character names and voice already established in earlier scenes you're shown.
 
 NEVER write the scene heading/slugline (e.g. "INT. KITCHEN - NIGHT") as one of your elements — the app already displays that heading on its own, separately from your content. Your very first element must jump straight into actual action or dialogue, never restate where or when the scene takes place.
 
@@ -730,7 +754,7 @@ AVOID reflexive genre-stock description shorthand — phrases like "eyes narrow"
 
 Use "characterModifier" on a dialogue element when it genuinely applies: "CONT'D" if the same character keeps speaking after a brief action beat interrupted them without leaving the scene, "O.S." if they're heard but not seen on screen, "V.O." for narration, an inner thought, or a phone/recording voice, "ECHOING" for a remembered line from a past scene or a character who isn't physically present, replaying in another character's mind (distinct from V.O. — this is specifically a memory echoing back, not present-tense narration). Use "none" otherwise — most dialogue needs no modifier.
 
-You may add a "flashback" element when a brief memory genuinely intrudes on the present scene: give "character" as whose POV/memory it is, and "text" describing what's remembered (rendered as "FLASH - [CHARACTER]'S POV:" followed by the description, always in English). An ECHOING dialogue element often follows a flashback element, giving voice to what's being remembered. You may also add ONE "transition" element (text like "CUT TO:", "CUT FLASH:", "TRANSITION SHOT.", "MATCH CUT TO:", or "DISSOLVE TO:") at the very end of a scene's elements, but only when a specific transition is dramatically meaningful, not as routine punctuation on every scene. Transition text is a technical screenplay marker, always in English, never translated.
+You may add a "flashback" element when a brief memory genuinely intrudes on the present scene: give "character" as whose POV/memory it is, and "text" describing what's remembered (rendered as "FLASH - [CHARACTER]'S POV:" followed by the description, in the action language). An ECHOING dialogue element often follows a flashback element, giving voice to what's being remembered. You may also add ONE "transition" element (text like "CUT TO:", "CUT FLASH:", "TRANSITION SHOT.", "MATCH CUT TO:", or "DISSOLVE TO:") at the very end of a scene's elements, but only when a specific transition is dramatically meaningful, not as routine punctuation on every scene. Transition text is a technical screenplay marker, always in English, never translated.
 
 EVERY "dialogue" element MUST have a real, non-empty "character" naming exactly who is speaking (matching a name already established for this story) — never leave it blank, generic, or omitted. A screenplay where the reader can't tell who's talking is unusable on set. For "action", "transition", and "flashback" elements, "character" only applies to "flashback" (whose memory it is); leave it as an empty string for "action" and "transition".
 
@@ -788,13 +812,60 @@ BOLCHAAL KI HINDI, NOT SHUDDH/SANSKRITIZED HINDI — this is the single most imp
 IMPORTANT — script, not Romanization: dialogue must always be written in actual Hindi (Devanagari) script, never Romanized/transliterated Hindi (Latin letters, e.g. "Kya kar rahe ho"). Code-switching means an occasional English word or short phrase embedded naturally INSIDE a Devanagari sentence — it does not mean writing whole sentences in Latin letters.`,
 };
 
-// The screen-only rule (shared with AI Movie's writers) was missing here:
-// in a real automatic run the script editor marked whole acts 6/10 because
-// action lines described smells, thoughts and feelings — and the writer
-// had even been asked for "sensory detail".
+// The language of action lines, scene description and flashbacks. Until
+// 2026-10-07 they were always English; the user's call: like a real Odia
+// shooting script, a scene whose dialogue is Odia has its action in natural
+// spoken Odia too (Hindi likewise), written the way an Odia storyteller
+// would tell it — never a translation of English. The Odia example is the
+// user's own rewrite of a real scene the app wrote (Tarangpur, episode 1,
+// scene 1); English scenes keep English action.
+const SCREENPLAY_ACTION_LANGUAGE_RULES = {
+  en: `ACTION LANGUAGE: action lines, scene description and flashback text are written in plain, simple English. Character names are in English capitals.`,
+  or: `ACTION LANGUAGE — ODIA SHOOTING SCRIPT: this scene's dialogue is Odia, so its action lines, scene description and flashback text are ALSO written in Odia (Odia script) — natural, spoken, everyday Odia (Chalita Bhasha), told the way an Odia storyteller would tell it. NEVER write the action in English and NEVER write Odia that reads like a translation of an English sentence or like a newspaper/textbook (no "ମହତ୍ୱାକାଂକ୍ଷୀ", "ପ୍ରାରମ୍ଭିକ ଭାବେ", "ଆଧୁନିକ ସହର ଯୋଜନାକାରୀ" — say it the plain way: "ବଡ଼ ସ୍ୱପ୍ନ", "ଆରମ୍ଭରୁ", "ଟାଉନ୍ ପ୍ଲାନର୍").
+- Short beats: one image or one action per short paragraph (1-2 short sentences). A sound gets its own line ("ପଛପଟୁ ଧୀର ପାଦଶବ୍ଦ।").
+- Narrate in simple past tense, like a storyteller: "...ଅଟକିଗଲା", "...ଓହ୍ଲାଇଲା", "...ଟାଣିନେଲା"; vary the rhythm — sometimes the verb comes first ("ଚାରିଆଡ଼େ ଉଡ଼ିଗଲା ନାଲି ଧୂଳିର ବାଦଲ।").
+- Everyday words, not Sanskrit ones (ଗାଁ, ଡର, ଖାଲଖମା, କାଠିକୁଟା ବିଡ଼ା). English words people really say stay English but are written in Odia script; for an object or technical word, add the English in brackets the first time: "ଏସ୍‌ୟୁଭି (SUV)", "ନକ୍ସା (blueprint)".
+- Character names stay in English capitals inside the Odia text (BIKRAM, RAMA). The FIRST time a character appears, write the name followed by (age in Odia digits, a short look/costume note in Odia): "BIKRAM (୩୦, ସହରୀ ଢଙ୍ଗର ଜିନ୍ସ-ସାର୍ଟ, ସ୍ମାର୍ଟ ଲୁକ୍)".
+- Real Odisha images instead of literary ones: "ସୁନେଲି ଖରାରେ ଚିକ୍‌ଚିକ୍ କରୁଛି ବଙ୍ଗୋପସାଗର", not "the ocean gleams like hammered silver"; "ପୁରୁଣା ବରଗଛ... ସେଇଠି ଗାଁ ମନ୍ଦିରର ଚୂଳ ଦିଶୁଛି", not "trees that hint at the temple grounds".
+- Acting notes ("parenthetical") are short and in Odia: "ଉତ୍ସାହର ସହ".
+STYLE EXAMPLE (only to show the voice — never copy its content, names or places):
+ଧୂଳିଭରା ମାଟି ରାସ୍ତାର ଖାଲଖମାରେ ଝଟ୍‌କା ଖାଇ ଅଟକିଗଲା ଗୋଟିଏ କଳା ରଙ୍ଗର ଏସ୍‌ୟୁଭି (SUV)। ଚାରିଆଡ଼େ ଉଡ଼ିଗଲା ନାଲି ଧୂଳିର ବାଦଲ।
+ଗାଡ଼ିର ଇଞ୍ଜିନ୍ ବନ୍ଦ ହୋଇଗଲା। ଚାରିଆଡ଼େ ଏକଦମ୍ ନିସ୍ତବ୍ଧ, ଭାରୀ ନୀରବତା।
+ଡ୍ରାଇଭର୍ ସିଟ୍‌ କବାଟ ଖୋଲି ବାହାରକୁ ଓହ୍ଲାଇଲା BIKRAM (୩୦, ସହରୀ ଢଙ୍ଗର ଜିନ୍ସ-ସାର୍ଟ, ସ୍ମାର୍ଟ ଲୁକ୍)।
+ତଳେ ପାଦ ଥାପି ସେ ଲମ୍ବା ନିଃଶ୍ୱାସଟେ ଟାଣିନେଲା। ପବନରେ ଭାସିଆସୁଛି ଦୂର ସମୁଦ୍ରର ଲୁଣିଆ ବାସ୍ନା, ଓଦା ମାଟିର ଗନ୍ଧ ଆଉ କାଠ ଚୁଲିର ଧୂଆଁ।
+ପଛପଟୁ ଧୀର ପାଦଶବ୍ଦ।
+ମୁଣ୍ଡରେ ଶୁଖିଲା କାଠିକୁଟା ବିଡ଼ା ବୋହି ଆସୁଛି RAMA (୭୦, ପିଠି ନଇଁ ପଡ଼ିଥିବା ଗାଁ ମାଉସୀ)। ଖାଲି ପାଦରେ ଧୂଳି ଉଡ଼ାଇ ସେ BIKRAM ପାଖରେ ଛିଡ଼ା ହୋଇଗଲା।
+RAMA: ଅରେ... ବଡ଼ଘର ବିକ୍ରମ ପରା! ବହୁତ ଦିନ ପରେ ଗାଁ କଥା ମନେ ପଡ଼ିଲା?
+BIKRAM (ଉତ୍ସାହର ସହ): ହଁ ମାଉସୀ, ସବୁ ବଢ଼ିଆ। ଏଥର ଭାବିଛି ଗାଁ ପାଇଁ କିଛି ନୂଆ କରିବି... ଏମିତି ଆଉ ପଡ଼ିରହିବାକୁ ଦେବିନି।
+RAMA: ନୂଆ କ'ଣ କରିବୁରେ ଧନ? ଯେତିକି ଅଛି ଆଗ ସେତିକି ଠିକ୍‌ରେ ରଖିପାରିବୁ ତ?
+ବିକ୍ରମ ନିଜ ବ୍ୟାଗ୍ ଚେନ୍ ଖୋଲିଲା। ଭିତରୁ ଗୁଡ଼ା ହୋଇଥିବା ଗୋଟେ ନକ୍ସା (blueprint) ବାହାର କଲା।`,
+  hi: `ACTION LANGUAGE — HINDI SHOOTING SCRIPT: this scene's dialogue is Hindi, so its action lines, scene description and flashback text are ALSO written in Hindi (Devanagari) — natural, everyday spoken Hindi (bolchaal ki Hindi), told the way a storyteller would tell it. NEVER write the action in English and NEVER write Hindi that reads like a translation of an English sentence or like a newspaper/textbook (no "महत्वाकांक्षी योजना", "प्रारंभिक रूप से" — say it the plain way: "बड़ा सपना", "शुरू में").
+- Short beats: one image or one action per short paragraph (1-2 short sentences). A sound gets its own line ("पीछे से धीमी आहट।").
+- Narrate in simple past tense, like a storyteller: "...रुक गई", "...उतरा", "...गहरी साँस ली"; vary the rhythm.
+- Everyday words, not shuddh/Sanskritized ones. English words people really say stay English but are written in Devanagari; for an object or technical word, add the English in brackets the first time: "एसयूवी (SUV)", "नक्शा (blueprint)".
+- Character names stay in English capitals inside the Hindi text. The FIRST time a character appears, write the name followed by (age, a short look/costume note in Hindi): "BIKRAM (30, शहरी जींस-शर्ट, स्मार्ट लुक)".
+- Real, concrete local images instead of literary similes.
+- Acting notes ("parenthetical") are short and in Hindi: "जोश से".`,
+};
+
+// Basic screenplay format for the Movie writers: only what the camera can
+// see and the microphone can hear. Unlike AI Movie's rule, a brief touch of
+// atmosphere (a smell, a sound) that sets the place is allowed — the user's
+// own model scene has "ଲୁଣିଆ ବାସ୍ନା, ଓଦା ମାଟିର ଗନ୍ଧ" — and a feeling that
+// shows on a face is fine; inner thoughts and abstract meaning are not.
+const MOVIE_SCREEN_ONLY_RULE = `SCREEN-ONLY WRITING: action text describes what the camera can see and the microphone can hear — people, faces, bodies, movement, objects, light, weather, sound. A brief touch of atmosphere that sets the place (the salty smell of the sea, wood smoke from a cooking fire) is fine, and so is a feeling that shows on a face ("a slight worry on his face"). NEVER write a character's inner thoughts, abstract feelings, what a moment means or symbolises, or what the audience should feel.
+- WRONG: "Her words are heavy." RIGHT: she turns away; the bundle of wood bobs on her head as she walks off.
+- WRONG: "Devi feels a cold understanding." RIGHT: Devi's hand stops on the loom. She stares at the pattern.
+- WRONG: "The weight of unspoken things hangs in his eyes." RIGHT: "He looks away. His grip tightens on the staff."
+Every sentence must be something that takes real screen time. Never add words just to make a scene longer — to make a scene longer, add more real on-screen moments: actions, reactions, events, lines.`;
+
+// The screen-only rule was missing here: in a real automatic run the script
+// editor marked whole acts 6/10 because action lines described thoughts and
+// feelings. The action language follows the scene's dialogue language.
 function buildScreenplaySystemPrompt(dialogueLanguage) {
   const craft = SCREENPLAY_DIALOGUE_CRAFT[dialogueLanguage] ?? SCREENPLAY_DIALOGUE_CRAFT.en;
-  return `${SCREENPLAY_BASE_PROMPT}\n\n${AI_MOVIE_SCREEN_ONLY_RULE}\n\n${craft}`;
+  const actionLanguage = SCREENPLAY_ACTION_LANGUAGE_RULES[dialogueLanguage] ?? SCREENPLAY_ACTION_LANGUAGE_RULES.en;
+  return `${SCREENPLAY_BASE_PROMPT}\n\n${actionLanguage}\n\n${MOVIE_SCREEN_ONLY_RULE}\n\n${craft}`;
 }
 
 const SCRIPT_BREAKDOWN_SYSTEM_PROMPT = `You are an experienced Assistant Director / Script Supervisor performing a professional SCRIPT BREAKDOWN — the standard pre-scheduling analysis every production does once a script is locked, reading it closely for everything the production team needs to plan for. You are precise and thorough, not creative — extract what's actually in the script, don't invent story content.
@@ -805,7 +876,9 @@ Read the full scene-by-scene material given and produce five separate lists:
 - "props": every significant PROPERTY (an object a character handles or that's plot-relevant — a letter, a weapon, a phone, a specific vehicle) — not generic background objects. Each with a short bilingual note on which scene(s)/context it's needed in.
 - "costumes": for each major character, a short bilingual description of their costume and any COSTUME CHANGES across the story (e.g. "starts in worn work clothes, changes to a clean kurta for the temple scene in Act 3").
 - "art": ART DEPARTMENT / set-dressing needs — anything the location needs to be dressed or built for (signage, furniture, decorations, damage/wear, festival decor) — each with a short bilingual note.
-Be thorough but only include things actually implied by the material — don't pad the lists with generic guesses. Write all bilingual fields in THREE languages — English, Odia (Odia script), and Hindi (Devanagari script) — each a natural, native-quality version, not a literal translation of the others. Character/prop/costume names stay as proper nouns, unchanged across all three languages.`;
+Be thorough but only include things actually implied by the material — don't pad the lists with generic guesses. Write all bilingual fields in THREE languages — English, Odia (Odia script), and Hindi (Devanagari script) — each a natural, native-quality version, not a literal translation of the others. Character/prop/costume names stay as proper nouns, unchanged across all three languages.
+
+${COLLOQUIAL_LANGUAGE_RULE}`;
 
 const PRODUCTION_SYSTEM_PROMPT = `You are the Production Management Agent, working with the Production Manager (and eventually the Producer) inside a filmmaking production platform. You think in logistics, budgets, availability, and constraints — the way an experienced line producer or production manager would. Your work is logistics and math-heavy, not creative — be precise and clear rather than exploratory.
 
@@ -816,7 +889,9 @@ Given the full scene list and major characters, plus availability information fo
 - Give each shoot day a short bilingual "notes" line explaining the grouping logic or anything the production team should know (e.g. "all Kamini's scenes at the temple location, grouped to shoot back-to-back given her limited window").
 - Number days sequentially starting from 1. A single location's scenes don't have to be one single day if there are too many for one day — split across consecutive days when needed, but keep the same location grouped on consecutive days rather than scattering it.
 - You will be given a TARGET number of shoot days the Production Manager wants to fit within. Try genuinely to fit the schedule into that many days by grouping efficiently — but if it's truly not feasible given the amount of material, say so PLAINLY in the "conflicts" list (e.g. "this needs at least 9 days at a realistic pace; compressing to 6 would require cutting scenes or very long days") rather than silently padding or rushing the schedule to hit the number.
-Write bilingual fields (location names, notes, conflicts) in THREE languages — English, Odia (Odia script), and Hindi (Devanagari script) — each a natural, native-quality version, not a literal translation of the others.`;
+Write bilingual fields (location names, notes, conflicts) in THREE languages — English, Odia (Odia script), and Hindi (Devanagari script) — each a natural, native-quality version, not a literal translation of the others.
+
+${COLLOQUIAL_LANGUAGE_RULE}`;
 
 // Plain strings, not BILINGUAL_TEXT_SCHEMA — the screenplay's dialogue
 // language is a single per-generation choice (see SCREENPLAY_DIALOGUE_CRAFT),
@@ -9678,7 +9753,9 @@ function sanitizeScreenplayElements(elements, dialogueLanguage) {
     }
     return {
       ...element,
-      text: clean(element.text, isDialogue ? dialogueRegex : EN_FOREIGN_SCRIPT_REGEX),
+      // Action and flashback text follow the scene's language (an Odia scene
+      // has Odia action); a transition is a technical marker, always English.
+      text: clean(element.text, element.type === "transition" ? EN_FOREIGN_SCRIPT_REGEX : dialogueRegex),
       parenthetical: element.parenthetical != null ? clean(element.parenthetical, dialogueRegex) : element.parenthetical,
     };
   });
@@ -9988,7 +10065,7 @@ function buildMovieScriptCorrectorPrompt(dialogueLanguage) {
   return `You are a careful script editor on a film screenplay. You CORRECT the text you are given — you never rewrite it.
 
 1. Fix spelling, grammar and punctuation.
-2. ACTION lines are always simple, natural English. Any part of an action line written in another language (Odia, Hindi, or romanized Indian languages) must be translated into English with the same meaning.
+2. ACTION lines keep the language they are written in. An English action line stays simple, natural English. An action line written in ${languageName}${dialogueLanguage === "en" ? "" : ` must read as natural, everyday spoken ${languageName} — never bookish, never like a translation of English — with character names left in English capitals`}. Any romanized part (Indian words written in English letters) becomes proper script in that line's language.
 3. DIALOGUE lines and ACTING NOTES are in ${languageName}. Any part written in another language, or written with English letters (romanized ${languageName}), must become proper ${languageName} in its own script with the same meaning — except a minor character the story clearly marks as speaking another language, whose line stays as it is.${dialogueLanguage === "en" ? "" : `
    No English letters may be left in a ${languageName} dialogue line or acting note. An English word the character would really say (like "phone" or "seriously") can stay as that English word, but spelled out in ${languageName} script — never in English letters.`}
 4. Judge what correct, natural ${languageName} dialogue looks like by the writer's own dialogue style guide below — use it ONLY to spot real mistakes; never rewrite a line that is already fine.
@@ -16295,7 +16372,8 @@ function sequenceChecklist(dialogueLanguage) {
 - Dialogue is natural, spoken ${language} — how these people really talk: short, with subtext; never speeches, lectures, or exposition telling the audience what it already knows.
 - Each character keeps one consistent voice.
 - Continuity from scene to scene: who is where, time of day, what each character already knows.
-- Action lines show only what the camera can see and hear.
+- Action lines show only what the camera can see and hear (a brief smell or sound that sets the place is fine; inner thoughts and abstract feelings are not).
+- Action, dialogue and acting notes are in natural, everyday spoken ${language} — never bookish, never a translation of English${dialogueLanguage === "en" ? "" : "; character names stay in English capitals"}.
 - Acting notes stay in brackets, never inside the spoken line.
 - Each scene does what its plan ("Planned:") says.`;
 }
@@ -16648,26 +16726,44 @@ const TRANSLATION_LANGUAGE_LABELS = {
 // language was picked deliberately) can have any of the three as its real
 // source, and this needs to translate correctly starting from whichever
 // one that actually is, not just "from Odia".
+// Action lines follow the scene's language now (an Odia scene has Odia
+// action), so they're translated too — any line not already written in the
+// target language's script. Transitions are technical markers: never.
+function textIsInLanguage(text, language) {
+  if (language === "or") return /[\u0B00-\u0B7F]/.test(text);
+  if (language === "hi") return /[\u0900-\u097F]/.test(text);
+  return !/[\u0900-\u0B7F]/.test(text);
+}
+
 async function translateScreenplaySceneElements(elements, sourceLanguage, targetLanguage) {
-  const dialogueIndexes = elements
-    .map((el, i) => (el.type === "dialogue" && el.text ? i : null))
+  const pieceIndexes = elements
+    .map((el, i) => {
+      if (!el.text || el.type === "transition") return null;
+      if (el.type === "dialogue") return i;
+      return textIsInLanguage(el.text, targetLanguage) ? null : i;
+    })
     .filter((i) => i !== null);
-  if (dialogueIndexes.length === 0) return elements;
+  if (pieceIndexes.length === 0) return elements;
 
   const sourceLabel = TRANSLATION_LANGUAGE_LABELS[sourceLanguage] ?? "the source language";
   const targetLabel = TRANSLATION_LANGUAGE_LABELS[targetLanguage] ?? "English";
-  const lines = dialogueIndexes.map((i, n) => {
+  const lines = pieceIndexes.map((i, n) => {
     const el = elements[i];
-    return `${n + 1}. ${el.text}${el.parenthetical ? ` [parenthetical: ${el.parenthetical}]` : ""}`;
+    const label = el.type === "dialogue" ? `DIALOGUE of ${el.character}` : "ACTION";
+    return `${n + 1}. [${label}] ${el.text}${el.parenthetical ? ` [parenthetical: ${el.parenthetical}]` : ""}`;
   });
+  const styleNote =
+    targetLanguage === "en"
+      ? "Action lines become plain, simple English."
+      : `Write everything as natural, everyday spoken ${targetLabel} — action lines told the way a storyteller would tell them in short, simple sentences, never bookish or word-for-word; character names stay in English capitals.\n\n${COLLOQUIAL_LANGUAGE_RULE}`;
 
   const parsed = await generateJsonContent({
     model: GEMINI_MODEL_NAME,
-    contents: `Translate ONLY these screenplay dialogue lines from ${sourceLabel} into natural, spoken ${targetLabel} — the way a person would actually say the same thing, never a stiff literal translation. Preserve the exact meaning, tone, and emotional register of each line. Return them in the same order, one per input line.\n\n${lines.join("\n")}`,
+    contents: `Translate these screenplay pieces (dialogue lines and action lines) into ${targetLabel} — the way a person would actually say the same thing, never a stiff literal translation. Preserve the exact meaning, tone, and emotional register of each piece. ${styleNote}\n\nReturn them in the same order, one per input piece (without the [label]).\n\n${lines.join("\n")}`,
     config: {
-      systemInstruction: `You are an expert screenplay translator producing natural, spoken ${targetLabel} dialogue translated faithfully from ${sourceLabel} — never a robotic word-for-word translation.`,
+      systemInstruction: `You are an expert screenplay translator producing natural ${targetLabel}, translated faithfully — never a robotic word-for-word translation.`,
       responseMimeType: "application/json",
-      maxOutputTokens: 4096,
+      maxOutputTokens: 16384,
       responseSchema: {
         type: Type.OBJECT,
         properties: {
@@ -16686,7 +16782,7 @@ async function translateScreenplaySceneElements(elements, sourceLanguage, target
   });
 
   const translated = [...elements];
-  dialogueIndexes.forEach((i, n) => {
+  pieceIndexes.forEach((i, n) => {
     const line = parsed.lines?.[n];
     if (!line) return;
     translated[i] = { ...translated[i], text: line.text, parenthetical: line.parenthetical || translated[i].parenthetical };
@@ -16770,12 +16866,14 @@ function renderFullScreenplayPdf(res, deck, sceneList, scenesByEpisode) {
   );
   doc.pipe(res);
 
-  const fontFor = (dialogueLanguage) =>
-    dialogueLanguage === "or"
-      ? { body: "odiaRegular", bold: "odiaBold" }
-      : dialogueLanguage === "hi"
-        ? { body: "hindiRegular", bold: "hindiBold" }
-        : { body: "Courier", bold: "Courier-Bold" };
+  // Each line picks its font from the script it's actually written in: an
+  // Odia scene's action is Odia now (and an old English line in an Odia
+  // scene stays English). Both Noto fonts also carry English letters, so
+  // names like BIKRAM inside Odia text still print.
+  const fontForText = (text, bold = false) =>
+    /[\u0B00-\u0B7F]/.test(text) ? (bold ? "odiaBold" : "odiaRegular")
+      : /[\u0900-\u097F]/.test(text) ? (bold ? "hindiBold" : "hindiRegular")
+      : bold ? "Courier-Bold" : "Courier";
 
   // Title page
   doc.font("Courier-Bold").fontSize(28).text(deck.title?.en ?? "Untitled", { align: "center" });
@@ -16788,12 +16886,13 @@ function renderFullScreenplayPdf(res, deck, sceneList, scenesByEpisode) {
   const characterIndent = margin + 155;
 
   const writeScene = (scene, sceneIndex, elements, dialogueLanguage, charactersPresent) => {
-    const fonts = fontFor(dialogueLanguage);
     doc.addPage();
+    doc.font("Courier-Bold").fontSize(12).text(`SCENE ${sceneIndex + 1}`, margin, doc.y, { width: actionWidth });
+    doc.moveDown(0.3);
     doc
       .font("Courier-Bold")
       .fontSize(12)
-      .text(`${sceneIndex + 1}. ${scene.intExt}. ${safeUpper(scene.location?.en, "LOCATION")} — ${scene.timeOfDay}`, margin, doc.y, {
+      .text(`${scene.intExt}. ${safeUpper(scene.location?.en, "LOCATION")} - ${scene.timeOfDay}`, margin, doc.y, {
         width: actionWidth,
       });
     doc.moveDown(0.4);
@@ -16811,9 +16910,9 @@ function renderFullScreenplayPdf(res, deck, sceneList, scenesByEpisode) {
           width: dialogueWidth,
         });
         if (element.parenthetical) {
-          doc.font(fonts.body).fontSize(10).text(`(${element.parenthetical})`, dialogueIndent, doc.y, { width: dialogueWidth });
+          doc.font(fontForText(element.parenthetical)).fontSize(10).text(`(${element.parenthetical})`, dialogueIndent, doc.y, { width: dialogueWidth });
         }
-        doc.font(fonts.body).fontSize(11).text(text, dialogueIndent, doc.y, { width: dialogueWidth });
+        doc.font(fontForText(text)).fontSize(11).text(text, dialogueIndent, doc.y, { width: dialogueWidth });
         doc.moveDown(0.7);
       } else if (element.type === "transition") {
         doc.font("Courier-Bold").fontSize(11).text(text, margin, doc.y, { width: actionWidth, align: "right" });
@@ -16823,11 +16922,11 @@ function renderFullScreenplayPdf(res, deck, sceneList, scenesByEpisode) {
           .font("Courier-Bold")
           .fontSize(11)
           .text(`FLASH - ${safeUpper(element.character, "CHARACTER")}'S POV:`, margin, doc.y, { width: actionWidth, continued: true })
-          .font("Courier")
+          .font(fontForText(text))
           .text(` ${text}`, { width: actionWidth });
         doc.moveDown(0.7);
       } else {
-        doc.font("Courier").fontSize(11).text(text, margin, doc.y, { width: actionWidth });
+        doc.font(fontForText(text)).fontSize(11).text(text, margin, doc.y, { width: actionWidth });
         doc.moveDown(0.7);
       }
     });
@@ -16981,13 +17080,17 @@ function buildFullScreenplayDocxParagraphs(deck, sceneList, scenesByEpisode) {
   const writeScene = (scene, sceneIndex, elements, charactersPresent) => {
     paragraphs.push(
       new Paragraph({
+        children: [new TextRun({ text: `SCENE ${sceneIndex + 1}`, bold: true })],
+        spacing: { before: 300, after: 60 },
+      }),
+      new Paragraph({
         children: [
           new TextRun({
-            text: `${sceneIndex + 1}. ${scene.intExt}. ${safeUpper(scene.location?.en, "LOCATION")} — ${scene.timeOfDay}`,
+            text: `${scene.intExt}. ${safeUpper(scene.location?.en, "LOCATION")} - ${scene.timeOfDay}`,
             bold: true,
           }),
         ],
-        spacing: { before: 300, after: charactersPresent?.length > 0 ? 50 : 200 },
+        spacing: { before: 0, after: charactersPresent?.length > 0 ? 50 : 200 },
       })
     );
 

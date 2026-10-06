@@ -16690,7 +16690,22 @@ async function reviewScreenplaySequence(draftText, checklist) {
   });
 }
 
-async function runSequenceReview(runId, deck, sceneList, sceneListId, dialogueLanguage) {
+// On a resumed run, sequences the script editor already finished (the next
+// one had started, or the editor was done) are skipped, so a restart part
+// way through doesn't read and rewrite the whole script again.
+async function finishedSequenceCount(runId, sequenceTotal) {
+  const notes = (await db.query("SELECT review_notes FROM auto_pipeline_runs WHERE id = $1", [runId])).rows[0]?.review_notes ?? [];
+  let finished = 0;
+  for (const { stage, note } of notes) {
+    if (stage !== "sequence-review") continue;
+    if (note?.startsWith("Script editor done:")) return sequenceTotal;
+    const match = note?.match(/^Sequence (\d+) of (\d+) /);
+    if (match && Number(match[2]) === sequenceTotal) finished = Math.max(finished, Number(match[1]) - 1);
+  }
+  return finished;
+}
+
+async function runSequenceReview(runId, deck, sceneList, sceneListId, dialogueLanguage, { resuming = false } = {}) {
   await updateAutoPipelineRun(runId, { progress_stage: "sequence-review" });
   const rows = (
     await db.query(
@@ -16703,8 +16718,12 @@ async function runSequenceReview(runId, deck, sceneList, sceneListId, dialogueLa
   const sequences = buildScreenplaySequences(sceneList, written);
   const checklist = sequenceChecklist(dialogueLanguage);
   let rewritten = 0;
+  const alreadyFinished = resuming ? await finishedSequenceCount(runId, sequences.length) : 0;
+  if (alreadyFinished > 0) {
+    await appendAutoPipelineNote(runId, "sequence-review", `Resuming the script editor: ${alreadyFinished} of ${sequences.length} sequence(s) were already read.`);
+  }
 
-  for (let n = 0; n < sequences.length; n++) {
+  for (let n = alreadyFinished; n < sequences.length; n++) {
     const { items, where } = sequences[n];
     const label = `Sequence ${n + 1} of ${sequences.length} (${where}, ${items.length} scenes)`;
     await appendAutoPipelineNote(runId, "sequence-review", `${label}: the script editor is reading it.`);
@@ -16862,7 +16881,7 @@ async function runScreenplayAndQualityPass(runId, deck, sceneList, sceneListId, 
     // never be caught until now. This is the one pass that reads the WHOLE
     // finished screenplay and can trigger a targeted rewrite of just the
     // worst-offending scenes rather than a full regeneration.
-    await runSequenceReview(runId, deck, sceneList, sceneListId, dialogueLanguage);
+    await runSequenceReview(runId, deck, sceneList, sceneListId, dialogueLanguage, { resuming: alreadyWritten.size > 0 });
 
     await updateAutoPipelineRun(runId, { progress_stage: "quality-pass" });
     // A failure in this final polish never throws away the finished script:

@@ -18,6 +18,7 @@ import WordExtractor from "word-extractor";
 import { XMLParser } from "fast-xml-parser";
 import AdmZip from "adm-zip";
 import crypto from "crypto";
+import { AsyncLocalStorage } from "async_hooks";
 import cookieParser from "cookie-parser";
 import { createClient } from "@supabase/supabase-js";
 import {
@@ -235,7 +236,20 @@ async function generateContentWithRetry(params, { retries = 4, fallbackDelayMs =
 // existing transient-error retry.
 const MAX_GEMINI_OUTPUT_TOKENS = 65536;
 
+// The user's own idea, given to every story writer the auto pipeline calls
+// inside userIdeaContext.run(...) — see runAutoPipeline. Before this only the
+// judge saw the idea and the writers saw just the picked storyline, so the
+// writers drifted (seen for real: the Pujari's SON became his grandson).
+const userIdeaContext = new AsyncLocalStorage();
+
 async function generateJsonContent(params, { jsonRetries = 3 } = {}) {
+  const userIdea = userIdeaContext.getStore();
+  if (userIdea && typeof params.contents === "string") {
+    params = {
+      ...params,
+      contents: `THE USER'S ORIGINAL IDEA — stay true to every point in it (who the characters are and how they are related, where they live, the twists the user asked for):\n${userIdea}\n\n${params.contents}`,
+    };
+  }
   let lastError;
   for (let attempt = 0; attempt <= jsonRetries; attempt++) {
     let response;
@@ -16297,6 +16311,14 @@ async function runAutoPipeline(runId, conceptText, format, dialogueLanguage, res
   const withIdea = (text) => `THE USER'S ORIGINAL IDEA (the story must stay true to it):\n${conceptText}\n\n${text}`;
   const isSeriesFormat = format?.type === "series" || format?.type === "vertical";
   const criticalChecks = storyCriticalChecks(isSeriesFormat);
+  // Story writers run with the user's idea in front of them (judges already
+  // get it through withIdea).
+  const asWriter = (writer) => (...args) => userIdeaContext.run(conceptText, () => writer(...args));
+  const writePitchDeck = asWriter(generatePitchDeckContent);
+  const writeCharacterSheet = asWriter(generateCharacterSheetContent);
+  const writeThreeAct = asWriter(generateThreeActContent);
+  const writeBitSheet = asWriter(generateBitSheetContent);
+  const writeSceneList = asWriter(generateSceneListContent);
   try {
     let conceptId = null;
     let storyline = null;
@@ -16393,7 +16415,7 @@ async function runAutoPipeline(runId, conceptText, format, dialogueLanguage, res
 
     if (!deck) {
       await updateAutoPipelineRun(runId, { progress_stage: "pitch-deck" });
-      deck = await generatePitchDeckContent(storyline, format);
+      deck = await writePitchDeck(storyline, format);
       // A REAL failure caught in testing: on a revision round, Gemini can
       // silently return a DIFFERENT episode count than requested (seen: 60
       // requested, got 66, then 30, then 33 across successive rounds) — the
@@ -16415,7 +16437,7 @@ async function runAutoPipeline(runId, conceptText, format, dialogueLanguage, res
           ]);
           return { issues: [...(story.issues ?? []), ...(hooks.issues ?? [])] };
         },
-        revise: (d, feedback, opts) => generatePitchDeckContent(storyline, format, { feedback, previous: d, fresh: opts?.fresh }),
+        revise: (d, feedback, opts) => writePitchDeck(storyline, format, { feedback, previous: d, fresh: opts?.fresh }),
         secondBatch: true,
       });
       const finalCountIssue = pitchDeckEpisodeCountIssue(deck, format);
@@ -16433,7 +16455,7 @@ async function runAutoPipeline(runId, conceptText, format, dialogueLanguage, res
 
     if (!characterSheet) {
       await updateAutoPipelineRun(runId, { progress_stage: "character-sheet" });
-      characterSheet = await generateCharacterSheetContent(deck);
+      characterSheet = await writeCharacterSheet(deck);
       await db.query("INSERT INTO character_sheets (pitch_deck_id, content, status) VALUES ($1, $2, 'approved')", [
         pitchDeckId,
         JSON.stringify(characterSheet),
@@ -16442,7 +16464,7 @@ async function runAutoPipeline(runId, conceptText, format, dialogueLanguage, res
 
     if (!threeAct) {
       await updateAutoPipelineRun(runId, { progress_stage: "three-act" });
-      threeAct = await generateThreeActContent(deck, characterSheet);
+      threeAct = await writeThreeAct(deck, characterSheet);
       // New: the Story Editor + story judge (there was no review here at all).
       threeAct = await reviseUntilGood(runId, "three-act", "Three-Act Structure", threeAct, {
         draftText: (d) => withIdea(threeActJudgeText(d)),
@@ -16450,7 +16472,7 @@ async function runAutoPipeline(runId, conceptText, format, dialogueLanguage, res
         judgeModel: STORY_JUDGE_MODEL_NAME,
         criticalChecks,
         review: (d) => reviewStoryStage("Story Structure", withIdea(threeActJudgeText(d)), STAGE_CHECKLISTS.threeAct),
-        revise: (d, feedback, opts) => generateThreeActContent(deck, characterSheet, { feedback, previous: d, fresh: opts?.fresh }),
+        revise: (d, feedback, opts) => writeThreeAct(deck, characterSheet, { feedback, previous: d, fresh: opts?.fresh }),
         secondBatch: true,
       });
       if (Array.isArray(deck.episodes)) {
@@ -16465,7 +16487,7 @@ async function runAutoPipeline(runId, conceptText, format, dialogueLanguage, res
 
     if (!bitSheet) {
       await updateAutoPipelineRun(runId, { progress_stage: "bit-sheet" });
-      bitSheet = await generateBitSheetContent(threeAct, deck);
+      bitSheet = await writeBitSheet(threeAct, deck);
       // New: the Story Editor + story judge (there was no review here at all).
       bitSheet = await reviseUntilGood(runId, "bit-sheet", "Bit Sheet", bitSheet, {
         draftText: (d) => withIdea(bitSheetJudgeText(d)),
@@ -16474,7 +16496,7 @@ async function runAutoPipeline(runId, conceptText, format, dialogueLanguage, res
         criticalChecks,
         mustFix: (d) => bitSheetBeatCountIssue(d, deck),
         review: (d) => reviewStoryStage("Bit Sheet", withIdea(bitSheetJudgeText(d)), STAGE_CHECKLISTS.bitSheet),
-        revise: (d, feedback, opts) => generateBitSheetContent(threeAct, deck, { feedback, previous: d, fresh: opts?.fresh }),
+        revise: (d, feedback, opts) => writeBitSheet(threeAct, deck, { feedback, previous: d, fresh: opts?.fresh }),
         secondBatch: true,
       });
       if (Array.isArray(deck.episodes)) {
@@ -16489,7 +16511,7 @@ async function runAutoPipeline(runId, conceptText, format, dialogueLanguage, res
 
     if (!sceneList) {
       await updateAutoPipelineRun(runId, { progress_stage: "scene-list" });
-      sceneList = await generateSceneListContent(bitSheet, deck);
+      sceneList = await writeSceneList(bitSheet, deck);
       // Story Editor + story judge for every format. The budget check (plain
       // code) only applies to a vertical micro-drama (a 2-3 day shoot) —
       // films and series have no budget cap (the user's call).
@@ -16508,7 +16530,7 @@ async function runAutoPipeline(runId, conceptText, format, dialogueLanguage, res
           const pacing = isVertical ? [] : sceneListPacingIssues(d);
           return { issues: [...budget.issues, ...pacing, ...(story.issues ?? [])] };
         },
-        revise: (d, feedback, opts) => generateSceneListContent(bitSheet, deck, { feedback, previous: d, fresh: opts?.fresh }),
+        revise: (d, feedback, opts) => writeSceneList(bitSheet, deck, { feedback, previous: d, fresh: opts?.fresh }),
         secondBatch: true,
       });
       if (Array.isArray(deck.episodes)) {

@@ -16235,6 +16235,23 @@ const AUTO_PIPELINE_SCREENPLAY_CONCURRENCY = 4;
 // every scene's screenplay, updating the row's progress as it goes. Never
 // awaited by its caller (the /start route responds immediately) — a
 // 60-episode vertical drama's screenplay stage alone can take many minutes.
+// Too many beats for the running time can't become good scenes: a real
+// 10-minute film got 12 rich beats (8 asked for) and its scene list was
+// squeezed version after version. A blocking check on the bit sheet.
+function bitSheetBeatCountIssue(bitSheet, deck) {
+  const tooMany = (count, minutes, label) => {
+    const suggested = suggestBitCount(minutes);
+    return minutes && count > suggested + 2
+      ? `${label} has ${count} beats for ${minutes} minutes — too many to become real scenes; combine them into about ${suggested} beats.`
+      : null;
+  };
+  if (Array.isArray(bitSheet.episodeBits)) {
+    if (deck.format?.type === "vertical") return null;
+    return bitSheet.episodeBits.map((ep, i) => tooMany(ep.bits?.length ?? 0, deck.format?.episodeMinutes, `Episode ${i + 1}`)).filter(Boolean).join(" ") || null;
+  }
+  return tooMany(bitSheet.bits?.length ?? 0, deck.format?.runtimeMinutes, "The film");
+}
+
 async function runAutoPipeline(runId, conceptText, format, dialogueLanguage, resumeFromConceptId) {
   // Every story stage is judged against the user's own idea (shown at the
   // top of the draft) and the must-fix checks.
@@ -16416,6 +16433,7 @@ async function runAutoPipeline(runId, conceptText, format, dialogueLanguage, res
         checklist: STAGE_CHECKLISTS.bitSheet,
         judgeModel: STORY_JUDGE_MODEL_NAME,
         criticalChecks,
+        mustFix: (d) => bitSheetBeatCountIssue(d, deck),
         review: (d) => reviewStoryStage("Bit Sheet", withIdea(bitSheetJudgeText(d)), STAGE_CHECKLISTS.bitSheet),
         revise: (d, feedback, opts) => generateBitSheetContent(threeAct, deck, { feedback, previous: d, fresh: opts?.fresh }),
         secondBatch: true,

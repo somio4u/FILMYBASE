@@ -9407,7 +9407,7 @@ function scenePacingRange(minutes) {
 function scenePacingRule(minutes, { isSeries }) {
   const { low, high, sceneLength } = scenePacingRange(minutes);
   const count = low ? ` For ${minutes} minutes that means about ${low}-${high} scenes.` : "";
-  return `SCENE PACING: a scene is ONE place and ONE continuous time — a new scene starts only when the place or the time changes, and a scene NEVER contains two places or a time jump. Never split one conversation or one continuous moment into several scenes in the same place and time; bits that play out in the same place and time are ONE fuller scene with several beats (an obstacle, rising stakes, a turn). Bits in different places are different scenes. Most scenes run ${sceneLength}; nothing over 3 minutes.${count} Cut between the main story and side stories (the antagonist's moves, other characters pursuing their own goals) so the ${isSeries ? "episode" : "film"} moves through varied places.${isSeries ? " Each episode: a cold open (1-2 scenes), Act I (3-4 scenes), Act II (3-4 scenes), Act III (2-3 scenes) ending on a cliffhanger — except the final episode, which ends the story." : ""}`;
+  return `SCENE PACING: a scene is ONE place and ONE continuous time — a new scene starts only when the place or the time changes, and a scene NEVER contains two places or a time jump. Never split one conversation or one continuous moment into several scenes in the same place and time; bits that play out in the same place and time are ONE fuller scene with several beats (an obstacle, rising stakes, a turn). Bits in different places are different scenes. Most scenes run ${sceneLength}; nothing over 3 minutes — except the climax, which gets the room it needs (3-5 minutes; it may also play across several scenes if the place or time changes).${count} Cut between the main story and side stories (the antagonist's moves, other characters pursuing their own goals) so the ${isSeries ? "episode" : "film"} moves through varied places.${isSeries ? " Each episode: a cold open (1-2 scenes), Act I (3-4 scenes), Act II (3-4 scenes), Act III (2-3 scenes) ending on a cliffhanger — except the final episode, which ends the story." : ""}`;
 }
 
 async function generateSceneListEpisodeBatch(deck, bitSheet, episodesChunk, startIndex, episodeTargetMinutes, isVerticalDrama, lockedLocations, revision) {
@@ -9590,7 +9590,13 @@ function sceneListPacingIssues(sceneList) {
     if (!scenes?.length) return;
     const range = scenePacingRange(minutes);
     const tiny = scenes.filter((s) => Number(s.estimatedMinutes) < range.tiny).length;
-    const long = scenes.filter((s) => Number(s.estimatedMinutes) > 3).map((s, i) => i + 1);
+    // The climax (final act) may run long — a real run squeezed a whole
+    // crisis-climax-realization into one 2.8-minute scene to obey "max 3".
+    const finalAct = Math.max(...scenes.map((s) => Number(s.actNumber) || 0));
+    const long = scenes
+      .map((s, i) => ({ s, n: i + 1 }))
+      .filter(({ s }) => Number(s.estimatedMinutes) > (Number(s.actNumber) === finalAct ? 5 : 3))
+      .map(({ n }) => n);
     if (tiny / scenes.length > 0.3) issues.push(`${label}: ${tiny} of ${scenes.length} scenes are under ${range.tiny} minute — combine one-beat moments in the same place into fuller scenes of about ${range.sceneLength}.`);
     if (long.length) issues.push(`${label}: scene(s) ${long.join(", ")} run over 3 minutes — tighten them or break them up with a real change of place or time.`);
     if (minutes) {
@@ -15958,7 +15964,7 @@ const STAGE_CHECKLISTS = {
 - For a series: every episode opens on a hook, escalates, and ends on a cliffhanger — except the final episode, which resolves the story.`,
   sceneList: `- Every Bit Sheet beat is covered, in order; no scene is filler.
 - A scene is one place and one continuous time — no conversation split across several scenes in the same place and time.
-- Fuller scenes, each with several beats (an obstacle, rising stakes, a turn) — mostly 1.5-2.5 minutes, none a one-beat 30-second moment, none over 3 minutes.
+- Fuller scenes, each with several beats (an obstacle, rising stakes, a turn) — mostly 1.5-2.5 minutes, none a one-beat 30-second moment, none over 3 minutes except the climax, which must get enough screen time (3-5 minutes).
 - The story cuts between the main storyline and side stories (antagonist, other characters' goals) through varied places.
 - No two scenes do the same job or repeat the same confrontation.
 - The estimated running time fits the target; for a series each episode has a cold open, three acts and a cliffhanger (except the last).`,

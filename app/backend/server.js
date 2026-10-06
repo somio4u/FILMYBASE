@@ -9393,11 +9393,21 @@ const SCENE_LIST_EPISODE_BATCH_SIZE = 5;
 // OTT blueprint: scenes of about 1.5-2.5 minutes, 10-12 per 20 minutes.
 // Real runs showed the opposite: one conversation chopped into six scene
 // headings in the same hut, and 30-second one-beat scenes.
+// Short pieces (a 10-minute film, a 10-minute episode) need shorter scenes
+// than a 20-minute TV episode: in a real 10-minute test, "1.5-2.5 minute
+// scenes" forced 8 beats into 5 scenes and the writer stuffed several places
+// into one scene.
+function scenePacingRange(minutes) {
+  const isShort = minutes && minutes < 15;
+  const low = minutes ? Math.max(3, Math.round(minutes / (isShort ? 1.6 : 2))) : null;
+  const high = minutes ? Math.max(low, Math.round(minutes / (isShort ? 1.2 : 1.6))) : null;
+  return { low, high, sceneLength: isShort ? "1-2 minutes" : "1.5-2.5 minutes", tiny: isShort ? 0.6 : 1 };
+}
+
 function scenePacingRule(minutes, { isSeries }) {
-  const low = minutes ? Math.max(3, Math.round(minutes / 2)) : null;
-  const high = minutes ? Math.max(low, Math.round(minutes / 1.6)) : null;
+  const { low, high, sceneLength } = scenePacingRange(minutes);
   const count = low ? ` For ${minutes} minutes that means about ${low}-${high} scenes.` : "";
-  return `SCENE PACING: a scene is ONE place and ONE continuous time — a new scene starts only when the place or the time changes. Never split one conversation or one continuous moment into several scenes in the same place and time; a bit that plays out in one place is ONE fuller scene with several beats (an obstacle, rising stakes, a turn). Most scenes run 1.5-2.5 minutes; nothing under 1 minute unless it is a deliberate quick cut, nothing over 3 minutes.${count} Cut between the main story and side stories (the antagonist's moves, other characters pursuing their own goals) so the ${isSeries ? "episode" : "film"} moves through varied places.${isSeries ? " Each episode: a cold open (1-2 scenes), Act I (3-4 scenes), Act II (3-4 scenes), Act III (2-3 scenes) ending on a cliffhanger — except the final episode, which ends the story." : ""}`;
+  return `SCENE PACING: a scene is ONE place and ONE continuous time — a new scene starts only when the place or the time changes, and a scene NEVER contains two places or a time jump. Never split one conversation or one continuous moment into several scenes in the same place and time; bits that play out in the same place and time are ONE fuller scene with several beats (an obstacle, rising stakes, a turn). Bits in different places are different scenes. Most scenes run ${sceneLength}; nothing over 3 minutes.${count} Cut between the main story and side stories (the antagonist's moves, other characters pursuing their own goals) so the ${isSeries ? "episode" : "film"} moves through varied places.${isSeries ? " Each episode: a cold open (1-2 scenes), Act I (3-4 scenes), Act II (3-4 scenes), Act III (2-3 scenes) ending on a cliffhanger — except the final episode, which ends the story." : ""}`;
 }
 
 async function generateSceneListEpisodeBatch(deck, bitSheet, episodesChunk, startIndex, episodeTargetMinutes, isVerticalDrama, lockedLocations, revision) {
@@ -9578,14 +9588,14 @@ function sceneListPacingIssues(sceneList) {
   const issues = [];
   const check = (scenes, minutes, label) => {
     if (!scenes?.length) return;
-    const tiny = scenes.filter((s) => Number(s.estimatedMinutes) < 1).length;
+    const range = scenePacingRange(minutes);
+    const tiny = scenes.filter((s) => Number(s.estimatedMinutes) < range.tiny).length;
     const long = scenes.filter((s) => Number(s.estimatedMinutes) > 3).map((s, i) => i + 1);
-    if (tiny / scenes.length > 0.3) issues.push(`${label}: ${tiny} of ${scenes.length} scenes are under 1 minute — combine one-beat moments into fuller scenes of about 1.5-2.5 minutes.`);
+    if (tiny / scenes.length > 0.3) issues.push(`${label}: ${tiny} of ${scenes.length} scenes are under ${range.tiny} minute — combine one-beat moments in the same place into fuller scenes of about ${range.sceneLength}.`);
     if (long.length) issues.push(`${label}: scene(s) ${long.join(", ")} run over 3 minutes — tighten them or break them up with a real change of place or time.`);
     if (minutes) {
-      const low = Math.max(3, Math.round(minutes / 2));
-      const high = Math.max(low, Math.round(minutes / 1.6));
-      if (scenes.length < low - 1 || scenes.length > high + 2) issues.push(`${label}: ${scenes.length} scenes for ${minutes} minutes — aim for about ${low}-${high} fuller scenes.`);
+      const { low, high } = range;
+      if (scenes.length < low - 1 || scenes.length > high + 2) issues.push(`${label}: ${scenes.length} scenes for ${minutes} minutes — aim for about ${low}-${high} scenes.`);
     }
   };
   if (Array.isArray(sceneList.episodeScenes)) {

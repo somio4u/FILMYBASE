@@ -384,20 +384,24 @@ It MUST tell the whole story through the central conflict, the climax and the en
 Return it as an array of 1 or 2 items — each item is one full page of prose, roughly 350-450 words. Only use 2 pages if the story genuinely has enough distinct dramatic movement to need it; a strong 1-page version is preferred over padding to 2. If you do write 2 pages, page 2 must continue directly where page 1 left off — the two pages should read as one continuous piece of writing, never repeating or re-summarizing what page 1 already covered.
 Since this is the page that actually gets read, the ENGLISH must be in plain, simple, everyday words — someone who isn't a fluent English speaker needs to follow it easily on a first read. Do NOT reach for literary or "impressive" vocabulary to make the writing sound polished (avoid things like "ostracized", "salvage", "utilize", "harbinger", "myriad", "ineffable") — say it the plain way instead ("left out", "save", "use", "many", "hard to describe"). The vividness should come from real, specific detail and genuine emotional stakes, never from fancy word choice.`;
 
-const THREE_ACT_SYSTEM_PROMPT = `You are the Story & Screenplay Agent, specializing in Odia (Odisha) cinema. After producer approval, break the approved story into a three-act structure — Setup, Confrontation, Resolution — with named key beats in each act.
+const THREE_ACT_SYSTEM_PROMPT = `You are the Story & Screenplay Agent, specializing in Odia (Odisha) cinema. After producer approval, lay out the approved story's structure.
+
+FIRST CHOOSE THE STRUCTURE that tells THIS story best — never default to three acts out of habit. "structureModel" is one of: three_act (setup, confrontation, resolution), five_act (exposition, rising action, climax/reversal, falling action/the spiral, catastrophe/resolution — slow-burn thrillers, prestige series), heros_journey (ordinary world, call, refusal, mentor, threshold, tests/allies/enemies, inmost cave, ordeal, reward, road back, resurrection, return with the elixir — mythological, spiritual, transformation stories), kishotenketsu (introduction, development, an unexpected twist that reframes everything, conclusion), non_linear (events deliberately out of order — memory, trauma, mystery), ensemble (several protagonists with intersecting storylines), real_time (one continuous stretch of time). "structureReason": one sentence on why it suits this story. Whatever the model, still fill the three big movements — "setup" (the beginning), "confrontation" (the middle), "resolution" (the end) — and NAME each key beat after the stage of the chosen model it belongs to (e.g. "Meeting the Mentor: ...", "Act 4, The Spiral: ...", "Ten, the twist: ..."), so the chosen structure is visible beat by beat.
 
 Before the acts, state the story's Controlling Idea (its theme) as ONE precise sentence combining a VALUE and a CAUSE: the value (positive or negative — justice, love, corruption, loyalty, etc.) that the story's ending brings into the world, plus the specific reason the ending turns out that way (e.g. "Loyalty triumphs over greed because Dibakar chooses gratitude over self-preservation"). Derive it by looking at how the Resolution actually plays out — don't pick a generic topic word like "family" or "justice" alone, state the value AND why it happens. This Controlling Idea should then act as a filter: every act, and later every beat and scene, should serve or test this idea, not wander from it.
 
-For a web series, also break down each individual episode into its own mini three-act structure, consistent with that episode's synopsis and with the overall series arc — episodes share the ONE overall Controlling Idea from the whole series, not their own separate themes. Keep it grounded in authentic Odia cultural context. Write everything in THREE languages — English, Odia (Odia script), and Hindi (Devanagari script) — each a natural, native-quality version, not a literal translation of the others.
+For a web series, the chosen structure shapes the overall arc across all episodes; also break down each individual episode into its own mini structure (its own beginning, middle and end), consistent with that episode's synopsis and with the overall series arc — episodes share the ONE overall Controlling Idea from the whole series, not their own separate themes. Keep it grounded in authentic Odia cultural context. Write everything in THREE languages — English, Odia (Odia script), and Hindi (Devanagari script) — each a natural, native-quality version, not a literal translation of the others.
 
 ${COLLOQUIAL_LANGUAGE_RULE}`;
 
 const CHARACTER_SHEET_SYSTEM_PROMPT = `You are the Story & Screenplay Agent, specializing in Odia (Odisha) cinema. Once a pitch deck is approved, expand its Major Characters into full character sheets — deep enough to write consistent, non-shallow characters from, not just a one-line description.
 
-Keep the SAME names and core roles already established in the pitch deck — you are deepening these characters, not replacing them. You may add at most ONE additional minor-but-necessary character (e.g. an Ally or Threshold Guardian) only if the story genuinely needs one that isn't already covered.
+Keep the SAME names and core roles already established in the pitch deck — you are deepening these characters, not replacing them.
+
+A story is never carried by one role. Make sure the cast covers the roles THIS story needs, adding a character for any that's missing (up to 4 more): the protagonist (hero) who drives the plot and changes; the antagonist (shadow) actively blocking them; a mentor or guide who gives the knowledge, training or aid they lack; an ally or foil (the deuteragonist) whose contrast shows the protagonist's strengths and weaknesses; a skeptic or voice of reason who questions them and tests their conviction; the antagonist's enforcer or henchman (threshold_guardian) who tests whether they're ready; and the community (community) — at least one named character standing for the people whose fate is at stake. (A short vertical micro-drama keeps its small cast — only add what its story truly needs.)
 
 For each character, give:
-- archetype: their PRIMARY function in the story, from: hero, mentor, threshold_guardian, herald, shapeshifter, shadow, ally, trickster. Archetypes are functions a character performs, not a fixed personality type — note in archetypeNote if they shift function at any point in the story (e.g. an Ally who briefly acts as a Shapeshifter).
+- archetype: their PRIMARY function in the story, from: hero, mentor, threshold_guardian, herald, shapeshifter, shadow, ally, trickster, skeptic, community. Archetypes are functions a character performs, not a fixed personality type — note in archetypeNote if they shift function at any point in the story (e.g. an Ally who briefly acts as a Shapeshifter).
 - want: their conscious, stated goal.
 - need: the deeper unconscious need or wound actually driving them, often different from what they consciously want.
 - flaw: the central flaw that creates their conflict.
@@ -475,6 +479,10 @@ const CHARACTER_SCHEMA = {
   required: ["name", "role", "emotionalCore", "conflict"],
 };
 
+// The structural models the story writer chooses from (the user's call:
+// never only three acts — the structure should fit the story).
+const STORY_STRUCTURE_MODELS = ["three_act", "five_act", "heros_journey", "kishotenketsu", "non_linear", "ensemble", "real_time"];
+
 const CHARACTER_ARCHETYPES = [
   "hero",
   "mentor",
@@ -484,6 +492,8 @@ const CHARACTER_ARCHETYPES = [
   "shadow",
   "ally",
   "trickster",
+  "skeptic",
+  "community",
 ];
 
 const CHARACTER_SHEET_ENTRY_SCHEMA = {
@@ -7720,14 +7730,27 @@ const PITCH_DECK_EPISODE_BATCH_SIZE = 10;
 async function generatePitchDeckEpisodeBatch(
   storyline, format, isVerticalDrama, batchStart, batchCount, totalCount, priorEpisodesSummary, revision
 ) {
-  const positionNote =
-    batchStart === 0
+  // A real 8-episode series stopped halfway through its own story: 8
+  // episodes fit in ONE batch, and the only instruction that batch got was
+  // "these are the FIRST episodes — establish the setup", so nothing ever
+  // asked for the ending. A single batch now holds the whole story, and
+  // every batch gets the arc map below.
+  const isOnlyBatch = batchStart === 0 && batchStart + batchCount >= totalCount;
+  const positionNote = isOnlyBatch
+    ? `These are ALL ${totalCount} episodes of the series — together they must tell the WHOLE story from set-up to ending, and episode ${totalCount} must bring it to its climax and resolve the main conflict.`
+    : batchStart === 0
       ? `These are the FIRST ${batchCount} episodes (1-${batchCount} of ${totalCount} total) — establish the setup and hook the audience immediately.`
       : batchStart + batchCount >= totalCount
-        ? `These are the FINAL ${batchCount} episodes (${batchStart + 1}-${totalCount} of ${totalCount} total) — this batch must bring the whole ${totalCount}-episode arc to a satisfying resolution.`
+        ? `These are the FINAL ${batchCount} episodes (${batchStart + 1}-${totalCount} of ${totalCount} total) — this batch must bring the whole ${totalCount}-episode arc to a satisfying resolution; episode ${totalCount} resolves the main conflict.`
         : `These are episodes ${batchStart + 1}-${batchStart + batchCount} of ${totalCount} total — continue building the arc from what's already happened, developing it further toward the eventual resolution (don't resolve everything yet).`;
+  const setupEnd = Math.max(1, Math.round(totalCount * 0.2));
+  const climaxStart = Math.max(setupEnd + 1, totalCount - Math.max(1, Math.round(totalCount * 0.2)) + 1);
+  const arcMap = isVerticalDrama
+    ? ""
+    : `\n\nARC MAP for all ${totalCount} episodes — the episodes together tell the whole story: episodes 1-${setupEnd} set-up and inciting incident; episodes ${setupEnd + 1}-${climaxStart - 1} escalation (investigation, setbacks, side stories, a midpoint turn, an all-is-lost low); episodes ${climaxStart}-${totalCount} the climax and the resolution — episode ${totalCount} resolves the main conflict, won by the protagonist's own choice and action. Give the antagonist and key side characters their own goals and moves across the episodes. Every episode opens on a hook (cold open) and — except the last — ends on a cliffhanger.`;
+  const storyText = storyline.storyText ? `\n\nTHE WHOLE STORY (from the pitch deck's story pages) — the episodes must tell all of it, through to its ending:\n${storyline.storyText}` : "";
 
-  let contents = `Storyline title (English): ${storyline.title.en}\nLogline (English): ${storyline.logline.en}\nSummary (English): ${storyline.summary.en}\n\n${priorEpisodesSummary ? `Episodes already established so far (for continuity — do not repeat or contradict them):\n${priorEpisodesSummary}\n\n` : ""}${positionNote}\n\nWrite EXACTLY ${batchCount} episodes for THIS BATCH ONLY (not the whole series — the rest are handled separately).`;
+  let contents = `Storyline title (English): ${storyline.title.en}\nLogline (English): ${storyline.logline.en}\nSummary (English): ${storyline.summary.en}${storyText}${arcMap}\n\n${priorEpisodesSummary ? `Episodes already established so far (for continuity — do not repeat or contradict them):\n${priorEpisodesSummary}\n\n` : ""}${positionNote}\n\nWrite EXACTLY ${batchCount} episodes for THIS BATCH ONLY (not the whole series — the rest are handled separately).`;
 
   contents += isVerticalDrama
     ? ` Each episode is only ${format.episodeMinutes} minutes — extremely short, fast-paced (ReelShort/short-drama app style), NOT a scaled-down web-series episode. For each episode give a short punchy title (2-5 words, do NOT include the word "Episode" or a number in the title itself), a tight 3-4 sentence synopsis that gets straight to the point — establish the situation fast, land one sharp turn, no wasted setup or padding — and a separate "hook" field: the EXACT, SPECIFIC beat the episode ends on, stated concretely — it can be a line of dialogue OR a silent action/visual beat, whichever genuinely suits that episode better; never a vague placeholder like "things get complicated". Every episode in this batch, including the last one if this is the final batch, must end on a real hook of this kind.`
@@ -7843,6 +7866,8 @@ BUDGET-FRIENDLY PRODUCTION CONSTRAINT — this is a low-budget format meant to s
 
   if (!isSeries) return result;
 
+  // The episode writer sees the full story pages, not just the short summary.
+  const storylineWithStory = { ...storyline, storyText: (core.storyPages ?? []).map((page) => page?.en ?? "").join("\n\n") };
   const totalCount = format.episodeCount;
   const chunkStarts = [];
   for (let i = 0; i < totalCount; i += PITCH_DECK_EPISODE_BATCH_SIZE) chunkStarts.push(i);
@@ -7867,7 +7892,7 @@ BUDGET-FRIENDLY PRODUCTION CONSTRAINT — this is a low-budget format meant to s
     // so batches are independent and can run concurrently.
     const chunkResults = await mapWithConcurrency(chunkStarts, 3, async (start) => {
       const batchCount = Math.min(PITCH_DECK_EPISODE_BATCH_SIZE, totalCount - start);
-      const batch = await generatePitchDeckEpisodeBatch(storyline, format, isVerticalDrama, start, batchCount, totalCount, null, revision);
+      const batch = await generatePitchDeckEpisodeBatch(storylineWithStory, format, isVerticalDrama, start, batchCount, totalCount, null, revision);
       return enforceBatchEpisodeCount(batch, batchCount);
     });
     result.episodes = chunkResults.flat();
@@ -7882,7 +7907,7 @@ BUDGET-FRIENDLY PRODUCTION CONSTRAINT — this is a low-budget format meant to s
         ? allEpisodes.map((ep, i) => `${i + 1}. ${ep.title.en}: ${ep.synopsis.en}`).join("\n")
         : null;
       const batch = await generatePitchDeckEpisodeBatch(
-        storyline, format, isVerticalDrama, start, batchCount, totalCount, priorSummary, null
+        storylineWithStory, format, isVerticalDrama, start, batchCount, totalCount, priorSummary, null
       );
       allEpisodes = allEpisodes.concat(enforceBatchEpisodeCount(batch, batchCount));
     }
@@ -7900,7 +7925,7 @@ BUDGET-FRIENDLY PRODUCTION CONSTRAINT — this is a low-budget format meant to s
     const shortfall = totalCount - result.episodes.length;
     const priorSummary = result.episodes.map((ep, i) => `${i + 1}. ${ep.title.en}: ${ep.synopsis.en}`).join("\n");
     const topUp = await generatePitchDeckEpisodeBatch(
-      storyline, format, isVerticalDrama, result.episodes.length, shortfall, totalCount, priorSummary, null
+      storylineWithStory, format, isVerticalDrama, result.episodes.length, shortfall, totalCount, priorSummary, null
     );
     result.episodes = result.episodes.concat(enforceBatchEpisodeCount(topUp, shortfall));
   }
@@ -8648,6 +8673,13 @@ function episodePacingGuidance(minutes) {
 // per-episode structures are generated in batches referencing it.
 const THREE_ACT_EPISODE_BATCH_SIZE = 5;
 
+// TV episode structure for a (non-vertical) series — the user's 8 x 20 min
+// blueprint: cold open, Act I complication, Act II escalation, Act III
+// climax + cliffhanger; the final episode resolves the whole story instead.
+function tvEpisodeStructureNote(totalEpisodes) {
+  return `TV EPISODE STRUCTURE for every episode: "setup" = a cold open (a hook in the first minute — an eerie event, a flashback beat, the antagonist's move) plus Act I (the protagonist's plan meets a fresh obstacle); "confrontation" = Act II (escalation to a point of no return — a confrontation, a reveal, a clash that shifts the balance of power); "resolution" = Act III (the episode's peak moment, ending on a cliffhanger that pulls into the next episode). The FINAL episode (episode ${totalEpisodes}) instead ends the series: its Act III is the climax and resolution of the main conflict, won by the protagonist's own choice. Every episode also moves at least one side story — the antagonist or a key side character pursuing their own goal.`;
+}
+
 async function generateThreeActEpisodeBatch(deck, episodesChunk, startIndex, overallContext, revision) {
   const episodeList = episodesChunk
     .map((episode, i) => `Episode ${startIndex + i + 1}: ${episode.title.en} — ${episode.synopsis.en}`)
@@ -8658,6 +8690,7 @@ async function generateThreeActEpisodeBatch(deck, episodesChunk, startIndex, ove
     : "";
 
   let contents = `${overallContext}\n\nHere is ONE BATCH of ${episodesChunk.length} episodes (out of ${deck.episodes.length} total):\n${episodeList}\n\nFor EACH episode in this batch, provide its OWN compact three-act mini-structure ("setup"/"confrontation"/"resolution") — what happens within just that single episode, consistent with its synopsis above and with the overall series structure already given.${perEpisodePacingLine} Return "episodeStructures": an array of exactly ${episodesChunk.length} objects, in the same order as the episodes given above (this batch only, not the whole series).`;
+  if (deck.format?.type !== "vertical") contents += `\n\n${tvEpisodeStructureNote(deck.episodes.length)}`;
 
   if (revision) {
     const previousChunk = (revision.previous.episodeStructures ?? []).slice(startIndex, startIndex + episodesChunk.length);
@@ -8695,6 +8728,10 @@ async function generateThreeActContent(deck, characterSheet, revision) {
     (deck.format?.type === "series" || deck.format?.type === "vertical") && Array.isArray(deck.episodes);
 
   let contents = `Title (English): ${deck.title.en}\nLogline (English): ${deck.logline.en}\nPremise (English): ${deck.premise.en}\nTone/Genre (English): ${deck.toneGenre.en}`;
+  // The whole story, so the structure reaches the story's real ending (it
+  // used to see only the premise).
+  const storyPagesText = (deck.storyPages ?? []).map((page) => page?.en ?? "").join("\n\n").trim();
+  if (storyPagesText) contents += `\n\nThe whole story (from the pitch deck) — the structure must cover all of it, through to its ending:\n${storyPagesText}`;
 
   if (characterSheet?.characters?.length) {
     const characterLines = characterSheet.characters
@@ -8704,12 +8741,14 @@ async function generateThreeActContent(deck, characterSheet, revision) {
   }
 
   const properties = {
+    structureModel: { type: Type.STRING, enum: STORY_STRUCTURE_MODELS },
+    structureReason: { type: Type.STRING },
     controllingIdea: BILINGUAL_TEXT_SCHEMA,
     setup: ACT_SCHEMA,
     confrontation: ACT_SCHEMA,
     resolution: ACT_SCHEMA,
   };
-  const required = ["controllingIdea", "setup", "confrontation", "resolution"];
+  const required = ["structureModel", "structureReason", "controllingIdea", "setup", "confrontation", "resolution"];
 
   if (isSeries) {
     const episodeTitles = deck.episodes.map((episode, index) => `${index + 1}. ${episode.title.en}`).join("; ");
@@ -8985,8 +9024,15 @@ async function generateBitSheetEpisodeBatch(episodesChunk, structuresChunk, star
     ? `This is a vertical micro-drama with ${deck.episodes.length} short episodes in total. Here is ONE BATCH of ${episodesChunk.length} of them, each with its own three-act mini-structure, plus the specific hook it must end on:\n\n${episodesText}\n\nFor EACH episode in this batch, break its three acts into its OWN complete Bit Sheet — an ordered list of its major plot-point beats. Each episode is a self-contained mini-story, so each episode's Bit Sheet must include its own opening_image, theme_stated, plot_point_1, all_is_lost, plot_point_2, and final_image anchors positioned within that episode, not just once for the whole series. Since these episodes are extremely short, keep each episode's bit list lean — the final bit (final_image) MUST be the concrete moment that delivers that episode's hook, exactly as given above, not a softer or different beat. Return "episodeBits": an array of exactly ${episodesChunk.length} objects, in the same order as the episodes given above (this batch only, not the whole series).`
     : `This is a web series with ${deck.episodes.length} episodes in total. Here is ONE BATCH of ${episodesChunk.length} of them, each with its own three-act mini-structure:\n\n${episodesText}\n\nFor EACH episode in this batch, break its three acts into its OWN complete Bit Sheet — an ordered list of its major plot-point beats. Each episode is a self-contained mini-story, so each episode's Bit Sheet must include its own opening_image, theme_stated, plot_point_1, all_is_lost, plot_point_2, and final_image anchors positioned within that episode, not just once for the whole series. Return "episodeBits": an array of exactly ${episodesChunk.length} objects, in the same order as the episodes given above (this batch only, not the whole series).`;
 
+  if (!isVerticalDrama) {
+    contents += `\n\nFor each episode: its first bit is the cold-open hook; include at least one side-story bit (the antagonist or a key side character pursuing their own goal); its last bit is a cliffhanger into the next episode — except episode ${deck.episodes.length}, whose last bits are the climax and the resolution of the whole story, won by the protagonist's own choice.`;
+  }
+
   if (threeAct.controllingIdea) {
     contents += `\n\nThe story's Controlling Idea (theme) is: "${threeAct.controllingIdea.en}" — the theme_stated bit especially, and every other bit generally, should stay true to this idea.`;
+    if (threeAct.structureModel) {
+      contents += `\n\nThe story is told with the "${threeAct.structureModel}" structure (${threeAct.structureReason ?? ""}). Arrange the bits to follow that structure's stages, and start each bit's title with the stage it belongs to.`;
+    }
   }
 
   if (revision) {
@@ -9073,6 +9119,9 @@ async function generateBitSheetContent(threeAct, deck, revision) {
 
   if (threeAct.controllingIdea) {
     contents += `\n\nThe story's Controlling Idea (theme) is: "${threeAct.controllingIdea.en}" — the theme_stated bit especially, and every other bit generally, should stay true to this idea.`;
+    if (threeAct.structureModel) {
+      contents += `\n\nThe story is told with the "${threeAct.structureModel}" structure (${threeAct.structureReason ?? ""}). Arrange the bits to follow that structure's stages, and start each bit's title with the stage it belongs to.`;
+    }
   }
 
   if (revision) {
@@ -9340,6 +9389,17 @@ const SCENE_LIST_EPISODE_BATCH_SIZE = 5;
 // responsible for INVENTING the series' small, reusable location set; every
 // later batch is given that exact list and required to reuse it verbatim,
 // which is why the first batch must finish before the rest can start.
+// Scene pacing for films and (non-vertical) series — the user's standard
+// OTT blueprint: scenes of about 1.5-2.5 minutes, 10-12 per 20 minutes.
+// Real runs showed the opposite: one conversation chopped into six scene
+// headings in the same hut, and 30-second one-beat scenes.
+function scenePacingRule(minutes, { isSeries }) {
+  const low = minutes ? Math.max(3, Math.round(minutes / 2)) : null;
+  const high = minutes ? Math.max(low, Math.round(minutes / 1.6)) : null;
+  const count = low ? ` For ${minutes} minutes that means about ${low}-${high} scenes.` : "";
+  return `SCENE PACING: a scene is ONE place and ONE continuous time — a new scene starts only when the place or the time changes. Never split one conversation or one continuous moment into several scenes in the same place and time; a bit that plays out in one place is ONE fuller scene with several beats (an obstacle, rising stakes, a turn). Most scenes run 1.5-2.5 minutes; nothing under 1 minute unless it is a deliberate quick cut, nothing over 3 minutes.${count} Cut between the main story and side stories (the antagonist's moves, other characters pursuing their own goals) so the ${isSeries ? "episode" : "film"} moves through varied places.${isSeries ? " Each episode: a cold open (1-2 scenes), Act I (3-4 scenes), Act II (3-4 scenes), Act III (2-3 scenes) ending on a cliffhanger — except the final episode, which ends the story." : ""}`;
+}
+
 async function generateSceneListEpisodeBatch(deck, bitSheet, episodesChunk, startIndex, episodeTargetMinutes, isVerticalDrama, lockedLocations, revision) {
   const episodesText = episodesChunk
     .map((episode, i) => {
@@ -9351,7 +9411,7 @@ async function generateSceneListEpisodeBatch(deck, bitSheet, episodesChunk, star
     })
     .join("\n\n");
 
-  let contents = `This is a ${isVerticalDrama ? "vertical micro-drama" : "web series"} with ${deck.episodes.length} episodes in total. Here is ONE BATCH of ${episodesChunk.length} of them, each with its own Bit Sheet — its major plot-point beats, already verified:\n\n${episodesText}\n\nFor EACH episode in this batch, expand its Bit Sheet into a full scene-by-scene list — each bit typically becomes 1-3 scenes — whose scenes' combined "estimatedMinutes" add up to approximately that episode's target runtime given above. Return "episodeScenes": an array of exactly ${episodesChunk.length} objects, in the same order as the episodes given above (this batch only, not the whole series).`;
+  let contents = `This is a ${isVerticalDrama ? "vertical micro-drama" : "web series"} with ${deck.episodes.length} episodes in total. Here is ONE BATCH of ${episodesChunk.length} of them, each with its own Bit Sheet — its major plot-point beats, already verified:\n\n${episodesText}\n\nFor EACH episode in this batch, expand its Bit Sheet into a full scene-by-scene list — ${isVerticalDrama ? "each bit typically becomes 1-3 scenes" : "following the SCENE PACING rule below (several bits can share one scene when they happen in the same place and time)"} — whose scenes' combined "estimatedMinutes" add up to approximately that episode's target runtime given above. Return "episodeScenes": an array of exactly ${episodesChunk.length} objects, in the same order as the episodes given above (this batch only, not the whole series).`;
 
   if (isVerticalDrama) {
     contents += lockedLocations
@@ -9363,7 +9423,7 @@ async function generateSceneListEpisodeBatch(deck, bitSheet, episodesChunk, star
 - The story must be carried by dialogue and character drama happening WITHIN this small set of locations, not by moving the story to new places or spectacle — favor confrontations, revelations, and emotional beats that naturally happen at home, at the one shop, or on the street outside, over anything that would require a new set.
 - Give each location a clear, reusable English name (e.g. "House — Kitchen", "House — Drawing Room", "Street Outside House", "The Shop") that later batches of episodes will match exactly.`;
   } else {
-    contents += `\n\n${NO_BUDGET_LIMIT_INSTRUCTION}`;
+    contents += `\n\n${NO_BUDGET_LIMIT_INSTRUCTION}\n\n${scenePacingRule(episodeTargetMinutes, { isSeries: true })}`;
   }
 
   if (bitSheet.controllingIdea) {
@@ -9431,8 +9491,8 @@ async function generateFilmSceneListPart(bitSheet, part, partIndex, partCount, f
       : `This part covers about ${part.targetMinutes} minutes of the film's ${filmTargetMinutes}-minute runtime (aim for roughly ${suggestSceneCount(part.targetMinutes)} scenes, adjusted as pacing requires).`
     : "";
   let contents = isOnlyPart
-    ? `Here is the film's Bit Sheet — its major plot-point beats, already verified, in order:\n${bitSheetOutlineText(bitSheet.bits)}\n${targetLine}\n\nExpand this Bit Sheet into a full scene-by-scene list for the entire film — each bit typically becomes 1-3 scenes — whose scenes' combined "estimatedMinutes" add up to approximately the target runtime given above. Return "scenes": a single array covering the whole film.`
-    : `Here is the film's whole Bit Sheet — its major plot-point beats, already verified, in order:\n${bitSheetOutlineText(bitSheet.bits)}\n\nThe film's scene list is being written in ${partCount} parts, in story order. This is PART ${partIndex + 1} of ${partCount}: write scenes ONLY for bits ${part.start + 1} to ${part.end} above — each bit typically becomes 1-3 scenes. Do not write any scene for a bit outside that range; earlier and later bits are written in their own parts.\n${targetLine} The scenes' combined "estimatedMinutes" should add up to approximately that. Return "scenes": the array for this part only.`;
+    ? `Here is the film's Bit Sheet — its major plot-point beats, already verified, in order:\n${bitSheetOutlineText(bitSheet.bits)}\n${targetLine}\n\nExpand this Bit Sheet into a full scene-by-scene list for the entire film, following the SCENE PACING rule below, whose scenes' combined "estimatedMinutes" add up to approximately the target runtime given above. Return "scenes": a single array covering the whole film.`
+    : `Here is the film's whole Bit Sheet — its major plot-point beats, already verified, in order:\n${bitSheetOutlineText(bitSheet.bits)}\n\nThe film's scene list is being written in ${partCount} parts, in story order. This is PART ${partIndex + 1} of ${partCount}: write scenes ONLY for bits ${part.start + 1} to ${part.end} above, following the SCENE PACING rule below. Do not write any scene for a bit outside that range; earlier and later bits are written in their own parts.\n${targetLine} The scenes' combined "estimatedMinutes" should add up to approximately that. Return "scenes": the array for this part only.`;
 
   if (scenesSoFar.length > 0) {
     const lastScenes = scenesSoFar
@@ -9443,7 +9503,7 @@ async function generateFilmSceneListPart(bitSheet, part, partIndex, partCount, f
     contents += `\n\nThe last scenes already written, just before this part — carry straight on from them, never repeat them:\n${lastScenes}\n\nPlaces already used in the film (when the story returns to one of these, use exactly the same name; new places are fine wherever the story needs them): ${placesSoFar}\n\nContinue the scene numbering from the last scene above in the same style.`;
   }
 
-  contents += `\n\n${NO_BUDGET_LIMIT_INSTRUCTION}`;
+  contents += `\n\n${NO_BUDGET_LIMIT_INSTRUCTION}\n\n${scenePacingRule(part.targetMinutes, { isSeries: false })}`;
 
   if (bitSheet.controllingIdea) {
     contents += `\n\nThe story's Controlling Idea (theme) is: "${bitSheet.controllingIdea.en}" — keep scenes true to it.`;
@@ -9464,6 +9524,70 @@ async function generateFilmSceneListPart(bitSheet, part, partIndex, partCount, f
     content = await callSceneListGemini(contents + correctionNote, false, part.targetMinutes);
   }
   return content.scenes ?? [];
+}
+
+// Safety net for the SCENE PACING rule: two back-to-back scenes in the same
+// place and the same time are one scene (a real series had one conversation
+// in a hut split across six headings). Joined outlines, summed minutes.
+// Not for vertical micro-dramas (their tiny scenes are the format).
+function sameSceneSetting(a, b) {
+  const norm = (text) => String(text ?? "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+  return a.intExt === b.intExt && a.timeOfDay === b.timeOfDay && norm(a.location?.en) === norm(b.location?.en);
+}
+
+function mergeSameSettingScenes(scenes) {
+  const joinText = (a, b) => {
+    const keys = new Set([...Object.keys(a ?? {}), ...Object.keys(b ?? {})]);
+    return Object.fromEntries([...keys].map((key) => [key, `${a?.[key] ?? ""} ${b?.[key] ?? ""}`.trim()]));
+  };
+  const merged = [];
+  for (const scene of scenes ?? []) {
+    const previous = merged[merged.length - 1];
+    if (previous && sameSceneSetting(previous, scene)) {
+      merged[merged.length - 1] = {
+        ...previous,
+        oneLiner: joinText(previous.oneLiner, scene.oneLiner),
+        turn: scene.turn ?? previous.turn,
+        estimatedMinutes: Math.round(((Number(previous.estimatedMinutes) || 0) + (Number(scene.estimatedMinutes) || 0)) * 10) / 10,
+      };
+    } else {
+      merged.push(scene);
+    }
+  }
+  return merged;
+}
+
+// After a merge, scene numbers like "E7S1, E7S2, E7S6" are made sequential again
+// (keeping their prefix) when every number has that simple shape.
+function renumberSimpleScenes(scenes) {
+  const shapes = scenes.map((scene) => String(scene.sceneNumber ?? "").match(/^(.*?)(\d+)$/));
+  if (shapes.length === 0 || shapes.some((shape) => !shape)) return scenes;
+  return scenes.map((scene, i) => ({ ...scene, sceneNumber: `${shapes[0][1]}${i + 1}` }));
+}
+
+// Measured pacing problems, given to the scene list's story judge as review
+// notes (not blocking): one-beat scenes, overlong scenes, and an episode or
+// film with too few / too many scenes for its length.
+function sceneListPacingIssues(sceneList) {
+  const issues = [];
+  const check = (scenes, minutes, label) => {
+    if (!scenes?.length) return;
+    const tiny = scenes.filter((s) => Number(s.estimatedMinutes) < 1).length;
+    const long = scenes.filter((s) => Number(s.estimatedMinutes) > 3).map((s, i) => i + 1);
+    if (tiny / scenes.length > 0.3) issues.push(`${label}: ${tiny} of ${scenes.length} scenes are under 1 minute — combine one-beat moments into fuller scenes of about 1.5-2.5 minutes.`);
+    if (long.length) issues.push(`${label}: scene(s) ${long.join(", ")} run over 3 minutes — tighten them or break them up with a real change of place or time.`);
+    if (minutes) {
+      const low = Math.max(3, Math.round(minutes / 2));
+      const high = Math.max(low, Math.round(minutes / 1.6));
+      if (scenes.length < low - 1 || scenes.length > high + 2) issues.push(`${label}: ${scenes.length} scenes for ${minutes} minutes — aim for about ${low}-${high} fuller scenes.`);
+    }
+  };
+  if (Array.isArray(sceneList.episodeScenes)) {
+    sceneList.episodeScenes.forEach((ep, i) => check(ep.scenes, ep.targetMinutes, `Episode ${i + 1}`));
+  } else {
+    check(sceneList.scenes, sceneList.targetMinutes, "The film");
+  }
+  return issues;
 }
 
 async function generateSceneListContent(bitSheet, deck, revision) {
@@ -9533,6 +9657,9 @@ async function generateSceneListContent(bitSheet, deck, revision) {
       episodeScenes = episodeScenes.concat(enforceCount(topUp, shortfall));
     }
 
+    if (!isVerticalDrama) {
+      episodeScenes = episodeScenes.map((episodeScene) => ({ ...episodeScene, scenes: renumberSimpleScenes(mergeSameSettingScenes(episodeScene.scenes)) }));
+    }
     let content = { episodeScenes };
     content = annotateSceneListTotals(content, true, episodeTargetMinutes, null);
     return bitSheet.controllingIdea ? { ...content, controllingIdea: bitSheet.controllingIdea } : content;
@@ -9545,10 +9672,14 @@ async function generateSceneListContent(bitSheet, deck, revision) {
     const partScenes = await generateFilmSceneListPart(bitSheet, part, partIndex, parts.length, filmTargetMinutes, scenes, revision);
     scenes = scenes.concat(partScenes);
   }
+  // Back-to-back scenes in the same place and time become one scene.
+  const beforeMerge = scenes.length;
+  scenes = mergeSameSettingScenes(scenes);
   // Written in parts, each part numbered its scenes slightly differently
   // (seen for real: "1.17", then "2.01", then "3.1") -- renumber the joined
-  // list one way: act.scene, counting from 1 inside each act.
-  if (parts.length > 1) {
+  // list one way: act.scene, counting from 1 inside each act. Also after a
+  // merge, so the numbers have no gaps.
+  if (parts.length > 1 || scenes.length !== beforeMerge) {
     const countPerAct = {};
     scenes = scenes.map((scene) => {
       const act = scene.actNumber || 1;
@@ -9807,13 +9938,6 @@ function suggestScreenplayWordCount(estimatedMinutes) {
   return Math.round(pages * 225);
 }
 
-function countScreenplayWords(elements) {
-  return elements.reduce((total, element) => {
-    const text = typeof element.text === "string" ? element.text : "";
-    const parenthetical = typeof element.parenthetical === "string" ? element.parenthetical : "";
-    return total + `${text} ${parenthetical}`.trim().split(/\s+/).filter(Boolean).length;
-  }, 0);
-}
 
 // Joins just the action/flashback description text of a scene (never
 // dialogue — characters repeating a catchphrase is normal, generic stock
@@ -9902,12 +10026,26 @@ function reviewScreenplayRepetition(sceneRows) {
   return { needsRevision: true, issues, overusedPhrases, offendingScenes };
 }
 
+// Rough real screen time of a written scene: spoken lines at about 140
+// words a minute plus a beat per line, and about 3 seconds per action
+// sentence (one visible moment). Used instead of page/word counts, which
+// long description inflates.
+function estimateScreenSeconds(elements) {
+  return (elements ?? []).reduce((seconds, element) => {
+    const text = String(element.text ?? "");
+    if (element.type === "dialogue") return seconds + 1 + (text.split(/\s+/).filter(Boolean).length / 140) * 60;
+    if (element.type === "transition") return seconds + 1;
+    const sentences = text.split(/[.!?।]+/).filter((part) => part.trim().length > 2).length;
+    return seconds + Math.max(1, sentences) * 3;
+  }, 0);
+}
+
 async function generateScreenplaySceneContent(deck, allScenes, sceneIndex, previousElements, controllingIdea, revision, dialogueLanguage, avoidPhrases) {
   const targetScene = allScenes[sceneIndex];
   const outlineText = allScenes.map((scene, index) => sceneOutlineLine(scene, index)).join("\n");
   const suggestedWords = suggestScreenplayWordCount(targetScene.estimatedMinutes);
 
-  let contents = `Story title: ${deck.title.en}\nLogline: ${deck.logline.en}\nTone/Genre: ${deck.toneGenre.en}\n\nFull scene outline for context (already established elsewhere — do not rewrite these, just stay consistent with them):\n${outlineText}\n\nNow write the FULL screenplay content — action lines and dialogue — for ONLY this one scene:\n${sceneOutlineLine(targetScene, sceneIndex)}\n\nThis scene is estimated at ${targetScene.estimatedMinutes} minute(s) of screen time. STANDARD SCREENPLAY FORMAT RULE: one page equals roughly one minute of screen time, at roughly 200-250 words of combined action and dialogue per page — so this scene needs to read as approximately ${targetScene.estimatedMinutes} page(s), meaning roughly ${suggestedWords} words total across all its action lines and dialogue combined. This is a hard length target, not a rough suggestion: write enough real action description and full dialogue exchanges — including natural back-and-forth, reactions, and beats — to genuinely fill that length. Never compress a multi-minute scene into just a couple of short lines regardless of how simple the one-liner sounds.`;
+  let contents = `Story title: ${deck.title.en}\nLogline: ${deck.logline.en}\nTone/Genre: ${deck.toneGenre.en}\n\nFull scene outline for context (already established elsewhere — do not rewrite these, just stay consistent with them):\n${outlineText}\n\nNow write the FULL screenplay content — action lines and dialogue — for ONLY this one scene:\n${sceneOutlineLine(targetScene, sceneIndex)}\n\nThis scene is planned at ${targetScene.estimatedMinutes} minute(s) of screen time. LENGTH COMES FROM STORY, NOT DESCRIPTION: fill that time with real on-screen moments — actions, reactions and exchanges of dialogue — never with long description. A dialogue scene gets its length from the exchange itself (natural back-and-forth, interruptions, silences, a turn); an action scene from a run of distinct visible moments. Keep every action line lean: one image or one action, 1-2 short sentences. As a guide, about ${Math.max(4, Math.round((Number(targetScene.estimatedMinutes) || 1) * 12))} short beats (each one action beat or one line of dialogue) fill ${targetScene.estimatedMinutes} minute(s). Give the scene several beats — an obstacle, rising stakes, a turn — never just one quick moment.`;
 
   if (controllingIdea) {
     contents += `\n\nThe story's Controlling Idea (theme) is: "${controllingIdea.en}" — let the dialogue and action reflect it where natural, without stating it outright.`;
@@ -9957,12 +10095,15 @@ async function generateScreenplaySceneContent(deck, allScenes, sceneIndex, previ
 
   let { elements, charactersPresent } = await callGemini(contents);
 
-  // If the model under-shot the page-length target badly, give it one
-  // chance to expand — capped at a single retry, same discipline as the
-  // scene list's runtime-correction retry.
-  const actualWords = countScreenplayWords(elements);
-  if (actualWords < suggestedWords * 0.7) {
-    const correctionNote = `\n\nIMPORTANT CORRECTION NEEDED: your draft only came to about ${actualWords} words, but a ${targetScene.estimatedMinutes}-minute scene needs roughly ${suggestedWords} words to fill its standard-format page length (1 page ≈ 1 minute). Rewrite the scene with substantially more action description and fuller dialogue exchanges — more back-and-forth, more beats — to genuinely reach that length, not just pad existing lines.`;
+  // If the scene plays far shorter than planned, one retry asking for more
+  // real moments. Measured as estimated SCREEN TIME, not words: the old
+  // word-count target ("225 words a minute, a hard target") was met by
+  // piling on description — a real 8-episode series came out 86% action
+  // prose and 14% dialogue, pages long but minutes short.
+  const plannedSeconds = (Number(targetScene.estimatedMinutes) || 1) * 60;
+  const playsSeconds = estimateScreenSeconds(elements);
+  if (playsSeconds < plannedSeconds * 0.6) {
+    const correctionNote = `\n\nIMPORTANT CORRECTION NEEDED: your draft plays in about ${Math.round(playsSeconds)} seconds, but this scene is planned at about ${Math.round(plannedSeconds)} seconds. Rewrite it with MORE REAL MOMENTS — a fuller exchange, a reaction, a new obstacle or a turn — never with longer description.`;
     ({ elements, charactersPresent } = await callGemini(contents + correctionNote));
   }
 
@@ -15736,22 +15877,39 @@ const AUTO_PIPELINE_SCORE_SCHEMA = {
 // real run scored the same pitch deck 7/10 three rounds running with
 // near-identical comments), against a checklist for that stage. The story
 // stages use the stronger model (STORY_JUDGE_MODEL_NAME).
-async function scorePipelineStage(stageLabel, draftText, reviewerIssues, { checklist, model = GEMINI_MODEL_NAME } = {}) {
+// criticalChecks: problems that block a stage from passing whatever its
+// score (the user's call after a real run whose climax was won by a lawyer
+// and whose 8-episode series stopped halfway through its own story). The
+// judge names the first one that applies in "criticalProblem".
+async function scorePipelineStage(stageLabel, draftText, reviewerIssues, { checklist, model = GEMINI_MODEL_NAME, criticalChecks } = {}) {
   const issuesText = reviewerIssues.length > 0 ? reviewerIssues.join(" ") : "none.";
   const checklistText = checklist ? `\n\nJudge it against this checklist:\n${checklist}` : "";
+  const criticalText = criticalChecks?.length
+    ? `\n\nMUST-FIX CHECK — these problems make the draft unacceptable whatever its score:\n${criticalChecks.map((c) => `- ${c}`).join("\n")}\nIn "criticalProblem", name the one that applies and exactly where (one sentence), or leave it empty if none does.`
+    : "";
 
   return generateJsonContent({
     model,
-    contents: `You are the final judge for the "${stageLabel}" stage of a screenplay pipeline. Here is the current draft:\n\n${draftText}${checklistText}\n\nA specialist reviewer has just read this same draft and found these problems in it (they are notes on THIS draft, not earlier feedback it was meant to fix): ${issuesText}\n\nRate this draft's quality on a strict scale from 1 to 10 (10 = genuinely excellent; 8 = strong; 7 = good and usable — the pass mark; anything below 7 needs real work before it's acceptable). Be a tough, honest judge — do not hand out high scores generously, and don't just repeat the specialist reviewer's words, form your own independent judgment. Give your verdict as a short, direct sentence, in this exact style: if below 7, "This is not up to the mark. This is only a(n) X-pointer because <specific, concrete reasons>." — if 7 or above, "This is a good X-pointer — <what's genuinely working>; to be even better: <the most important remaining improvement>."`,
+    contents: `You are the final judge for the "${stageLabel}" stage of a screenplay pipeline. Here is the current draft:\n\n${draftText}${checklistText}${criticalText}\n\nA specialist reviewer has just read this same draft and found these problems in it (they are notes on THIS draft, not earlier feedback it was meant to fix): ${issuesText}\n\nRate this draft's quality on a strict scale from 1 to 10 (10 = genuinely excellent; 8 = strong; 7 = good and usable — the pass mark; anything below 7 needs real work before it's acceptable). Be a tough, honest judge — do not hand out high scores generously, and don't just repeat the specialist reviewer's words, form your own independent judgment. Give your verdict as a short, direct sentence, in this exact style: if below 7, "This is not up to the mark. This is only a(n) X-pointer because <specific, concrete reasons>." — if 7 or above, "This is a good X-pointer — <what's genuinely working>; to be even better: <the most important remaining improvement>."`,
     config: {
       systemInstruction: "You are the final quality judge in a multi-agent screenplay pipeline — blunt, specific, and consistent. Never inflate scores just to move things along.",
       responseMimeType: "application/json",
       // 2.5 Flash "thinks" first, and that counts against this ceiling.
       maxOutputTokens: model === GEMINI_MODEL_NAME ? 1024 : 16384,
-      responseSchema: AUTO_PIPELINE_SCORE_SCHEMA,
+      responseSchema: criticalChecks?.length ? AUTO_PIPELINE_CRITICAL_SCORE_SCHEMA : AUTO_PIPELINE_SCORE_SCHEMA,
     },
   });
 }
+
+const AUTO_PIPELINE_CRITICAL_SCORE_SCHEMA = {
+  type: Type.OBJECT,
+  properties: {
+    score: { type: Type.INTEGER },
+    verdict: { type: Type.STRING },
+    criticalProblem: { type: Type.STRING },
+  },
+  required: ["score", "verdict", "criticalProblem"],
+};
 
 // The story stages' judge and Story Editor use the stronger model: this is
 // where a story's quality is decided, and the calls are few (a handful
@@ -15761,30 +15919,46 @@ const STORY_JUDGE_MODEL_NAME = "gemini-2.5-flash";
 // What "good" means at each story stage — given to both the Story Editor
 // (to find problems) and the judge (to score).
 const STAGE_CHECKLISTS = {
-  pitchDeck: `- A specific, fresh premise — not a stock "corporation vs. village" or "estranged child returns" set-up told the usual way; what makes THIS story unlike others like it?
+  pitchDeck: `- True to the user's original idea (given at the top): its core situation, characters and conflict are kept, built on, never replaced.
+- A specific, fresh premise — not a stock set-up told the usual way; what makes THIS story unlike others like it?
 - A protagonist with a clear goal, clear stakes (what they lose if they fail) and a strong opposing force.
-- Major characters whose wants genuinely clash with each other.
+- A real cast, not one role: antagonist, mentor/guide, an ally or foil, a skeptic, the antagonist's enforcer, and the community at stake — each wanting something.
 - The setting and culture drive the story, not just decorate it.
-- For a series: every episode has its own specific turn and hook; no two episodes do the same job.`,
-  threeAct: `- The protagonist's outer goal (want) and inner need are clear, and pull against each other.
-- An inciting incident early in Act 1 that forces the story into motion.
-- Stakes that keep rising through Act 2, with a real midpoint turn, and a genuine "all is lost" low before Act 3.
+- The story pages tell the WHOLE story through the climax and the ending.
+- For a series: the episodes together tell the whole story — set-up, escalation, climax and resolution — and the final episode resolves the main conflict; every episode has its own turn, opens on a hook and (except the last) ends on a cliffhanger; side characters and the antagonist make their own moves across episodes.`,
+  threeAct: `- The chosen structure model genuinely suits this story, and the beats really follow its stages.
+- The protagonist's outer goal (want) and inner need are clear, and pull against each other.
+- A clear inciting event that forces the story into motion; stakes that keep rising; real turns/reversals (where the model has them: a midpoint, an all-is-lost low).
 - A climax where the protagonist resolves the central conflict through their OWN choice and action — not luck, a rescue or someone else's decision.
 - The ending pays off what the setup planted, and proves the controlling idea (theme).
-- Each major character's arc lands.
-- For a series: the overall arc and every episode's own three acts are complete, and episodes escalate.`,
+- Each major character's arc lands; the antagonist and side characters pursue their own goals.
+- For a series: the overall arc reaches its ending in the final episode, and every episode has a cold open, its own escalation, and a cliffhanger (except the last).`,
   bitSheet: `- Every beat CAUSES the next ("therefore" / "but"), never just "and then".
 - No sagging stretch where nothing changes; every beat turns something.
 - Twists and reveals are set up earlier, so they feel earned, not random.
 - No two beats do the same job; nothing important happens off-screen.
-- The beats cover all three acts in order, with the climax and resolution given real weight.
-- For a series: every episode's beats escalate and end on a hook.`,
+- The beats follow the chosen structure through to the climax and resolution, given real weight.
+- Side stories: the antagonist and key side characters have beats of their own.
+- For a series: every episode opens on a hook, escalates, and ends on a cliffhanger — except the final episode, which resolves the story.`,
   sceneList: `- Every Bit Sheet beat is covered, in order; no scene is filler.
-- Every scene has a turn (something changes by its end).
+- A scene is one place and one continuous time — no conversation split across several scenes in the same place and time.
+- Fuller scenes, each with several beats (an obstacle, rising stakes, a turn) — mostly 1.5-2.5 minutes, none a one-beat 30-second moment, none over 3 minutes.
+- The story cuts between the main storyline and side stories (antagonist, other characters' goals) through varied places.
 - No two scenes do the same job or repeat the same confrontation.
-- Variety of places, time of day and pace; big moments are given enough screen time.
-- The estimated running time fits the target.`,
+- The estimated running time fits the target; for a series each episode has a cold open, three acts and a cliffhanger (except the last).`,
 };
+
+// Must-fix problems for the story stages (scorePipelineStage's
+// criticalChecks): they block a stage from passing, whatever its score.
+function storyCriticalChecks(isSeries) {
+  return [
+    "It drifts away from the user's original idea (given at the top): its core situation, central characters or central conflict are replaced by something else.",
+    isSeries
+      ? "The series stops before its ending: the episodes together don't reach the climax and the resolution, or the final episode doesn't resolve the main conflict."
+      : "The story stops before its ending: it doesn't reach the climax and the resolution.",
+    "The climax is won by someone other than the protagonist — luck, a rescuer, a lawyer, the authorities, or the antagonist simply giving up — instead of the protagonist's own choice and action.",
+  ];
+}
 
 // Story Editor (AI): the specialist reviewer for the story stages that had
 // no review at all before (Three-Act, Bit Sheet) and for the Scene List.
@@ -15816,18 +15990,20 @@ async function reviewStoryStage(stageLabel, draftText, checklist) {
 // tests, plain revising flattened out after 2-3 rounds.
 const SECOND_BATCH_VERSIONS = 3;
 
-async function reviseUntilGood(runId, stageKey, stageLabel, firstDraft, { draftText, review, revise, mustFix, checklist, judgeModel, secondBatch = false }) {
+async function reviseUntilGood(runId, stageKey, stageLabel, firstDraft, { draftText, review, revise, mustFix, checklist, judgeModel, secondBatch = false, criticalChecks }) {
   const maxVersions = MAX_AUTO_PIPELINE_REVISION_ROUNDS + (secondBatch ? SECOND_BATCH_VERSIONS : 0);
   let draft = firstDraft;
   let best = null;
   const allNotes = [];
   let versionsWithoutGain = 0;
   for (let version = 1; ; version++) {
-    const blocking = mustFix ? mustFix(draft) : null;
+    const codeProblem = mustFix ? mustFix(draft) : null;
     const reviewed = review ? await review(draft) : { issues: [] };
     const issues = Array.isArray(reviewed?.issues) ? reviewed.issues : [];
-    const judged = await scorePipelineStage(stageLabel, draftText(draft), issues, { checklist, model: judgeModel });
+    const judged = await scorePipelineStage(stageLabel, draftText(draft), issues, { checklist, model: judgeModel, criticalChecks });
     await appendAutoPipelineNote(runId, stageKey, `Version ${version} — Judge score: ${judged.score}/10 — ${judged.verdict}`);
+    const judgedProblem = typeof judged.criticalProblem === "string" && judged.criticalProblem.trim() ? `MUST FIX: ${judged.criticalProblem.trim()}` : null;
+    const blocking = [codeProblem, judgedProblem].filter(Boolean).join(" ") || null;
     if (blocking) await appendAutoPipelineNote(runId, stageKey, blocking);
     const candidate = { draft, score: Number(judged.score) || 0, version, blocking: Boolean(blocking) };
     const beatsBest =
@@ -15888,7 +16064,8 @@ function pitchDeckJudgeText(deck) {
 }
 
 function threeActJudgeText(threeAct) {
-  const acts = `CONTROLLING IDEA (THEME): ${threeAct.controllingIdea?.en ?? ""}\n\nACT 1 — SETUP: ${actText(threeAct.setup)}\n\nACT 2 — CONFRONTATION: ${actText(threeAct.confrontation)}\n\nACT 3 — RESOLUTION: ${actText(threeAct.resolution)}`;
+  const model = threeAct.structureModel ? `CHOSEN STRUCTURE: ${threeAct.structureModel} — ${threeAct.structureReason ?? ""}\n\n` : "";
+  const acts = `${model}CONTROLLING IDEA (THEME): ${threeAct.controllingIdea?.en ?? ""}\n\nBEGINNING: ${actText(threeAct.setup)}\n\nMIDDLE: ${actText(threeAct.confrontation)}\n\nEND: ${actText(threeAct.resolution)}`;
   const episodes = Array.isArray(threeAct.episodeStructures)
     ? `\n\nEPISODES:\n${threeAct.episodeStructures.map((ep, i) => `Episode ${i + 1}: Setup: ${ep.setup?.summary?.en ?? ""} / Confrontation: ${ep.confrontation?.summary?.en ?? ""} / Resolution: ${ep.resolution?.summary?.en ?? ""}`).join("\n")}`
     : "";
@@ -15916,7 +16093,7 @@ function sceneListJudgeText(sceneList, bitSheet) {
 
 // Storylines: the run used to always take the first of the 3 directions.
 // Now the story judge picks the strongest.
-async function pickBestStoryline(storylines, format) {
+async function pickBestStoryline(storylines, format, conceptText) {
   if (!Array.isArray(storylines) || storylines.length < 2) return { index: 0, reason: "" };
   const formatLine = format?.type === "vertical" ? "a low-budget vertical micro-drama" : format?.type === "series" ? "a web series" : "a feature film";
   const options = storylines
@@ -15924,7 +16101,7 @@ async function pickBestStoryline(storylines, format) {
     .join("\n\n");
   const result = await generateJsonContent({
     model: STORY_JUDGE_MODEL_NAME,
-    contents: `Three storyline directions for ${formatLine}:\n\n${options}\n\nPick the ONE with the most potential to become a genuinely great screenplay: the freshest premise, the clearest protagonist goal and stakes, the strongest conflict, and the most room for surprise and emotion. Return "choice" (1, 2 or 3) and "reason" — one short sentence.`,
+    contents: `${conceptText ? `THE USER'S ORIGINAL IDEA:\n${conceptText}\n\n` : ""}Three storyline directions for ${formatLine}:\n\n${options}\n\nPick the ONE with the most potential to become a genuinely great screenplay while staying TRUE to the user's idea (never pick one that replaces its core situation, characters or conflict): the clearest protagonist goal and stakes, the strongest conflict, and the most room for surprise and emotion. Return "choice" (1, 2 or 3) and "reason" — one short sentence.`,
     config: {
       systemInstruction: "You are an experienced film producer and story editor choosing which story to develop.",
       responseMimeType: "application/json",
@@ -16043,6 +16220,11 @@ const AUTO_PIPELINE_SCREENPLAY_CONCURRENCY = 4;
 // awaited by its caller (the /start route responds immediately) — a
 // 60-episode vertical drama's screenplay stage alone can take many minutes.
 async function runAutoPipeline(runId, conceptText, format, dialogueLanguage, resumeFromConceptId) {
+  // Every story stage is judged against the user's own idea (shown at the
+  // top of the draft) and the must-fix checks.
+  const withIdea = (text) => `THE USER'S ORIGINAL IDEA (the story must stay true to it):\n${conceptText}\n\n${text}`;
+  const isSeriesFormat = format?.type === "series" || format?.type === "vertical";
+  const criticalChecks = storyCriticalChecks(isSeriesFormat);
   try {
     let conceptId = null;
     let storyline = null;
@@ -16122,7 +16304,7 @@ async function runAutoPipeline(runId, conceptText, format, dialogueLanguage, res
       const { storylines } = await generateStorylinesContent(conceptText, format);
       // The story judge picks the strongest of the 3 (it used to always be
       // the first). A failed pick just falls back to the first.
-      const picked = await pickBestStoryline(storylines, format).catch(() => ({ index: 0, reason: "" }));
+      const picked = await pickBestStoryline(storylines, format, conceptText).catch(() => ({ index: 0, reason: "" }));
       storyline = storylines[picked.index];
       if (picked.reason) {
         await appendAutoPipelineNote(runId, "storylines", `Picked option ${picked.index + 1} of ${storylines.length}: "${storyline?.title?.en ?? ""}" — ${picked.reason}`);
@@ -16149,13 +16331,14 @@ async function runAutoPipeline(runId, conceptText, format, dialogueLanguage, res
       // the judge's score, and fails the whole run loudly below rather than
       // completing with silently-wrong data if it's still off after all rounds.
       deck = await reviseUntilGood(runId, "pitch-deck", "Pitch Deck", deck, {
-        draftText: pitchDeckJudgeText,
+        draftText: (d) => withIdea(pitchDeckJudgeText(d)),
         checklist: STAGE_CHECKLISTS.pitchDeck,
         judgeModel: STORY_JUDGE_MODEL_NAME,
+        criticalChecks,
         mustFix: (d) => pitchDeckEpisodeCountIssue(d, format),
         review: async (d) => {
           const [story, hooks] = await Promise.all([
-            reviewStoryStage("Pitch Deck", pitchDeckJudgeText(d), STAGE_CHECKLISTS.pitchDeck),
+            reviewStoryStage("Pitch Deck", withIdea(pitchDeckJudgeText(d)), STAGE_CHECKLISTS.pitchDeck),
             reviewPitchDeckHooks(d),
           ]);
           return { issues: [...(story.issues ?? []), ...(hooks.issues ?? [])] };
@@ -16190,10 +16373,11 @@ async function runAutoPipeline(runId, conceptText, format, dialogueLanguage, res
       threeAct = await generateThreeActContent(deck, characterSheet);
       // New: the Story Editor + story judge (there was no review here at all).
       threeAct = await reviseUntilGood(runId, "three-act", "Three-Act Structure", threeAct, {
-        draftText: threeActJudgeText,
+        draftText: (d) => withIdea(threeActJudgeText(d)),
         checklist: STAGE_CHECKLISTS.threeAct,
         judgeModel: STORY_JUDGE_MODEL_NAME,
-        review: (d) => reviewStoryStage("Three-Act Structure", threeActJudgeText(d), STAGE_CHECKLISTS.threeAct),
+        criticalChecks,
+        review: (d) => reviewStoryStage("Story Structure", withIdea(threeActJudgeText(d)), STAGE_CHECKLISTS.threeAct),
         revise: (d, feedback, opts) => generateThreeActContent(deck, characterSheet, { feedback, previous: d, fresh: opts?.fresh }),
         secondBatch: true,
       });
@@ -16212,10 +16396,11 @@ async function runAutoPipeline(runId, conceptText, format, dialogueLanguage, res
       bitSheet = await generateBitSheetContent(threeAct, deck);
       // New: the Story Editor + story judge (there was no review here at all).
       bitSheet = await reviseUntilGood(runId, "bit-sheet", "Bit Sheet", bitSheet, {
-        draftText: bitSheetJudgeText,
+        draftText: (d) => withIdea(bitSheetJudgeText(d)),
         checklist: STAGE_CHECKLISTS.bitSheet,
         judgeModel: STORY_JUDGE_MODEL_NAME,
-        review: (d) => reviewStoryStage("Bit Sheet", bitSheetJudgeText(d), STAGE_CHECKLISTS.bitSheet),
+        criticalChecks,
+        review: (d) => reviewStoryStage("Bit Sheet", withIdea(bitSheetJudgeText(d)), STAGE_CHECKLISTS.bitSheet),
         revise: (d, feedback, opts) => generateBitSheetContent(threeAct, deck, { feedback, previous: d, fresh: opts?.fresh }),
         secondBatch: true,
       });
@@ -16240,13 +16425,15 @@ async function runAutoPipeline(runId, conceptText, format, dialogueLanguage, res
         ? `${STAGE_CHECKLISTS.sceneList}\n- Budget: at most 4-5 distinct locations for the whole series and about 5 main characters (a 2-3 day shoot).`
         : STAGE_CHECKLISTS.sceneList;
       sceneList = await reviseUntilGood(runId, "scene-list", "Scene List", sceneList, {
-        draftText: (d) => sceneListJudgeText(d, bitSheet),
+        draftText: (d) => withIdea(sceneListJudgeText(d, bitSheet)),
         checklist: sceneListChecklist,
         judgeModel: STORY_JUDGE_MODEL_NAME,
+        criticalChecks,
         review: async (d) => {
-          const story = await reviewStoryStage("Scene List", sceneListJudgeText(d, bitSheet), sceneListChecklist);
+          const story = await reviewStoryStage("Scene List", withIdea(sceneListJudgeText(d, bitSheet)), sceneListChecklist);
           const budget = isVertical ? reviewSceneListBudget(deck, d) : { issues: [] };
-          return { issues: [...budget.issues, ...(story.issues ?? [])] };
+          const pacing = isVertical ? [] : sceneListPacingIssues(d);
+          return { issues: [...budget.issues, ...pacing, ...(story.issues ?? [])] };
         },
         revise: (d, feedback, opts) => generateSceneListContent(bitSheet, deck, { feedback, previous: d, fresh: opts?.fresh }),
         secondBatch: true,
@@ -16360,7 +16547,8 @@ function sequenceDraftText(deck, items, contents) {
             : `[${el.type === "transition" ? "TRANSITION" : "ACTION"}] ${el.text}`
         )
         .join("\n");
-      return `SCENE ${i + 1}${item.episodeIndex !== null ? ` (episode ${item.episodeIndex + 1})` : ""} — ${scene.intExt}. ${scene.location?.en ?? ""} — ${scene.timeOfDay}\nPlanned: ${scene.oneLiner?.en ?? ""}\n${lines}`;
+      const plays = Math.round(estimateScreenSeconds(contents[i].elements ?? []));
+      return `SCENE ${i + 1}${item.episodeIndex !== null ? ` (episode ${item.episodeIndex + 1})` : ""} — ${scene.intExt}. ${scene.location?.en ?? ""} — ${scene.timeOfDay}\nPlanned: ${scene.oneLiner?.en ?? ""} (planned ${scene.estimatedMinutes ?? "?"} min; plays in about ${Math.floor(plays / 60)} min ${plays % 60} sec)\n${lines}`;
     })
     .join("\n\n");
   return capJudgeText(`${screenplayStoryContext(deck)}\n\n${body}`);
@@ -16375,7 +16563,8 @@ function sequenceChecklist(dialogueLanguage) {
 - Action lines show only what the camera can see and hear (a brief smell or sound that sets the place is fine; inner thoughts and abstract feelings are not).
 - Action, dialogue and acting notes are in natural, everyday spoken ${language} — never bookish, never a translation of English${dialogueLanguage === "en" ? "" : "; character names stay in English capitals"}.
 - Acting notes stay in brackets, never inside the spoken line.
-- Each scene does what its plan ("Planned:") says.`;
+- Each scene does what its plan ("Planned:") says, and plays close to its planned time.
+- Description is lean: a scene's length comes from real moments and dialogue exchanges, never from long prose; a dialogue scene has a real back-and-forth with a turn.`;
 }
 
 async function reviewScreenplaySequence(draftText, checklist) {
@@ -16886,7 +17075,11 @@ function renderFullScreenplayPdf(res, deck, sceneList, scenesByEpisode) {
   const characterIndent = margin + 155;
 
   const writeScene = (scene, sceneIndex, elements, dialogueLanguage, charactersPresent) => {
-    doc.addPage();
+    // Scenes flow on continuously like a real script (every scene used to
+    // start a new page, leaving most pages largely blank). A heading never
+    // sits alone at the very bottom of a page.
+    if (doc.y > doc.page.height - margin - 90) doc.addPage();
+    else doc.moveDown(1.2);
     doc.font("Courier-Bold").fontSize(12).text(`SCENE ${sceneIndex + 1}`, margin, doc.y, { width: actionWidth });
     doc.moveDown(0.3);
     doc
@@ -16945,6 +17138,7 @@ function renderFullScreenplayPdf(res, deck, sceneList, scenesByEpisode) {
       });
     });
   } else {
+    doc.addPage(); // the script starts after the title page
     const filmScenes = scenesByEpisode.get(null) ?? [];
     sceneList.scenes.forEach((scene, sceneIndex) => {
       const row = filmScenes.find((r) => r.scene_index === sceneIndex);

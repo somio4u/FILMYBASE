@@ -513,6 +513,16 @@ const LABELS = {
     generatingThreeAct: 'Generating three-act structure...',
     threeActHeading: 'Three-Act Structure',
     controllingIdeaLabel: 'Theme:',
+    structureModelLabel: 'Structure:',
+    structureModelNames: {
+      three_act: 'Three-Act',
+      five_act: 'Five-Act',
+      heros_journey: "Hero's Journey",
+      kishotenketsu: 'Kishōtenketsu (four-part, with a twist)',
+      non_linear: 'Non-linear',
+      ensemble: 'Ensemble (several protagonists)',
+      real_time: 'Real-time',
+    },
     setupLabel: 'Act 1: Setup',
     confrontationLabel: 'Act 2: Confrontation',
     resolutionLabel: 'Act 3: Resolution',
@@ -727,6 +737,8 @@ const LABELS = {
       shadow: 'Shadow',
       ally: 'Ally',
       trickster: 'Trickster',
+      skeptic: 'Skeptic',
+      community: 'Community',
     },
     generateBitSheet: 'Generate Bit Sheet',
     generatingBitSheet: 'Generating bit sheet...',
@@ -1195,6 +1207,16 @@ const LABELS = {
     generatingThreeAct: 'ତ୍ରି-ଅଙ୍କ ସଂରଚନା ତିଆରି ହେଉଛି...',
     threeActHeading: 'ତ୍ରି-ଅଙ୍କ ସଂରଚନା',
     controllingIdeaLabel: 'ମୂଳ ଭାବ:',
+    structureModelLabel: 'ଗଠନ:',
+    structureModelNames: {
+      three_act: 'ତିନି ଅଙ୍କ',
+      five_act: 'ପାଞ୍ଚ ଅଙ୍କ',
+      heros_journey: 'ନାୟକର ଯାତ୍ରା (Hero\'s Journey)',
+      kishotenketsu: 'କିଶୋତେନକେତ୍ସୁ (ଚାରି ଭାଗ, ଗୋଟେ ମୋଡ଼ ସହ)',
+      non_linear: 'ଆଗପଛ କାହାଣୀ (Non-linear)',
+      ensemble: 'ଏକାଧିକ ନାୟକ (Ensemble)',
+      real_time: 'ରିଅଲ୍-ଟାଇମ୍',
+    },
     setupLabel: 'ପ୍ରଥମ ଅଙ୍କ: ପ୍ରସ୍ଥାପନା',
     confrontationLabel: 'ଦ୍ୱିତୀୟ ଅଙ୍କ: ସଂଘର୍ଷ',
     resolutionLabel: 'ତୃତୀୟ ଅଙ୍କ: ସମାଧାନ',
@@ -1409,6 +1431,8 @@ const LABELS = {
       shadow: 'ଛାୟା',
       ally: 'ସହଚର',
       trickster: 'ଠକ',
+      skeptic: 'ସନ୍ଦେହୀ',
+      community: 'ଗାଁ ସମାଜ',
     },
     generateBitSheet: 'ବିଟ୍ ସିଟ୍ ତିଆରି କରନ୍ତୁ',
     generatingBitSheet: 'ବିଟ୍ ସିଟ୍ ତିଆରି ହେଉଛି...',
@@ -11829,6 +11853,12 @@ function App() {
         <div className="three-act-structure">
           <h2>{t.threeActHeading}</h2>
 
+          {threeActStructure.structureModel && (
+            <p className="controlling-idea">
+              <strong>{t.structureModelLabel}</strong> {t.structureModelNames[threeActStructure.structureModel] ?? threeActStructure.structureModel}
+              {threeActStructure.structureReason ? ` — ${threeActStructure.structureReason}` : ''}
+            </p>
+          )}
           {threeActStructure.controllingIdea && (
             <p className="controlling-idea">
               <strong>{t.controllingIdeaLabel}</strong> {threeActStructure.controllingIdea[language]}

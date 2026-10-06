@@ -15620,25 +15620,181 @@ const AUTO_PIPELINE_SCORE_SCHEMA = {
   required: ["score", "verdict"],
 };
 
-// Reviewer 4 (AI) — the judge. Every stage that has a specialist reviewer
-// above also gets scored 1-10 by this one after that reviewer's pass. Below
-// 8 triggers another regeneration round (see runAutoPipeline's revision
-// loop), feeding the judge's own verdict back in alongside the specialist's
-// issues, not just the specialist's issues alone — the judge is a second,
+// Reviewer 4 (AI) — the judge. Every reviewed stage gets scored 1-10 by
+// this one after the specialist reviewer's pass. Below 8 triggers another
+// revision round (see reviseUntilGood), feeding the judge's own verdict
+// back in alongside the specialist's issues — the judge is a second,
 // independent opinion, not a rubber stamp on the first reviewer's word.
-async function scorePipelineStage(stageLabel, contentSummary, reviewerIssues) {
+// It now reads the REAL draft (it used to get a one-line summary, and in a
+// real run scored the same pitch deck 7/10 three rounds running with
+// near-identical comments), against a checklist for that stage. The story
+// stages use the stronger model (STORY_JUDGE_MODEL_NAME).
+async function scorePipelineStage(stageLabel, draftText, reviewerIssues, { checklist, model = GEMINI_MODEL_NAME } = {}) {
   const issuesText = reviewerIssues.length > 0 ? reviewerIssues.join(" ") : "No specific issues were flagged by the specialist reviewer.";
+  const checklistText = checklist ? `\n\nJudge it against this checklist:\n${checklist}` : "";
 
   return generateJsonContent({
-    model: GEMINI_MODEL_NAME,
-    contents: `You are the final judge for the "${stageLabel}" stage of a screenplay pipeline. Here is a summary of the current draft:\n\n${contentSummary}\n\nA specialist reviewer already flagged: ${issuesText}\n\nRate this draft's quality on a strict scale from 1 to 10 (10 = genuinely excellent and ready to ship; 8 = solid and usable; anything below 8 needs real work before it's acceptable). Be a tough, honest judge — do not hand out 8+ scores generously, and don't just repeat the specialist reviewer's words, form your own independent judgment. Give your verdict as a short, direct sentence, in this exact style: if below 8, "This is not up to the mark. This is only a(n) X-pointer because <specific, concrete reasons>." — if 8 or above, "This is a strong X-pointer — <what's genuinely working>."`,
+    model,
+    contents: `You are the final judge for the "${stageLabel}" stage of a screenplay pipeline. Here is the current draft:\n\n${draftText}${checklistText}\n\nA specialist reviewer already flagged: ${issuesText}\n\nRate this draft's quality on a strict scale from 1 to 10 (10 = genuinely excellent and ready to ship; 8 = solid and usable; anything below 8 needs real work before it's acceptable). Be a tough, honest judge — do not hand out 8+ scores generously, and don't just repeat the specialist reviewer's words, form your own independent judgment. Give your verdict as a short, direct sentence, in this exact style: if below 8, "This is not up to the mark. This is only a(n) X-pointer because <specific, concrete reasons>." — if 8 or above, "This is a strong X-pointer — <what's genuinely working>."`,
     config: {
       systemInstruction: "You are the final quality judge in a multi-agent screenplay pipeline — blunt, specific, and consistent. Never inflate scores just to move things along.",
       responseMimeType: "application/json",
-      maxOutputTokens: 1024,
+      // 2.5 Flash "thinks" first, and that counts against this ceiling.
+      maxOutputTokens: model === GEMINI_MODEL_NAME ? 1024 : 16384,
       responseSchema: AUTO_PIPELINE_SCORE_SCHEMA,
     },
   });
+}
+
+// The story stages' judge and Story Editor use the stronger model: this is
+// where a story's quality is decided, and the calls are few (a handful
+// per run), unlike the per-scene ones.
+const STORY_JUDGE_MODEL_NAME = "gemini-2.5-flash";
+
+// What "good" means at each story stage — given to both the Story Editor
+// (to find problems) and the judge (to score).
+const STAGE_CHECKLISTS = {
+  pitchDeck: `- A specific, fresh premise — not a stock "corporation vs. village" or "estranged child returns" set-up told the usual way; what makes THIS story unlike others like it?
+- A protagonist with a clear goal, clear stakes (what they lose if they fail) and a strong opposing force.
+- Major characters whose wants genuinely clash with each other.
+- The setting and culture drive the story, not just decorate it.
+- For a series: every episode has its own specific turn and hook; no two episodes do the same job.`,
+  threeAct: `- The protagonist's outer goal (want) and inner need are clear, and pull against each other.
+- An inciting incident early in Act 1 that forces the story into motion.
+- Stakes that keep rising through Act 2, with a real midpoint turn, and a genuine "all is lost" low before Act 3.
+- A climax where the protagonist resolves the central conflict through their OWN choice and action — not luck, a rescue or someone else's decision.
+- The ending pays off what the setup planted, and proves the controlling idea (theme).
+- Each major character's arc lands.
+- For a series: the overall arc and every episode's own three acts are complete, and episodes escalate.`,
+  bitSheet: `- Every beat CAUSES the next ("therefore" / "but"), never just "and then".
+- No sagging stretch where nothing changes; every beat turns something.
+- Twists and reveals are set up earlier, so they feel earned, not random.
+- No two beats do the same job; nothing important happens off-screen.
+- The beats cover all three acts in order, with the climax and resolution given real weight.
+- For a series: every episode's beats escalate and end on a hook.`,
+  sceneList: `- Every Bit Sheet beat is covered, in order; no scene is filler.
+- Every scene has a turn (something changes by its end).
+- No two scenes do the same job or repeat the same confrontation.
+- Variety of places, time of day and pace; big moments are given enough screen time.
+- The estimated running time fits the target.`,
+};
+
+// Story Editor (AI): the specialist reviewer for the story stages that had
+// no review at all before (Three-Act, Bit Sheet) and for the Scene List.
+async function reviewStoryStage(stageLabel, draftText, checklist) {
+  return generateJsonContent({
+    model: STORY_JUDGE_MODEL_NAME,
+    contents: `You are a demanding story editor reviewing the "${stageLabel}" of a screenplay in development. Here is the draft:\n\n${draftText}\n\nCheck it against this checklist:\n${checklist}\n\nList the real problems as "issues": each one specific (name the beat, act, character or scene) and saying what to change. At most 8, most important first. Only genuine problems, never style preferences; if it's genuinely strong, return no issues and needsRevision false.`,
+    config: {
+      systemInstruction: "You are a meticulous, experienced story editor. Strict but fair, specific and constructive.",
+      responseMimeType: "application/json",
+      maxOutputTokens: 16384,
+      responseSchema: AUTO_PIPELINE_REVIEW_SCHEMA,
+    },
+  });
+}
+
+// The writer -> reviewer -> judge -> revise loop every reviewed stage runs.
+// Keeps the BEST-scoring version, not the last one (a revision can come out
+// worse than the draft before it). `mustFix(draft)` returns a blocking
+// problem code can see (e.g. a wrong episode count) or null — a draft with
+// one is never chosen over one without.
+async function reviseUntilGood(runId, stageKey, stageLabel, firstDraft, { draftText, review, revise, mustFix, checklist, judgeModel }) {
+  let draft = firstDraft;
+  let best = null;
+  for (let round = 0; round < MAX_AUTO_PIPELINE_REVISION_ROUNDS; round++) {
+    const blocking = mustFix ? mustFix(draft) : null;
+    const reviewed = review ? await review(draft) : { issues: [] };
+    const issues = Array.isArray(reviewed?.issues) ? reviewed.issues : [];
+    const judged = await scorePipelineStage(stageLabel, draftText(draft), issues, { checklist, model: judgeModel });
+    await appendAutoPipelineNote(runId, stageKey, `Judge score: ${judged.score}/10 — ${judged.verdict}`);
+    if (blocking) await appendAutoPipelineNote(runId, stageKey, blocking);
+    const candidate = { draft, score: Number(judged.score) || 0, round, blocking: Boolean(blocking) };
+    const isBetter =
+      !best ||
+      (best.blocking && !candidate.blocking) ||
+      (best.blocking === candidate.blocking && candidate.score >= best.score);
+    if (isBetter) best = candidate;
+    if ((candidate.score >= 8 && !blocking) || round === MAX_AUTO_PIPELINE_REVISION_ROUNDS - 1) break;
+    const feedback = [blocking, ...issues, judged.verdict].filter(Boolean).join(" ");
+    draft = await revise(draft, feedback);
+  }
+  if (best.draft !== draft) {
+    await appendAutoPipelineNote(runId, stageKey, `Kept version ${best.round + 1} (score ${best.score}/10) — later revisions scored lower.`);
+  }
+  return best.draft;
+}
+
+// The judge's view of each stage: the real content, in English, trimmed
+// only if it's enormous (a 60-episode series).
+const JUDGE_TEXT_LIMIT = 60000;
+function capJudgeText(text) {
+  return text.length > JUDGE_TEXT_LIMIT ? `${text.slice(0, JUDGE_TEXT_LIMIT)}\n...(the rest is cut for length)` : text;
+}
+
+function pitchDeckJudgeText(deck) {
+  const characters = (deck.majorCharacters ?? [])
+    .map((c) => `- ${c.name} — ${c.role?.en ?? ""}. Emotional core: ${c.emotionalCore?.en ?? ""}. Conflict: ${c.conflict?.en ?? ""}`)
+    .join("\n");
+  const episodes = Array.isArray(deck.episodes)
+    ? `\n\nEPISODES:\n${deck.episodes.map((ep, i) => `${i + 1}. ${ep.title?.en ?? ""} — ${ep.synopsis?.en ?? ""}${ep.hook?.en ? ` HOOK: ${ep.hook.en}` : ""}`).join("\n")}`
+    : "";
+  return capJudgeText(
+    `TITLE: ${deck.title?.en ?? ""}\nLOGLINE: ${deck.logline?.en ?? ""}\nPREMISE: ${deck.premise?.en ?? ""}\nTONE/GENRE: ${deck.toneGenre?.en ?? ""}\n\nSTORY:\n${(deck.storyPages ?? []).map((page) => page.en).join("\n\n")}\n\nMAJOR CHARACTERS:\n${characters}${episodes}`
+  );
+}
+
+function threeActJudgeText(threeAct) {
+  const acts = `CONTROLLING IDEA (THEME): ${threeAct.controllingIdea?.en ?? ""}\n\nACT 1 — SETUP: ${actText(threeAct.setup)}\n\nACT 2 — CONFRONTATION: ${actText(threeAct.confrontation)}\n\nACT 3 — RESOLUTION: ${actText(threeAct.resolution)}`;
+  const episodes = Array.isArray(threeAct.episodeStructures)
+    ? `\n\nEPISODES:\n${threeAct.episodeStructures.map((ep, i) => `Episode ${i + 1}: Setup: ${ep.setup?.summary?.en ?? ""} / Confrontation: ${ep.confrontation?.summary?.en ?? ""} / Resolution: ${ep.resolution?.summary?.en ?? ""}`).join("\n")}`
+    : "";
+  return capJudgeText(acts + episodes);
+}
+
+function bitSheetJudgeText(bitSheet) {
+  if (Array.isArray(bitSheet.episodeBits)) {
+    return capJudgeText(bitSheet.episodeBits.map((ep, i) => `EPISODE ${i + 1}:\n${bitSheetOutlineText(ep.bits ?? [])}`).join("\n\n"));
+  }
+  return capJudgeText(bitSheetOutlineText(bitSheet.bits ?? []));
+}
+
+function sceneListJudgeText(sceneList, bitSheet) {
+  const sceneLine = (scene, i) =>
+    `${scene.sceneNumber || i + 1}. [Act ${scene.actNumber}] ${scene.intExt}. ${scene.location?.en ?? ""} — ${scene.timeOfDay}: ${scene.oneLiner?.en ?? ""} (${scene.estimatedMinutes ?? "?"} min)`;
+  const scenesText = Array.isArray(sceneList.episodeScenes)
+    ? sceneList.episodeScenes
+        .map((ep, i) => `EPISODE ${i + 1} (${ep.totalEstimatedMinutes ?? "?"} of ${ep.targetMinutes ?? "?"} min):\n${(ep.scenes ?? []).map(sceneLine).join("\n")}`)
+        .join("\n\n")
+    : `RUNNING TIME: ${sceneList.totalEstimatedMinutes ?? "?"} of ${sceneList.targetMinutes ?? "?"} min\n${(sceneList.scenes ?? []).map(sceneLine).join("\n")}`;
+  const beats = Array.isArray(bitSheet?.bits) ? `THE BIT SHEET IT MUST COVER:\n${bitSheetOutlineText(bitSheet.bits)}\n\nTHE SCENE LIST:\n` : "";
+  return capJudgeText(beats + scenesText);
+}
+
+// Storylines: the run used to always take the first of the 3 directions.
+// Now the story judge picks the strongest.
+async function pickBestStoryline(storylines, format) {
+  if (!Array.isArray(storylines) || storylines.length < 2) return { index: 0, reason: "" };
+  const formatLine = format?.type === "vertical" ? "a low-budget vertical micro-drama" : format?.type === "series" ? "a web series" : "a feature film";
+  const options = storylines
+    .map((s, i) => `OPTION ${i + 1}: ${s.title?.en ?? ""}\nLogline: ${s.logline?.en ?? ""}\nSummary: ${s.summary?.en ?? ""}`)
+    .join("\n\n");
+  const result = await generateJsonContent({
+    model: STORY_JUDGE_MODEL_NAME,
+    contents: `Three storyline directions for ${formatLine}:\n\n${options}\n\nPick the ONE with the most potential to become a genuinely great screenplay: the freshest premise, the clearest protagonist goal and stakes, the strongest conflict, and the most room for surprise and emotion. Return "choice" (1, 2 or 3) and "reason" — one short sentence.`,
+    config: {
+      systemInstruction: "You are an experienced film producer and story editor choosing which story to develop.",
+      responseMimeType: "application/json",
+      maxOutputTokens: 16384,
+      responseSchema: {
+        type: Type.OBJECT,
+        properties: { choice: { type: Type.INTEGER }, reason: { type: Type.STRING } },
+        required: ["choice", "reason"],
+      },
+    },
+  });
+  const index = Math.round(Number(result.choice)) - 1;
+  return { index: index >= 0 && index < storylines.length ? index : 0, reason: result.reason ?? "" };
 }
 
 // Caps the reviewer-judge revision loop so a stubbornly low score can't spin
@@ -15816,11 +15972,18 @@ async function runAutoPipeline(runId, conceptText, format, dialogueLanguage, res
     } else {
       await updateAutoPipelineRun(runId, { progress_stage: "storylines" });
       const { storylines } = await generateStorylinesContent(conceptText, format);
-      storyline = storylines[0];
+      // The story judge picks the strongest of the 3 (it used to always be
+      // the first). A failed pick just falls back to the first.
+      const picked = await pickBestStoryline(storylines, format).catch(() => ({ index: 0, reason: "" }));
+      storyline = storylines[picked.index];
+      if (picked.reason) {
+        await appendAutoPipelineNote(runId, "storylines", `Picked option ${picked.index + 1} of ${storylines.length}: "${storyline?.title?.en ?? ""}" — ${picked.reason}`);
+      }
 
       const conceptResult = await db.query(
         "INSERT INTO concepts (concept_text, storylines, title) VALUES ($1, $2, $3) RETURNING id",
-        [conceptText, JSON.stringify(storylines), storyline?.title?.en ?? null]
+        // The picked one first — Resume reads the first.
+        [conceptText, JSON.stringify([storyline, ...storylines.filter((s) => s !== storyline)]), storyline?.title?.en ?? null]
       );
       conceptId = conceptResult.rows[0].id;
       await updateAutoPipelineRun(runId, { concept_id: conceptId });
@@ -15829,27 +15992,28 @@ async function runAutoPipeline(runId, conceptText, format, dialogueLanguage, res
     if (!deck) {
       await updateAutoPipelineRun(runId, { progress_stage: "pitch-deck" });
       deck = await generatePitchDeckContent(storyline, format);
-      for (let round = 0; round < MAX_AUTO_PIPELINE_REVISION_ROUNDS; round++) {
-        // A REAL failure caught in testing: on a revision round, Gemini can
-        // silently return a DIFFERENT episode count than requested (seen: 60
-        // requested, got 66, then 30, then 33 across successive rounds) — the
-        // judge only grades quality, so this drifted through undetected and
-        // every downstream stage just inherited the wrong count. This is
-        // checked and force-corrected every round, independent of the judge's
-        // score, and fails the whole run loudly rather than completing with
-        // silently-wrong data if it's still off after all rounds.
-        const countIssue = pitchDeckEpisodeCountIssue(deck, format);
-        const hookReview = await reviewPitchDeckHooks(deck);
-        const summary = deck.episodes
-          ? `${deck.episodes.length} episodes. Sample hooks: ${deck.episodes.slice(0, 3).map((ep) => ep.hook?.en).filter(Boolean).join(" | ")}`
-          : `Premise: ${deck.premise.en}`;
-        const judged = await scorePipelineStage("Pitch Deck", summary, hookReview.issues);
-        await appendAutoPipelineNote(runId, "pitch-deck", `Judge score: ${judged.score}/10 — ${judged.verdict}`);
-        if (countIssue) await appendAutoPipelineNote(runId, "pitch-deck", countIssue);
-        if ((judged.score >= 8 && !countIssue) || round === MAX_AUTO_PIPELINE_REVISION_ROUNDS - 1) break;
-        const feedback = [countIssue, ...hookReview.issues, judged.verdict].filter(Boolean).join(" ");
-        deck = await generatePitchDeckContent(storyline, format, { feedback, previous: deck });
-      }
+      // A REAL failure caught in testing: on a revision round, Gemini can
+      // silently return a DIFFERENT episode count than requested (seen: 60
+      // requested, got 66, then 30, then 33 across successive rounds) — the
+      // judge only grades quality, so this drifted through undetected and
+      // every downstream stage just inherited the wrong count. This is
+      // checked every round as a blocking problem (mustFix), independent of
+      // the judge's score, and fails the whole run loudly below rather than
+      // completing with silently-wrong data if it's still off after all rounds.
+      deck = await reviseUntilGood(runId, "pitch-deck", "Pitch Deck", deck, {
+        draftText: pitchDeckJudgeText,
+        checklist: STAGE_CHECKLISTS.pitchDeck,
+        judgeModel: STORY_JUDGE_MODEL_NAME,
+        mustFix: (d) => pitchDeckEpisodeCountIssue(d, format),
+        review: async (d) => {
+          const [story, hooks] = await Promise.all([
+            reviewStoryStage("Pitch Deck", pitchDeckJudgeText(d), STAGE_CHECKLISTS.pitchDeck),
+            reviewPitchDeckHooks(d),
+          ]);
+          return { issues: [...(story.issues ?? []), ...(hooks.issues ?? [])] };
+        },
+        revise: (d, feedback) => generatePitchDeckContent(storyline, format, { feedback, previous: d }),
+      });
       const finalCountIssue = pitchDeckEpisodeCountIssue(deck, format);
       if (finalCountIssue) {
         throw new Error(
@@ -15875,6 +16039,14 @@ async function runAutoPipeline(runId, conceptText, format, dialogueLanguage, res
     if (!threeAct) {
       await updateAutoPipelineRun(runId, { progress_stage: "three-act" });
       threeAct = await generateThreeActContent(deck, characterSheet);
+      // New: the Story Editor + story judge (there was no review here at all).
+      threeAct = await reviseUntilGood(runId, "three-act", "Three-Act Structure", threeAct, {
+        draftText: threeActJudgeText,
+        checklist: STAGE_CHECKLISTS.threeAct,
+        judgeModel: STORY_JUDGE_MODEL_NAME,
+        review: (d) => reviewStoryStage("Three-Act Structure", threeActJudgeText(d), STAGE_CHECKLISTS.threeAct),
+        revise: (d, feedback) => generateThreeActContent(deck, characterSheet, { feedback, previous: d }),
+      });
       if (Array.isArray(deck.episodes)) {
         assertEpisodeCount(threeAct.episodeStructures?.length ?? 0, deck.episodes.length, "Three-act structure");
       }
@@ -15888,6 +16060,14 @@ async function runAutoPipeline(runId, conceptText, format, dialogueLanguage, res
     if (!bitSheet) {
       await updateAutoPipelineRun(runId, { progress_stage: "bit-sheet" });
       bitSheet = await generateBitSheetContent(threeAct, deck);
+      // New: the Story Editor + story judge (there was no review here at all).
+      bitSheet = await reviseUntilGood(runId, "bit-sheet", "Bit Sheet", bitSheet, {
+        draftText: bitSheetJudgeText,
+        checklist: STAGE_CHECKLISTS.bitSheet,
+        judgeModel: STORY_JUDGE_MODEL_NAME,
+        review: (d) => reviewStoryStage("Bit Sheet", bitSheetJudgeText(d), STAGE_CHECKLISTS.bitSheet),
+        revise: (d, feedback) => generateBitSheetContent(threeAct, deck, { feedback, previous: d }),
+      });
       if (Array.isArray(deck.episodes)) {
         assertEpisodeCount(bitSheet.episodeBits?.length ?? 0, deck.episodes.length, "Bit sheet");
       }
@@ -15901,23 +16081,24 @@ async function runAutoPipeline(runId, conceptText, format, dialogueLanguage, res
     if (!sceneList) {
       await updateAutoPipelineRun(runId, { progress_stage: "scene-list" });
       sceneList = await generateSceneListContent(bitSheet, deck);
-      // The budget review + judge only means something for a vertical
-      // micro-drama (a 2-3 day shoot). Films and series have no budget cap
-      // (the user's call), so for them this round would only score the
-      // story on its location count -- skipped.
-      const budgetRounds = deck.format?.type === "vertical" ? MAX_AUTO_PIPELINE_REVISION_ROUNDS : 0;
-      for (let round = 0; round < budgetRounds; round++) {
-        const budgetReview = reviewSceneListBudget(deck, sceneList);
-        const locationCount = new Set(
-          (sceneList.episodeScenes ?? [{ scenes: sceneList.scenes }]).flatMap((es) => es.scenes.map((s) => s.location.en))
-        ).size;
-        const summary = `${locationCount} distinct locations used across the series; ${deck.majorCharacters?.length ?? 0} major characters.`;
-        const judged = await scorePipelineStage("Scene List (budget feasibility)", summary, budgetReview.issues);
-        await appendAutoPipelineNote(runId, "scene-list", `Judge score: ${judged.score}/10 — ${judged.verdict}`);
-        if (judged.score >= 8 || round === budgetRounds - 1) break;
-        const feedback = [...budgetReview.issues, judged.verdict].filter(Boolean).join(" ");
-        sceneList = await generateSceneListContent(bitSheet, deck, { feedback, previous: sceneList });
-      }
+      // Story Editor + story judge for every format. The budget check (plain
+      // code) only applies to a vertical micro-drama (a 2-3 day shoot) —
+      // films and series have no budget cap (the user's call).
+      const isVertical = deck.format?.type === "vertical";
+      const sceneListChecklist = isVertical
+        ? `${STAGE_CHECKLISTS.sceneList}\n- Budget: at most 4-5 distinct locations for the whole series and about 5 main characters (a 2-3 day shoot).`
+        : STAGE_CHECKLISTS.sceneList;
+      sceneList = await reviseUntilGood(runId, "scene-list", "Scene List", sceneList, {
+        draftText: (d) => sceneListJudgeText(d, bitSheet),
+        checklist: sceneListChecklist,
+        judgeModel: STORY_JUDGE_MODEL_NAME,
+        review: async (d) => {
+          const story = await reviewStoryStage("Scene List", sceneListJudgeText(d, bitSheet), sceneListChecklist);
+          const budget = isVertical ? reviewSceneListBudget(deck, d) : { issues: [] };
+          return { issues: [...budget.issues, ...(story.issues ?? [])] };
+        },
+        revise: (d, feedback) => generateSceneListContent(bitSheet, deck, { feedback, previous: d }),
+      });
       if (Array.isArray(deck.episodes)) {
         assertEpisodeCount(sceneList.episodeScenes?.length ?? 0, deck.episodes.length, "Scene list");
       }
@@ -16005,22 +16186,20 @@ async function runScreenplayAndQualityPass(runId, deck, sceneList, sceneListId, 
         if (sceneIndex === 0 && episodeIndex % 5 === 0 && hasDialogue) {
           try {
             const stageLabel = episodeIndex === null ? "screenplay" : `screenplay-ep${episodeIndex + 1}`;
-            for (let round = 0; round < MAX_AUTO_PIPELINE_REVISION_ROUNDS; round++) {
-              const dialogueReview = await reviewDialogueAuthenticity(content.elements, dialogueLanguage);
-              const sampleLines = content.elements
-                .filter((el) => el.type === "dialogue")
-                .slice(0, 4)
-                .map((el) => `${el.character}: ${el.text}`)
-                .join(" / ");
-              const judged = await scorePipelineStage("Screenplay dialogue", sampleLines, dialogueReview.issues);
-              await appendAutoPipelineNote(runId, stageLabel, `Judge score: ${judged.score}/10 — ${judged.verdict}`);
-              if (judged.score >= 8 || round === MAX_AUTO_PIPELINE_REVISION_ROUNDS - 1) break;
-              const feedback = [...dialogueReview.issues, judged.verdict].filter(Boolean).join(" ");
-              content = await generateScreenplaySceneContent(
-                deck, scenes, sceneIndex, previousElements, sceneList.controllingIdea,
-                { feedback, previous: content }, dialogueLanguage, avoidPhrases
-              );
-            }
+            const dialogueText = (c) =>
+              c.elements
+                .filter((el) => el.type === "dialogue" && el.text?.trim())
+                .map((el) => `${el.character}${el.parenthetical ? ` (${el.parenthetical})` : ""}: ${el.text}`)
+                .join("\n");
+            content = await reviseUntilGood(runId, stageLabel, "Screenplay dialogue", content, {
+              draftText: dialogueText,
+              review: (c) => reviewDialogueAuthenticity(c.elements, dialogueLanguage),
+              revise: (c, feedback) =>
+                generateScreenplaySceneContent(
+                  deck, scenes, sceneIndex, previousElements, sceneList.controllingIdea,
+                  { feedback, previous: c }, dialogueLanguage, avoidPhrases
+                ),
+            });
           } catch (error) {
             console.error(`Auto-pipeline ${runId}: dialogue review of ${sceneLabel} failed:`, error.message);
             await appendAutoPipelineNote(runId, "screenplay", `The dialogue review of ${sceneLabel} failed — the scene was kept as written.`);

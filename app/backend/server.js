@@ -8867,8 +8867,12 @@ app.get("/api/three-act-structure/:id", requireLogin, async (req, res) => {
 // (crisis/climax/realization) are now 8 mandatory structural anchors (see
 // BIT_SHEET_SYSTEM_PROMPT) — a shorter list would leave no room for the
 // catalyst/midpoint/setback beats that anchor the middle of the story too.
+// A short film can't hold 12+ beats (seen for real: 15 beats for a 10-minute
+// film squeezed its scene list) — under 40 minutes it's about one beat per
+// 2.5 minutes, never fewer than the 8 structural anchors.
 function suggestBitCount(minutes) {
   if (!minutes) return 12;
+  if (minutes < 40) return Math.min(12, Math.max(8, Math.round(minutes / 2.5)));
   return Math.min(24, Math.max(12, Math.round(minutes / 8)));
 }
 
@@ -9654,6 +9658,19 @@ function sanitizeScreenplayElements(elements, dialogueLanguage) {
 
   const cleaned = (elements ?? []).map((element) => {
     const isDialogue = element.type === "dialogue";
+    // An acting note written at the start of the spoken line ("(a bit
+    // defensively) କ'ଣ କହୁଛୁ...", seen for real) moves to the acting-note
+    // slot, so it prints as a parenthetical and is never read out.
+    if (isDialogue && typeof element.text === "string") {
+      const note = element.text.match(/^\s*\(([^()]{1,80})\)\s*/);
+      if (note && element.text.slice(note[0].length).trim()) {
+        element = {
+          ...element,
+          parenthetical: element.parenthetical?.trim() ? element.parenthetical : note[1].trim(),
+          text: element.text.slice(note[0].length),
+        };
+      }
+    }
     return {
       ...element,
       text: clean(element.text, isDialogue ? dialogueRegex : EN_FOREIGN_SCRIPT_REGEX),
@@ -15619,29 +15636,6 @@ function reviewSceneListBudget(deck, sceneList) {
   return { needsRevision: issues.length > 0, issues };
 }
 
-// Reviewer 3 (AI): dialogue authenticity — only sampled on a subset of scenes
-// during the screenplay stage (see runAutoPipeline) to keep this cheap on a
-// high-episode-count vertical drama, rather than reviewing every scene.
-async function reviewDialogueAuthenticity(elements, dialogueLanguage) {
-  const dialogueLines = elements
-    .filter((el) => el.type === "dialogue")
-    .map((el) => `${el.character}: ${el.text}`)
-    .join("\n");
-  if (!dialogueLines) return { needsRevision: false, issues: [] };
-
-  const languageLabel = dialogueLanguage === "or" ? "Odia" : dialogueLanguage === "hi" ? "Hindi" : "English";
-  return generateJsonContent({
-    model: GEMINI_MODEL_NAME,
-    contents: `You are reviewing dialogue from a screenplay scene for natural, authentic ${languageLabel} speech. Here are the dialogue lines:\n\n${dialogueLines}\n\nFlag it if the dialogue sounds stiff, overly formal/literary, like a textbook translation, or if every character sounds the same regardless of who they are. Also flag it if it's EXPOSITORY — a character or narrator (V.O.) stating an emotion, motivation, or plot point outright ("I feel so betrayed", "She must not find out about the merger") instead of revealing it through what's said, withheld, or done; real people rarely announce their own feelings that plainly. Real spoken dialogue is casual, has natural rhythm, shows feeling through behavior and subtext rather than announcing it, and different characters sound different from each other. If it genuinely reads as natural, authentic, and shown rather than told, return no issues.`,
-    config: {
-      systemInstruction: "You are a meticulous script supervisor reviewing dialogue authenticity. Be strict but fair.",
-      responseMimeType: "application/json",
-      maxOutputTokens: 4096,
-      responseSchema: AUTO_PIPELINE_REVIEW_SCHEMA,
-    },
-  });
-}
-
 const AUTO_PIPELINE_SCORE_SCHEMA = {
   type: Type.OBJECT,
   properties: {
@@ -15666,7 +15660,7 @@ async function scorePipelineStage(stageLabel, draftText, reviewerIssues, { check
 
   return generateJsonContent({
     model,
-    contents: `You are the final judge for the "${stageLabel}" stage of a screenplay pipeline. Here is the current draft:\n\n${draftText}${checklistText}\n\nA specialist reviewer has just read this same draft and found these problems in it (they are notes on THIS draft, not earlier feedback it was meant to fix): ${issuesText}\n\nRate this draft's quality on a strict scale from 1 to 10 (10 = genuinely excellent and ready to ship; 8 = solid and usable; anything below 8 needs real work before it's acceptable). Be a tough, honest judge — do not hand out 8+ scores generously, and don't just repeat the specialist reviewer's words, form your own independent judgment. Give your verdict as a short, direct sentence, in this exact style: if below 8, "This is not up to the mark. This is only a(n) X-pointer because <specific, concrete reasons>." — if 8 or above, "This is a strong X-pointer — <what's genuinely working>."`,
+    contents: `You are the final judge for the "${stageLabel}" stage of a screenplay pipeline. Here is the current draft:\n\n${draftText}${checklistText}\n\nA specialist reviewer has just read this same draft and found these problems in it (they are notes on THIS draft, not earlier feedback it was meant to fix): ${issuesText}\n\nRate this draft's quality on a strict scale from 1 to 10 (10 = genuinely excellent; 8 = strong; 7 = good and usable — the pass mark; anything below 7 needs real work before it's acceptable). Be a tough, honest judge — do not hand out high scores generously, and don't just repeat the specialist reviewer's words, form your own independent judgment. Give your verdict as a short, direct sentence, in this exact style: if below 7, "This is not up to the mark. This is only a(n) X-pointer because <specific, concrete reasons>." — if 7 or above, "This is a good X-pointer — <what's genuinely working>; to be even better: <the most important remaining improvement>."`,
     config: {
       systemInstruction: "You are the final quality judge in a multi-agent screenplay pipeline — blunt, specific, and consistent. Never inflate scores just to move things along.",
       responseMimeType: "application/json",
@@ -15732,11 +15726,11 @@ async function reviewStoryStage(stageLabel, draftText, checklist) {
 // one is never chosen over one without.
 //
 // Second batch (the user's call, 2026-10-06; story stages only): if no
-// version has reached 8/10 after the first 3, version 4 is a FRESH version
+// version has reached the pass mark after the first 3, version 4 is a FRESH version
 // that takes in every note from versions 1-3 at once (each normal revision
 // only sees the latest notes), with the best version so far as reference;
 // versions 5-6 then revise it as usual. It stops early once a version
-// reaches 8, or when two versions in a row don't beat the best — in the
+// reaches the pass mark, or when two versions in a row don't beat the best — in the
 // tests, plain revising flattened out after 2-3 rounds.
 const SECOND_BATCH_VERSIONS = 3;
 
@@ -15763,7 +15757,7 @@ async function reviseUntilGood(runId, stageKey, stageLabel, firstDraft, { draftT
     const feedback = [blocking, ...issues, judged.verdict].filter(Boolean).join(" ");
     allNotes.push(`Version ${version} (${candidate.score}/10): ${feedback}`);
 
-    if (candidate.score >= 8 && !blocking) break;
+    if (candidate.score >= PASS_SCORE && !blocking) break;
     if (version >= maxVersions) break;
     if (version === MAX_AUTO_PIPELINE_REVISION_ROUNDS) {
       if (!secondBatch) break;
@@ -15868,6 +15862,11 @@ async function pickBestStoryline(storylines, format) {
 // forever — after this many rounds, the pipeline proceeds with whatever the
 // best attempt was rather than burning unbounded time/API quota on one stage.
 const MAX_AUTO_PIPELINE_REVISION_ROUNDS = 3;
+// The judge's pass mark: a version scoring this or more is good enough and
+// the loop stops (the user's call, 2026-10-06 — it used to be 8, which no
+// story stage reached in any real test, so every stage always ran every
+// round).
+const PASS_SCORE = 7;
 
 // Real bug found in testing: Gemini can silently return a different episode
 // count than requested on a pitch-deck REVISION call (60 requested -> 66,
@@ -16201,6 +16200,223 @@ async function runAutoPipeline(runId, conceptText, format, dialogueLanguage, res
   }
 }
 
+// Step 3 — the Script Editor. Once every scene is written, the screenplay
+// is read in sequences (up to 8 scenes together: within one act for a film,
+// whole neighbouring episodes for a series). For each, the editor finds the
+// weak scenes, the judge scores the sequence, and below the pass mark up to
+// 3 flagged scenes are rewritten with their specific fix — the same
+// writer -> reviewer -> judge -> revise loop (reviseUntilGood), keeping the
+// best version. It replaces the old dialogue spot-check (the first scene of
+// every 5th episode only), so every scene is now read by an editor.
+const SEQUENCE_MAX_SCENES = 8;
+const SEQUENCE_REWRITES_PER_ROUND = 3;
+
+// What the story is — given to every script reviewer. Seen for real: a
+// dialogue judge that wasn't told the story called its own sacred dance's
+// name an "invented-sounding word".
+function screenplayStoryContext(deck) {
+  const characters = (deck.majorCharacters ?? []).map((c) => `${c.name} — ${c.role?.en ?? ""}`).join("; ");
+  return `STORY: "${deck.title?.en ?? ""}" — ${deck.logline?.en ?? ""}\nMAIN CHARACTERS: ${characters}\nNames, places, rituals, dances and other terms that come from this story (including its title) are the story's own — never call them invented or wrong.`;
+}
+
+function buildScreenplaySequences(sceneList, written) {
+  const sequences = [];
+  const addChunks = (items, describe) => {
+    for (let i = 0; i < items.length; i += SEQUENCE_MAX_SCENES) {
+      const chunk = items.slice(i, i + SEQUENCE_MAX_SCENES);
+      sequences.push({ items: chunk, where: describe(chunk) });
+    }
+  };
+  if (Array.isArray(sceneList.episodeScenes)) {
+    const episodesText = (chunk) => {
+      const first = chunk[0].episodeIndex + 1;
+      const last = chunk[chunk.length - 1].episodeIndex + 1;
+      return first === last ? `episode ${first}` : `episodes ${first}-${last}`;
+    };
+    let current = [];
+    sceneList.episodeScenes.forEach((episode, e) => {
+      const items = (episode.scenes ?? [])
+        .map((scene, s) => ({ episodeIndex: e, sceneIndex: s, scenes: episode.scenes, content: written.get(`${e}:${s}`) }))
+        .filter((item) => item.content);
+      if (items.length === 0) return;
+      if (current.length > 0 && current.length + items.length > SEQUENCE_MAX_SCENES) {
+        addChunks(current, episodesText);
+        current = [];
+      }
+      if (items.length > SEQUENCE_MAX_SCENES) addChunks(items, episodesText);
+      else current.push(...items);
+    });
+    if (current.length > 0) addChunks(current, episodesText);
+  } else {
+    const scenes = sceneList.scenes ?? [];
+    let act = null;
+    let current = [];
+    const actText = (chunk) => `Act ${chunk[0].scenes[chunk[0].sceneIndex].actNumber ?? "?"}`;
+    scenes.forEach((scene, s) => {
+      const content = written.get(`null:${s}`);
+      if (!content) return;
+      if (act !== null && scene.actNumber !== act && current.length > 0) {
+        addChunks(current, actText);
+        current = [];
+      }
+      act = scene.actNumber;
+      current.push({ episodeIndex: null, sceneIndex: s, scenes, content });
+    });
+    if (current.length > 0) addChunks(current, actText);
+  }
+  return sequences;
+}
+
+function sequenceDraftText(deck, items, contents) {
+  const body = items
+    .map((item, i) => {
+      const scene = item.scenes[item.sceneIndex];
+      const lines = (contents[i].elements ?? [])
+        .map((el) =>
+          el.type === "dialogue"
+            ? `${el.character}${el.parenthetical ? ` (${el.parenthetical})` : ""}: ${el.text}`
+            : `[${el.type === "transition" ? "TRANSITION" : "ACTION"}] ${el.text}`
+        )
+        .join("\n");
+      return `SCENE ${i + 1}${item.episodeIndex !== null ? ` (episode ${item.episodeIndex + 1})` : ""} — ${scene.intExt}. ${scene.location?.en ?? ""} — ${scene.timeOfDay}\nPlanned: ${scene.oneLiner?.en ?? ""}\n${lines}`;
+    })
+    .join("\n\n");
+  return capJudgeText(`${screenplayStoryContext(deck)}\n\n${body}`);
+}
+
+function sequenceChecklist(dialogueLanguage) {
+  const language = MOVIE_LANGUAGE_NAMES[dialogueLanguage] ?? "English";
+  return `- Every scene has a turn — something changes by its end; no scene just repeats what an earlier one did.
+- Dialogue is natural, spoken ${language} — how these people really talk: short, with subtext; never speeches, lectures, or exposition telling the audience what it already knows.
+- Each character keeps one consistent voice.
+- Continuity from scene to scene: who is where, time of day, what each character already knows.
+- Action lines show only what the camera can see and hear.
+- Acting notes stay in brackets, never inside the spoken line.
+- Each scene does what its plan ("Planned:") says.`;
+}
+
+async function reviewScreenplaySequence(draftText, checklist) {
+  return generateJsonContent({
+    model: STORY_JUDGE_MODEL_NAME,
+    contents: `You are a demanding script editor reading a sequence of consecutive scenes from a screenplay in development.\n\n${draftText}\n\nCheck it against this checklist:\n${checklist}\n\nReturn "issues": the real problems, each naming its scene number, most important first (at most 8); and "sceneFixes": for each scene that genuinely needs rewriting (at most ${SEQUENCE_REWRITES_PER_ROUND}, the most important first), its number and exactly what to change. Every issue must belong to a scene in sceneFixes. Only genuine problems, never style preferences; if the sequence is genuinely strong, return both empty.`,
+    config: {
+      systemInstruction: "You are a meticulous, experienced script editor. Strict but fair, specific and constructive.",
+      responseMimeType: "application/json",
+      maxOutputTokens: 16384,
+      responseSchema: {
+        type: Type.OBJECT,
+        properties: {
+          issues: { type: Type.ARRAY, items: { type: Type.STRING } },
+          sceneFixes: {
+            type: Type.ARRAY,
+            items: {
+              type: Type.OBJECT,
+              properties: { scene: { type: Type.INTEGER }, fix: { type: Type.STRING } },
+              required: ["scene", "fix"],
+            },
+          },
+        },
+        required: ["issues", "sceneFixes"],
+      },
+    },
+  });
+}
+
+async function runSequenceReview(runId, deck, sceneList, sceneListId, dialogueLanguage) {
+  await updateAutoPipelineRun(runId, { progress_stage: "sequence-review" });
+  const rows = (
+    await db.query(
+      `SELECT DISTINCT ON (episode_index, scene_index) episode_index, scene_index, content
+       FROM screenplay_scenes WHERE scene_list_id = $1 ORDER BY episode_index, scene_index, created_at DESC`,
+      [sceneListId]
+    )
+  ).rows;
+  const written = new Map(rows.filter((row) => row.content?.elements?.length).map((row) => [`${row.episode_index}:${row.scene_index}`, row.content]));
+  const sequences = buildScreenplaySequences(sceneList, written);
+  const checklist = sequenceChecklist(dialogueLanguage);
+  let rewritten = 0;
+
+  for (let n = 0; n < sequences.length; n++) {
+    const { items, where } = sequences[n];
+    const label = `Sequence ${n + 1} of ${sequences.length} (${where}, ${items.length} scenes)`;
+    await appendAutoPipelineNote(runId, "sequence-review", `${label}: the script editor is reading it.`);
+    try {
+      const original = items.map((item) => item.content);
+      let latestFixes = [];
+      const best = await reviseUntilGood(runId, "sequence-review", `Screenplay ${label}`, original, {
+        draftText: (contents) => sequenceDraftText(deck, items, contents),
+        checklist,
+        judgeModel: STORY_JUDGE_MODEL_NAME,
+        review: async (contents) => {
+          const reviewed = await reviewScreenplaySequence(sequenceDraftText(deck, items, contents), checklist);
+          latestFixes = (reviewed.sceneFixes ?? [])
+            .map((f) => ({ index: Math.round(Number(f.scene)) - 1, fix: f.fix }))
+            .filter((f) => f.index >= 0 && f.index < items.length && f.fix)
+            .slice(0, SEQUENCE_REWRITES_PER_ROUND);
+          return { issues: reviewed.issues ?? [] };
+        },
+        revise: async (contents, feedback) => {
+          const next = [...contents];
+          for (const { index, fix } of latestFixes) {
+            const item = items[index];
+            const previousElements = index > 0 ? next[index - 1].elements : null;
+            try {
+              next[index] = await generateScreenplaySceneContent(
+                deck, item.scenes, item.sceneIndex, previousElements, sceneList.controllingIdea,
+                { feedback: `${fix} (The script editor's overall note on this sequence: ${feedback})`, previous: contents[index] },
+                dialogueLanguage, []
+              );
+            } catch (error) {
+              console.error(`Auto-pipeline ${runId}: sequence rewrite failed:`, error.message);
+            }
+            await touchAutoPipelineRun(runId);
+          }
+          return next;
+        },
+      });
+      for (let i = 0; i < items.length; i++) {
+        if (best[i] === original[i]) continue;
+        await db.query(
+          "INSERT INTO screenplay_scenes (scene_list_id, episode_index, scene_index, content) VALUES ($1, $2, $3, $4)",
+          [sceneListId, items[i].episodeIndex, items[i].sceneIndex, JSON.stringify(best[i])]
+        );
+        rewritten++;
+      }
+    } catch (error) {
+      // A failed review never stops the run: the scenes stay as written.
+      console.error(`Auto-pipeline ${runId}: sequence review failed:`, error.message);
+      await appendAutoPipelineNote(runId, "sequence-review", `${label}: the review could not finish — its scenes are kept as written.`);
+    }
+  }
+  await appendAutoPipelineNote(runId, "sequence-review", `Script editor done: ${sequences.length} sequence(s) read, ${rewritten} scene(s) rewritten.`);
+}
+
+// Step 3 — the same full language check as the Movie screen's "Check full
+// script" (grammar, spelling, natural spoken dialogue in its own script),
+// run once over the finished screenplay. It saves each corrected scene as
+// a new version, so nothing is lost.
+async function runFinalLanguageCheck(runId, sceneListId) {
+  await updateAutoPipelineRun(runId, { progress_stage: "language-check" });
+  const state = { status: "running", report: [], doneScenes: 0, totalScenes: 0 };
+  // The check writes no run updates of its own; without this heartbeat a
+  // long script would look dead to the stale-run reaper.
+  const heartbeat = setInterval(() => touchAutoPipelineRun(runId).catch(() => {}), 60_000);
+  try {
+    await runMovieScriptCheck(sceneListId, state);
+  } finally {
+    clearInterval(heartbeat);
+  }
+  const corrected = state.report.filter((entry) => entry.changed > 0).length;
+  const failed = state.report.filter((entry) => entry.error).length;
+  await appendAutoPipelineNote(
+    runId,
+    "language-check",
+    state.status === "error"
+      ? "The final language check could not run — the script is kept as written."
+      : `Language check: ${corrected} of ${state.report.length} scene(s) corrected${failed ? `; ${failed} could not be checked` : ""}.`
+  );
+}
+
 // Shared by runAutoPipeline (fresh/resumed run, respects alreadyWritten so a
 // resume doesn't rewrite scenes that already succeeded) and
 // regenerateScreenplayInLanguage below (a completed run's story/structure is
@@ -16245,37 +16461,9 @@ async function runScreenplayAndQualityPass(runId, deck, sceneList, sceneListId, 
           await appendAutoPipelineNote(runId, "screenplay", `${sceneLabel} could not be written (${friendlyGeminiErrorMessage(error.message)}) — skipped; the rest of the script carries on.`);
           continue;
         }
-        // Spot-check dialogue authenticity on just the first scene of every
-        // 5th episode (or every 5th scene for a film) — enough to catch a
-        // systemic problem without a per-scene AI review cost. Whole-script
-        // repetition is caught separately below, after every scene is written.
-        // A failed review or rewrite just keeps the scene as it is.
-        // A scene with no dialogue at all is skipped: seen for real, the judge
-        // scored a silent opening 1/10 "because there is no dialogue" and
-        // forced lines into it, which made it worse.
-        const hasDialogue = content.elements.some((el) => el.type === "dialogue" && el.text?.trim());
-        if (sceneIndex === 0 && episodeIndex % 5 === 0 && hasDialogue) {
-          try {
-            const stageLabel = episodeIndex === null ? "screenplay" : `screenplay-ep${episodeIndex + 1}`;
-            const dialogueText = (c) =>
-              c.elements
-                .filter((el) => el.type === "dialogue" && el.text?.trim())
-                .map((el) => `${el.character}${el.parenthetical ? ` (${el.parenthetical})` : ""}: ${el.text}`)
-                .join("\n");
-            content = await reviseUntilGood(runId, stageLabel, "Screenplay dialogue", content, {
-              draftText: dialogueText,
-              review: (c) => reviewDialogueAuthenticity(c.elements, dialogueLanguage),
-              revise: (c, feedback) =>
-                generateScreenplaySceneContent(
-                  deck, scenes, sceneIndex, previousElements, sceneList.controllingIdea,
-                  { feedback, previous: c }, dialogueLanguage, avoidPhrases
-                ),
-            });
-          } catch (error) {
-            console.error(`Auto-pipeline ${runId}: dialogue review of ${sceneLabel} failed:`, error.message);
-            await appendAutoPipelineNote(runId, "screenplay", `The dialogue review of ${sceneLabel} failed — the scene was kept as written.`);
-          }
-        }
+        // Every scene is now read by the Script Editor after the whole
+        // screenplay is written (runSequenceReview) — the old dialogue
+        // spot-check of one scene in five is gone.
         phraseTracker.recordElements(content.elements);
         await db.query(
           "INSERT INTO screenplay_scenes (scene_list_id, episode_index, scene_index, content) VALUES ($1, $2, $3, $4)",
@@ -16306,6 +16494,8 @@ async function runScreenplayAndQualityPass(runId, deck, sceneList, sceneListId, 
     // never be caught until now. This is the one pass that reads the WHOLE
     // finished screenplay and can trigger a targeted rewrite of just the
     // worst-offending scenes rather than a full regeneration.
+    await runSequenceReview(runId, deck, sceneList, sceneListId, dialogueLanguage);
+
     await updateAutoPipelineRun(runId, { progress_stage: "quality-pass" });
     // A failure in this final polish never throws away the finished script:
     // the scenes already written simply stay as they are.
@@ -16321,7 +16511,7 @@ async function runScreenplayAndQualityPass(runId, deck, sceneList, sceneListId, 
         const summary = `${allScenesResult.rows.length} scenes checked across the full finished screenplay for reused stock description.`;
         const judged = await scorePipelineStage("Screenplay prose variety (full script)", summary, repetitionReview.issues);
         await appendAutoPipelineNote(runId, "screenplay", `Judge score: ${judged.score}/10 — ${judged.verdict}`);
-        if (judged.score >= 8 || repetitionReview.offendingScenes.length === 0 || round === MAX_AUTO_PIPELINE_REVISION_ROUNDS - 1) break;
+        if (judged.score >= PASS_SCORE || repetitionReview.offendingScenes.length === 0 || round === MAX_AUTO_PIPELINE_REVISION_ROUNDS - 1) break;
 
         // Cap how many scenes get rewritten in one round — a handful of the
         // worst offenders is enough to break the pattern without redoing the
@@ -16355,6 +16545,12 @@ async function runScreenplayAndQualityPass(runId, deck, sceneList, sceneListId, 
     } catch (error) {
       console.error(`Auto-pipeline ${runId}: quality pass failed:`, error.message);
       await appendAutoPipelineNote(runId, "quality-pass", "The final quality pass could not finish — the script is kept as written.");
+    }
+
+    try {
+      await runFinalLanguageCheck(runId, sceneListId);
+    } catch (error) {
+      console.error(`Auto-pipeline ${runId}: language check failed:`, error.message);
     }
 
     if (skippedScenes.length > 0) {

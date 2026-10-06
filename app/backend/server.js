@@ -16515,7 +16515,7 @@ async function runScreenplayAndQualityPass(runId, deck, sceneList, sceneListId, 
         const repetitionReview = reviewScreenplayRepetition(allScenesResult.rows);
         const summary = `${allScenesResult.rows.length} scenes checked across the full finished screenplay for reused stock description.`;
         const judged = await scorePipelineStage("Screenplay prose variety (full script)", summary, repetitionReview.issues);
-        await appendAutoPipelineNote(runId, "screenplay", `Judge score: ${judged.score}/10 — ${judged.verdict}`);
+        await appendAutoPipelineNote(runId, "quality-pass", `Judge score: ${judged.score}/10 — ${judged.verdict}`);
         if (judged.score >= PASS_SCORE || repetitionReview.offendingScenes.length === 0 || round === MAX_AUTO_PIPELINE_REVISION_ROUNDS - 1) break;
 
         // Cap how many scenes get rewritten in one round — a handful of the

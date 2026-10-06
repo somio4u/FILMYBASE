@@ -4342,53 +4342,316 @@ button, input, textarea, select {
 }
 
 .floating-agent-pose-idle .floating-agent-image,
-.floating-agent-panel-character.floating-agent-pose-idle {
+.floating-agent-header-character.floating-agent-pose-idle {
   animation: floatingAgentIdleBob 2.4s ease-in-out infinite;
 }
 
 .floating-agent-pose-working .floating-agent-image,
-.floating-agent-panel-character.floating-agent-pose-working {
+.floating-agent-header-character.floating-agent-pose-working {
   animation: floatingAgentWorkingShake 0.6s ease-in-out infinite;
 }
 
 .floating-agent-pose-done .floating-agent-image,
-.floating-agent-panel-character.floating-agent-pose-done {
+.floating-agent-header-character.floating-agent-pose-done {
   animation: floatingAgentCelebrate 0.8s ease-in-out infinite;
 }
 
 .floating-agent-pose-failed .floating-agent-image,
-.floating-agent-panel-character.floating-agent-pose-failed {
+.floating-agent-header-character.floating-agent-pose-failed {
   animation: floatingAgentIdleBob 2.4s ease-in-out infinite;
 }
 
+/* The pen window — same glass look as the rest of the app. Opens above or
+   below the button (see FloatingAgentWidget), scrolls inside itself. */
 .floating-agent-panel {
   position: fixed;
   z-index: 901;
-  width: 320px;
   max-width: calc(100vw - 32px);
-  background: var(--bg-surface-raised);
-  border: 1px solid var(--border-subtle);
-  border-radius: 12px;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
-  padding: 14px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  background: var(--glass-bg);
+  backdrop-filter: blur(18px) saturate(1.2);
+  -webkit-backdrop-filter: blur(18px) saturate(1.2);
+  border: 1px solid var(--glass-border);
+  border-radius: 18px;
+  box-shadow: var(--shadow-lift), 0 0 0 1px rgba(138, 180, 248, 0.08);
+  padding: 16px;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 14px;
+  animation: floatingAgentPanelIn 0.32s var(--ease-spring) both;
+}
+
+.floating-agent-panel::before {
+  content: '';
+  position: sticky;
+  top: -16px;
+  display: block;
+  height: 3px;
+  margin: -16px -16px 0;
+  border-radius: 18px 18px 0 0;
+  background: var(--accent-gradient);
+  opacity: 0.85;
+}
+
+.floating-agent-panel.is-running::before {
+  background-size: 200% 100%;
+  animation: floatingAgentSheen 2.4s linear infinite;
+}
+
+@keyframes floatingAgentPanelIn {
+  from { opacity: 0; transform: translateY(8px) scale(0.98); }
+  to { opacity: 1; transform: none; }
+}
+
+@keyframes floatingAgentSheen {
+  from { background-position: 0% 0; }
+  to { background-position: 200% 0; }
 }
 
 .floating-agent-header {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  gap: 10px;
 }
+
+.floating-agent-header-character {
+  height: 44px;
+  width: auto;
+  flex-shrink: 0;
+  filter: drop-shadow(0 3px 6px rgba(0, 0, 0, 0.35));
+}
+
+.floating-agent-header-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1;
+}
+
+.floating-agent-header-text strong {
+  font-family: var(--font-display);
+  font-size: 17px;
+  letter-spacing: 0.01em;
+}
+
+.floating-agent-concept {
+  font-size: 12px;
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.floating-agent-status-pill {
+  flex-shrink: 0;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: var(--accent-gradient-soft);
+  color: var(--accent-strong);
+}
+
+.floating-agent-status-pill.is-completed { background: var(--success-bg); color: var(--success); }
+.floating-agent-status-pill.is-failed { background: var(--danger-bg); color: var(--danger); }
 
 .floating-agent-close {
   background: none;
   border: none;
   color: var(--text-secondary);
-  font-size: 20px;
+  font-size: 22px;
   line-height: 1;
   cursor: pointer;
+  padding: 2px 4px;
+  border-radius: 8px;
+}
+
+.floating-agent-close:hover { color: var(--text-primary); background: rgba(255, 255, 255, 0.06); }
+
+.floating-agent-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1;
+  min-width: 0;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.floating-agent-now {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  border-radius: 14px;
+  background: var(--accent-gradient-soft);
+  border: 1px solid rgba(138, 180, 248, 0.18);
+}
+
+.floating-agent-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.floating-agent-section-title {
+  margin: 0;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.floating-agent-timeline {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.floating-agent-timeline-item {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 28px;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+/* The line joining the dots. */
+.floating-agent-timeline-item:not(:last-child)::after {
+  content: '';
+  position: absolute;
+  left: 8px;
+  top: 21px;
+  bottom: -7px;
+  width: 2px;
+  background: var(--border-subtle);
+}
+
+.floating-agent-timeline-item.is-done:not(:last-child)::after { background: rgba(129, 201, 149, 0.45); }
+
+.floating-agent-timeline-dot {
+  position: relative;
+  z-index: 1;
+  flex-shrink: 0;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-size: 11px;
+  font-weight: 700;
+  border: 2px solid var(--border-strong);
+  background: var(--bg-surface);
+}
+
+.floating-agent-timeline-item.is-done { color: var(--text-secondary); }
+.floating-agent-timeline-item.is-done .floating-agent-timeline-dot { border-color: var(--success); background: var(--success); color: #0f1f14; }
+.floating-agent-timeline-item.is-current { color: var(--text-primary); font-weight: 600; }
+.floating-agent-timeline-item.is-current .floating-agent-timeline-dot {
+  border-color: var(--accent);
+  background: var(--accent);
+  animation: floatingAgentPulse 1.6s ease-in-out infinite;
+}
+.floating-agent-timeline-item.is-failed { color: var(--danger); font-weight: 600; }
+.floating-agent-timeline-item.is-failed .floating-agent-timeline-dot { border-color: var(--danger); background: var(--danger); color: #2a0f0d; }
+
+@keyframes floatingAgentPulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(138, 180, 248, 0.55); }
+  50% { box-shadow: 0 0 0 6px rgba(138, 180, 248, 0); }
+}
+
+.floating-agent-timeline-name { flex: 1; min-width: 0; }
+
+.floating-agent-score {
+  flex-shrink: 0;
+  font-size: 11px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  padding: 2px 7px;
+  border-radius: 999px;
+}
+
+.floating-agent-score.is-good { background: var(--success-bg); color: var(--success); }
+.floating-agent-score.is-mid { background: var(--warning-bg); color: var(--warning); }
+.floating-agent-score.is-low { background: var(--danger-bg); color: var(--danger); }
+
+.floating-agent-feed {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 280px;
+  overflow-y: auto;
+}
+
+.floating-agent-feed-item {
+  padding: 9px 11px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.035);
+  border: 1px solid var(--glass-border);
+  animation: floatingAgentPanelIn 0.4s var(--ease-spring) both;
+}
+
+.floating-agent-feed-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-bottom: 4px;
+}
+
+.floating-agent-feed-stage {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--accent-strong);
+}
+
+.floating-agent-feed-version {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.floating-agent-feed-icon {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.floating-agent-feed-text {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--text-secondary);
+}
+
+.floating-agent-done {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.floating-agent-done-title {
+  margin: 0;
+  font-weight: 600;
+  color: var(--success);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .floating-agent-panel,
+  .floating-agent-feed-item,
+  .floating-agent-panel.is-running::before,
+  .floating-agent-timeline-item.is-current .floating-agent-timeline-dot {
+    animation: none;
+  }
 }
 
 .floating-agent-form {
@@ -4398,8 +4661,22 @@ button, input, textarea, select {
 }
 
 .floating-agent-form textarea {
-  min-height: 80px;
+  min-height: 96px;
   resize: vertical;
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid var(--glass-border);
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 13px;
+}
+
+.floating-agent-form textarea:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(138, 180, 248, 0.18);
 }
 
 .floating-agent-row {
@@ -4410,21 +4687,6 @@ button, input, textarea, select {
 .floating-agent-row input {
   flex: 1;
   min-width: 0;
-}
-
-.floating-agent-progress {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.floating-agent-panel-character {
-  display: block;
-  height: 90px;
-  width: auto;
-  margin: 0 auto 4px;
-  object-fit: contain;
-  filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.3));
 }
 
 .floating-agent-progress-bar {
@@ -4500,15 +4762,6 @@ button, input, textarea, select {
   border-radius: 50%;
   animation: floatingAgentSpin 0.8s linear infinite;
   flex-shrink: 0;
-}
-
-.floating-agent-notes {
-  margin: 0;
-  padding-left: 18px;
-  font-size: 12px;
-  color: var(--text-secondary);
-  max-height: 160px;
-  overflow-y: auto;
 }
 
 .floating-agent-download {
@@ -5706,4 +5959,33 @@ button:not(:disabled):active {
   margin: 12px auto;
   max-width: 760px;
   text-align: center;
+}
+
+/* Form controls inside the pen window match its glass look. */
+.floating-agent-form > select,
+.floating-agent-row select,
+.floating-agent-field input {
+  width: 100%;
+  min-width: 0;
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1px solid var(--glass-border);
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 13px;
+}
+
+.floating-agent-form > select:focus,
+.floating-agent-row select:focus,
+.floating-agent-field input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(138, 180, 248, 0.18);
+}
+
+.floating-agent-form > select option,
+.floating-agent-row select option {
+  background: var(--bg-surface-raised);
+  color: var(--text-primary);
 }

@@ -571,6 +571,12 @@ const LABELS = {
       done: 'Done',
     },
     floatingAgentSecondsSuffix: 's',
+    floatingAgentFilmMinutesLabel: 'Film length (minutes)',
+    floatingAgentStatusWorking: 'Working',
+    floatingAgentStatusStopped: 'Stopped',
+    floatingAgentTimelineTitle: 'Stages',
+    floatingAgentNotesTitle: 'What the agents said',
+    floatingAgentOpenProjectButton: 'Open in Movie screen',
     floatingAgentDoneLabel: 'Your screenplay is ready.',
     floatingAgentDownloadButton: 'Download Screenplay',
     floatingAgentTranslateDownloadButton: 'Translate & Download',
@@ -1247,6 +1253,12 @@ const LABELS = {
       done: 'ସମାପ୍ତ',
     },
     floatingAgentSecondsSuffix: 'ସେ',
+    floatingAgentFilmMinutesLabel: 'ଫିଲ୍ମର ଲମ୍ବ (ମିନିଟ୍)',
+    floatingAgentStatusWorking: 'କାମ ଚାଲିଛି',
+    floatingAgentStatusStopped: 'ବନ୍ଦ ହୋଇଗଲା',
+    floatingAgentTimelineTitle: 'ପର୍ଯ୍ୟାୟ',
+    floatingAgentNotesTitle: "ଏଜେଣ୍ଟମାନେ କ'ଣ କହିଲେ",
+    floatingAgentOpenProjectButton: 'ମୁଭି ସ୍କ୍ରିନରେ ଖୋଲନ୍ତୁ',
     floatingAgentDoneLabel: 'ଆପଣଙ୍କର ସ୍କ୍ରିନପ୍ଲେ ପ୍ରସ୍ତୁତ।',
     floatingAgentDownloadButton: 'ସ୍କ୍ରିନପ୍ଲେ ଡାଉନଲୋଡ୍ କରନ୍ତୁ',
     floatingAgentTranslateDownloadButton: 'ଅନୁବାଦ କରି ଡାଉନଲୋଡ୍ କରନ୍ତୁ',
@@ -2002,7 +2014,37 @@ function floatingAgentFramesFor(runStatus) {
 // in this fixed sequence, so the panel can show an actual filling progress
 // bar (not just a spinner) even though we don't have finer-grained percent
 // data from the server.
-const AUTO_PIPELINE_STAGE_ORDER = ['starting', 'storylines', 'pitch-deck', 'character-sheet', 'three-act', 'bit-sheet', 'scene-list', 'screenplay', 'quality-pass', 'done']
+const AUTO_PIPELINE_STAGE_ORDER = [
+  'starting', 'storylines', 'pitch-deck', 'character-sheet', 'three-act', 'bit-sheet', 'scene-list',
+  'screenplay', 'sequence-review', 'quality-pass', 'language-check', 'done',
+]
+// The stages the pen window's timeline lists (everything but start/done).
+const AUTO_PIPELINE_TIMELINE_STAGES = AUTO_PIPELINE_STAGE_ORDER.slice(1, -1)
+
+// One run-log note, split into the parts the pen window shows: the judge's
+// score (as a coloured chip), the version number, a small icon for the
+// special notes, and the rest of the text.
+function parseAutoPipelineNote(note) {
+  const text = note?.note ?? ''
+  const version = text.match(/^Version (\d+) — /)
+  const rest = version ? text.slice(version[0].length) : text
+  const judged = rest.match(/^Judge score: (\d+)\/10 — /)
+  const body = judged ? rest.slice(judged[0].length) : rest
+  // Icons only mark the special notes, never a judge's verdict.
+  const icon = judged ? null
+    : /^Picked option/.test(text) ? '★'
+    : /^Kept version/.test(text) ? '✓'
+    : /^Stopped early/.test(text) ? '■'
+    : /fresh version/.test(text) ? '↻'
+    : /could not|failed/i.test(text) ? '!'
+    : /is reading it/.test(text) ? '✎'
+    : null
+  return { stage: note?.stage ?? '', version: version ? Number(version[1]) : null, score: judged ? Number(judged[1]) : null, body, icon }
+}
+
+function autoPipelineScoreClass(score) {
+  return score >= 7 ? 'is-good' : score >= 5 ? 'is-mid' : 'is-low'
+}
 
 function autoPipelineProgressPercent(stage) {
   const index = AUTO_PIPELINE_STAGE_ORDER.indexOf(stage)
@@ -2015,7 +2057,7 @@ function autoPipelineProgressPercent(stage) {
 // back as one downloadable PDF, without clicking through each stage
 // manually. Position is a per-viewer convenience (localStorage only); the
 // run itself lives server-side so a page refresh doesn't lose progress.
-function FloatingAgentWidget({ currentUser, t, onRunCompleted }) {
+function FloatingAgentWidget({ currentUser, t, onRunCompleted, onOpenProject }) {
   const [position, setPosition] = useState(() => {
     try {
       const saved = localStorage.getItem(FLOATING_AGENT_POSITION_STORAGE_KEY)
@@ -2035,6 +2077,7 @@ function FloatingAgentWidget({ currentUser, t, onRunCompleted }) {
   const [formatType, setFormatType] = useState('vertical')
   const [episodeCount, setEpisodeCount] = useState(60)
   const [episodeMinutes, setEpisodeMinutes] = useState(1.5)
+  const [filmMinutes, setFilmMinutes] = useState(120)
   const [dialogueLanguage, setDialogueLanguage] = useState('or')
   const [downloadFormat, setDownloadFormat] = useState('pdf')
   const [downloadLanguage, setDownloadLanguage] = useState('or')
@@ -2213,7 +2256,7 @@ function FloatingAgentWidget({ currentUser, t, onRunCompleted }) {
     try {
       const format =
         formatType === 'film'
-          ? { type: 'film', runtimeMinutes: 120 }
+          ? { type: 'film', runtimeMinutes: Number(filmMinutes) || 120 }
           : { type: formatType, episodeCount: Number(episodeCount), episodeMinutes: Number(episodeMinutes) }
 
       const response = await fetch(`${BACKEND_URL}/api/auto-pipeline/start`, {
@@ -2293,149 +2336,201 @@ function FloatingAgentWidget({ currentUser, t, onRunCompleted }) {
         <img src={currentFrames[frameIndex] ?? currentFrames[0]} alt="" className="floating-agent-image" draggable="false" />
       </button>
 
-      {isOpen && (
-        <div
-          className="floating-agent-panel"
-          style={{ left: Math.min(position.x, Math.max(16, window.innerWidth - 340)), top: Math.max(16, position.y - 440) }}
-        >
-          <div className="floating-agent-header">
-            <strong>{t.floatingAgentTitle}</strong>
-            <button type="button" className="floating-agent-close" onClick={() => setIsOpen(false)}>×</button>
-          </div>
+      {isOpen && (() => {
+        // Opens below the button when it's in the top half of the screen,
+        // above it otherwise, and never runs off the screen edges.
+        const width = Math.min(400, window.innerWidth - 32)
+        const left = Math.min(Math.max(16, position.x), window.innerWidth - width - 16)
+        const below = position.y < window.innerHeight / 2
+        const panelStyle = below
+          ? { left, width, top: position.y + 84, maxHeight: Math.max(260, window.innerHeight - position.y - 100) }
+          : { left, width, bottom: window.innerHeight - position.y + 12, maxHeight: Math.max(260, position.y - 28) }
+        const notes = (status?.reviewNotes ?? []).map(parseAutoPipelineNote)
+        const bestScoreFor = (stage) => {
+          const scores = notes.filter((n) => n.stage === stage && n.score !== null).map((n) => n.score)
+          return scores.length > 0 ? Math.max(...scores) : null
+        }
+        const currentIndex = AUTO_PIPELINE_STAGE_ORDER.indexOf(status?.progressStage)
+        const stageState = (stage) => {
+          if (status?.status === 'completed') return 'done'
+          const index = AUTO_PIPELINE_STAGE_ORDER.indexOf(stage)
+          if (index < currentIndex) return 'done'
+          if (index === currentIndex) return status?.status === 'failed' ? 'failed' : 'current'
+          return 'upcoming'
+        }
+        const elapsedSeconds = status?.status === 'running'
+          ? (runStartedAtRef.current ? Math.max(0, Math.floor((nowTick - runStartedAtRef.current) / 1000)) : null)
+          : status?.createdAt && status?.updatedAt
+            ? Math.max(0, Math.round((new Date(status.updatedAt) - new Date(status.createdAt)) / 1000))
+            : null
+        const statusLabel = status?.status === 'running' ? t.floatingAgentStatusWorking
+          : status?.status === 'completed' ? t.floatingAgentStageNames.done
+          : status?.status === 'failed' ? t.floatingAgentStatusStopped
+          : null
 
-          {!runId && (
-            <div className="floating-agent-form">
-              <MicTextarea
-                placeholder={t.floatingAgentConceptPlaceholder}
-                value={concept}
-                onChange={(e) => setConcept(e.target.value)}
-              />
-              <select value={formatType} onChange={(e) => setFormatType(e.target.value)}>
-                <option value="vertical">{t.verticalDramaOption}</option>
-                <option value="series">{t.seriesOption}</option>
-                <option value="film">{t.filmOption}</option>
-              </select>
-              {formatType !== 'film' && (
-                <div className="floating-agent-row">
-                  <input
-                    type="number"
-                    min="1"
-                    value={episodeCount}
-                    onChange={(e) => setEpisodeCount(e.target.value)}
-                    placeholder={t.episodeCountLabel}
-                  />
-                  <input
-                    type="number"
-                    min="0.1"
-                    step="0.1"
-                    value={episodeMinutes}
-                    onChange={(e) => setEpisodeMinutes(e.target.value)}
-                    placeholder={t.episodeMinutesLabel}
-                  />
-                </div>
-              )}
-              <select value={dialogueLanguage} onChange={(e) => setDialogueLanguage(e.target.value)}>
-                <option value="en">{t.dialogueLanguageEnglish}</option>
-                <option value="or">{t.dialogueLanguageOdia}</option>
-                <option value="hi">{t.dialogueLanguageHindi}</option>
-              </select>
-              {errorMessage && <p className="feedback-note">{errorMessage}</p>}
-              <button type="button" className="choose-button" onClick={handleStart} disabled={isStarting || !concept.trim()}>
-                {isStarting ? t.floatingAgentStarting : t.floatingAgentStartButton}
-              </button>
-            </div>
-          )}
-
-          {runId && status?.status === 'running' && (
-            <div className="floating-agent-progress">
-              <img
-                src={currentFrames[frameIndex] ?? currentFrames[0]}
-                alt=""
-                className={`floating-agent-panel-character floating-agent-pose-${poseState}`}
-                draggable="false"
-              />
-              <div className="floating-agent-progress-bar">
-                <div
-                  className="floating-agent-progress-fill"
-                  style={{ width: `${autoPipelineProgressPercent(status.progressStage)}%` }}
-                />
+        return (
+          <div className={`floating-agent-panel${status?.status ? ` is-${status.status}` : ''}`} style={panelStyle}>
+            <div className="floating-agent-header">
+              <img src={currentFrames[frameIndex] ?? currentFrames[0]} alt="" className={`floating-agent-header-character floating-agent-pose-${poseState}`} draggable="false" />
+              <div className="floating-agent-header-text">
+                <strong>{t.floatingAgentTitle}</strong>
+                {runId && status?.conceptText && <span className="floating-agent-concept">{status.conceptText}</span>}
               </div>
-              <p className="floating-agent-stage-line">
-                <span className="floating-agent-spinner" aria-hidden="true" />
-                {t.floatingAgentStageLabel}: {t.floatingAgentStageNames[status.progressStage] ?? status.progressStage}
-                {runStartedAtRef.current && (
-                  <span className="floating-agent-elapsed">
-                    {' '}· {Math.max(0, Math.floor((nowTick - runStartedAtRef.current) / 1000))}{t.floatingAgentSecondsSuffix}
-                  </span>
-                )}
-              </p>
-              {status.reviewNotes?.length > 0 && (
-                <ul className="floating-agent-notes">
-                  {status.reviewNotes.slice(-5).map((note, i) => (
-                    <li key={i}>{note.note}</li>
-                  ))}
-                </ul>
-              )}
+              {statusLabel && <span className={`floating-agent-status-pill is-${status.status}`}>{statusLabel}</span>}
+              <button type="button" className="floating-agent-close" onClick={() => setIsOpen(false)} aria-label="Close">×</button>
             </div>
-          )}
 
-          {runId && status?.status === 'completed' && (
-            <div className="floating-agent-progress">
-              <img
-                src={currentFrames[frameIndex] ?? currentFrames[0]}
-                alt=""
-                className={`floating-agent-panel-character floating-agent-pose-${poseState}`}
-                draggable="false"
-              />
-              <p>{t.floatingAgentDoneLabel}</p>
-              <div className="floating-agent-row">
-                <select value={downloadFormat} onChange={(e) => setDownloadFormat(e.target.value)}>
-                  <option value="pdf">{t.floatingAgentFormatPdf}</option>
-                  <option value="docx">{t.floatingAgentFormatWord}</option>
+            {!runId && (
+              <div className="floating-agent-form">
+                <MicTextarea
+                  placeholder={t.floatingAgentConceptPlaceholder}
+                  value={concept}
+                  onChange={(e) => setConcept(e.target.value)}
+                />
+                <select value={formatType} onChange={(e) => setFormatType(e.target.value)}>
+                  <option value="vertical">{t.verticalDramaOption}</option>
+                  <option value="series">{t.seriesOption}</option>
+                  <option value="film">{t.filmOption}</option>
                 </select>
-                <select value={downloadLanguage} onChange={(e) => setDownloadLanguage(e.target.value)}>
+                {formatType === 'film' ? (
+                  <label className="floating-agent-field">
+                    <span>{t.floatingAgentFilmMinutesLabel}</span>
+                    <input type="number" min="1" value={filmMinutes} onChange={(e) => setFilmMinutes(e.target.value)} />
+                  </label>
+                ) : (
+                  <div className="floating-agent-row">
+                    <label className="floating-agent-field">
+                      <span>{t.episodeCountLabel}</span>
+                      <input type="number" min="1" value={episodeCount} onChange={(e) => setEpisodeCount(e.target.value)} />
+                    </label>
+                    <label className="floating-agent-field">
+                      <span>{t.episodeMinutesLabel}</span>
+                      <input type="number" min="0.1" step="0.1" value={episodeMinutes} onChange={(e) => setEpisodeMinutes(e.target.value)} />
+                    </label>
+                  </div>
+                )}
+                <select value={dialogueLanguage} onChange={(e) => setDialogueLanguage(e.target.value)}>
+                  <option value="en">{t.dialogueLanguageEnglish}</option>
                   <option value="or">{t.dialogueLanguageOdia}</option>
                   <option value="hi">{t.dialogueLanguageHindi}</option>
-                  <option value="en">{t.dialogueLanguageEnglish}</option>
                 </select>
-              </div>
-              <a
-                className="choose-button floating-agent-download"
-                href={`${BACKEND_URL}/api/auto-pipeline/${runId}/screenplay-${downloadFormat}?lang=${downloadLanguage}`}
-                target="_blank"
-                rel="noreferrer"
-              >
-                {downloadLanguage === 'or' ? t.floatingAgentDownloadButton : t.floatingAgentTranslateDownloadButton}
-              </a>
-              <button type="button" className="cancel-button" onClick={handleStartNew}>
-                {t.floatingAgentNewRunButton}
-              </button>
-            </div>
-          )}
-
-          {runId && status?.status === 'failed' && (
-            <div className="floating-agent-progress">
-              <img
-                src={currentFrames[frameIndex] ?? currentFrames[0]}
-                alt=""
-                className={`floating-agent-panel-character floating-agent-pose-${poseState}`}
-                draggable="false"
-              />
-              <p className="feedback-note">{status.error}</p>
-              {status.conceptId && (
-                <button type="button" className="choose-button" onClick={handleResume} disabled={isResuming}>
-                  {isResuming ? t.floatingAgentResuming : t.floatingAgentResumeButton}
+                {errorMessage && <p className="feedback-note">{errorMessage}</p>}
+                <button type="button" className="choose-button" onClick={handleStart} disabled={isStarting || !concept.trim()}>
+                  {isStarting ? t.floatingAgentStarting : t.floatingAgentStartButton}
                 </button>
-              )}
-              <button type="button" className="cancel-button" onClick={handleStartNew}>
-                {t.floatingAgentNewRunButton}
-              </button>
-            </div>
-          )}
+              </div>
+            )}
 
-          {runId && !status && !errorMessage && <p className="sidebar-section-note">{t.loadingLabel}</p>}
-        </div>
-      )}
+            {runId && status && (
+              <>
+                {status.status === 'running' && (
+                  <div className="floating-agent-now">
+                    <div className="floating-agent-progress-bar">
+                      <div className="floating-agent-progress-fill" style={{ width: `${autoPipelineProgressPercent(status.progressStage)}%` }} />
+                    </div>
+                    <p className="floating-agent-stage-line">
+                      <span className="floating-agent-spinner" aria-hidden="true" />
+                      <span>{t.floatingAgentStageNames[status.progressStage] ?? status.progressStage}</span>
+                      {elapsedSeconds !== null && <span className="floating-agent-elapsed">{t.aiMovieShortDuration(elapsedSeconds / 60)}</span>}
+                    </p>
+                  </div>
+                )}
+
+                {status.status === 'completed' && (
+                  <div className="floating-agent-done">
+                    <p className="floating-agent-done-title">
+                      {t.floatingAgentDoneLabel}
+                      {elapsedSeconds !== null && <span className="floating-agent-elapsed"> · {t.aiMovieShortDuration(elapsedSeconds / 60)}</span>}
+                    </p>
+                    {status.conceptId && onOpenProject && (
+                      <button type="button" className="choose-button" onClick={() => { onOpenProject(status.conceptId); setIsOpen(false) }}>
+                        {t.floatingAgentOpenProjectButton}
+                      </button>
+                    )}
+                    <div className="floating-agent-row">
+                      <select value={downloadFormat} onChange={(e) => setDownloadFormat(e.target.value)}>
+                        <option value="pdf">{t.floatingAgentFormatPdf}</option>
+                        <option value="docx">{t.floatingAgentFormatWord}</option>
+                      </select>
+                      <select value={downloadLanguage} onChange={(e) => setDownloadLanguage(e.target.value)}>
+                        <option value="or">{t.dialogueLanguageOdia}</option>
+                        <option value="hi">{t.dialogueLanguageHindi}</option>
+                        <option value="en">{t.dialogueLanguageEnglish}</option>
+                      </select>
+                    </div>
+                    <a
+                      className="cancel-button floating-agent-download"
+                      href={`${BACKEND_URL}/api/auto-pipeline/${runId}/screenplay-${downloadFormat}?lang=${downloadLanguage}`}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      {downloadLanguage === 'or' ? t.floatingAgentDownloadButton : t.floatingAgentTranslateDownloadButton}
+                    </a>
+                    <button type="button" className="cancel-button" onClick={handleStartNew}>
+                      {t.floatingAgentNewRunButton}
+                    </button>
+                  </div>
+                )}
+
+                {status.status === 'failed' && (
+                  <div className="floating-agent-done">
+                    <p className="feedback-note">{status.error}</p>
+                    {status.conceptId && (
+                      <button type="button" className="choose-button" onClick={handleResume} disabled={isResuming}>
+                        {isResuming ? t.floatingAgentResuming : t.floatingAgentResumeButton}
+                      </button>
+                    )}
+                    <button type="button" className="cancel-button" onClick={handleStartNew}>
+                      {t.floatingAgentNewRunButton}
+                    </button>
+                  </div>
+                )}
+                <div className="floating-agent-section">
+                  <p className="floating-agent-section-title">{t.floatingAgentTimelineTitle}</p>
+                  <ol className="floating-agent-timeline">
+                    {AUTO_PIPELINE_TIMELINE_STAGES.map((stage) => {
+                      const state = stageState(stage)
+                      // The script editor scores each sequence separately, so
+                      // one "best" number would hide the weaker sequences.
+                      const best = stage === 'sequence-review' ? null : bestScoreFor(stage)
+                      return (
+                        <li key={stage} className={`floating-agent-timeline-item is-${state}`}>
+                          <span className="floating-agent-timeline-dot" aria-hidden="true">{state === 'done' ? '✓' : state === 'failed' ? '!' : ''}</span>
+                          <span className="floating-agent-timeline-name">{t.floatingAgentStageNames[stage] ?? stage}</span>
+                          {best !== null && <span className={`floating-agent-score ${autoPipelineScoreClass(best)}`}>{best}/10</span>}
+                        </li>
+                      )
+                    })}
+                  </ol>
+                </div>
+
+                {notes.length > 0 && (
+                  <div className="floating-agent-section">
+                    <p className="floating-agent-section-title">{t.floatingAgentNotesTitle}</p>
+                    <ul className="floating-agent-feed">
+                      {notes.slice().reverse().map((n, i) => (
+                        <li key={notes.length - i} className="floating-agent-feed-item">
+                          <div className="floating-agent-feed-meta">
+                            <span className="floating-agent-feed-stage">{t.floatingAgentStageNames[n.stage] ?? n.stage}</span>
+                            {n.version !== null && <span className="floating-agent-feed-version">v{n.version}</span>}
+                            {n.score !== null && <span className={`floating-agent-score ${autoPipelineScoreClass(n.score)}`}>{n.score}/10</span>}
+                            {n.icon && <span className="floating-agent-feed-icon" aria-hidden="true">{n.icon}</span>}
+                          </div>
+                          <p className="floating-agent-feed-text">{n.body}</p>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
+              </>
+            )}
+
+            {runId && !status && !errorMessage && <p className="sidebar-section-note">{t.loadingLabel}</p>}
+            {runId && errorMessage && <p className="feedback-note">{errorMessage}</p>}
+          </div>
+        )
+      })()}
     </>
   )
 }
@@ -10846,7 +10941,12 @@ function App() {
   return (
     <DictationContext.Provider value={{ t, dictationLanguage, onDictationLanguageChange: handleDictationLanguageChange }}>
     <div className="app-shell">
-      <FloatingAgentWidget currentUser={currentUser} t={t} onRunCompleted={() => loadProjectList()} />
+      <FloatingAgentWidget
+        currentUser={currentUser}
+        t={t}
+        onRunCompleted={() => loadProjectList()}
+        onOpenProject={(id) => { setActiveAgent('story'); loadProject(id) }}
+      />
       <div className="mobile-topbar">
         <button className="mobile-menu-button" onClick={() => setIsSidebarOpen(true)} aria-label={t.openMenuLabel}>
           ☰

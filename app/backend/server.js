@@ -1281,7 +1281,7 @@ app.get("/api/test-gemini", requireRole("admin"), async (req, res) => {
 // real: a Three-Act draft went 6/10 -> 5/10 with brand-new problems). Now
 // every story writer gets its full previous draft — in English only, to
 // save room — plus this rule.
-function previousDraftForRevision(previous, omitKeys = []) {
+function previousDraftForRevision(previous, omitKeys = [], fresh = false) {
   const englishOnly = (value) => {
     if (Array.isArray(value)) return value.map(englishOnly);
     if (value && typeof value === "object") {
@@ -1290,7 +1290,12 @@ function previousDraftForRevision(previous, omitKeys = []) {
     }
     return value;
   };
-  return `Your previous draft (English):\n${JSON.stringify(englishOnly(previous))}\n\nKeep everything in it that already works — the same characters, events and order — and change only what the feedback asks for. Do not rewrite the story from scratch.`;
+  const draftJson = JSON.stringify(englishOnly(previous));
+  // A "fresh version" (the second batch in reviseUntilGood) may restructure.
+  if (fresh) {
+    return `Your best version so far (English), for reference:\n${draftJson}\n\nWrite a NEW version that fixes every problem listed in the feedback. You may restructure freely — keep only what genuinely works.`;
+  }
+  return `Your previous draft (English):\n${draftJson}\n\nKeep everything in it that already works — the same characters, events and order — and change only what the feedback asks for. Do not rewrite the story from scratch.`;
 }
 
 async function generateStorylinesContent(concept, format) {
@@ -7715,7 +7720,7 @@ BUDGET-FRIENDLY PRODUCTION CONSTRAINT — this is a low-budget format meant to s
   let contents = `Storyline title (English): ${storyline.title.en}\nLogline (English): ${storyline.logline.en}\nSummary (English): ${storyline.summary.en}\n${formatInstruction}\n\n${majorCharactersInstruction}\n\nAlso give: "genre" — a SHORT genre label, just 2-4 words (e.g. "Crime Drama", "Romantic Comedy", "Family Slice-of-Life"), distinct from the longer "toneGenre" prose description; "targetAudience" — cover the age group, the region/market this is aimed at, and what specifically appeals to that audience (not just an age range alone); "highlights" — exactly 4 short, punchy bullet points (5-15 words each) on what makes this story stand out from similar shows — genuinely distinctive hooks, not generic praise; "sponsorshipAngle" — a short paragraph aimed at a potential brand sponsor: why a brand should back this specific story, and at least one concrete branding/placement idea (e.g. title sponsorship, a natural product-placement moment, a brand-integrated segment) grounded in this story's actual content, not a generic pitch.\n\nEvery one of those fields — premise, genre, toneGenre, targetAudience, highlights, sponsorshipAngle — must ALSO be in plain, simple, everyday English, exactly like storyPages below: no literary or "impressive" words (nothing like "prodigy", "despises", "backdrop", "backlash", "navigate a turbulent landscape"), just the plain way a person would actually say it out loud. This is a hard requirement across every field, not only the story pages.\n\n${PITCH_DECK_STORY_PAGES_INSTRUCTION}`;
 
   if (revision) {
-    contents += `\n\nThis is a REVISION of a previous draft. The producer reviewed it and requested changes.\nProducer's feedback: "${revision.feedback}"\n${previousDraftForRevision(revision.previous, ["episodes"])}\nRevise the pitch deck to address the producer's feedback directly, while keeping the same title and logline.`;
+    contents += `\n\nThis is a REVISION of a previous draft. The producer reviewed it and requested changes.\nProducer's feedback: "${revision.feedback}"\n${previousDraftForRevision(revision.previous, ["episodes"], revision.fresh)}\nRevise the pitch deck to address the producer's feedback directly, while keeping the same title and logline.`;
   }
 
   const core = sanitizeBilingualContent(
@@ -8402,7 +8407,7 @@ async function generateCharacterSheetContent(deck, revision) {
   let contents = `Title (English): ${deck.title.en}\nLogline (English): ${deck.logline.en}\nPremise (English): ${deck.premise.en}\nTone/Genre (English): ${deck.toneGenre.en}\n${isSeries ? `Format: web series, ${deck.episodes.length} episodes.` : "Format: feature film."}\n\nPitch deck's Major Characters to deepen:\n${seedCharacters}`;
 
   if (revision) {
-    contents += `\n\nThis is a REVISION of a previous character sheet. The Story Writer reviewed it and requested changes.\nFeedback: "${revision.feedback}"\n${revision.previous ? `${previousDraftForRevision(revision.previous)}\n` : ""}Revise the character sheet to address the feedback directly.`;
+    contents += `\n\nThis is a REVISION of a previous character sheet. The Story Writer reviewed it and requested changes.\nFeedback: "${revision.feedback}"\n${revision.previous ? `${previousDraftForRevision(revision.previous, [], revision.fresh)}\n` : ""}Revise the character sheet to address the feedback directly.`;
   }
 
   // 11 trilingual (en/or/hi) fields per character, up to 5 characters —
@@ -8643,7 +8648,7 @@ async function generateThreeActContent(deck, characterSheet, revision) {
   }
 
   if (revision) {
-    contents += `\n\nThis is a REVISION of a previous three-act structure. The Story Writer reviewed it and requested changes.\nStory Writer's feedback: "${revision.feedback}"\n${previousDraftForRevision(revision.previous, ["episodeStructures"])}\nRevise the three-act structure to address the feedback directly.`;
+    contents += `\n\nThis is a REVISION of a previous three-act structure. The Story Writer reviewed it and requested changes.\nStory Writer's feedback: "${revision.feedback}"\n${previousDraftForRevision(revision.previous, ["episodeStructures"], revision.fresh)}\nRevise the three-act structure to address the feedback directly.`;
   }
 
   const overall = sanitizeBilingualContent(
@@ -8987,7 +8992,7 @@ async function generateBitSheetContent(threeAct, deck, revision) {
   }
 
   if (revision) {
-    contents += `\n\nThis is a REVISION of a previous Bit Sheet. The Story Writer reviewed it and requested changes.\nFeedback: "${revision.feedback}"\n${revision.previous ? `${previousDraftForRevision({ bits: revision.previous.bits })}\n` : ""}Revise the Bit Sheet to address the feedback directly.`;
+    contents += `\n\nThis is a REVISION of a previous Bit Sheet. The Story Writer reviewed it and requested changes.\nFeedback: "${revision.feedback}"\n${revision.previous ? `${previousDraftForRevision({ bits: revision.previous.bits }, [], revision.fresh)}\n` : ""}Revise the Bit Sheet to address the feedback directly.`;
   }
 
   const content = sanitizeBilingualContent(
@@ -9361,7 +9366,7 @@ async function generateFilmSceneListPart(bitSheet, part, partIndex, partCount, f
   }
 
   if (revision) {
-    contents += `\n\nThis is a REVISION of a previous scene list. The Screenplay Writer reviewed it and requested changes.\nFeedback: "${revision.feedback}"\n${revision.previous?.scenes ? `${previousDraftForRevision({ scenes: revision.previous.scenes })}\n${partCount > 1 ? "(That is the whole film's previous list; write only this part's scenes.)\n" : ""}` : ""}Revise the scene list to address this feedback directly, keeping the same overall structure otherwise.`;
+    contents += `\n\nThis is a REVISION of a previous scene list. The Screenplay Writer reviewed it and requested changes.\nFeedback: "${revision.feedback}"\n${revision.previous?.scenes ? `${previousDraftForRevision({ scenes: revision.previous.scenes }, [], revision.fresh)}\n${partCount > 1 ? "(That is the whole film's previous list; write only this part's scenes.)\n" : ""}` : ""}Revise the scene list to address this feedback directly, keeping the same overall structure otherwise.`;
   }
 
   let content = await callSceneListGemini(contents, false, part.targetMinutes);
@@ -15725,28 +15730,64 @@ async function reviewStoryStage(stageLabel, draftText, checklist) {
 // worse than the draft before it). `mustFix(draft)` returns a blocking
 // problem code can see (e.g. a wrong episode count) or null — a draft with
 // one is never chosen over one without.
-async function reviseUntilGood(runId, stageKey, stageLabel, firstDraft, { draftText, review, revise, mustFix, checklist, judgeModel }) {
+//
+// Second batch (the user's call, 2026-10-06; story stages only): if no
+// version has reached 8/10 after the first 3, version 4 is a FRESH version
+// that takes in every note from versions 1-3 at once (each normal revision
+// only sees the latest notes), with the best version so far as reference;
+// versions 5-6 then revise it as usual. It stops early once a version
+// reaches 8, or when two versions in a row don't beat the best — in the
+// tests, plain revising flattened out after 2-3 rounds.
+const SECOND_BATCH_VERSIONS = 3;
+
+async function reviseUntilGood(runId, stageKey, stageLabel, firstDraft, { draftText, review, revise, mustFix, checklist, judgeModel, secondBatch = false }) {
+  const maxVersions = MAX_AUTO_PIPELINE_REVISION_ROUNDS + (secondBatch ? SECOND_BATCH_VERSIONS : 0);
   let draft = firstDraft;
   let best = null;
-  for (let round = 0; round < MAX_AUTO_PIPELINE_REVISION_ROUNDS; round++) {
+  const allNotes = [];
+  let versionsWithoutGain = 0;
+  for (let version = 1; ; version++) {
     const blocking = mustFix ? mustFix(draft) : null;
     const reviewed = review ? await review(draft) : { issues: [] };
     const issues = Array.isArray(reviewed?.issues) ? reviewed.issues : [];
     const judged = await scorePipelineStage(stageLabel, draftText(draft), issues, { checklist, model: judgeModel });
-    await appendAutoPipelineNote(runId, stageKey, `Judge score: ${judged.score}/10 — ${judged.verdict}`);
+    await appendAutoPipelineNote(runId, stageKey, `Version ${version} — Judge score: ${judged.score}/10 — ${judged.verdict}`);
     if (blocking) await appendAutoPipelineNote(runId, stageKey, blocking);
-    const candidate = { draft, score: Number(judged.score) || 0, round, blocking: Boolean(blocking) };
-    const isBetter =
-      !best ||
-      (best.blocking && !candidate.blocking) ||
-      (best.blocking === candidate.blocking && candidate.score >= best.score);
-    if (isBetter) best = candidate;
-    if ((candidate.score >= 8 && !blocking) || round === MAX_AUTO_PIPELINE_REVISION_ROUNDS - 1) break;
+    const candidate = { draft, score: Number(judged.score) || 0, version, blocking: Boolean(blocking) };
+    const beatsBest =
+      !best || (best.blocking && !candidate.blocking) || (best.blocking === candidate.blocking && candidate.score > best.score);
+    // A tie also takes the newer version (it has had more fixes).
+    const keep = beatsBest || (best.blocking === candidate.blocking && candidate.score === best.score);
+    if (keep) best = candidate;
+    versionsWithoutGain = beatsBest ? 0 : versionsWithoutGain + 1;
     const feedback = [blocking, ...issues, judged.verdict].filter(Boolean).join(" ");
+    allNotes.push(`Version ${version} (${candidate.score}/10): ${feedback}`);
+
+    if (candidate.score >= 8 && !blocking) break;
+    if (version >= maxVersions) break;
+    if (version === MAX_AUTO_PIPELINE_REVISION_ROUNDS) {
+      if (!secondBatch) break;
+      await appendAutoPipelineNote(
+        runId,
+        stageKey,
+        `Still not up to the mark after ${version} versions (best: version ${best.version}, ${best.score}/10) — writing a fresh version that takes in every note so far.`
+      );
+      draft = await revise(
+        best.draft,
+        `Earlier reviews of this ${stageLabel} found the problems below. Write a NEW, stronger version that fixes ALL of them at once:\n${allNotes.join("\n")}`,
+        { fresh: true }
+      );
+      versionsWithoutGain = 0;
+      continue;
+    }
+    if (version > MAX_AUTO_PIPELINE_REVISION_ROUNDS && versionsWithoutGain >= 2) {
+      await appendAutoPipelineNote(runId, stageKey, "Stopped early: two versions in a row did not beat the best one.");
+      break;
+    }
     draft = await revise(draft, feedback);
   }
   if (best.draft !== draft) {
-    await appendAutoPipelineNote(runId, stageKey, `Kept version ${best.round + 1} (score ${best.score}/10) — later revisions scored lower.`);
+    await appendAutoPipelineNote(runId, stageKey, `Kept version ${best.version} (score ${best.score}/10) — the best of all versions.`);
   }
   return best.draft;
 }
@@ -16038,7 +16079,8 @@ async function runAutoPipeline(runId, conceptText, format, dialogueLanguage, res
           ]);
           return { issues: [...(story.issues ?? []), ...(hooks.issues ?? [])] };
         },
-        revise: (d, feedback) => generatePitchDeckContent(storyline, format, { feedback, previous: d }),
+        revise: (d, feedback, opts) => generatePitchDeckContent(storyline, format, { feedback, previous: d, fresh: opts?.fresh }),
+        secondBatch: true,
       });
       const finalCountIssue = pitchDeckEpisodeCountIssue(deck, format);
       if (finalCountIssue) {
@@ -16071,7 +16113,8 @@ async function runAutoPipeline(runId, conceptText, format, dialogueLanguage, res
         checklist: STAGE_CHECKLISTS.threeAct,
         judgeModel: STORY_JUDGE_MODEL_NAME,
         review: (d) => reviewStoryStage("Three-Act Structure", threeActJudgeText(d), STAGE_CHECKLISTS.threeAct),
-        revise: (d, feedback) => generateThreeActContent(deck, characterSheet, { feedback, previous: d }),
+        revise: (d, feedback, opts) => generateThreeActContent(deck, characterSheet, { feedback, previous: d, fresh: opts?.fresh }),
+        secondBatch: true,
       });
       if (Array.isArray(deck.episodes)) {
         assertEpisodeCount(threeAct.episodeStructures?.length ?? 0, deck.episodes.length, "Three-act structure");
@@ -16092,7 +16135,8 @@ async function runAutoPipeline(runId, conceptText, format, dialogueLanguage, res
         checklist: STAGE_CHECKLISTS.bitSheet,
         judgeModel: STORY_JUDGE_MODEL_NAME,
         review: (d) => reviewStoryStage("Bit Sheet", bitSheetJudgeText(d), STAGE_CHECKLISTS.bitSheet),
-        revise: (d, feedback) => generateBitSheetContent(threeAct, deck, { feedback, previous: d }),
+        revise: (d, feedback, opts) => generateBitSheetContent(threeAct, deck, { feedback, previous: d, fresh: opts?.fresh }),
+        secondBatch: true,
       });
       if (Array.isArray(deck.episodes)) {
         assertEpisodeCount(bitSheet.episodeBits?.length ?? 0, deck.episodes.length, "Bit sheet");
@@ -16123,7 +16167,8 @@ async function runAutoPipeline(runId, conceptText, format, dialogueLanguage, res
           const budget = isVertical ? reviewSceneListBudget(deck, d) : { issues: [] };
           return { issues: [...budget.issues, ...(story.issues ?? [])] };
         },
-        revise: (d, feedback) => generateSceneListContent(bitSheet, deck, { feedback, previous: d }),
+        revise: (d, feedback, opts) => generateSceneListContent(bitSheet, deck, { feedback, previous: d, fresh: opts?.fresh }),
+        secondBatch: true,
       });
       if (Array.isArray(deck.episodes)) {
         assertEpisodeCount(sceneList.episodeScenes?.length ?? 0, deck.episodes.length, "Scene list");

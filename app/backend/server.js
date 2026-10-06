@@ -726,7 +726,7 @@ NEVER write the scene heading/slugline (e.g. "INT. KITCHEN - NIGHT") as one of y
 
 Alongside "elements", also return "charactersPresent": every character who is physically in the scene, not just whoever speaks — a real Odia shooting script always lists this under the scene heading as "Characters: X, Y, Z" (matching how the app renders it), so someone who's silently there (or briefly glimpsed, or present but not part of the dialogue) still belongs in this list.
 
-AVOID reflexive genre-stock description shorthand — phrases like "eyes narrow", "jaw clenches", "marble floor", "victorious smile", or any other generic gesture reached for on autopilot. Ground each scene's action description in specific, concrete, sensory detail unique to THIS scene's actual location, character, and moment, never an interchangeable stock line that could be pasted into any other scene in the story. If you're shown phrases already overused earlier in this same story below, do not reuse them or close variants — find a fresh, specific way to convey the same beat.
+AVOID reflexive genre-stock description shorthand — phrases like "eyes narrow", "jaw clenches", "marble floor", "victorious smile", or any other generic gesture reached for on autopilot. Ground each scene's action description in specific, concrete detail the camera can see and the microphone can hear, unique to THIS scene's actual location, character, and moment, never an interchangeable stock line that could be pasted into any other scene in the story. If you're shown phrases already overused earlier in this same story below, do not reuse them or close variants — find a fresh, specific way to convey the same beat.
 
 Use "characterModifier" on a dialogue element when it genuinely applies: "CONT'D" if the same character keeps speaking after a brief action beat interrupted them without leaving the scene, "O.S." if they're heard but not seen on screen, "V.O." for narration, an inner thought, or a phone/recording voice, "ECHOING" for a remembered line from a past scene or a character who isn't physically present, replaying in another character's mind (distinct from V.O. — this is specifically a memory echoing back, not present-tense narration). Use "none" otherwise — most dialogue needs no modifier.
 
@@ -788,9 +788,13 @@ BOLCHAAL KI HINDI, NOT SHUDDH/SANSKRITIZED HINDI — this is the single most imp
 IMPORTANT — script, not Romanization: dialogue must always be written in actual Hindi (Devanagari) script, never Romanized/transliterated Hindi (Latin letters, e.g. "Kya kar rahe ho"). Code-switching means an occasional English word or short phrase embedded naturally INSIDE a Devanagari sentence — it does not mean writing whole sentences in Latin letters.`,
 };
 
+// The screen-only rule (shared with AI Movie's writers) was missing here:
+// in a real automatic run the script editor marked whole acts 6/10 because
+// action lines described smells, thoughts and feelings — and the writer
+// had even been asked for "sensory detail".
 function buildScreenplaySystemPrompt(dialogueLanguage) {
   const craft = SCREENPLAY_DIALOGUE_CRAFT[dialogueLanguage] ?? SCREENPLAY_DIALOGUE_CRAFT.en;
-  return `${SCREENPLAY_BASE_PROMPT}\n\n${craft}`;
+  return `${SCREENPLAY_BASE_PROMPT}\n\n${AI_MOVIE_SCREEN_ONLY_RULE}\n\n${craft}`;
 }
 
 const SCRIPT_BREAKDOWN_SYSTEM_PROMPT = `You are an experienced Assistant Director / Script Supervisor performing a professional SCRIPT BREAKDOWN — the standard pre-scheduling analysis every production does once a script is locked, reading it closely for everything the production team needs to plan for. You are precise and thorough, not creative — extract what's actually in the script, don't invent story content.

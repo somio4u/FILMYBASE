@@ -838,6 +838,10 @@ const SCREENPLAY_ACTION_LANGUAGE_RULES = {
 - Character names stay in English capitals inside the Odia text (BIKRAM, RAMA). The FIRST time a character appears, write the name followed by (age in Odia digits, a short look/costume note in Odia): "BIKRAM (୩୦, ସହରୀ ଢଙ୍ଗର ଜିନ୍ସ-ସାର୍ଟ, ସ୍ମାର୍ଟ ଲୁକ୍)".
 - Real Odisha images instead of literary ones: "ସୁନେଲି ଖରାରେ ଚିକ୍‌ଚିକ୍ କରୁଛି ବଙ୍ଗୋପସାଗର", not "the ocean gleams like hammered silver"; "ପୁରୁଣା ବରଗଛ... ସେଇଠି ଗାଁ ମନ୍ଦିରର ଚୂଳ ଦିଶୁଛି", not "trees that hint at the temple grounds".
 - Acting notes ("parenthetical") are short and in Odia: "ଉତ୍ସାହର ସହ".
+- SCREEN-ONLY IN ODIA TOO — only what the camera sees and the microphone hears; a feeling must show on the body, never be named or explained (seen for real in an Odia draft):
+  WRONG: "ତା'ର ନାଚରେ ଗଭୀର ଶ୍ରଦ୍ଧା, ଯନ୍ତ୍ରଣା, ଓ ମାଆର ଅବିସ୍ମରଣୀୟ ସ୍ମୃତି ମିଶି ରହିଥିଲା।" RIGHT: "ନାଚୁ ନାଚୁ ତା' ଆଖି ଓଦା ହୋଇଗଲା। ସେ ମାଆର ପୋଷାକକୁ ଛାତିରେ ଚାପି ଧରିଲା।"
+  WRONG: "DEEPU ମାଟିରେ ମିଶିଯିବାକୁ ଚାହୁଁଥିଲା।" RIGHT: "DEEPU ମୁଣ୍ଡ ତଳକୁ କରି ଛିଡ଼ା ହୋଇ ରହିଲା। ହାତରୁ ଛୁଞ୍ଚି ଖସି ପଡ଼ିଲା।"
+  WRONG: "BALARAMର ଚେହେରାରେ ଯନ୍ତ୍ରଣା ଏବଂ କ୍ରୋଧର ମିଶ୍ରିତ ଭାବନା।" RIGHT: "BALARAMର ଓଠ ଥରିଲା। ସେ ମୁଠା ବାନ୍ଧି କବାଟ ପଟକୁ ମୁହଁ ବୁଲାଇଦେଲା।"
 STYLE EXAMPLE (only to show the voice — never copy its content, names or places):
 ଧୂଳିଭରା ମାଟି ରାସ୍ତାର ଖାଲଖମାରେ ଝଟ୍‌କା ଖାଇ ଅଟକିଗଲା ଗୋଟିଏ କଳା ରଙ୍ଗର ଏସ୍‌ୟୁଭି (SUV)। ଚାରିଆଡ଼େ ଉଡ଼ିଗଲା ନାଲି ଧୂଳିର ବାଦଲ।
 ଗାଡ଼ିର ଇଞ୍ଜିନ୍ ବନ୍ଦ ହୋଇଗଲା। ଚାରିଆଡ଼େ ଏକଦମ୍ ନିସ୍ତବ୍ଧ, ଭାରୀ ନୀରବତା।

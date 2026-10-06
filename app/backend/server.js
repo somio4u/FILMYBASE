@@ -9980,10 +9980,14 @@ function collectActionText(elements) {
 // cheap (pure string processing, no AI call) and good enough to catch the
 // kind of reused stock description a full read-through would notice.
 function actionPhraseNgrams(text) {
+  // Odia/Hindi letters are kept (action lines can be Odia now — this used to
+  // strip every non-English letter, so an Odia script was reduced to its
+  // character names and judged "extremely repetitive"), and character names
+  // in capitals (DEEPU, BALARAM) are left out: names naturally repeat.
   const words = text
-    .toLowerCase()
-    .replace(/[^a-z0-9\s']/g, "")
     .split(/\s+/)
+    .filter((word) => !/^[A-Z][A-Z'.\-]+[A-Za-z\u0B00-\u0B7F\u0900-\u097F']*$/.test(word.replace(/[^A-Za-z\u0B00-\u0B7F\u0900-\u097F'.\-]/g, "")))
+    .map((word) => word.toLowerCase().replace(/[^\p{L}\p{M}\p{N}']/gu, ""))
     .filter(Boolean);
   const ngrams = [];
   for (const n of [3, 4]) {
@@ -15949,7 +15953,7 @@ const STAGE_CHECKLISTS = {
 - A specific, fresh premise — not a stock set-up told the usual way; what makes THIS story unlike others like it?
 - A protagonist with a clear goal, clear stakes (what they lose if they fail) and a strong opposing force.
 - A real cast, not one role: antagonist, mentor/guide, an ally or foil, a skeptic, the antagonist's enforcer, and the community at stake — each wanting something.
-- The setting and culture drive the story, not just decorate it.
+- The setting and culture drive the story, not just decorate it — and are ACCURATE for the region: the right festival, season, ritual, dress and customs (e.g. Danda Nacha belongs to the month of Chaitra in Ganjam, not to Nuakhai).
 - The story pages tell the WHOLE story through the climax and the ending.
 - For a series: the episodes together tell the whole story — set-up, escalation, climax and resolution — and the final episode resolves the main conflict; every episode has its own turn, opens on a hook and (except the last) ends on a cliffhanger; side characters and the antagonist make their own moves across episodes.`,
   threeAct: `- The chosen structure model genuinely suits this story, and the beats really follow its stages.
@@ -15957,6 +15961,7 @@ const STAGE_CHECKLISTS = {
 - A clear inciting event that forces the story into motion; stakes that keep rising; real turns/reversals (where the model has them: a midpoint, an all-is-lost low).
 - A climax where the protagonist resolves the central conflict through their OWN choice and action — not luck, a rescue or someone else's decision.
 - The ending pays off what the setup planted, and proves the controlling idea (theme).
+- Festivals, rituals, seasons and customs are accurate for the region and time.
 - Each major character's arc lands; the antagonist and side characters pursue their own goals.
 - For a series: the overall arc reaches its ending in the final episode, and every episode has a cold open, its own escalation, and a cliffhanger (except the last).`,
   bitSheet: `- Every beat CAUSES the next ("therefore" / "but"), never just "and then".
@@ -17075,7 +17080,7 @@ app.get("/api/auto-pipeline/:id/status", requireLogin, async (req, res) => {
 // `.toUpperCase()`. Used everywhere a heading-style field gets uppercased,
 // rather than trusting every such field is always present.
 function safeUpper(value, fallback) {
-  return (value && String(value).trim()) || fallback;
+  return (value && String(value).trim().toUpperCase()) || fallback;
 }
 
 // Renders every episode's every scene, in order, as one continuous

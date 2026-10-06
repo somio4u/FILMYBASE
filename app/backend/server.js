@@ -81,6 +81,12 @@ const AI_MOVIE_DIALOGUE_MODEL_NAME = "gemini-2.5-flash";
 // with scenes that all genuinely belonged to Beat 1. Slower and costs more
 // per call, but this is where screenplay quality is decided.
 const AI_MOVIE_SCREENPLAY_WRITER_MODEL_NAME = "gemini-2.5-flash";
+// The story writers (storylines, pitch deck, character sheet, three-act,
+// bit sheet, scene list) — shared by the Movie stages and the automatic
+// pipeline. Also 2.5 Flash (the user's call, 2026-10-06): in a real
+// automatic run the Bit Sheet writer on Flash-Lite stayed at 5/10 for all
+// three revision rounds — it couldn't act on the story editor's notes.
+const STORY_WRITER_MODEL_NAME = "gemini-2.5-flash";
 // DATABASE_URL (a full Postgres connection string, e.g. from Supabase) is
 // used when set; otherwise falls back to the local "filmmaking_app" dev
 // database. Supabase's pooled connection requires SSL but uses a
@@ -1278,7 +1284,7 @@ async function generateStorylinesContent(concept, format) {
 
   return sanitizeBilingualContent(
     await generateJsonContent({
-      model: GEMINI_MODEL_NAME,
+      model: STORY_WRITER_MODEL_NAME,
       contents: `Movie concept: ${concept}\n${formatInstruction}`,
       config: {
         systemInstruction: STORY_AGENT_SYSTEM_PROMPT,
@@ -7641,7 +7647,7 @@ async function generatePitchDeckEpisodeBatch(
       };
 
   const parsed = await generateJsonContent({
-    model: GEMINI_MODEL_NAME,
+    model: STORY_WRITER_MODEL_NAME,
     contents,
     config: {
       systemInstruction: PITCH_DECK_SYSTEM_PROMPT,
@@ -7695,7 +7701,7 @@ BUDGET-FRIENDLY PRODUCTION CONSTRAINT — this is a low-budget format meant to s
 
   const core = sanitizeBilingualContent(
     await generateJsonContent({
-      model: GEMINI_MODEL_NAME,
+      model: STORY_WRITER_MODEL_NAME,
       contents,
       config: {
         systemInstruction: PITCH_DECK_SYSTEM_PROMPT,
@@ -8385,7 +8391,7 @@ async function generateCharacterSheetContent(deck, revision) {
   // mode as the pitch deck's core-content call). generateJsonContent also
   // adds a retry-on-parse-failure safety net this call didn't have before.
   const parsed = await generateJsonContent({
-    model: GEMINI_MODEL_NAME,
+    model: STORY_WRITER_MODEL_NAME,
     contents,
     config: {
       systemInstruction: CHARACTER_SHEET_SYSTEM_PROMPT,
@@ -8555,7 +8561,7 @@ async function generateThreeActEpisodeBatch(deck, episodesChunk, startIndex, ove
   }
 
   const parsed = await generateJsonContent({
-    model: GEMINI_MODEL_NAME,
+    model: STORY_WRITER_MODEL_NAME,
     contents,
     config: {
       systemInstruction: THREE_ACT_SYSTEM_PROMPT,
@@ -8623,7 +8629,7 @@ async function generateThreeActContent(deck, characterSheet, revision) {
 
   const overall = sanitizeBilingualContent(
     await generateJsonContent({
-      model: GEMINI_MODEL_NAME,
+      model: STORY_WRITER_MODEL_NAME,
       contents,
       config: {
         systemInstruction: THREE_ACT_SYSTEM_PROMPT,
@@ -8881,7 +8887,7 @@ async function generateBitSheetEpisodeBatch(episodesChunk, structuresChunk, star
   }
 
   const parsed = await generateJsonContent({
-    model: GEMINI_MODEL_NAME,
+    model: STORY_WRITER_MODEL_NAME,
     contents,
     config: {
       systemInstruction: BIT_SHEET_SYSTEM_PROMPT,
@@ -8967,7 +8973,7 @@ async function generateBitSheetContent(threeAct, deck, revision) {
 
   const content = sanitizeBilingualContent(
     await generateJsonContent({
-      model: GEMINI_MODEL_NAME,
+      model: STORY_WRITER_MODEL_NAME,
       contents,
       config: {
         systemInstruction: BIT_SHEET_SYSTEM_PROMPT,
@@ -9198,12 +9204,13 @@ async function callSceneListGemini(contents, isSeries, totalTargetMinutes) {
   const required = isSeries ? ["episodeScenes"] : ["scenes"];
 
   const parsed = await generateJsonContent({
-    model: GEMINI_MODEL_NAME,
+    model: STORY_WRITER_MODEL_NAME,
     contents,
     config: {
       systemInstruction: SCENE_SYSTEM_PROMPT,
       responseMimeType: "application/json",
-      maxOutputTokens: estimateTokenBudget(totalTargetMinutes, isSeries),
+      // + room for 2.5 Flash's thinking, which counts against this ceiling.
+      maxOutputTokens: Math.min(MAX_GEMINI_OUTPUT_TOKENS, estimateTokenBudget(totalTargetMinutes, isSeries) + 8192),
       responseSchema: {
         type: Type.OBJECT,
         properties,
@@ -15630,12 +15637,12 @@ const AUTO_PIPELINE_SCORE_SCHEMA = {
 // near-identical comments), against a checklist for that stage. The story
 // stages use the stronger model (STORY_JUDGE_MODEL_NAME).
 async function scorePipelineStage(stageLabel, draftText, reviewerIssues, { checklist, model = GEMINI_MODEL_NAME } = {}) {
-  const issuesText = reviewerIssues.length > 0 ? reviewerIssues.join(" ") : "No specific issues were flagged by the specialist reviewer.";
+  const issuesText = reviewerIssues.length > 0 ? reviewerIssues.join(" ") : "none.";
   const checklistText = checklist ? `\n\nJudge it against this checklist:\n${checklist}` : "";
 
   return generateJsonContent({
     model,
-    contents: `You are the final judge for the "${stageLabel}" stage of a screenplay pipeline. Here is the current draft:\n\n${draftText}${checklistText}\n\nA specialist reviewer already flagged: ${issuesText}\n\nRate this draft's quality on a strict scale from 1 to 10 (10 = genuinely excellent and ready to ship; 8 = solid and usable; anything below 8 needs real work before it's acceptable). Be a tough, honest judge — do not hand out 8+ scores generously, and don't just repeat the specialist reviewer's words, form your own independent judgment. Give your verdict as a short, direct sentence, in this exact style: if below 8, "This is not up to the mark. This is only a(n) X-pointer because <specific, concrete reasons>." — if 8 or above, "This is a strong X-pointer — <what's genuinely working>."`,
+    contents: `You are the final judge for the "${stageLabel}" stage of a screenplay pipeline. Here is the current draft:\n\n${draftText}${checklistText}\n\nA specialist reviewer has just read this same draft and found these problems in it (they are notes on THIS draft, not earlier feedback it was meant to fix): ${issuesText}\n\nRate this draft's quality on a strict scale from 1 to 10 (10 = genuinely excellent and ready to ship; 8 = solid and usable; anything below 8 needs real work before it's acceptable). Be a tough, honest judge — do not hand out 8+ scores generously, and don't just repeat the specialist reviewer's words, form your own independent judgment. Give your verdict as a short, direct sentence, in this exact style: if below 8, "This is not up to the mark. This is only a(n) X-pointer because <specific, concrete reasons>." — if 8 or above, "This is a strong X-pointer — <what's genuinely working>."`,
     config: {
       systemInstruction: "You are the final quality judge in a multi-agent screenplay pipeline — blunt, specific, and consistent. Never inflate scores just to move things along.",
       responseMimeType: "application/json",

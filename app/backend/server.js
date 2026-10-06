@@ -9535,6 +9535,8 @@ function sameSceneSetting(a, b) {
   return a.intExt === b.intExt && a.timeOfDay === b.timeOfDay && norm(a.location?.en) === norm(b.location?.en);
 }
 
+const MAX_MERGED_SCENE_MINUTES = 3;
+
 function mergeSameSettingScenes(scenes) {
   const joinText = (a, b) => {
     const keys = new Set([...Object.keys(a ?? {}), ...Object.keys(b ?? {})]);
@@ -9543,7 +9545,11 @@ function mergeSameSettingScenes(scenes) {
   const merged = [];
   for (const scene of scenes ?? []) {
     const previous = merged[merged.length - 1];
-    if (previous && sameSceneSetting(previous, scene)) {
+    const combinedMinutes = (Number(previous?.estimatedMinutes) || 0) + (Number(scene.estimatedMinutes) || 0);
+    // Only while the result stays a normal-length scene: a long climax that
+    // plays out in one place across several real scenes must not collapse
+    // into one giant scene (seen in a real run: 8 beats in one "scene").
+    if (previous && sameSceneSetting(previous, scene) && combinedMinutes <= MAX_MERGED_SCENE_MINUTES) {
       merged[merged.length - 1] = {
         ...previous,
         oneLiner: joinText(previous.oneLiner, scene.oneLiner),

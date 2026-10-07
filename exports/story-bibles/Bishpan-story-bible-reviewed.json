@@ -1,0 +1,680 @@
+{
+  "bible": {
+    "idea": "Bishpan — an 8-episode Odia web series. Rambhadipur, a village in Odisha, has an old Kali temple. Years ago the eyes of the Kali Mata idol were stolen. The village blamed the temple's Pujari: the Pujari was killed and his family was disgraced and driven out. Today the Pujari's son lives a modern life in Bhubaneswar with his own job and relationships. He grew up hearing his grandmother's half-told stories about the village but never knew the full truth. He comes back to Rambhadipur and discovers the full truth there. He takes revenge, possessed by Kali Mata: it is the Goddess herself taking her revenge through him. Twist the user asked for: the climax is not the first possession — early on, people guilty in the old crime are punished one by one, and neither the hero nor the audience knows it is him, possessed. Fixed: the village name Rambhadipur; the son of the murdered Pujari is the hero; Kali Mata takes the revenge through him. Everything else is free to invent.",
+    "format": {
+      "type": "series",
+      "episodeCount": 8,
+      "episodeMinutes": 20
+    },
+    "units": {
+      "kind": "episode",
+      "count": 8,
+      "minutes": 20,
+      "label": "a web series of 8 episodes, 20 minutes each"
+    },
+    "pitchRoom": {
+      "directions": [
+        {
+          "title": "Bishpan: Eyes of the Mother",
+          "logline": "A rationalist investigative journalist from Bhubaneswar returns to his disgraced ancestral village to solve a series of bizarre murders linked to a stolen goddess, unaware that he himself is the divine weapon of vengeance.",
+          "centralQuestion": "Who is gruesomely picking off the village elders who framed the former priest, and how are they bypassing all logic and security?",
+          "genrePromise": "A tense, supernatural murder mystery that shifts into terrifying mythological horror.",
+          "coldOpen": "Rambhadipur, 1999: A terrified Pujari is dragged through the mud by villagers. The temple doors are kicked open showing the Kali idol's face bleeding from empty eye sockets. Cut to present day: A wealthy village elder is found hung upside down like a bat above the temple steps, his own eyes violently gouged out.",
+          "openingEnding": "The hero, investigating the elder's death, finds an old photograph hidden in the victim's safe. It shows the elder and three others holding the glowing stolen eyes. Suddenly, the hero's grandmother in Bhubaneswar calls him, her voice trembling: She has found you. The Mother has woken up.",
+          "climaxTwist": "The hero sets a trap for the killer on Kali Puja night to save the final conspirator, the Sarpanch. When the trap springs, a mirror reveals the hero's own reflection with pitch-black eyes. The twist: his recent medical blackouts were possessions. He must choose to let the Goddess destroy the Sarpanch, sacrificing his humanity and rationalist worldview. The final image: the hero restoring the silver eyes to the idol, his hands stained with blood, accepting his fate as the new, haunted guardian.",
+          "whyWow": "The ultimate betrayal of trust—the hero and audience are solving a murder mystery where they are the killer, driven by unstoppable divine wrath.",
+          "freshness": "Subverts the modern investigator trope by blending psychological fugue states with literal divine possession, rooted deeply in the fierce Chandi rituals of Odisha."
+        },
+        {
+          "title": "Bishpan: The Dust Penance",
+          "logline": "When a mysterious madness strikes the village that exiled his family, a pragmatic doctor returns to cure the afflicted, only to discover the disease is a bloody retribution acting through his own hands.",
+          "centralQuestion": "Is the village suffering from a toxic epidemic, or is the Goddess actually exacting a long-delayed blood debt through an invisible assassin?",
+          "genrePromise": "Folk-horror and psychological dread set against the intense, visceral backdrop of Odisha's rural penance rituals.",
+          "coldOpen": "The sweltering heat of Chaitra month. Danda Nata dancers perform on burning coals. One dancer, a wealthy local contractor, suddenly screams not in religious ecstasy, but in agony. His skin blisters as if burned from the inside, and he collapses dead beneath the eyeless Kali idol.",
+          "openingEnding": "The hero examines the contractor's body in the village clinic. He extracts a blackened, ancient silver coin forced down the man's throat—a coin from the temple's treasury. The hero washes his hands, but the water in the clinic basin turns to thick, dark blood.",
+          "climaxTwist": "The final target is the local MLA who orchestrated the theft to fund his first campaign. Trying to medically evacuate the MLA, the hero suffers a severe seizure. Flashbacks reveal the hero committing every murder during his sleepwalking episodes, mirroring the physical tortures of Danda Nata. The Goddess forces him to execute the MLA in front of the village during the final Danda ritual. The cost: he becomes a fugitive from the law, losing his medical career and city fiancée.",
+          "whyWow": "The horrific realization that the hero's supposed medical condition of sleepwalking is actually the Goddess commandeering his body for brutal, ritualistic justice.",
+          "freshness": "Uses the specific physical rituals of Odia Danda Nata like fire, dust, and water penance as the exact methods of the murders, turning a cultural festival into a blueprint for vengeance."
+        },
+        {
+          "title": "Bishpan: The Silent Tandav",
+          "logline": "An ambitious structural engineer returns to Rambhadipur to survey an ancient ruined temple for a resort project, accidentally triggering a violent supernatural purge of the men who murdered his father.",
+          "centralQuestion": "Who is the phantom assassin hunting down the resort investors, and where are they hiding the stolen artifacts?",
+          "genrePromise": "A high-stakes, fast-paced conspiracy thriller colliding with terrifying ancient tantric power.",
+          "coldOpen": "A lavish resort party near the Rambhadipur sacred grove. The Ashtaprahari continuous chanting echoes in the distance. An investor wanders into the grove to take a phone call. A shadow drops from the ancient Banyan tree, severing his head with a traditional curved Khanda sword before melting back into the darkness.",
+          "openingEnding": "The hero finds his father's secret journal hidden in the temple ruins, detailing the names of the thieves. The last page has a fresh entry in the hero's own handwriting, written in blood: One down. Three remain. He has no memory of writing it.",
+          "climaxTwist": "The mastermind locks himself in a high-tech panic room. The hero breaches the room to get answers about his father, only to be shown the mastermind's security footage: it is the hero himself on tape, moving with the impossible, multi-armed grace of a traditional Mahari dancer, slaughtering the guards. The possession takes over in real-time. The hero obliterates the mastermind, completing the revenge, but his fiancée sees the footage and flees in terror. Final image: the hero sitting on the temple steps in the monsoon rain, holding the restored ruby eyes, utterly alone but divine.",
+          "whyWow": "The devastating emotional cost—the hero achieves justice for his father and restores the Goddess, but loses the modern life and love he built, trapped by destiny.",
+          "freshness": "Contrasts modern corporate greed and high-tech security with ancient, unstoppable tantric magic, proving that modern walls cannot stop a localized deity's wrath."
+        }
+      ],
+      "verdict": {
+        "scores": [
+          {
+            "direction": 1,
+            "hook": 7,
+            "freshness": 6,
+            "climax": 7,
+            "faithfulness": 10,
+            "note": "Hits all prompt requirements including the grandmother, but relies heavily on the clichéd mirror reveal and generic investigative thriller tropes."
+          },
+          {
+            "direction": 2,
+            "hook": 9,
+            "freshness": 9,
+            "climax": 9,
+            "faithfulness": 10,
+            "note": "Deeply rooted in authentic Odisha culture with Danda Nata acting as the murder blueprint, and the medical protagonist makes the supernatural twist hit much harder."
+          },
+          {
+            "direction": 3,
+            "hook": 7,
+            "freshness": 6,
+            "climax": 8,
+            "faithfulness": 10,
+            "note": "Clever use of modern security footage to reveal the twist, but suffers from cultural inaccuracy by mixing Vaishnav traditions like Mahari and Ashtaprahari with Tantric Kali worship."
+          }
+        ],
+        "best": 2,
+        "reason": "It integrates Odisha's culture perfectly by using the physical penance rituals of Danda Nata as the exact method of the murders, fulfilling the 'Culture as Engine' rule. A doctor protagonist provides a strong, rational counterpoint that makes his eventual possession terrifying rather than expected.",
+        "improve": "Ensure the grandmother's half-told stories from the user's prompt are explicitly featured as misinterpreted clues to the Danda Nata rituals. Also, borrow the security footage reveal from Direction 3 so the hero discovers his own guilt through hard, undeniable evidence rather than just internal flashbacks."
+      },
+      "chosen": 2
+    },
+    "promise": {
+      "title": "Bishpan",
+      "logline": "When a mysterious madness strikes the village that exiled his family, a pragmatic doctor returns to cure the afflicted, only to discover the disease is a bloody retribution acting through his own sleepwalking body.",
+      "centralQuestion": "Is the village suffering from a toxic epidemic, or is the Goddess actually exacting a long-delayed blood debt through an invisible assassin?",
+      "genrePromise": "Folk-horror and psychological dread set against the intense, visceral backdrop of Odisha's rural penance rituals.",
+      "whyWow": "The horrific realization that the hero's supposed medical condition of sleepwalking is actually the Goddess commandeering his brilliant medical skills to enact brutal, ritualistic justice."
+    },
+    "hiddenTruth": {
+      "summary": "Fifteen years ago, ambitious local politician Balaram Rout orchestrated the theft of the Kali idol's antique Zamindar-endowed gold-and-diamond eyes (Hira Akhi) to fund his first election campaign. He used local contractor Deba to physically steal them, hastily replacing them with cheap brass eyes so the idol wouldn't be declared Khandita (desecrated), though the temple lost its glory. When the temple Pujari discovered the theft, Balaram and Deba framed him, whipping the village into a frenzy during the Chaitra month festival. The mob brutally murdered the Pujari. His mother, Sulochana, fled to Bhubaneswar with her young grandson, Soumya. Sulochana knew the truth but hid it in mythical stories about Danda Nata penances. Today, following Sulochana's death, the trauma has awakened within Soumya, allowing the Goddess Kali to possess his unconscious, sleepwalking body. Utilizing his profound medical knowledge, she enacts ritualistic vengeance on the guilty by staging impossible supernatural deaths using chemicals and anatomy.",
+      "timeline": [
+        {
+          "when": "April 2009",
+          "event": "Balaram Rout and Deba steal the Kali idol's antique Hira Akhi (diamond eyes) from the Rambhadipur temple, replacing them with cheap brass eyes."
+        },
+        {
+          "when": "April 2009 (Next Day)",
+          "event": "The Pujari discovers the theft. Balaram incites a mob, accusing the Pujari of the crime. The Pujari is beaten to death."
+        },
+        {
+          "when": "April 2009 (Night)",
+          "event": "Sulochana escapes Rambhadipur with young Soumya, relocating to Bhubaneswar and changing their last name."
+        },
+        {
+          "when": "2010 to 2023",
+          "event": "Balaram becomes a powerful MLA. Soumya grows up to become a successful doctor, suppressing his childhood memories and developing severe parasomnia."
+        },
+        {
+          "when": "March 2024",
+          "event": "Sulochana passes away, leaving behind cassette tapes of her stories. The grief triggers Soumya's sleepwalking, and the Goddess takes hold."
+        },
+        {
+          "when": "April 2024 (Start of Series)",
+          "event": "Soumya returns to Rambhadipur to run a free health camp, unaware that at night he is hunting down his father's killers."
+        }
+      ],
+      "whoKnowsWhat": [
+        {
+          "character": "Dr. Soumya Dash",
+          "knows": "Thinks his father died in a random communal riot and believes his grandmother's stories were just folklore. He hides his severe parasomnia from his colleagues."
+        },
+        {
+          "character": "Balaram Rout",
+          "knows": "Knows he orchestrated the theft and murder, and hides the stolen diamond eyes inside his signature silver walking stick."
+        },
+        {
+          "character": "Deba",
+          "knows": "Knows he physically stole the eyes and struck the first blow against the Pujari."
+        },
+        {
+          "character": "Inspector Meera",
+          "knows": "Knows the contractor's death was not natural, hiding her suspicion that the old temple faction is involved."
+        },
+        {
+          "character": "Madhab",
+          "knows": "Knows someone is leaving bloody clothes in the Kali temple at night, but hides them to protect the temple's sanctity."
+        }
+      ]
+    },
+    "characters": [
+      {
+        "name": "Dr. Soumya Dash",
+        "age": "28",
+        "relationToHero": "Hero",
+        "look": "Clean-cut city doctor, wears scrubs or neat casuals, always looks slightly exhausted with dark circles.",
+        "role": "Protagonist / Unwitting Assassin",
+        "want": "To cure the strange epidemic in his ancestral village and honor his late grandmother's memory.",
+        "need": "To uncover the horrific truth of his father's death and accept his dark blood-legacy.",
+        "secret": "He suffers from severe, violent sleepwalking episodes (parasomnia) that he hides from the world.",
+        "lie": "Believes science and medicine can explain every human affliction and that the past is firmly dead.",
+        "plotMove": "He discovers his own guilt by secretly installing a CCTV camera in his clinic to monitor his night-terrors, only to watch footage of himself leaving with a surgical scalpel.",
+        "arc": "From a pragmatic, rational man of science to a fugitive avatar of divine retribution who sacrifices his normal life for justice."
+      },
+      {
+        "name": "Balaram Rout",
+        "age": "55",
+        "relationToHero": "Antagonist (The man who framed the hero's father)",
+        "look": "Crisp white kurtas, heavy gold rings, walks with a silver-headed cane, always accompanied by armed guards.",
+        "role": "Villain",
+        "want": "To win the upcoming election and bulldoze the old Kali temple to build a lucrative tourist resort.",
+        "need": "To be held accountable for the blood on his hands.",
+        "secret": "He possesses the original Hira Akhi (diamond eyes) of the Goddess, hiding them inside his silver walking stick.",
+        "lie": "Believes power and money make him immune to consequences and that religion is just a tool to control the masses.",
+        "plotMove": "He frames Soumya for the new murders, planting evidence to recreate the exact mob justice he used on Soumya's father.",
+        "arc": "From an untouchable, arrogant ruler of the region to a terrified, broken man executed publicly during the final ritual."
+      },
+      {
+        "name": "Kavita",
+        "age": "27",
+        "relationToHero": "His fiancee",
+        "look": "Modern, practical, wears elegant sarees or doctor's coats, carries high-end medical gear.",
+        "role": "Ally / Foil",
+        "want": "To bring Soumya back to Bhubaneswar and marry him.",
+        "need": "To realize she cannot medically save Soumya from his supernatural destiny.",
+        "secret": "She realizes Soumya is the killer before he does, and tries to sedate him to hide his guilt from the law.",
+        "lie": "Believes love and chemical intervention can fix any deep-rooted psychological trauma.",
+        "plotMove": "She helps Meera uncover the medical anomalies in the autopsies, then tries to forcefully sedate Soumya to hide his guilt, inadvertently trapping him in the village when the mob arrives.",
+        "arc": "From a practical medical partner trying to fix her fiance to a horrified witness who must let the man she loves go."
+      },
+      {
+        "name": "Inspector Meera",
+        "age": "30",
+        "relationToHero": "No relation - the investigating police officer",
+        "look": "Tough, practical police uniform, carries a notebook and a heavy flashlight.",
+        "role": "Skeptic / Detective",
+        "want": "To logically solve the bizarre murders and get a promotion to the city.",
+        "need": "To accept that some forces in Rambhadipur defy the Indian Penal Code.",
+        "secret": "She was demoted to this village for speaking out against a corrupt politician and hates politicians.",
+        "lie": "Believes every crime has a clear, mundane motive and a rational human perpetrator.",
+        "plotMove": "She insists on a thorough secondary autopsy in the city, uncovering the hidden chemical and surgical evidence that proves a brilliant doctor is the killer.",
+        "arc": "From a strict enforcer of the law to someone who looks the other way, allowing the Goddess's justice to be completed."
+      },
+      {
+        "name": "Deba",
+        "age": "45",
+        "relationToHero": "No relation - the wealthy local contractor",
+        "look": "Loud printed shirts, heavy gold chains, constantly chewing paan.",
+        "role": "Henchman / Victim",
+        "want": "To secure the temple demolition contract from Balaram.",
+        "need": "To confess his sins before the Goddess.",
+        "secret": "He kept a silver coin from the temple treasury as a twisted lucky charm.",
+        "lie": "Believes his wealth has washed away the sins of his past.",
+        "plotMove": "He wanders into a dark alley during the festival and is ambushed by Soumya, dying in the cold open and setting the investigation in motion.",
+        "arc": "Dies early, establishing the terrifying stakes and the method of the Goddess's vengeance."
+      },
+      {
+        "name": "Sulochana",
+        "age": "75",
+        "relationToHero": "His father's mother (deceased)",
+        "look": "Seen in flashbacks and photos: traditional white widow's saree, deep wrinkles, fearful eyes.",
+        "role": "Mentor (Posthumous)",
+        "want": "To protect Soumya from the village's curse.",
+        "need": "To tell the truth about her son's murder.",
+        "secret": "She recognized Deba and Balaram in the mob but stayed silent to keep Soumya alive.",
+        "lie": "Believed running away would permanently sever their ties to Kali Mata.",
+        "plotMove": "Leaves behind audio cassettes disguising the perpetrators' identities as demons in Danda Nata fables, which Soumya decodes.",
+        "arc": "Remains a tragic figure, but her voice from the past guides Soumya to the truth."
+      },
+      {
+        "name": "Madhab",
+        "age": "25",
+        "relationToHero": "No relation - local temple caretaker",
+        "look": "Ash smeared on forehead, wears simple dhoti, gaunt and intense.",
+        "role": "False Suspect",
+        "want": "To restore the Kali temple to its former glory.",
+        "need": "To find a true purpose beyond blind fanaticism.",
+        "secret": "He has been sneaking into the clinic at night to steal medical supplies for the village poor.",
+        "lie": "Believes the Goddess requires random human blood sacrifice from the villagers to be appeased.",
+        "plotMove": "He finds the killer's bloody clothes in the temple and hides them in the locked storage room to protect the temple's sanctity, inadvertently making himself look like the killer.",
+        "arc": "From a creepy, suspicious fanatic to a loyal devotee who realizes the true avatar is Soumya."
+      }
+    ],
+    "villainPlan": "Balaram Rout plans to secure his upcoming re-election by initiating a massive commercial development over the sacred temple lands, turning Rambhadipur into a lucrative tourist hub. He plans to bulldoze the Kali temple entirely using a fabricated clearance document from the Commissioner of Endowments, Odisha. When the bizarre murders of his old co-conspirators begin, he realizes someone is targeting his past. Believing it to be a surviving relative or political sabotage, his plan is to identify the killer and frame them for the crimes, inciting a village mob to execute them—exactly as he did to the Pujari 15 years ago. He is completely convinced he is right, believing that progress, wealth, and power justify erasing obsolete, superstitious traditions and anyone who clings to them.",
+    "facts": {
+      "jobsAndMoney": [
+        "Dr. Soumya earns a lucrative salary at a private city hospital but carries a heavy mortgage, leaving him with little liquid cash.",
+        "Balaram Rout possesses massive untraceable cash reserves hidden in agricultural fronts, allowing him to buy off local authorities.",
+        "Rambhadipur's economy is entirely dependent on Balaram's construction jobs and seasonal farming, making the villagers fearful of crossing him.",
+        "The local clinic is severely underfunded, relying on expired medicines and donations, prompting Soumya to fund it out of pocket."
+      ],
+      "healthAndBodies": [
+        "Soumya suffers from severe clinical parasomnia (sleepwalking) triggered by extreme stress; his body moves fluidly while his mind is completely unconscious.",
+        "The victims die from mathematically precise, medically induced trauma mimicking Danda Nata penances (e.g., paralytic laryngospasm mimicking drowning, caustic chemicals mimicking internal fire).",
+        "Sulochana died of a sudden, severe stroke, which acted as the psychological trigger for Soumya's repressed memories.",
+        "Due to his medical training, Soumya has high physical stamina and anatomical knowledge, which the Goddess utilizes to enact precise, lethal justice without using magic."
+      ],
+      "belongingsAndVehicles": [
+        "Soumya drives a mid-range, heavily financed SUV that stands out awkwardly in the dusty village streets.",
+        "Balaram travels in a convoy of matching white Scorpios, symbolizing his political dominance and intimidation.",
+        "Sulochana left behind a locked wooden box containing old cassette tapes and a rusted brass key to the temple's forgotten storage room.",
+        "The local clinic lacks a working ambulance, forcing characters to rely on personal vehicles for emergency transport."
+      ],
+      "places": [
+        "Rambhadipur, located in the Ganjam district, is a sweltering, drought-prone village characterized by deep red dust, intense heat, and a deeply rooted Danda Nata tradition.",
+        "The old Kali temple is half-ruined, overgrown with banyan roots, housing an idol with cheap brass eyes replacing the stolen diamonds.",
+        "The village clinic is a dusty, poorly lit two-room concrete structure with flickering tube lights and a rusty examination table.",
+        "Soumya's apartment in Bhubaneswar is sleek, sterile, and heavily air-conditioned, representing the safe, modern world he is forced to abandon."
+      ],
+      "worldRules": [
+        "The Goddess cannot manifest as a ghost or floating spirit; she strictly requires a traumatized human blood-vessel from the Pujari's lineage to affect the physical world.",
+        "The possession can only occur when the vessel's conscious mind is completely suppressed, which happens during Soumya's deep sleepwalking states.",
+        "The Goddess does not use magic to kill; she commandeers Soumya's medical genius, using real-world chemicals, scalpels, and anatomy to stage supernatural-looking Danda Nata penances.",
+        "Technology functions normally in this world; the supernatural does not disable cameras or phones, which is why Soumya's actions are ultimately captured on CCTV."
+      ]
+    },
+    "climax": {
+      "setting": "The final night of the Chaitra month festival during the Meru Jatra, directly in front of the half-ruined Kali temple in Rambhadipur, surrounded by a violent village mob.",
+      "reversal": "Balaram successfully incites the mob to execute Soumya, perfectly mirroring the Pujari's murder 15 years ago. Instead of trying to escape or reason with them, Soumya realizes the only way to expose Balaram and save the village is to stop fighting his condition and let history repeat itself with a divine twist.",
+      "heroChoice": "Soumya deliberately injects himself with Kavita's heavy psychiatric sedative, intentionally inducing the deep-sleep state required for the Goddess to possess him completely, knowing he will wake up a murderer.",
+      "cost": "He permanently breaks his medical oath, becomes a wanted fugitive on the run, loses his modern life and Kavita, and accepts his fate as the eternal, unwilling vessel of Kali Mata.",
+      "payoffs": [
+        "Kavita's psychiatric sedative syringe.",
+        "Sulochana's cassette tape fable about the Demon King's silver leg.",
+        "The Danda Nata Jhuna (flammable resin) throwing ritual."
+      ],
+      "finalImage": "Soumya, now a wanted fugitive, walking alone on a dark Odia highway at dawn. He walks with a slight, rhythmic limp, and the unmistakable sound of Danda Nata ankle bells syncs perfectly with his footsteps in the otherwise silent morning.",
+      "whyWow": "The audience realizes the hero's ultimate victory requires him to actively surrender his free will to the Goddess, weaponizing a debilitating medical condition to enact divine justice right in front of the villain who thought he had won.",
+      "resolution": "Balaram is dead and his 15-year corruption is exposed. Inspector Meera closes the old murder file but must now hunt Soumya. Kavita returns to the city heartbroken. The village's Kali idol finally has its antique Hira Akhi (diamond eyes) restored by the blood-soaked hands of the Pujari's son."
+    },
+    "setupsPayoffs": [
+      {
+        "setup": "Danda Nata performers throwing Jhuna (flammable tree resin) into open flames to create sudden bursts of fire.",
+        "plantedIn": "Episode 1 (Cold Open)",
+        "payoff": "Possessed Soumya uses crushed Jhuna dust mixed with clinic alcohol to ignite Balaram in front of the mob.",
+        "paidOffIn": "Episode 8"
+      },
+      {
+        "setup": "Kavita brings a powerful psychiatric sedative in a syringe to stop Soumya's sleepwalking.",
+        "plantedIn": "Episode 7",
+        "payoff": "Cornered by the mob, Soumya injects himself with the sedative to force the deep-sleep state, allowing Kali to possess him.",
+        "paidOffIn": "Episode 8"
+      },
+      {
+        "setup": "Sulochana's audio cassette tells a Danda Nata fable about the 'Demon of the Red Dirt' who swallowed two stars and hid them in his silver leg.",
+        "plantedIn": "Episode 2",
+        "payoff": "Possessed Soumya breaks open Balaram's signature silver-headed walking stick to reveal the original stolen diamond eyes.",
+        "paidOffIn": "Episode 8"
+      },
+      {
+        "setup": "A battery-operated CCTV camera Soumya installs in the clinic because Kavita finds red dirt on his feet.",
+        "plantedIn": "Episode 5",
+        "payoff": "Soumya checks the footage and watches in horror as his own sleeping body takes a surgical scalpel and walks into the night.",
+        "paidOffIn": "Episode 6"
+      },
+      {
+        "setup": "Sulochana's rusted brass key to the forgotten temple storage room.",
+        "plantedIn": "Episode 1",
+        "payoff": "Soumya uses it to unlock the storage room, finding generic bloody clothes and the empty Hira Akhi box.",
+        "paidOffIn": "Episode 4"
+      }
+    ],
+    "blueprint": [
+      {
+        "number": 1,
+        "title": "The Eyeless Mother",
+        "coldOpen": "The sweltering heat of Chaitra month in Ganjam. Danda Nata dancers perform on burning coals, throwing Jhuna resin. Wealthy contractor Deba wanders into a dark alley near the temple ruins to urinate. An unseen force violently ambushes him in the shadows. He staggers back into the firelight, screaming in agony as his throat burns from the inside out, and collapses dead.",
+        "question": "What invisible force is causing a grotesque, fiery epidemic in the village of Rambhadipur?",
+        "heroMove": "Dr. Soumya pretends to check Deba's airway in the clinic, secretly using forceps to extract a blackened, ancient silver coin from Deba's throat just before Balaram's men seize the body.",
+        "villainMove": "MLA Balaram Rout orders his men to seize Deba's body and cremate it without a police report, desperate to destroy any evidence connecting the death to the temple.",
+        "clue": "Soumya matches the silver coin's insignia to a dusty temple registry he finds abandoned in the clinic's storage, realizing the victim was stealing.",
+        "falseLead": "The village headman claims Deba contracted a rare, highly contagious skin virus from the city.",
+        "heroLearns": "The physical trauma on the victim isn't a virus; someone poured a highly caustic clinical chemical down his throat to mimic internal fire.",
+        "audienceLearns": "Balaram is terrified of something from his past, and Soumya is deeply connected to this temple.",
+        "setPiece": "The chaotic, hypnotic Danda Nata Agni Danda (fire penance) ritual, filled with drums, trance, and sudden, inexplicable death.",
+        "sideStory": "Inspector Meera arrives from the city, instantly suspicious of Balaram's rushed cremation orders.",
+        "turn": "Soumya decides to stay in Rambhadipur, using his own money to keep the clinic open to investigate the 'disease' himself.",
+        "endingHook": "Soumya vigorously washes Deba's blood from his hands at the clinic basin, but as he dries them, he discovers his knuckles are deeply, painfully bruised. He dismisses it as an injury from moving clinic equipment.",
+        "plants": [
+          "Danda Nata performers throwing Jhuna (flammable tree resin) into fire.",
+          "Sulochana's rusted brass temple key."
+        ],
+        "payoffs": []
+      },
+      {
+        "number": 2,
+        "title": "Demon of the Red Dirt",
+        "coldOpen": "Soumya drives his heavily financed SUV through the claustrophobic, red-dust lanes of Rambhadipur, listening to his late grandmother's cassette tapes. He blows a tire right outside the overgrown ruins of the Kali temple, whose idol has cheap brass eyes.",
+        "question": "Who is targeting Balaram's inner circle using ancient folk methods?",
+        "heroMove": "Soumya decodes his grandmother's taped fable about the 'Demon of the Red Dirt' and cross-references it with local land deeds, tracking down Balaram's corrupt former surveyor.",
+        "villainMove": "Balaram pressures the local Tehsildar, producing a fabricated clearance document from the Commissioner of Endowments, Odisha, to legally bulldoze the temple.",
+        "clue": "Soumya breaks into the surveyor's locked field office and finds a hidden ledger detailing illegal temple land transfers from 15 years ago.",
+        "falseLead": "The surveyor's death looks like a severe asthma attack brought on by a sudden Ganjam dust storm.",
+        "heroLearns": "The surveyor and Deba were both part of a specific land-grab operation fifteen years ago.",
+        "audienceLearns": "The 'Demon' in Sulochana's fairy tale is actually Balaram Rout.",
+        "setPiece": "The Dhuli Danda (Dust Penance) sequence: The corrupt surveyor is trapped in his own vehicle, unable to open the doors, as fine red dust is forcibly dumped into the AC intake, suffocating him.",
+        "sideStory": "Balaram walks with a prominent silver-headed walking stick, aggressively using it to point and intimidate the villagers.",
+        "turn": "Inspector Meera confiscates the ledger from Soumya, warning him not to play detective.",
+        "endingHook": "Soumya searches a stolen medical supply bag recovered from outside his clinic and finds the dead surveyor's dropped pocket watch—heavy evidence pointing directly to the clinic thief.",
+        "plants": [
+          "Sulochana's audio cassette about the silver leg."
+        ],
+        "payoffs": []
+      },
+      {
+        "number": 3,
+        "title": "The Midnight Thief",
+        "coldOpen": "Soumya wakes up on his clinic cot, exhausted, sweating, and suffering from a severe migraine. He checks his medical kit and finds a surgical scalpel missing.",
+        "question": "Is the eccentric temple caretaker executing Balaram's men?",
+        "heroMove": "Refusing to involve the corrupt local police, Soumya conducts a midnight stakeout in the pitch-black clinic to catch the intruder who has been stealing supplies and tools.",
+        "villainMove": "Balaram feeds Inspector Meera a fabricated tip that the temple caretaker, Madhab, has a violent grudge against the dead men.",
+        "clue": "Soumya catches Madhab sneaking in, but discovers Madhab is only stealing expired painkillers to treat poor villagers Balaram banned from the hospital.",
+        "falseLead": "Madhab is heavily framed as the killer by the police due to the surveyor's watch and his late-night activities in the clinic.",
+        "heroLearns": "Madhab's motives for stealing are purely altruistic, meaning he is likely not a calculated murderer, though he did take the scalpel for medical use.",
+        "audienceLearns": "Inspector Meera is closing in on making an arrest that suits Balaram's narrative perfectly.",
+        "setPiece": "A tense, silent nighttime stakeout inside the clinic, as Soumya waits with a flashlight for the thief to arrive.",
+        "sideStory": "Meera builds a circumstantial case against Madhab based on the planted evidence and his temple fanaticism.",
+        "turn": "Inspector Meera arrests Madhab based on Balaram's tip, closing the official investigation.",
+        "endingHook": "That night, Soumya sees a shadow sneaking away from the supposedly abandoned, locked Kali temple storage room, making him realize the true answers are hidden inside.",
+        "plants": [
+          "The abandoned Kali temple storage room."
+        ],
+        "payoffs": []
+      },
+      {
+        "number": 4,
+        "title": "The Water Penance",
+        "coldOpen": "Flashback to April 2009: A young Soumya cowers under a bed as violent mob noises echo outside. His grandmother Sulochana frantically packs a single bag, her hands covered in someone else's blood.",
+        "question": "What is the true connection between Soumya's family and the targeted men?",
+        "heroMove": "Soumya uses the rusted brass key from his grandmother's belongings to unlock the forbidden temple storage room, searching for what was being hidden there.",
+        "villainMove": "Balaram, fearing the killer is closing in, uses his political power to order the corrupt local police to execute a brutal, unwarranted raid on Soumya's clinic under the guise of an inspection, destroying equipment.",
+        "clue": "Inside the storage room, Soumya finds generic bloody clothes and the victims' stolen belongings hidden next to an empty velvet jewelry box—the Hira Akhi box.",
+        "falseLead": "The local drunk claims he saw a vengeful ghost drowning people in the pond.",
+        "heroLearns": "The Kali idol did not just lose its eyes to decay; they were violently pried out and stolen, and the current brass eyes are a desecrating cover-up.",
+        "audienceLearns": "Inspector Meera discovers a heavily redacted 15-year-old case file revealing Soumya's true last name and his identity as the murdered Pujari's son.",
+        "setPiece": "The Pani Danda (Water Penance): Balaram's former IIC (Inspector In-Charge) is found standing frozen in the waist-deep village pond, dead. He drowned with completely dry lungs.",
+        "sideStory": "The local village doctor performs a basic autopsy on the IIC and completely misses the microscopic medical evidence.",
+        "turn": "Meera confronts Soumya at the clinic, slamming the 15-year-old case file on his desk, exposing his hidden identity.",
+        "endingHook": "Balaram silently unlocks his secret vault, stares at the blinding diamond eyes, and plots to incite the village against Soumya.",
+        "plants": [
+          "Hidden medical evidence on the drowned IIC."
+        ],
+        "payoffs": [
+          "Sulochana's rusted brass key opens the storage room."
+        ]
+      },
+      {
+        "number": 5,
+        "title": "Red Dust",
+        "coldOpen": "Kavita arrives in Rambhadipur in a sleek, air-conditioned city car. She steps out into the sweltering, dusty village and is horrified to find Soumya looking manic, hollow-eyed, and cleaning up his trashed clinic after the police raid.",
+        "question": "Can Soumya's modern medical logic explain away his deteriorating mental state?",
+        "heroMove": "Prompted by Kavita pointing out his filthy, red-dust-covered feet (a sign he's been walking outside at night), Soumya purchases and secretly installs a battery-operated CCTV camera to monitor his own bed while he sleeps.",
+        "villainMove": "Balaram spreads a rumor that the 'demon' who killed the Pujari has returned as a city doctor, laying the groundwork for mob justice.",
+        "clue": "Madhab (from jail) tells Soumya he found the bloody clothes draped over the Kali idol and hid them in the storage to protect the temple's sanctity, confirming they didn't magically appear.",
+        "falseLead": "Kavita insists Soumya's symptoms are just extreme stress-induced psychosis from being back in a traumatizing place.",
+        "heroLearns": "Madhab is completely innocent, and whoever is committing the murders has intimate access to the clinic.",
+        "audienceLearns": "Kavita secretly starts helping Meera review the autopsy files, noticing anomalies the local doctor missed.",
+        "setPiece": "A tense sequence where Soumya tries to perform a delicate procedure on a villager in his ruined clinic, but his hands shake uncontrollably due to exhaustion.",
+        "sideStory": "Kavita desperately tries to convince Inspector Meera that Soumya is medically unfit and needs a police escort back to Bhubaneswar.",
+        "turn": "Soumya refuses to leave, realizing that running away 15 years ago is what allowed Balaram to destroy his family.",
+        "endingHook": "Soumya turns off the clinic lights and hits record on the CCTV camera, staring into the lens as he finally goes to sleep.",
+        "plants": [
+          "Battery-operated CCTV camera."
+        ],
+        "payoffs": []
+      },
+      {
+        "number": 6,
+        "title": "The Footage",
+        "coldOpen": "Inspector Meera and Kavita, dissatisfied with the local doctor's report, conduct a covert review of the drowned former IIC's medical files at the city hospital.",
+        "question": "Who is the invisible assassin executing the Danda Nata penances?",
+        "heroMove": "Soumya removes the SD card from the battery-operated CCTV camera he installed the night before and plays it on his laptop.",
+        "villainMove": "Balaram publicly announces a massive bounty on the killer's head, officially naming 'the deranged city doctor' as the prime suspect to whip the village into a frenzy.",
+        "clue": "During the file review, Kavita and Meera discover proof of a paralytic agent (causing laryngospasm) and precise, surgical incisions hidden deep under the victim's eyelid—methods only a highly trained doctor could execute.",
+        "falseLead": "None. The brutal truth is revealed.",
+        "heroLearns": "Soumya watches the footage in absolute horror: his own sleeping body rises from the cot, grabs a surgical scalpel, and walks out into the night with lethal purpose.",
+        "audienceLearns": "Soumya is the killer. The Goddess is using his severe parasomnia condition and his brilliant medical knowledge to enact her divine retribution.",
+        "setPiece": "A tense, psychological sequence of Soumya watching his own terrifying, fluid movements on screen, intercut with flashes of the actual murders he staged using chemicals and anatomy while unconscious.",
+        "sideStory": "Meera officially issues a warrant for Soumya's arrest based on the newly discovered medical evidence.",
+        "turn": "Accepting his horrific guilt, Soumya packs his bags to surrender to Meera and protect the village from himself.",
+        "endingHook": "Soumya tries to drive out of Rambhadipur to turn himself in, but a convoy of Balaram's white Scorpios blocks the only highway out, trapping him in the village.",
+        "plants": [],
+        "payoffs": [
+          "The battery-operated CCTV camera reveals the killer.",
+          "The hidden medical evidence on the drowned IIC is found."
+        ]
+      },
+      {
+        "number": 7,
+        "title": "History Repeats",
+        "coldOpen": "Nightfall. Balaram stands on the hood of his Scorpio with a loudspeaker, rallying a mob with torches. He declares Soumya a demon cursing the village—a direct, chilling mirror of the night the Pujari was killed.",
+        "question": "Can Soumya survive the mob justice that claimed his father?",
+        "heroMove": "Trapped and hunted, Soumya abandons his vehicle and navigates the narrow village lanes to hide inside the overgrown ruins of the Kali temple, piecing together Balaram's final plan.",
+        "villainMove": "Balaram orchestrates a ruthless manhunt, ordering his men to plant the dead victims' bloody belongings in Soumya's clinic to provide undeniable proof to the terrified village that Soumya is the serial killer.",
+        "clue": "Inside the temple, Soumya finds Balaram's discarded election pamphlets from 2009 stuffed into the idol's hollow base, confirming Balaram funded his rise with the stolen Hira Akhi.",
+        "falseLead": "Meera believes Balaram is just trying to protect the village from a serial killer, unaware he orchestrated the original theft.",
+        "heroLearns": "Balaram didn't just frame his father; he is using the exact same tactic to eliminate Soumya and bulldoze the temple.",
+        "audienceLearns": "Kavita realizes Soumya is the killer and decides to protect him by hiding his condition.",
+        "setPiece": "A high-stakes, claustrophobic game of cat-and-mouse through the festival-decorated village alleys, with the sounds of the Meru Jatra drums masking the mob's approach.",
+        "sideStory": "Desperate to save him from the law, Kavita brings a powerful psychiatric sedative, intending to inject Soumya to stop his night-terrors and hide his guilt.",
+        "turn": "Soumya realizes he cannot outrun the mob or legally expose a man as powerful as Balaram. The system is entirely rigged.",
+        "endingHook": "Kavita's attempt to sedate Soumya inadvertently traps them in the temple as the heavy wooden doors are smashed open. The mob drags a bloodied Soumya out into the festival square.",
+        "plants": [
+          "Kavita's psychiatric sedative syringe."
+        ],
+        "payoffs": []
+      },
+      {
+        "number": 8,
+        "title": "Meru Jatra",
+        "coldOpen": "The final night of Chaitra. Torches blaze in the festival square. Balaram stands victorious before the Kali idol with its cheap brass eyes, watching his men beat Soumya to his knees. History is perfectly repeating itself.",
+        "question": "Will Soumya surrender to the mob, or surrender his free will to the Goddess to break the cycle?",
+        "heroMove": "Realizing logic and law have failed, Soumya stops fighting. He snatches Kavita's sedative syringe and intentionally injects himself, voluntarily inducing the deep-sleep state required for the Goddess to possess him.",
+        "villainMove": "Balaram steps forward to deliver the killing blow with his silver-headed walking stick, screaming that tradition is dead.",
+        "clue": "Possessed, Soumya catches the walking stick mid-air and snaps it in half, revealing the hidden diamonds.",
+        "falseLead": "The mob thinks Soumya has merely passed out from the sedative, dropping their guard.",
+        "heroLearns": "The ultimate truth of his grandmother's fable: Balaram kept the Goddess's eyes hidden in plain sight inside his silver leg.",
+        "audienceLearns": "Soumya accepts the immense cost of vengeance, permanently sacrificing his humanity and modern life to become Kali's vessel.",
+        "setPiece": "The ultimate Agni Danda. A terrifying, supernatural martial sequence where the unconscious, possessed Soumya moves with divine brutality, using crushed Jhuna dust and clinic alcohol to ignite Balaram in front of the horrified mob.",
+        "sideStory": "Kavita and Meera arrive just in time to watch Soumya exact impossible, ritualistic justice, realizing the supernatural is horrifyingly real.",
+        "turn": "Possessed Soumya retrieves the original stolen diamond eyes from the broken silver walking stick, rips out the cheap brass eyes, and restores the Hira Akhi to the Kali idol.",
+        "endingHook": "Wanted for murder and stripped of his old life, Soumya walks away from the village. Final image: A fugitive walking alone on a dark Odia highway at dawn. He walks with a slight, rhythmic limp, and the unmistakable sound of Danda Nata ankle bells syncs perfectly with his footsteps.",
+        "plants": [],
+        "payoffs": [
+          "Kavita's psychiatric sedative syringe induces the possession.",
+          "Sulochana's cassette fable about the Demon's silver leg reveals the diamonds in the walking stick.",
+          "The Danda Nata Jhuna (flammable resin) throwing ritual is used to ignite Balaram."
+        ]
+      }
+    ],
+    "revisionNotes": [
+      {
+        "version": 2,
+        "changes": [
+          "Moved CCTV installation to Ep 5 and footage check to Ep 6 to fix the irrational delay blocker (Story Doctor).",
+          "Changed Deba's death in Ep 1 so he wanders into a dark alley and is ambushed by sleepwalking Soumya before staggering back into the crowd, fixing the physical logistics blocker (Story Doctor).",
+          "Moved the bloody shirt discovery to the locked temple storage room in Ep 4, accessed via grandmother's key, fixing the illogical hiding spot (Story Doctor).",
+          "Made the surgical incisions on the drowned IIC hidden deep under the eyelid, missed by the local doctor in Ep 4 but found by Meera's city autopsy in Ep 6, fixing the procedural plot hole (Story Doctor).",
+          "Replaced the tap water to blood trope in Ep 1 with Soumya discovering a faint burn blister on his own palm, fixing the world-building blocker (Audience Critic).",
+          "Shifted clues in Eps 2 and 3 to heavily frame Madhab for the murders, so the Ep 6 CCTV footage is a genuine surprise (Audience Critic).",
+          "Changed Ep 4 ending hook to Balaram silently pulling the diamond eyes from his vault and calling a hitman, removing the cartoonish dialogue (Audience Critic).",
+          "Updated the final image to Soumya walking with a slight limp and the rhythmic sound of Danda Nata ankle bells syncing with his footsteps, replacing the glowing eyes cliche (Audience Critic).",
+          "Changed Ep 1 medical procedure so Soumya extracts the coin while pretending to check Deba's airway, fixing the unauthorized autopsy legal blocker (Odisha Culture Expert).",
+          "Changed Balaram's demolition strategy in Ep 2 to faking a clearance from the Odisha Hindu Religious Endowments Commission, fixing the Panchayat legal blocker (Odisha Culture Expert).",
+          "Changed the 'corrupt police chief' to 'former IIC (Inspector In-Charge)', reflecting accurate Odia police ranks (Odisha Culture Expert).",
+          "Updated the stolen artifact to 'antique Zamindar-endowed gold-and-diamond eyes (Hira Akhi)' to logically justify their presence in a rural temple (Odisha Culture Expert)."
+        ]
+      },
+      {
+        "version": 3,
+        "changes": [
+          "Made the murders medically plausible to match the Ep 6 autopsy reveal, fixing the logic blocker: Ep 1 features a lethal injection of a caustic chemical (internal burn), Ep 2 features dust dumped into a car's AC intake, and Ep 4 features a paralytic agent causing laryngospasm (dry drowning).",
+          "Made the central mystery clues subtler (fixing the major complaint): Ep 1 hand injury is now deeply bruised knuckles dismissed as manual labor; Ep 3's missing scalpel is blamed entirely on Madhab; Ep 4 features Soumya finding generic bloody clothes/belongings rather than his own identifiable shirt; and the Ep 5 CCTV installation is motivated by Kavita finding red dirt on his feet.",
+          "Replaced the generic 'city hitmen' with a brutal, unwarranted raid by corrupt local police acting on Balaram's orders, escalating the local political menace.",
+          "Changed Balaram's planted evidence in Ep 7 from 'property files' to undeniable, blood-soaked weapons and victims' belongings to realistically incite a mob to execute a serial killer.",
+          "Added the Danda Nata Jhuna (flammable resin) throwing ritual to the Setups and Payoffs table (planted in Ep 1, paid off in Ep 8).",
+          "Fixed the massive cultural blocker regarding the Khandita (eyeless) idol by establishing that the stolen Hira Akhi (diamond eyes) were hastily replaced with cheap brass eyes 15 years ago to maintain basic sanctity.",
+          "Changed the institutional terminology to the accurate 'Commissioner of Endowments, Odisha' to maintain immersion.",
+          "Explicitly located Rambhadipur in the Ganjam district to authentically ground the Danda Nata traditions, the sweltering heat, and the red dirt environment.",
+          "Revamped Kavita's character from a nagging partner to a medical ally who helps uncover the autopsy clues; her attempt to sedate Soumya to hide his guilt inadvertently traps him in the village."
+        ]
+      }
+    ],
+    "review": {
+      "passed": false,
+      "keptVersion": 3,
+      "scores": {
+        "storyDoctor": 6,
+        "audienceCritic": 6,
+        "cultureExpert": 9
+      },
+      "reports": {
+        "storyDoctor": {
+          "score": 6,
+          "verdict": "An incredibly evocative and culturally rich folk-horror concept with fantastic atmospheric elements and a brilliant climax. However, glaring logical contradictions regarding the locked storage room and heavy-handed clues that give away the mystery too early to the audience hold it back from greatness.",
+          "strengths": [
+            "The integration of Odia culture, specifically the Danda Nata rituals and the Chaitra month festival, gives the series a unique and deeply authentic folk-horror identity.",
+            "The hero using his medical genius while sleepwalking to enact seemingly supernatural penances is a brilliant, grounded take on divine possession.",
+            "The climax is spectacular: the hero voluntarily weaponizing his parasomnia by injecting a sedative to let the Goddess take over is a fantastic, active choice.",
+            "The villain's motivation (covering up the theft of the diamond eyes to build a resort) is grounded, plausible, and ties perfectly into the historical tragedy."
+          ],
+          "problems": [
+            {
+              "where": "Episode 3, 4, & 5 (The locked storage room)",
+              "severity": "blocker",
+              "problem": "Sulochana fled with the rusted key 15 years ago, and Soumya uses it to unlock the 'forgotten' temple storage room in Episode 4. Yet, Madhab supposedly hid the killer's recently bloody clothes in this exact same room. If the room was locked for 15 years, Madhab could not have accessed it. Furthermore, it makes no logical sense for Balaram or Deba to leave the empty Hira Akhi velvet box inside the temple storage room after stealing the diamonds.",
+              "fix": "Make the room itself generally accessible (but abandoned), allowing Madhab to hide clothes there. The rusted key from Sulochana should instead open a specific locked chest or floor safe hidden beneath the debris in that room, where the Pujari had secured the empty velvet box as evidence before he was murdered."
+            },
+            {
+              "where": "Episodes 1 & 3 (The Mystery Giveaway)",
+              "severity": "major",
+              "problem": "The user explicitly asked that the audience not know it is the hero until later. However, in Episode 1, Soumya discovers painfully bruised knuckles immediately after a violent murder, and in Episode 3, a scalpel goes missing from his bag. These clues are far too heavy-handed; viewers will immediately guess the sleepwalking doctor is the killer.",
+              "fix": "Remove the bruised knuckles in Episode 1. For the missing scalpel in Episode 3, provide a concrete red herring: show Madhab explicitly stealing it and later attempting to use it for an amateur medical procedure on a villager, so the audience genuinely believes Madhab is the one utilizing the stolen medical tools for murder."
+            },
+            {
+              "where": "Episode 2 (The Surveyor's Death)",
+              "severity": "major",
+              "problem": "The rules explicitly state the Goddess 'commandeers Soumya's medical genius, using real-world chemicals, scalpels, and anatomy'. Sabotaging a car's AC intake to pump red dust and jamming car doors is mechanical engineering, not medical science. It also strains plausibility that the surveyor couldn't just break a window or turn off the AC.",
+              "fix": "Align the kill with Soumya's medical skills. Have the sleepwalking Soumya break into the surveyor's home and replace the medication in his asthma inhaler with a lethal, caustic powder (e.g., crushed toxic chemicals mimicking red dirt). When the surveyor uses it, his airways paralyze."
+            },
+            {
+              "where": "Episode 8 (The Climax Sedation)",
+              "severity": "major",
+              "problem": "Soumya is surrounded by a mob and actively being beaten to his knees. Snatching a syringe and injecting a psychiatric sedative wouldn't instantly render him deeply asleep, nor would his heavily sedated body logically be able to jump up and catch a stick mid-air a second later without violating the 'no magic' rule.",
+              "fix": "Change the timing. Soumya realizes the mob is about to breach the temple. Barricaded inside, he prepares and injects a fast-acting anesthetic (like Propofol) into his own IV line. By the time the mob smashes the doors and drags his limp body out, his conscious mind is already fully suppressed, allowing the Goddess to fluidly take over before Balaram strikes."
+            },
+            {
+              "where": "Episode 6 & 7 (Kavita's revelation)",
+              "severity": "minor",
+              "problem": "The Episode 7 blueprint states: 'Audience learns: Kavita realizes Soumya is the killer'. However, in Episode 6, Kavita and Meera already jointly discovered the medical evidence proving a highly trained doctor committed the murders, prompting an arrest warrant. Kavita would logically realize it in Episode 6.",
+              "fix": "In Episode 6, have Kavita discover the medical anomalies (paralytic agents, surgical cuts) on her own and hide them from Inspector Meera to protect Soumya. Meera should issue the warrant based on Balaram's planted evidence instead. This saves Kavita's full realization and protective instinct for Episode 7."
+            }
+          ]
+        },
+        "audienceCritic": {
+          "score": 6,
+          "verdict": "The core concept of a doctor weaponizing his parasomnia to enact divine, medical-grade vengeance is phenomenal, and the climax is an absolute masterpiece of tragic storytelling. However, structural flaws, a massive plot hole, and a dragged-out mystery that modern audiences will guess immediately bring it down to average execution. It needs a structural rewrite to survive the mid-season slump.",
+          "strengths": [
+            "The hero's choice in the climax to intentionally inject himself with a sedative to surrender to the Goddess is a brilliant, unforgettable payoff.",
+            "Grounding the supernatural possession in visceral medical science (caustic chemicals, precise anatomy) rather than ghost magic feels fresh and terrifying.",
+            "The rich, authentic setting of Odia folklore, specifically the Danda Nata penance rituals tied to the murders."
+          ],
+          "problems": [
+            {
+              "where": "Episodes 1-6 Pacing and Mystery",
+              "severity": "blocker",
+              "problem": "The audience will guess Soumya is the killer by Episode 2 (murders require medical precision, he has bruised knuckles, he suffers from extreme exhaustion). Waiting until Episode 6 for the CCTV reveal makes the hero look incompetent and the audience incredibly bored.",
+              "fix": "Move the CCTV reveal to Episode 3. Shift the genre for the second half from a whodunit to a tense thriller where Soumya desperately tries to chain himself to his bed at night while covering his tracks by day."
+            },
+            {
+              "where": "Episode 4 and 5 Logic",
+              "severity": "major",
+              "problem": "In Episode 4, Soumya uses Sulochana's key (brought from the city) to open the forgotten storage room. In Episode 5, Madhab claims he hid the bloody clothes inside it. How did Madhab get into a locked room if Soumya had the only key in Bhubaneswar?",
+              "fix": "Sulochana's key should open a specific locked antique chest or a false bottom beneath the idol where the empty Hira Akhi box is kept, while Madhab simply hides the clothes in the generally accessible temple shadows."
+            },
+            {
+              "where": "Episode 5 (Kavita's arc)",
+              "severity": "major",
+              "problem": "Kavita drops into the story in Episode 5 purely to deliver a sedative and act as a plot device. We have no reason to care about their relationship because we haven't seen them together.",
+              "fix": "Kavita must travel to Rambhadipur with Soumya in Episode 1 to co-run the medical camp. Her constant presence makes his attempts to hide his exhaustion harder and her eventual discovery more emotionally devastating."
+            },
+            {
+              "where": "Episode 3",
+              "severity": "minor",
+              "problem": "Dedicating an entire episode to a stakeout just to catch Madhab stealing expired painkillers is classic filler and halts the main murder mystery dead in its tracks.",
+              "fix": "Compress the Madhab theft subplot into Episode 2. Use Episode 3 to have Soumya wake up outside in the dirt with blood on his hands and no memory, escalating his personal dread and pushing him to buy the CCTV camera earlier."
+            }
+          ]
+        },
+        "cultureExpert": {
+          "score": 9,
+          "verdict": "This is an exceptionally well-researched and brilliantly structured pitch. The integration of Ganjam's Danda Nata rituals with a psychological medical-thriller plot is incredibly authentic and creative. A few minor adjustments to administrative realities and cultural sensitivities around divine possession will make it flawless.",
+          "strengths": [
+            "The use of Ganjam's specific Danda Nata rituals (Dhuli Danda, Pani Danda, Agni Danda, and Meru Jatra) is stunningly accurate and perfectly utilized as murder methods.",
+            "The cultural logic of the 'Hira Akhi' (diamond eyes) and replacing them to prevent the idol from being declared 'Khandita' (desecrated) is deeply rooted in Odia temple tradition.",
+            "The names, geographical details (the sweltering red dust of Ganjam), and administrative titles (IIC, Tehsildar) are completely authentic to Odisha."
+          ],
+          "problems": [
+            {
+              "where": "Episode 8 (The Climax)",
+              "severity": "major",
+              "problem": "Using a psychiatric sedative to intentionally 'summon' Goddess Kali. In Odia rural culture, reducing divine possession (Bhar/Kalasi) to a drug's side-effect might offend devotees and undercuts the spiritual awe of the moment. The Goddess shouldn't rely on a clinical syringe to take control of her chosen vessel at the peak of her own festival.",
+              "fix": "Have Kavita attempt to inject Soumya to *stop* his condition and save him from the mob. Soumya stops her, throws the syringe away, and instead consciously surrenders to the hypnotic, rhythmic Dhol (drums) of the Meru Jatra. This merges his medical condition with the traditional Odia method of inducing divine trance (Bhar)."
+            },
+            {
+              "where": "Episode 2 (Villain's plan / Institutions)",
+              "severity": "minor",
+              "problem": "The Commissioner of Endowments exists to protect temple properties (Devottar land). A fabricated document explicitly allowing the bulldozing of an ancient temple for a private 'tourist resort' would trigger immediate state-wide media outrage and legal stays, breaking suspension of disbelief regarding Odia bureaucracy.",
+              "fix": "Have Balaram fabricate a structural safety report claiming the temple is dangerously unstable, requiring the deity to undergo 'Bije' (temporary or permanent relocation) to a new, smaller shrine. This legally frees up the old land for a 'community development trust' that Balaram secretly controls."
+            },
+            {
+              "where": "Episode 4 and 6 (Medical Investigation)",
+              "severity": "minor",
+              "problem": "The unnatural death of a former IIC (police inspector) would never be left solely to a 'local village doctor' for autopsy; police procedure would mandate sending the body to the district's major medical hub.",
+              "fix": "Specify that Balaram uses his influence to illegally rush the post-mortem at the local CHC (Community Health Centre) to bury the evidence. In Episode 6, Inspector Meera takes the covert files and tissue samples to MKCG Medical College in Berhampur (the actual major hospital for Ganjam) for the accurate review."
+            }
+          ]
+        }
+      },
+      "history": [
+        {
+          "version": 1,
+          "scores": {
+            "storyDoctor": 6,
+            "audienceCritic": 6,
+            "cultureExpert": 6
+          },
+          "passed": false
+        },
+        {
+          "version": 2,
+          "scores": {
+            "storyDoctor": 6,
+            "audienceCritic": 8,
+            "cultureExpert": 6
+          },
+          "passed": false
+        },
+        {
+          "version": 3,
+          "scores": {
+            "storyDoctor": 6,
+            "audienceCritic": 6,
+            "cultureExpert": 9
+          },
+          "passed": false
+        },
+        {
+          "version": 4,
+          "scores": {
+            "storyDoctor": 6,
+            "audienceCritic": 7,
+            "cultureExpert": 8
+          },
+          "passed": false
+        }
+      ]
+    }
+  },
+  "usage": {
+    "calls": 15,
+    "promptTokens": 140909,
+    "outputTokens": 36291,
+    "thinkingTokens": 54027,
+    "models": [
+      "gemini-3.1-pro-preview"
+    ]
+  }
+}

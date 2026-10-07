@@ -1,0 +1,655 @@
+{
+  "bible": {
+    "idea": "An Odia feature film (thriller). During Rath Yatra in Puri, a young pickpocket working the crowd steals a phone — and finds it holds video evidence of a murder. Now the killers are hunting him through the festival crowds. Everything else is free to invent.",
+    "format": {
+      "type": "film",
+      "runtimeMinutes": 120
+    },
+    "units": {
+      "kind": "sequence",
+      "count": 8,
+      "minutes": 15,
+      "label": "a feature film of 120 minutes, designed as 8 sequences of about 15 minutes"
+    },
+    "pitchRoom": {
+      "directions": [
+        {
+          "title": "The Watchtower",
+          "logline": "When a cynical teenage pickpocket steals a phone containing video evidence of a murder, he must outsmart the city's corrupt police chief who is using the massive Rath Yatra security grid to hunt him down.",
+          "centralQuestion": "Can a street thief outwit the chief of police in a crowd of a million people when the hunter controls the exits?",
+          "genrePromise": "A claustrophobic, high-stakes cat-and-mouse chase thriller amidst the sensory overload of a massive festival.",
+          "coldOpen": "A frantic POV shot of a bleeding man in a Puri alleyway, recording a video. He desperately drops the phone into a wealthy tourist's tote bag just as a cop in full uniform drags him violently into the darkness.",
+          "openingEnding": "Babulu unlocks the stolen phone, watches the murder video, and realizes the killer is the Police Chief whose voice is currently echoing over the Bada Danda loudspeakers directing crowd control. The phone rings; Babulu answers, and the Chief is looking right at him from a security watchtower.",
+          "climaxTwist": "Babulu cannot go to the police and cannot escape the cordon. Instead, he orchestrates his gang to reverse-pickpocket the phone directly into the Chief Minister's pocket during the heavily guarded Chhera Pahanra (chariot sweeping) ritual. The cost: Babulu sacrifices his hidden escape money to create the massive crowd diversion, trapping himself in Puri forever, but taking the Chief down.",
+          "whyWow": "The villain controls the cameras, the cops, and the exits, forcing the hero to use analog street magic to survive in plain sight.",
+          "freshness": "The climax hinges on a reverse-pickpocket during a sacred, highly televised ritual, turning the hero's criminal flaw into the ultimate weapon of justice."
+        },
+        {
+          "title": "Daru (The Sacred Timber)",
+          "logline": "An amnesiac pickpocket lifts a phone that holds a twelve-year-old murder video of his own father, forcing him to evade a deadly cult through the Rath Yatra crowds to uncover his true identity.",
+          "centralQuestion": "Will the thief discover why his father was killed before the hidden cult silences him forever?",
+          "genrePromise": "A dark, psychological mystery blending street grit with the esoteric and secretive lore of temple rituals.",
+          "coldOpen": "Twelve years ago during a brutal storm, a man is chased and bludgeoned to death near the sacred Neem tree meant for the new deity idols (Nabakalebara). Cut to present day: Kalia, an older pickpocket, lifts wallets with effortless grace as the Pahandi ritual begins.",
+          "openingEnding": "Kalia watches the video on the stolen phone. The dying victim looks into the lens and calls out Kalia's forgotten childhood name. Horrified, Kalia looks up from the screen and spots the killer's distinct silver ring on the hand of a passing temple authority figure.",
+          "climaxTwist": "The man with the silver ring was actually trying to save Kalia's father. The real killer is Kalia's gang-boss mentor, who killed the father to cover up the theft of ancient temple artifacts. Kalia must fight his mentor inside the scaffolding of the Taladhwaja chariot, choosing blood over the man who raised him. The cost: He loses the only 'father' he ever knew to avenge the one he doesn't remember.",
+          "whyWow": "The crime connects the grand history of a massive cultural event with the deeply personal trauma of a forgotten street child.",
+          "freshness": "The stolen phone is a time capsule, turning a standard chase into a profound mystery about the hero's own origins and the dark side of local history."
+        },
+        {
+          "title": "The Grand Road",
+          "logline": "A mute pickpocket steals a phone that contains the digital trigger for an assassination planned during the Rath Yatra, turning him into the target of rogue agents.",
+          "centralQuestion": "How can a boy who cannot speak warn a million people about a deadly sniper?",
+          "genrePromise": "A relentless, real-time ticking-clock action thriller set entirely in the daylight crowds of Puri.",
+          "coldOpen": "A wealthy businessman is suffocated in a beachfront hotel. The killer calmly packs up, sets up a sniper rifle at the window, and records a test run of the sightlines to the Bada Danda, showing a countdown timer superimposed over the beloved local king (Gajapati).",
+          "openingEnding": "Jagu steals a handler's phone and watches the video. He realizes the countdown ends in exactly three hours, coinciding with the chariot pulling. He makes eye contact with a man in the crowd who touches an earpiece, pulls a concealed blade, and points directly at Jagu.",
+          "climaxTwist": "Unable to communicate the threat to the authorities, Jagu scales the massive Nandighosha chariot himself amidst the roaring crowd. He uses his specialized pickpocket razor to sever the chariot's main pulling ropes, halting the massive structure just inches before it enters the sniper's kill zone. The cost: Jagu is brutally beaten by the crowd for desecrating the chariot and is arrested, unable to explain himself, but smiles as he sees the Gajapati is safe.",
+          "whyWow": "A completely silent hero uses his invisible street skills in plain sight on the biggest stage in Odisha to stop a tragedy.",
+          "freshness": "The video isn't evidence of a past crime; it is the blueprint and trigger for a future one, turning a run-and-hide story into a race-against-time."
+        }
+      ],
+      "verdict": {
+        "scores": [
+          {
+            "direction": 1,
+            "hook": 9,
+            "freshness": 9,
+            "climax": 9,
+            "faithfulness": 10,
+            "note": "Brilliant use of the setting and the hero's specific skills; the reverse-pickpocket climax is incredibly smart."
+          },
+          {
+            "direction": 2,
+            "hook": 5,
+            "freshness": 3,
+            "climax": 5,
+            "faithfulness": 8,
+            "note": "Amnesia is a tired trope, and finding a twelve-year-old video on a freshly stolen phone defies real-world technology logic."
+          },
+          {
+            "direction": 3,
+            "hook": 8,
+            "freshness": 4,
+            "climax": 4,
+            "faithfulness": 7,
+            "note": "The ticking clock is exciting, but having the hero physically sever the sacred chariot ropes risks massive cultural backlash."
+          }
+        ],
+        "best": 1,
+        "reason": "It completely honors the user's prompt while building a claustrophobic, high-stakes panopticon thriller. Using the Police Chief as the killer weaponizes the massive festival security against the hero. The climax perfectly uses a highly authentic, real-world ritual (Chhera Pahanra) and the hero's core skill to resolve the plot without offending cultural sensibilities.",
+        "improve": "Borrow the relentless real-time ticking clock from Direction 3 to keep the pace blistering. Ensure the logistics of getting close to the Chief Minister during the heavily guarded Chhera Pahanra are meticulously set up early on, so the climax feels earned and inevitable."
+      },
+      "chosen": 1
+    },
+    "promise": {
+      "title": "The Watchtower",
+      "logline": "When a cynical teenage pickpocket steals a phone containing video evidence of a murder, he must outsmart the city's corrupt Superintendent of Police who is using the massive Rath Yatra security grid to hunt him down.",
+      "centralQuestion": "Can a street thief outwit a corrupt SP in a crowd of a million people when the hunter controls the cameras, the exits, and the radio towers?",
+      "genrePromise": "A claustrophobic, high-stakes cat-and-mouse chase thriller amidst the sensory overload of a massive festival.",
+      "whyWow": "The villain controls the tactical high ground and surveillance grid, forcing the hero to use analog street magic, crowd physics, and ancient festival traditions to survive in plain sight."
+    },
+    "hiddenTruth": {
+      "summary": "SP Rudra Pratap runs a massive extortion syndicate skimming funds from VIP temple security. Three days before Rath Yatra, a junior temple servitor named Soumya uncovered the ledgers and recorded Rudra executing a dissenting politician. Cornered on the morning of the festival, Soumya activates 'Screen Pinning' to lock the video, drops the phone in a tourist's bag, and is murdered. Rudra's men hide the body in a police trunk to prevent a disruption of the sacred Niti by the Sevayat Nijogs, but the phone remains in the crowd.",
+      "timeline": [
+        {
+          "when": "Six months ago",
+          "event": "SP Rudra takes charge of Puri and sets up an underground extortion ring disguised as VIP security protocols."
+        },
+        {
+          "when": "Three days before Rath Yatra",
+          "event": "Soumya discovers the hidden ledgers and secretly records Rudra murdering a dissenting local politician in a warehouse."
+        },
+        {
+          "when": "Night before Rath Yatra",
+          "event": "Rudra learns of the leak and dispatches his plainclothes strike team to eliminate Soumya before the Chief Minister arrives."
+        },
+        {
+          "when": "Morning of Rath Yatra",
+          "event": "Soumya is chased into an alley, pins the video to his screen, drops the phone into a tourist's tote bag, and is killed and hidden in a police trunk by Rudra."
+        },
+        {
+          "when": "During the intense morning crowd build-up",
+          "event": "Babulu, working the tourist crowd on Bada Danda, pickpockets the tourist's tote bag, acquiring the locked phone with 90% battery."
+        }
+      ],
+      "whoKnowsWhat": [
+        {
+          "character": "SP Rudra Pratap",
+          "knows": "He killed Soumya and hid the body to prevent a Sevayat Nijog protest, but knows the phone's IMEI is pinging in the crowd."
+        },
+        {
+          "character": "Babulu",
+          "knows": "Discovers the locked murder video and realizes the killer's voice matches the man commanding the festival loudspeakers."
+        },
+        {
+          "character": "Inspector Das",
+          "knows": "Knows Rudra ordered the hit and knows exactly where Soumya's body is hidden, carrying immense guilt."
+        }
+      ]
+    },
+    "characters": [
+      {
+        "name": "Babulu",
+        "age": "17",
+        "relationToHero": "Protagonist",
+        "look": "Wiry, sun-burnt, wearing a faded oversized yellow shirt with a ripped left collar to hide stolen goods, quick-eyed and constantly scanning.",
+        "role": "Hero",
+        "want": "To save enough stolen money to leave Puri and start a clean life in Mumbai.",
+        "need": "To realize that running away solves nothing, and that he has a responsibility to the city that raised him.",
+        "secret": "He has a hidden stash of 50,000 rupees in cash buried under a loose brick in the Markandeswar temple tank.",
+        "lie": "Believes everyone is corrupt and looking out only for themselves, so he should do the same.",
+        "plotMove": "Deduces the exact 3-second VVIP security blind spot by watching a live broadcast of the Chief Minister pushing away SSB guards at the temple gates.",
+        "arc": "From a selfish, cynical thief who preys on the crowd, to a localized hero who sacrifices his own freedom and wealth to protect the innocent."
+      },
+      {
+        "name": "SP Rudra Pratap",
+        "age": "45",
+        "relationToHero": "Antagonist",
+        "look": "Impeccably ironed Khaki uniform, aviator sunglasses, imposing posture, always holding a walkie-talkie.",
+        "role": "Antagonist",
+        "want": "To retrieve the phone and eliminate Babulu before the Chief Minister's security detail leaves.",
+        "need": "Total control and submission from the city.",
+        "secret": "He despises the religious fervor of the festival and views the million devotees purely as cattle to be managed and monetized.",
+        "lie": "Believes his badge makes him untouchable and that street kids are invisible and powerless.",
+        "plotMove": "Uses IMSI catchers on the watchtowers to track the stolen phone's IMEI to a 50-meter radius, unleashing ruthless ground sweeps.",
+        "arc": "From absolute authority commanding the city from above, to public humiliation and physical arrest at ground level."
+      },
+      {
+        "name": "Mina",
+        "age": "16",
+        "relationToHero": "His partner in crime and closest friend",
+        "look": "Dressed in a bright, cheap Salwar suit, wears fake silver anklets, incredibly fast hands.",
+        "role": "Ally / Mastermind",
+        "want": "To keep Babulu safe and stick to their usual small-time thievery.",
+        "need": "To trust that they can punch above their weight and fight the system.",
+        "secret": "She deliberately botches some pickpockets if the victim looks genuinely poor.",
+        "lie": "Believes survival is the only victory poor people can achieve.",
+        "plotMove": "Actively orchestrates a flawless decoy trail using a different stolen phone strapped to a cow, pulling cops away, and triggers a smoke distraction underneath the VIP gallery.",
+        "arc": "Transforms from a frightened survivor into a brave operative who risks her life and outsmarts the police to breach the VIP cordon."
+      },
+      {
+        "name": "Baya Mamu",
+        "age": "60",
+        "relationToHero": "His mentor",
+        "look": "Leathery skin, missing three fingers on his left hand, wears a traditional white dhoti and gamucha.",
+        "role": "Mentor",
+        "want": "To live out his days in peace running a small festival food stall.",
+        "need": "To pass on his ultimate 'phantom hand' technique for a righteous cause.",
+        "secret": "He once tried to rob a politician and lost his fingers as punishment from corrupt cops.",
+        "lie": "Believes the system is too big to fall.",
+        "plotMove": "Teaches Babulu the ultimate reverse-pickpocketing technique while hiding from police, demonstrating that giving is harder than taking.",
+        "arc": "Moves from passive cynicism to actively running interference in the street kitchen to buy Babulu time."
+      },
+      {
+        "name": "Inspector Das",
+        "age": "35",
+        "relationToHero": "The conflicted pursuer",
+        "look": "Sweaty, perpetually stressed, plainclothes cop wearing a checkered shirt and jeans, hiding a service weapon.",
+        "role": "Henchman / Secondary Antagonist",
+        "want": "To impress Rudra and secure his own promotion.",
+        "need": "To confront his dwindling morality and actively stop his corrupt boss.",
+        "secret": "He knows exactly which police vehicle trunk Soumya's body is rotting in and feels sick with guilt.",
+        "lie": "Believes following orders absolves him of guilt.",
+        "plotMove": "Spots Babulu sneaking under the VIP viewing gallery but intentionally lowers his radio and turns his back, letting him pass.",
+        "arc": "Goes from a loyal attack dog to a brave man who ultimately draws his weapon on his own boss to protect the truth."
+      },
+      {
+        "name": "Chief Minister Anant Mohanty",
+        "age": "55",
+        "relationToHero": "The target",
+        "look": "Crisp white Kurta, surrounded by SSB commandos, polite but exhausted.",
+        "role": "The Unwitting Savior",
+        "want": "A flawless, highly publicized PR photo-op at the Rath Yatra showing him as a humble devotee.",
+        "need": "To realize the rot in his own state police.",
+        "secret": "He intentionally breaches his own SSB security protocols just to get better solo camera angles.",
+        "lie": "Believes his security detail tells him the truth about the city.",
+        "plotMove": "Steps entirely out of his SSB security bubble to bow barefoot during the VIP Darshan, creating the 3-second physical window Babulu needs.",
+        "arc": "Remains functionally the same, but his PR obsession acts as the ultimate blind spot that Rudra cannot control."
+      }
+    ],
+    "villainPlan": "SP Rudra plans to use IMSI catchers (Stingrays) on the watchtowers to track the stolen phone's IMEI number to a 50-meter radius. Because local cell networks are down from crowd strain and VVIP jammers block all uploads, Babulu cannot send the video online. Rudra deploys plainclothes strike teams to physically hunt within the pinged radius, intending to quietly assassinate Babulu, retrieve the phone, and write the death off as a stampede casualty. He hid Soumya's body in a trunk to avoid a Sevayat Nijog protest disrupting the sacred Niti, believing his brutal extortion is just a 'tax' for managing the chaotic city.",
+    "facts": {
+      "jobsAndMoney": [
+        "Pickpockets operate entirely in cash; Babulu's life savings (50,000 rupees) are entirely in one hundred 500-rupee notes.",
+        "SP Rudra uses untraceable temple donation cash to pay his hitmen.",
+        "The local street vendors pay a protection fee to the police, which Babulu exploits to blend in behind their stalls."
+      ],
+      "healthAndBodies": [
+        "The extreme July humidity of Puri causes rapid dehydration; running through the dense crowd exhausts stamina quickly.",
+        "Baya Mamu's missing fingers mean he cannot execute complex sleight of hand anymore, forcing Babulu to perform the climax trick.",
+        "The dense crowd crush during the Pahandi makes running impossible; everyone moves as a swaying ocean of bodies."
+      ],
+      "belongingsAndVehicles": [
+        "Soumya activated 'Screen Pinning' before dying, locking the video on screen and disabling touch input so it cannot be accidentally muted.",
+        "The phone battery starts at 90 percent and ticks down in real-time throughout the movie, adding a relentless deadline.",
+        "Police vehicles cannot move through Bada Danda; police must move on horseback or in foot-based wedge formations."
+      ],
+      "places": [
+        "Bada Danda: The three-kilometer Grand Road where the chariots are pulled. A sea of a million people, claustrophobic and loud.",
+        "The Mathas: Ancient, interconnected temple monasteries with unmapped rooftops offering escape from ground crowds.",
+        "The Mancha (VIP Viewing Gallery): A massive, multi-tiered scaffolding structure where VIPs sit securely above the crowd."
+      ],
+      "worldRules": [
+        "There is no supernatural magic; survival depends entirely on analog street smarts, crowd physics, and physical sleight of hand.",
+        "Local cell towers completely collapse under data strain; state VVIP jammers create a total dead zone around the Chief Minister.",
+        "IMSI catchers (Stingrays) only provide a 50-meter radius for tracking an IMEI, forcing physical ground hunts by plainclothes cops.",
+        "The Chief Minister uses the ground-level VIP Darshan window before the Gajapati Maharaja's arrival as a PR opportunity, deliberately stepping out of his SSB bubble to appear humble on live TV."
+      ]
+    },
+    "climax": {
+      "setting": "The highly secured VVIP cordon next to Nandighosa (Lord Jagannath's chariot) on Bada Danda, exactly during the ground-level VIP Darshan window before the Gajapati Maharaja arrives.",
+      "reversal": "The audience expects Babulu to try and escape the jammer zone to upload the video. Instead, he runs into the most heavily guarded zone in Puri to reverse-pickpocket the phone onto the Chief Minister.",
+      "heroChoice": "Babulu chooses to sacrifice his hidden escape fund of 50,000 rupees, untying the bundle and throwing it high into the air like confetti over his network of street kids and beggars. This creates a massive, chaotic physical wall against Rudra, while leaving the VVIP ring perfectly calm.",
+      "cost": "He permanently loses his ticket to a clean life in Mumbai, trapping himself in the chaotic, dangerous streets of Puri forever.",
+      "payoffs": [
+        "Babulu's hidden stash of 50,000 in 500-rupee notes buried under a brick at the Markandeswar temple tank.",
+        "Soumya's 'Screen Pinning' accessibility feature keeping the video active.",
+        "Baya Mamu's lesson on the wrist-flick reverse-pickpocket trick under the table.",
+        "Babulu watching the live broadcast of the CM pushing away his SSB guards for a solo PR bow at the temple gates.",
+        "Inspector Das staring at his holstered weapon, sweating with guilt over hiding Soumya's body in a trunk."
+      ],
+      "finalImage": "Live on national television, as the massive crowd prepares to pull the chariot ropes, the Chief Minister stands in his viewing area staring at the looping murder video. Below him, Inspector Das holds Rudra at gunpoint, while Babulu vanishes smiling into the roaring ocean of devotees.",
+      "whyWow": "SP Rudra's inescapable, high-tech digital trap is shattered by analog street magic, a sprawling cash frenzy triggering a beggar network, and the perfect exploitation of a politician's predictable live TV PR stunt.",
+      "resolution": "Babulu accepts Puri as his home, becoming a local protector. SP Rudra is arrested at gunpoint by his own subordinate. Inspector Das finds his courage and exposes the hidden body. Mina takes over the street network alongside Babulu, and the CM gets his undeniable proof."
+    },
+    "setupsPayoffs": [
+      {
+        "setup": "Babulu's hidden stash of Rs 50,000 in 500-rupee notes buried under a brick at the Markandeswar temple tank.",
+        "plantedIn": "Sequence 1 (Hero's introduction at the tank before heading to work).",
+        "payoff": "Babulu unties the bundle and throws it like confetti over the street kids, triggering a sprawling frenzy that blocks Rudra's path.",
+        "paidOffIn": "Sequence 8 (Climax)."
+      },
+      {
+        "setup": "Soumya's phone has 'Screen Pinning' activated; touch input is disabled and the video loops relentlessly, aggressively draining the 90% battery.",
+        "plantedIn": "Sequence 2 (Discovering the locked video).",
+        "payoff": "When the Chief Minister checks his pocket, the screen is still bright and looping the evidence.",
+        "paidOffIn": "Sequence 8 (Climax)."
+      },
+      {
+        "setup": "Baya Mamu demonstrates a 'put-pocket' trick under a table while hiding from cops, stating giving is harder than taking.",
+        "plantedIn": "Sequence 3 (Strategy session in the street kitchen).",
+        "payoff": "Babulu uses the exact wrist-flick technique to drop the phone into the Chief Minister's kurta pocket.",
+        "paidOffIn": "Sequence 8 (Climax)."
+      },
+      {
+        "setup": "Babulu watches a live TV broadcast of the CM arriving at the VIP Mancha, pushing away his SSB guards to appear humble for exactly 3 seconds.",
+        "plantedIn": "Sequence 5 (The Blueprint deduction).",
+        "payoff": "Babulu anticipates the exact 3-second unprotected PR window when the CM does his VIP Darshan at the chariot.",
+        "paidOffIn": "Sequence 8 (Climax)."
+      },
+      {
+        "setup": "Inspector Das stares at his holstered weapon, sweating with guilt over hiding Soumya's body in a trunk.",
+        "plantedIn": "Sequence 4 (The Relay).",
+        "payoff": "Das finally draws his weapon, aiming it at Rudra to prevent him from stopping the Chief Minister.",
+        "paidOffIn": "Sequence 8 (Climax)."
+      }
+    ],
+    "blueprint": [
+      {
+        "number": 1,
+        "title": "The Harvest on Bada Danda",
+        "coldOpen": "At the quiet Markandeswar tank, Babulu hides cash under a brick. Nearby, Soumya pins a murder video on his screen, drops the phone in a tourist's bag, and is murdered. Cops throw his body into a vehicle trunk to prevent a Nijog protest.",
+        "question": "Can a teenage street thief survive stealing the most dangerous item in Puri?",
+        "heroMove": "Babulu works the intense morning crowd build-up, identifies the wealthy tourist, and flawlessly pickpockets the tote bag to steal the phone.",
+        "villainMove": "Rudra realizes the phone is in the crowd, tracks its IMEI via watchtower IMSI catchers, and deploys ground teams.",
+        "clue": "Babulu notices blood on the case, sees the pinned video of the murder, and realizes the killer's voice matches the man commanding the festival loudspeakers.",
+        "falseLead": "none",
+        "heroLearns": "The man commanding the entire festival security is the murderer on the screen.",
+        "audienceLearns": "The Screen Pinning feature means the video cannot be stopped and the 90% battery will drain relentlessly.",
+        "setPiece": "A rhythmic, high-tension pickpocketing montage synchronized with the morning temple chants and surging devotee crowds.",
+        "sideStory": "Mina is busy creating petty distractions for Babulu, unaware they are stepping into a murder plot.",
+        "turn": "Babulu decides not to ditch the phone but to exploit it to fund his Mumbai escape.",
+        "endingHook": "Rudra takes over the PA loudspeakers in Babulu's exact sector, calling out a 'suspect in a yellow shirt with a ripped left collar, carrying a green canvas tote bag'. Babulu freezes.",
+        "plants": [
+          "Babulu's hidden stash of Rs 50,000 in 500-rupee notes buried under a brick at the Markandeswar temple tank."
+        ],
+        "payoffs": []
+      },
+      {
+        "number": 2,
+        "title": "The Dead Zone",
+        "coldOpen": "With his hyper-specific description echoing over the PA system, Babulu sprints into the suffocating crowd as plainclothes hitmen begin physically sweeping his 50-meter radius.",
+        "question": "How does a thief escape a hunter who controls the tactical high ground?",
+        "heroMove": "Babulu evades the watchtower line-of-sight by stealing a traditional Pipli umbrella and navigating blind spots in the street stalls.",
+        "villainMove": "Rudra tightens the IMSI catcher radius on the IMEI, directing his brutal ground teams to physically assault anyone matching Babulu's description.",
+        "clue": "Babulu attempts to upload the video to a news app, discovering that the local cell towers have completely collapsed under the crowd's data strain.",
+        "falseLead": "Babulu believes he can slip out through an alley, only to find armored riot police blocking the exits.",
+        "heroLearns": "There is no digital escape; the internet is useless, and the battery is fiercely draining due to max brightness and network searching.",
+        "audienceLearns": "Rudra's ground teams are ruthless and will kill in plain sight if the crowd provides cover.",
+        "setPiece": "A claustrophobic cat-and-mouse chase through a vibrant labyrinth of street vendors, with Babulu using his knowledge of protection-racket stalls to hide.",
+        "sideStory": "Mina realizes Babulu is being hunted by cops and decides to intervene, attacking a hitman.",
+        "turn": "Babulu realizes he cannot outrun the physical grid; he needs specialized help to counter police tactics.",
+        "endingHook": "Mina is briefly snagged by a hitman in an alleyway, forcing Babulu to stop running and formulate a rescue.",
+        "plants": [
+          "Soumya's phone has 'Screen Pinning' activated; touch input is disabled and the video loops relentlessly, aggressively draining the 90% battery."
+        ],
+        "payoffs": []
+      },
+      {
+        "number": 3,
+        "title": "The Matha Corridors",
+        "coldOpen": "Babulu uses a stolen mirror to blind the hitman with sunlight, allowing Mina to break free, and they dive into the ancient, interconnected temple monasteries.",
+        "question": "How to outmaneuver an omnipresent enemy without relying on technology?",
+        "heroMove": "Babulu seeks out his retired mentor, Baya Mamu, running a chaotic street-kitchen on the monastery rooftops to stay off the ground.",
+        "villainMove": "Rudra, frustrated by the IMSI signal bouncing off temple stone, orders Inspector Das to forcefully interrogate the local street urchins.",
+        "clue": "While hiding under a prep table from a passing patrol, Baya Mamu explains that planting an object requires true mastery, teaching the wrist-flick.",
+        "falseLead": "none",
+        "heroLearns": "The only way to expose Rudra is to physically reverse-pickpocket the phone onto someone with higher authority than the SP.",
+        "audienceLearns": "Baya Mamu lost his fingers to corrupt cops, establishing the extreme physical stakes of failing.",
+        "setPiece": "A high-stress hiding sequence in a bustling street-kitchen, where the 'put-pocket' lesson occurs inches away from patrolling boots.",
+        "sideStory": "Inspector Das forcefully questions kids, his hand hovering over his holster as he drowns in guilt over the body in his trunk.",
+        "turn": "Babulu shifts from fleeing the city to planning an infiltration into the most heavily guarded zone on earth.",
+        "endingHook": "Babulu decides the target must be the Chief Minister, realizing the terrifying level of security he must breach.",
+        "plants": [
+          "Baya Mamu demonstrates a 'put-pocket' trick under a table while hiding from cops, stating giving is harder than taking."
+        ],
+        "payoffs": []
+      },
+      {
+        "number": 4,
+        "title": "The Relay",
+        "coldOpen": "Rudra publicly humiliates Inspector Das for losing Babulu, demanding he scour the slums until the boy is found or lose his badge.",
+        "question": "Can the street network outpace the police radio network?",
+        "heroMove": "Babulu and Mina organize the street kids into a massive relay network, passing the glowing phone through the crowd to confuse the IMSI tracking.",
+        "villainMove": "Rudra realizes the IMEI is moving too fast for one person and orders his men to use batons to break the chain of children.",
+        "clue": "Babulu observes Inspector Das lingering at a barricade, noticing Das deliberately lower his baton instead of striking a child.",
+        "falseLead": "Rudra tracks an erratic signal to a garbage bin, only to find Mina strapped a completely different stolen phone to a stray temple cow as a decoy.",
+        "heroLearns": "Inspector Das is conflicted and not entirely loyal to Rudra.",
+        "audienceLearns": "Das is sweating with guilt and heavily relies on checking his holstered weapon to calm his nerves.",
+        "setPiece": "The Relay: A high-speed, parkour-style sequence where the murder phone is seamlessly tossed, kicked, and slipped between ten different street kids across Bada Danda.",
+        "sideStory": "Mina positions the kids, promising them a huge payout if they succeed.",
+        "turn": "A hitman corners the youngest urchin; Babulu breaks cover to tackle the hitman, reclaiming the real phone but exposing his position.",
+        "endingHook": "Babulu is cornered by a heavy riot police wedge advancing through the crowd, forcing him to flee toward the Markandeswar tank.",
+        "plants": [
+          "Inspector Das stares at his holstered weapon, sweating with guilt over hiding Soumya's body in a trunk."
+        ],
+        "payoffs": []
+      },
+      {
+        "number": 5,
+        "title": "The Blueprint",
+        "coldOpen": "Babulu outruns the advancing riot police wedge, diving into the murky waters of the Markandeswar temple tank to retrieve his buried savings.",
+        "question": "How do you breach an impenetrable SSB cordon without getting shot?",
+        "heroMove": "Babulu secures his 50,000 cash and watches a live TV broadcast of the festival at a vendor's stall to study the CM's movements.",
+        "villainMove": "Rudra creates a choke point around the VIP Mancha by clearing out all non-essential personnel, tightening the net.",
+        "clue": "Babulu spots a critical detail on the live broadcast: as the CM arrives at the VIP Mancha, he deliberately pushes his SSB guards away to bow for the cameras.",
+        "falseLead": "none",
+        "heroLearns": "The CM's obsession with PR creates a perfectly clear 3-second physical window with no SSB interference whenever cameras are on him.",
+        "audienceLearns": "The state VVIP jammer activates as the CM moves, completely deadening all remaining signals in the area.",
+        "setPiece": "A tense underwater evasion in the green waters of the Markandeswar tank as Babulu secures his cash while riot police flashlights scan the surface above.",
+        "sideStory": "Mina independently plans a major diversion, moving to the VIP scaffolding without getting caught.",
+        "turn": "Babulu commits his entire life savings to the suicide mission, prioritizing justice over his Mumbai dream.",
+        "endingHook": "The battery drops to 20 percent as deafening conch shells announce the Pahandi Bije is about to begin.",
+        "plants": [
+          "Babulu watches a live TV broadcast of the CM arriving at the VIP Mancha, pushing away his SSB guards to appear humble for exactly 3 seconds."
+        ],
+        "payoffs": []
+      },
+      {
+        "number": 6,
+        "title": "The Pahandi",
+        "coldOpen": "The massive, rhythmic Pahandi procession begins, accompanied by the violent metallic clashes of the Ghantuas. The deities are carried forward, creating a terrifying, swaying crush of devotees.",
+        "question": "Can Babulu survive the tightening net as the crowd density reaches lethal levels?",
+        "heroMove": "Babulu navigates the intense crowd crush, using the violent swaying of the devotees to slip past Rudra's outer guards.",
+        "villainMove": "Rudra leaves the watchtower to personally command the ground forces around the inner VVIP ring, closing the distance to the hero.",
+        "clue": "Babulu uses the reflection on a tuba in the police band to spot plainclothes cops closing in on him from behind.",
+        "falseLead": "Rudra assumes Babulu is trying to reach a satellite media van parked outside the jammer zone to plug the phone in.",
+        "heroLearns": "Rudra has abandoned his post and is now on the ground, making the threat immediate and physical.",
+        "audienceLearns": "The jammer zone is absolute; if the phone doesn't physically reach the CM, the footage is entirely useless.",
+        "setPiece": "Navigating the breathtaking, breathless crush of the Pahandi procession amidst deafening cymbals, where one slip means being trampled to death under the swaying deities.",
+        "sideStory": "Mina masterfully orchestrates a decoy trail of stolen wallets that draws three hitmen completely away from Babulu's path.",
+        "turn": "Babulu reaches the outer edge of the VIP viewing gallery (Mancha), but finds the ground-level approach swarming with Rudra's personal detail.",
+        "endingHook": "Babulu dives underneath the massive wooden scaffolding of the Mancha, trapping himself in a labyrinth of beams with cops above and below.",
+        "plants": [],
+        "payoffs": []
+      },
+      {
+        "number": 7,
+        "title": "The Mancha Scaffolding",
+        "coldOpen": "Trapped underneath the creaking scaffolding of the VIP viewing gallery, Babulu hides among the structural pillars as heavy boots stomp directly overhead.",
+        "question": "Will Inspector Das's conscience finally break, or will Babulu's luck run out?",
+        "heroMove": "Babulu uses the shadows to edge closer to the inner cordon but is suddenly pinned down by Inspector Das's blinding flashlight.",
+        "villainMove": "Rudra stands yards away, weapon drawn, ordering a complete flush of the scaffolding perimeter.",
+        "clue": "Babulu makes eye contact with Inspector Das, realizing Das is trembling and deliberately pointing his flashlight just inches away from Babulu's face.",
+        "falseLead": "none",
+        "heroLearns": "Sometimes the enemy of his enemy can be a momentary ally.",
+        "audienceLearns": "Das's immense guilt over hiding the body has finally overpowered his fear of Rudra; he is actively aiding the hero.",
+        "setPiece": "A high-tension crawl through the claustrophobic scaffolding underneath the VIPs, dodging searchlights and heavy boots.",
+        "sideStory": "Mina triggers a smoke flare on the opposite side of the gallery, causing a localized panic that pulls Rudra's attention.",
+        "turn": "Das lowers his radio and steps aside, completely ignoring Babulu and letting him pass into the final ring.",
+        "endingHook": "Babulu emerges at the edge of the inner SSB cordon. The battery hits 5 percent. The Chief Minister steps down for the VIP Darshan.",
+        "plants": [],
+        "payoffs": []
+      },
+      {
+        "number": 8,
+        "title": "The VIP Darshan",
+        "coldOpen": "The crowd roars as the Chief Minister approaches the chariot for his ground-level VIP Darshan. Babulu stands inches from the final SSB barricade, his hands trembling as Rudra spots him.",
+        "question": "Can Babulu execute the ultimate sleight of hand to expose the SP at the cost of his own future?",
+        "heroMove": "Babulu unties his bundle of 50,000 cash and throws the 100 bills high into the air like confetti over his street kid network, triggering a sprawling, violent frenzy that physically blocks Rudra.",
+        "villainMove": "Rudra violently battles the massive wall of diving beggars and children, desperate to reach the peaceful inner VVIP ring before Babulu strikes.",
+        "clue": "Babulu watches the Chief Minister aggressively push his SSB guards back, demanding space for the cameras.",
+        "falseLead": "none",
+        "heroLearns": "True freedom isn't escaping to Mumbai; it's freeing his home from a tyrant.",
+        "audienceLearns": "The chaotic cash frenzy kept the inner ring perfectly peaceful, allowing the CM's PR stunt to proceed exactly as planned.",
+        "setPiece": "The Reverse-Pickpocket: In slow motion, as the CM steps out of his security bubble and bows barefoot at the chariot, Babulu uses the 3-second window to execute the flawless wrist-flick, dropping the pinned phone into the CM's pocket.",
+        "sideStory": "Inspector Das draws his service weapon, aiming it directly at Rudra's chest to prevent him from snatching the phone back from the CM.",
+        "turn": "The Gajapati Maharaja is announced, and the CM returns to his secure vehicle, checks his pocket, and stares at the brightly looping murder video.",
+        "endingHook": "Live on national TV, the CM orders the arrest. Babulu, penniless but smiling, vanishes like a ghost into the swirling ocean of a million devotees.",
+        "plants": [],
+        "payoffs": [
+          "Babulu's hidden stash of Rs 50,000 in 500-rupee notes buried under a brick at the Markandeswar temple tank.",
+          "Soumya's 'Screen Pinning' accessibility feature keeping the video active.",
+          "Baya Mamu's lesson on the wrist-flick reverse-pickpocket trick under the table.",
+          "Babulu watches a live TV broadcast of the CM arriving at the VIP Mancha, pushing away his SSB guards to appear humble for exactly 3 seconds.",
+          "Inspector Das stares at his holstered weapon, sweating with guilt over hiding Soumya's body in a trunk."
+        ]
+      }
+    ],
+    "revisionNotes": [
+      {
+        "version": 2,
+        "changes": [
+          "Reordered the festival rituals to match reality (Blocker/Odisha Culture Expert): Sequence 6 is now the Pahandi (carrying deities to chariots) and Sequence 8 is the Chhera Pahanra (sweeping ritual), ending right as the chariots are finally pulled.",
+          "Changed the climax VVIP mechanics (Major/Story Doctor & Audience Critic): Babulu throws his cash stash outside the inner NSG ring to distract SP Rudra and local police, while leveraging the traditional lowering of NSG weapons during the Gajapati King's sweeping ritual to execute the reverse-pickpocket securely.",
+          "Fixed the VIP jammer logic (Major/Story Doctor): In Sequence 2, Babulu fails to upload the video because local cell towers collapse under the data strain of a million devotees. The true military VVIP jammer only activates in Sequence 5 when the Chief Minister arrives.",
+          "Gave the hero more agency (Major/Story Doctor): Babulu now deduces the 3-second Chhera Pahanra blind spot himself by watching archived Rath Yatra footage on a street vendor's TV, instead of having his mentor hand him the answer.",
+          "Fixed the phone screen logic (Major/Audience Critic): Soumya enabled the 'Screen Pinning' (Guided Access) accessibility feature before dying, locking the video on-screen and disabling all touch input so accidental pocket touches don't stop the video.",
+          "Improved Mina's arc (Major/Audience Critic): Mina is no longer captured a second time. She freely orchestrates the Sequence 6 decoy trail and actively triggers the smoke distraction in Sequence 7 to save Babulu.",
+          "Replaced the bloody knife trope (Minor/Audience Critic): Inspector Das now holds encrypted police radio logs and GPS tracking data that definitively prove SP Rudra ordered the illegal hit and festival lockdown.",
+          "Corrected police ranks (Major/Odisha Culture Expert): Changed the antagonist's title from DCP Rudra Pratap to SP Rudra Pratap, as Puri is a police district.",
+          "Corrected the VIP tent location (Major/Odisha Culture Expert): Moved Sequence 7 from a ground-level banquet tent to underneath the scaffolding of a raised VIP viewing gallery (Mancha) on Bada Danda.",
+          "Fixed the cultural instruments (Minor/Odisha Culture Expert): Updated 'Ghantuas playing drumbeats' to 'Ghantuas playing heavy brass gongs with resonating chimes'.",
+          "Planted the cash stash properly (Minor/Story Doctor): Sequence 1 now explicitly opens at the Markandeswar temple tank where Babulu deposits cash into his hidden stash before heading to Bada Danda."
+        ]
+      },
+      {
+        "version": 3,
+        "changes": [
+          "Replaced the VOIP call in Sequence 1 with Rudra using the festival's PA loudspeakers to publicly describe Babulu's exact outfit as a 'security hazard', maintaining the 'no internet' rule while proving his omnipresent control. (Story Doctor & Audience Critic)",
+          "Removed Inspector Das's redundant USB drive. Das's arc is now entirely physical and action-based: his defiance is letting Babulu pass, and his redemption is drawing his service weapon on Rudra during the climax to secure the arrest. (Audience Critic)",
+          "Replaced the police jeep on Bada Danda with a heavily armored riot police squad advancing in a wedge formation, aligning with the rule that vehicles cannot move through the crowd. (Story Doctor)",
+          "Changed the 'archived footage' setup to Babulu watching a live news broadcast of the Chief Minister performing the Chhera Pahanra on the first chariot (Taladhwaja), allowing him to anticipate the exact protocol for the final chariot (Nandighosa). (Story Doctor)",
+          "Adjusted the climax blind spot: The NSG do not step back for tradition. Instead, the Chief Minister deliberately steps completely out of his NSG security bubble to offer a barefoot Pranam (bow) for live TV optics, creating his own 3-second PR window. (Odisha Culture Expert)",
+          "Changed the cash distraction: Babulu throws the money further down the route to his established network of street kids and beggars, who surge to grab the cash and form a physical wall against Rudra, ensuring the devotees' Bhakti (devotion) is undisturbed and the inner VVIP ring remains calm. (Odisha Culture Expert & Story Doctor)",
+          "Replaced facial recognition with IMSI catchers (Stingrays) that provide only a 50-meter radius, forcing a terrifying, analog physical hunt by ground teams. (Audience Critic)",
+          "Moved Baya Mamu's mentor scene from a quiet rooftop to a chaotic street-kitchen under patrol, with the 'put-pocket' trick taught while hiding under a table to maintain relentless pacing. (Audience Critic)",
+          "Clarified that Soumya's body is immediately hidden in a police vehicle trunk to prevent the powerful Sevayat union (Daitapati Niyog) from discovering the death and halting the festival. (Odisha Culture Expert)"
+        ]
+      },
+      {
+        "version": 4,
+        "changes": [
+          "Changed the climax ritual from Chhera Pahanra to the VIP Darshan window, respecting the sacred tradition that only the Gajapati Maharaja performs the sweeping (fixes Story Doctor and Odisha Culture Expert blocker).",
+          "Adjusted Sequence 5 timeline so Babulu watches the CM arriving at the VIP Mancha/temple gates on TV, establishing the 3-second security blueprint before the chariots are boarded (fixes Story Doctor major).",
+          "Corrected the technological tracking logic: Rudra now tracks the phone's IMEI number using IMSI catchers, replacing the incorrect MAC address tracking (fixes Story Doctor and Audience Critic major).",
+          "Increased the starting battery life to 90% to realistically sustain a 2-hour ticking clock with maximum brightness and no network (fixes Audience Critic major).",
+          "Redesigned the climax distraction: Babulu explicitly unties the bundle of cash and throws the 100 bills into the air like confetti, triggering a massive, sprawling frenzy instead of a localized scuffle (fixes Audience Critic major).",
+          "Made the Sequence 1 PA announcement hyper-specific ('yellow shirt with a ripped left collar, carrying a green canvas tote bag') so Babulu realistically freezes in the crowd (fixes Audience Critic minor).",
+          "Adjusted the festival timeline: Sequence 1 is now the intense morning crowd build-up, and the Ghantuas (cymbals) are moved to Sequence 6 to accurately accompany the Pahandi Bije (fixes Odisha Culture Expert major).",
+          "Changed 'Sevayat union strike' to 'protest by the Sevayat Nijogs' or 'disruption of the sacred Niti' to reflect authentic temple culture (fixes Odisha Culture Expert minor).",
+          "Replaced 'NSG commandos' with 'SSB commandos' to accurately reflect the Odisha Chief Minister's state security detail (fixes Odisha Culture Expert minor).",
+          "Clarified the Sequence 4 false lead: Mina uses a completely different stolen phone strapped to the cow to act as a decoy (fixes Story Doctor minor)."
+        ]
+      }
+    ],
+    "review": {
+      "passed": false,
+      "keptVersion": 4,
+      "scores": {
+        "storyDoctor": 6,
+        "audienceCritic": 8,
+        "cultureExpert": 9
+      },
+      "reports": {
+        "storyDoctor": {
+          "score": 6,
+          "verdict": "This is a fiercely original and claustrophobic thriller that brilliantly utilizes the sensory overload of Puri's Rath Yatra, anchored by an inspired reverse-pickpocketing climax. However, a major logic contradiction regarding how the locked phone functions, along with a few logistical gaps in crowd behavior and police tracking, hold it back. It is a fantastic concept that just needs strict tightening to ensure the rules of its own world are never broken.",
+          "strengths": [
+            "The concept of using a massive, million-person religious festival as a locked-room, claustrophobic trap for a tech-driven cat-and-mouse chase is spectacular.",
+            "The climax is incredibly inventive: weaponizing a politician's predictable vanity (the 3-second PR window) and using analog street magic (reverse-pickpocketing) to defeat a high-tech surveillance grid.",
+            "Inspector Das's arc from a sweating, compromised henchman to a man who finds his courage is subtle and highly effective, beautifully visually communicated by him constantly checking his holster.",
+            "The stakes are inherently tied to the setting and the physical limitations of the technology (heat, battery drain, crowd crush, jammers), creating relentless pacing."
+          ],
+          "problems": [
+            {
+              "where": "Sequence 2, Hero's move / Clue",
+              "severity": "blocker",
+              "problem": "The rules explicitly state Soumya activated 'Screen Pinning', disabling touch input and locking the video permanently on screen. Yet, Babulu 'attempts to upload the video to a news app,' which is functionally impossible if he cannot navigate away from the pinned video app.",
+              "fix": "Babulu desperately tries to guess the lock-screen PIN to unpin the app so he can send it, but fails. He then realizes that even if he could unlock it, the cell towers are down, physically trapping the evidence on this specific device."
+            },
+            {
+              "where": "Sequence 1, Ending hook & Sequence 2",
+              "severity": "major",
+              "problem": "Rudra broadcasts a hyper-specific description of Babulu (yellow shirt, ripped collar, green tote bag). Since Rudra is tracking the IMEI via IMSI catchers to a 50-meter radius, he only knows roughly where the phone is, not who holds it. If his men actually saw Babulu steal it, they would have grabbed him immediately.",
+              "fix": "Rudra's ground team tracks the IMEI to the wealthy tourist. The tourist complains loudly to the plainclothes cops that his green tote bag was just stolen by a street kid in a yellow shirt with a ripped collar, handing Rudra the exact description to broadcast."
+            },
+            {
+              "where": "Sequence 8, Climax",
+              "severity": "major",
+              "problem": "Babulu throws Rs 50,000 into the air right next to the VVIP barricade, triggering a 'violent frenzy'. In reality, SSB commandos would immediately evacuate the Chief Minister upon seeing a crowd riot form ten feet away, completely ruining the 3-second PR window.",
+              "fix": "Babulu must orchestrate the cash drop in the outer perimeter, directly behind Rudra. The massive crowd surges backward away from the inner ring to grab the money, pinning Rudra against the outer barricades, while leaving the inner VVIP ring completely quiet and safe, allowing the CM to confidently perform his solo PR bow."
+            },
+            {
+              "where": "Sequence 6, Clue",
+              "severity": "major",
+              "problem": "Babulu uses the 'reflection on a tuba in the police band' to spot cops. A brass police band with tubas would never be inside the terrifying, dense devotee crush of the traditional Pahandi Bije; it contradicts the established physics of the crowd crush.",
+              "fix": "Babulu uses the reflection off a massive, highly polished brass Ghanta (traditional cymbal) being violently played by a nearby traditional Sevayat to spot the plainclothes cops closing in on him."
+            },
+            {
+              "where": "Sequence 5, Set piece",
+              "severity": "minor",
+              "problem": "Babulu dives into the murky waters of the Markandeswar tank while carrying the stolen phone. If the phone gets waterlogged, the evidence is destroyed and the plot ends.",
+              "fix": "Explicitly state that Babulu securely double-wraps the phone in a stolen plastic street-food bag before diving into the tank, adding a brief moment of tension regarding the device's survival when he surfaces."
+            }
+          ]
+        },
+        "audienceCritic": {
+          "score": 8,
+          "verdict": "This is a remarkably tight, high-octane thriller that brilliantly leverages its unique cultural setting and crowd physics. The setups and payoffs are meticulously crafted, and the climax is both surprising and emotionally satisfying. With a few minor technical logic fixes, this is highly producible and ready to be greenlit.",
+          "strengths": [
+            "The reverse-pickpocket (put-pocket) climax exploiting the Chief Minister's vanity PR window is a brilliant, grounded payoff.",
+            "The thematic sacrifice of the 50,000 rupee stash to create a human barrier beautifully completes Babulu's character arc.",
+            "Screen pinning combined with battery drain acts as an incredibly clever modern thriller ticking-clock device.",
+            "Excellent use of localized geography and crowd physics, especially the claustrophobic Pahandi crush and the ancient Matha rooftops."
+          ],
+          "problems": [
+            {
+              "where": "Sequence 5 and Sequence 8",
+              "severity": "major",
+              "problem": "Babulu retrieves his stash of 50,000 rupees by diving underwater, but later throws the bills into the air 'like confetti'. Wet currency clumps together heavily and cannot flutter or be dispersed easily to create a sprawling frenzy.",
+              "fix": "Have the stash hidden in a dry crevice above the water line at the Markandeswar tank, or firmly sealed inside a watertight plastic jar so the bills remain crisp and easily throwable."
+            },
+            {
+              "where": "Sequence 6 and 7: The Jammer Zone",
+              "severity": "major",
+              "problem": "The story establishes both IMSI catchers tracking the phone AND a VVIP jammer blocking signals. VVIP jammers block the exact cellular frequencies IMSI catchers rely on. If Babulu is near the CM, the tracking should go completely dark.",
+              "fix": "Turn this into a dramatic escalation. Have Rudra's tracking screen go completely black as Babulu enters the VVIP jammer radius, forcing a panicked Rudra to abandon his watchtower and hunt Babulu purely by sight on the ground."
+            },
+            {
+              "where": "Sequence 8: The VIP Darshan",
+              "severity": "minor",
+              "problem": "Inspector Das draws his service weapon on SP Rudra right at the edge of the CM's security bubble. If a plainclothes man draws a gun just yards from a Chief Minister, the SSB commandos will instantly shoot him dead.",
+              "fix": "Have Das draw his weapon on Rudra just outside the visual perimeter of the SSB guards, or have Das physically tackle Rudra while immediately raising his police badge high so the SSB commandos stand down."
+            },
+            {
+              "where": "Sequence 1: The Promise",
+              "severity": "minor",
+              "problem": "A modern smartphone starting at 90 percent battery will easily survive a 120-minute timeline, even with screen pinning, max brightness, and network searching. The ticking clock lacks realistic urgency.",
+              "fix": "Establish that the stolen phone's battery is already at a highly stressful 30 percent when Babulu first acquires it, making the countdown over the two hours intensely believable."
+            }
+          ]
+        },
+        "cultureExpert": {
+          "score": 9,
+          "verdict": "This is an exceptionally well-researched, deeply authentic thriller that uses the specific geography, politics, and ritual schedule of Puri flawlessly. The writer understands temple dynamics—especially the threat of a Nijog halting the Nitis—and the sequential timing of Rath Yatra perfectly. With just a couple of minor physical corrections regarding crowd boundaries and recent architectural changes, this is ready to shoot.",
+          "strengths": [
+            "The exact sequential timing of the rituals (Pahandi -> VIP Darshan gap -> Gajapati's arrival -> Chariot pulling) is phenomenally accurate and expertly used to build a ticking clock.",
+            "The SP's motive for hiding the body—preventing the Sevayat Nijogs from halting the sacred Niti—is a brilliant, deeply authentic piece of Puri temple politics.",
+            "The inclusion of hyper-local details like the VVIP jammers, network data collapse, Pipli umbrellas, Ghantuas, and Odia names (Baya Mamu, Anant, Das) ground the story perfectly in reality."
+          ],
+          "problems": [
+            {
+              "where": "Sequence 6: The Pahandi",
+              "severity": "major",
+              "problem": "Babulu is described as risking being 'trampled to death under the swaying deities.' Only the Daitapati Sevayats (bare-chested, in traditional silk attire) are allowed in the immediate inner circle carrying the deities. A boy in a yellow shirt getting under the deities would be instantly spotted and violently ejected by the Sevayats and police cordons.",
+              "fix": "Have Babulu navigate the terrifying, breathless crush of the ordinary devotees who are violently pushing against the heavy police rope cordons, desperate to get closer to the deities, rather than being under the deities himself."
+            },
+            {
+              "where": "Sequence 3: The Matha Corridors",
+              "severity": "minor",
+              "problem": "The script mentions interconnected Mathas (monasteries) for a rooftop escape. Due to the recent Shree Mandira Parikrama Prakalpa (Heritage Corridor project), all Mathas and structures within a 75-meter radius of the temple boundary have been cleared.",
+              "fix": "Ensure the rooftop chase takes place on the Mathas situated slightly further down Bada Danda rather than those immediately abutting the temple. Also, change 'street-kitchen' to a 'Matha's festival kitchen' (Roshaghara/temporary setup), as Mathas feed thousands but wouldn't call it a street kitchen."
+            }
+          ]
+        }
+      },
+      "history": [
+        {
+          "version": 1,
+          "scores": {
+            "storyDoctor": 6,
+            "audienceCritic": 7,
+            "cultureExpert": 6
+          },
+          "passed": false
+        },
+        {
+          "version": 2,
+          "scores": {
+            "storyDoctor": 6,
+            "audienceCritic": 6,
+            "cultureExpert": 8
+          },
+          "passed": false
+        },
+        {
+          "version": 3,
+          "scores": {
+            "storyDoctor": 6,
+            "audienceCritic": 8,
+            "cultureExpert": 6
+          },
+          "passed": false
+        },
+        {
+          "version": 4,
+          "scores": {
+            "storyDoctor": 6,
+            "audienceCritic": 8,
+            "cultureExpert": 9
+          },
+          "passed": false
+        }
+      ]
+    }
+  },
+  "usage": {
+    "calls": 15,
+    "promptTokens": 127622,
+    "outputTokens": 33591,
+    "thinkingTokens": 44700,
+    "models": [
+      "gemini-3.1-pro-preview"
+    ]
+  }
+}

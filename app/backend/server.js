@@ -1513,6 +1513,39 @@ async function generateStorylinesContent(concept, format) {
   );
 }
 
+// An approved Story Bible already chose the story, so the auto pipeline
+// skips the 3-storylines step and only puts the Bible's own title, logline
+// and summary into the trilingual storyline the later stages expect.
+async function storylineFromBible(bible) {
+  const p = bible.promise ?? {};
+  return sanitizeBilingualContent(
+    await generateJsonContent({
+      model: STORY_WRITER_MODEL_NAME,
+      contents: `This story has already been designed and approved. Write its storyline card: the title, the logline, and a summary of 5-8 sentences telling the whole story from the opening to the climax and ending. Keep the English true to the design below; write the Odia and Hindi as natural retellings, not translations.\n\nTITLE: ${p.title}\nLOGLINE: ${p.logline}\nTHE QUESTION: ${p.centralQuestion}\nHIDDEN TRUTH: ${bible.hiddenTruth?.summary ?? ""}\nCLIMAX: ${bible.climax?.reversal ?? ""} ${bible.climax?.heroChoice ?? ""} ${bible.climax?.resolution ?? ""}\nFINAL IMAGE: ${bible.climax?.finalImage ?? ""}`,
+      config: {
+        systemInstruction: STORY_AGENT_SYSTEM_PROMPT,
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: { title: BILINGUAL_TEXT_SCHEMA, logline: BILINGUAL_TEXT_SCHEMA, summary: BILINGUAL_TEXT_SCHEMA },
+          required: ["title", "logline", "summary"],
+        },
+      },
+    })
+  );
+}
+
+// What every writer and judge of an approved-Bible run sees as "the user's
+// idea": the whole approved design, so nothing drifts from it.
+function bibleAsIdea(ideaText, bible) {
+  return `THE APPROVED STORY BIBLE — the user approved this design. Follow it exactly: the story, every character (names, ages, relationships), the facts sheet and world rules, the setups and payoffs, the clues, each ${bible.units?.kind ?? "episode"}'s blueprint and the climax. Never invent a different story or change a fixed fact; add only the detail the stage needs.
+
+THE USER'S ORIGINAL IDEA:
+${ideaText}
+
+${storyBibleToMarkdown({ ...bible, pitchRoom: null, review: null })}`;
+}
+
 app.post("/api/generate-storylines", requireRole("admin"), async (req, res) => {
   const { concept, format } = req.body;
 
@@ -16386,7 +16419,7 @@ function bitSheetBeatCountIssue(bitSheet, deck) {
   return tooMany(bitSheet.bits?.length ?? 0, deck.format?.runtimeMinutes, "The film");
 }
 
-async function runAutoPipeline(runId, conceptText, format, dialogueLanguage, resumeFromConceptId) {
+async function runAutoPipeline(runId, conceptText, format, dialogueLanguage, resumeFromConceptId, { storyBible = null, ideaText = conceptText } = {}) {
   // Every story stage is judged against the user's own idea (shown at the
   // top of the draft) and the must-fix checks.
   const withIdea = (text) => `THE USER'S ORIGINAL IDEA (the story must stay true to it):\n${conceptText}\n\n${text}`;
@@ -16476,19 +16509,26 @@ async function runAutoPipeline(runId, conceptText, format, dialogueLanguage, res
       );
     } else {
       await updateAutoPipelineRun(runId, { progress_stage: "storylines" });
-      const { storylines } = await generateStorylinesContent(conceptText, format);
-      // The story judge picks the strongest of the 3 (it used to always be
-      // the first). A failed pick just falls back to the first.
-      const picked = await pickBestStoryline(storylines, format, conceptText).catch(() => ({ index: 0, reason: "" }));
-      storyline = storylines[picked.index];
-      if (picked.reason) {
-        await appendAutoPipelineNote(runId, "storylines", `Picked option ${picked.index + 1} of ${storylines.length}: "${storyline?.title?.en ?? ""}" — ${picked.reason}`);
+      let storylines;
+      if (storyBible) {
+        storyline = await storylineFromBible(storyBible);
+        storylines = [storyline];
+        await appendAutoPipelineNote(runId, "storylines", `Writing from the approved Story Bible: "${storyline?.title?.en ?? ""}".`);
+      } else {
+        ({ storylines } = await generateStorylinesContent(conceptText, format));
+        // The story judge picks the strongest of the 3 (it used to always be
+        // the first). A failed pick just falls back to the first.
+        const picked = await pickBestStoryline(storylines, format, conceptText).catch(() => ({ index: 0, reason: "" }));
+        storyline = storylines[picked.index];
+        if (picked.reason) {
+          await appendAutoPipelineNote(runId, "storylines", `Picked option ${picked.index + 1} of ${storylines.length}: "${storyline?.title?.en ?? ""}" — ${picked.reason}`);
+        }
       }
 
       const conceptResult = await db.query(
         "INSERT INTO concepts (concept_text, storylines, title) VALUES ($1, $2, $3) RETURNING id",
         // The picked one first — Resume reads the first.
-        [conceptText, JSON.stringify([storyline, ...storylines.filter((s) => s !== storyline)]), storyline?.title?.en ?? null]
+        [ideaText, JSON.stringify([storyline, ...storylines.filter((s) => s !== storyline)]), storyline?.title?.en ?? null]
       );
       conceptId = conceptResult.rows[0].id;
       await updateAutoPipelineRun(runId, { concept_id: conceptId });
@@ -17141,10 +17181,13 @@ async function awaitingRun(req, res) {
 app.post("/api/auto-pipeline/:id/bible-approve", requireRole("admin"), async (req, res) => {
   const run = await awaitingRun(req, res);
   if (!run) return;
-  await appendAutoPipelineNote(run.id, "story-brain", "You approved the Story Bible.");
-  // Writing the script from the approved Bible is the next build step
-  // (STORY_BRAIN_DESIGN.md, step 5); for now the run rests here.
-  await updateAutoPipelineRun(run.id, { status: "approved", progress_stage: "story-bible-approved" });
+  await appendAutoPipelineNote(run.id, "story-brain", "You approved the Story Bible — writing the script from it.");
+  await updateAutoPipelineRun(run.id, { status: "running", progress_stage: "storylines" });
+  // Deliberately not awaited — see runAutoPipeline's own comment.
+  runAutoPipeline(run.id, bibleAsIdea(run.concept_text, run.story_bible), run.format, run.dialogue_language, null, {
+    storyBible: run.story_bible,
+    ideaText: run.concept_text,
+  });
   res.json({ runId: run.id });
 });
 
@@ -17216,7 +17259,14 @@ app.post("/api/auto-pipeline/:id/resume", requireRole("admin"), async (req, res)
   await db.query("UPDATE auto_pipeline_runs SET status = 'running', error = NULL WHERE id = $1", [run.id]);
 
   // Deliberately not awaited — see runAutoPipeline's own comment.
-  runAutoPipeline(run.id, run.concept_text, run.format, run.dialogue_language, run.concept_id);
+  if (run.story_bible) {
+    runAutoPipeline(run.id, bibleAsIdea(run.concept_text, run.story_bible), run.format, run.dialogue_language, run.concept_id, {
+      storyBible: run.story_bible,
+      ideaText: run.concept_text,
+    });
+  } else {
+    runAutoPipeline(run.id, run.concept_text, run.format, run.dialogue_language, run.concept_id);
+  }
 
   res.json({ runId: run.id });
 });

@@ -242,6 +242,28 @@ const MAX_GEMINI_OUTPUT_TOKENS = 65536;
 // writers drifted (seen for real: the Pujari's SON became his grandson).
 const userIdeaContext = new AsyncLocalStorage();
 
+// The locked cast list (from the character sheet), given to every scene
+// writer and the script editor inside castContext.run(...). Without it each
+// scene invented its own ages and relationships (seen for real: the hero's
+// wife became his 10-year-old sister, his mother was 25 in one scene).
+const castContext = new AsyncLocalStorage();
+
+function castListText(characterSheet) {
+  const lines = (characterSheet?.characters ?? []).map((c) =>
+    [
+      c.name,
+      c.age ? `age ${c.age}` : null,
+      c.relationToHero || c.role?.en || null,
+      c.look || null,
+    ]
+      .filter(Boolean)
+      .join(" — ")
+  );
+  return lines.length
+    ? `THE CAST (fixed for the whole story — use exactly these names, ages and relationships in every scene; never change anyone's age or relationship, never merge or split these people, and never give another character one of these names):\n${lines.join("\n")}`
+    : "";
+}
+
 async function generateJsonContent(params, { jsonRetries = 3 } = {}) {
   const userIdea = userIdeaContext.getStore();
   if (userIdea && typeof params.contents === "string") {
@@ -425,6 +447,8 @@ const CHARACTER_SHEET_SYSTEM_PROMPT = `You are the Story & Screenplay Agent, spe
 
 Keep the SAME names and core roles already established in the pitch deck — you are deepening these characters, not replacing them.
 
+Every character has a DIFFERENT name: no two characters may share a first name, even with a title added (never both "Durga" and "Durga Mausi"). One person is one character, never split across two entries.
+
 A story is never carried by one role. Make sure the cast covers the roles THIS story needs, adding a character for any that's missing (up to 4 more): the protagonist (hero) who drives the plot and changes; the antagonist (shadow) actively blocking them; a mentor or guide who gives the knowledge, training or aid they lack; an ally or foil (the deuteragonist) whose contrast shows the protagonist's strengths and weaknesses; a skeptic or voice of reason who questions them and tests their conviction; the antagonist's enforcer or henchman (threshold_guardian) who tests whether they're ready; and the community (community) — at least one named character standing for the people whose fate is at stake. (A short vertical micro-drama keeps its small cast — only add what its story truly needs.)
 
 For each character, give:
@@ -436,6 +460,9 @@ For each character, give:
 - innerConflict: the internal struggle (a belief, fear, or contradiction within themselves).
 - outerConflict: the external obstacle or opposing force (often another character or the situation).
 - arc: one sentence describing how they change from beginning to end (A → Z).
+- age: their age as a number in years (e.g. "28"), kept the same for the whole story.
+- relationToHero: in plain English, exactly who they are to the protagonist (e.g. "his wife", "his father's mother", "the village headman, no relation"); for the protagonist, "the protagonist".
+- look: a short English description of how they look and dress (e.g. "tall, grey stubble, white dhoti and a gamuchha").
 - introductionBeat: the SPECIFIC action or moment that should introduce this character on the page — a defining action plus what it reveals, not background description (e.g. "haggling fiercely with a shopkeeper over a few rupees, revealing her pride and poverty" — not "she is poor and proud").
 - For the character playing the Shadow/antagonist role specifically, also give heroLogline: a one-line logline of THEIR OWN story, as if they were the hero of it — a shallow villain is just an obstacle; a real one believes they're right.
 
@@ -535,6 +562,9 @@ const CHARACTER_SHEET_ENTRY_SCHEMA = {
   type: Type.OBJECT,
   properties: {
     name: { type: Type.STRING },
+    age: { type: Type.STRING },
+    relationToHero: { type: Type.STRING },
+    look: { type: Type.STRING },
     archetype: { type: Type.STRING, enum: CHARACTER_ARCHETYPES },
     archetypeNote: BILINGUAL_TEXT_SCHEMA,
     role: BILINGUAL_TEXT_SCHEMA,
@@ -550,6 +580,9 @@ const CHARACTER_SHEET_ENTRY_SCHEMA = {
   },
   required: [
     "name",
+    "age",
+    "relationToHero",
+    "look",
     "archetype",
     "archetypeNote",
     "role",
@@ -8540,6 +8573,22 @@ app.get("/api/pitch-deck/:id/export-ppt", requireLogin, async (req, res) => {
 // Builds the full Character Sheet via Gemini, deepening the pitch deck's
 // thin Major Characters into archetype/want/need/flaw/virtues/arc etc. When
 // `revision` is given, the prompt asks for a rewrite addressing feedback.
+// Two cast entries that are really one name ("Durga" and "Durga Mausi")
+// split one person into two characters in the scenes (seen for real in
+// Bishpan). Titles like Mausi/Bhai/Babu are ignored when comparing.
+const NAME_TITLE_WORDS = new Set(["mausi", "mausa", "bou", "didi", "dada", "bhai", "bhaina", "babu", "nana", "nani", "maa", "ma", "ji", "jee", "dadi", "jejema", "jejebapa", "aai", "bapa", "mr", "mrs", "dr", "sri", "shri", "smt"]);
+
+function duplicateCharacterNames(characters) {
+  const byKey = new Map();
+  for (const character of characters ?? []) {
+    const words = String(character.name ?? "").toLowerCase().split(/[^a-z\p{L}\p{M}]+/u).filter(Boolean);
+    const key = words.find((word) => !NAME_TITLE_WORDS.has(word)) ?? words[0];
+    if (!key) continue;
+    byKey.set(key, [...(byKey.get(key) ?? []), character.name]);
+  }
+  return [...byKey.values()].filter((names) => names.length > 1);
+}
+
 async function generateCharacterSheetContent(deck, revision) {
   const isSeries =
     (deck.format?.type === "series" || deck.format?.type === "vertical") && Array.isArray(deck.episodes);
@@ -8571,6 +8620,16 @@ async function generateCharacterSheetContent(deck, revision) {
       },
     },
   });
+
+  const duplicates = duplicateCharacterNames(parsed.characters);
+  if (duplicates.length && !revision?.nameFix) {
+    const clash = duplicates.map((names) => names.join(" / ")).join("; ");
+    return generateCharacterSheetContent(deck, {
+      feedback: `These entries share a name: ${clash}. If they are the same person, merge them into one entry; if they are different people, give one of them a completely different name.`,
+      previous: parsed,
+      nameFix: true,
+    });
+  }
 
   return sanitizeBilingualContent(parsed);
 }
@@ -9446,7 +9505,7 @@ function scenePacingRange(minutes) {
 function scenePacingRule(minutes, { isSeries }) {
   const { low, high, sceneLength } = scenePacingRange(minutes);
   const count = low ? ` For ${minutes} minutes that means about ${low}-${high} scenes.` : "";
-  return `SCENE PACING: a scene is ONE place and ONE continuous time — a new scene starts only when the place or the time changes, and a scene NEVER contains two places or a time jump. Never split one conversation or one continuous moment into several scenes in the same place and time; bits that play out in the same place and time are ONE fuller scene with several beats (an obstacle, rising stakes, a turn). Bits in different places are different scenes. Most scenes run ${sceneLength}; nothing over 3 minutes — except the climax, which gets the room it needs (3-5 minutes; it may also play across several scenes if the place or time changes).${count} Cut between the main story and side stories (the antagonist's moves, other characters pursuing their own goals) so the ${isSeries ? "episode" : "film"} moves through varied places.${isSeries ? " Each episode: a cold open (1-2 scenes), Act I (3-4 scenes), Act II (3-4 scenes), Act III (2-3 scenes) ending on a cliffhanger — except the final episode, which ends the story." : ""}`;
+  return `SCENE PACING: a scene is ONE place and ONE continuous time — a new scene starts only when the place or the time changes, and a scene NEVER contains two places or a time jump. Never split one conversation or one continuous moment into several scenes in the same place and time; bits that play out in the same place and time are ONE fuller scene with several beats (an obstacle, rising stakes, a turn). Bits in different places are different scenes. Most scenes run ${sceneLength}; nothing over 3 minutes — except the climax, which gets the room it needs (3-5 minutes; it may also play across several scenes if the place or time changes).${count} Cut between the main story and side stories (the antagonist's moves, other characters pursuing their own goals) so the ${isSeries ? "episode" : "film"} moves through varied places. SHOW, DON'T REPORT: the story's key events (a death, a punishment, an attack, a discovery, a reveal, the climax) happen ON SCREEN in a scene of their own, never only told afterwards by someone who heard about it (a mystery can hide WHO did it — in shadow, from behind, only the aftermath of the act — but the audience sees the event itself).${isSeries ? " Each episode: a cold open (1-2 scenes), Act I (3-4 scenes), Act II (3-4 scenes), Act III (2-3 scenes) ending on a cliffhanger — except the final episode, which ends the story." : ""}`;
 }
 
 async function generateSceneListEpisodeBatch(deck, bitSheet, episodesChunk, startIndex, episodeTargetMinutes, isVerticalDrama, lockedLocations, revision) {
@@ -10101,7 +10160,10 @@ function estimateScreenSeconds(elements) {
     if (element.type === "dialogue") return seconds + 1 + (text.split(/\s+/).filter(Boolean).length / 140) * 60;
     if (element.type === "transition") return seconds + 1;
     const sentences = text.split(/[.!?।]+/).filter((part) => part.trim().length > 2).length;
-    return seconds + Math.max(1, sentences) * 3;
+    // 2 seconds per description sentence: at 3, a script that was mostly
+    // description (Bishpan: ~300 action sentences but ~600 words of dialogue
+    // per episode) estimated 20 minutes for episodes a reviewer timed at ~14.
+    return seconds + Math.max(1, sentences) * 2;
   }, 0);
 }
 
@@ -10111,6 +10173,9 @@ async function generateScreenplaySceneContent(deck, allScenes, sceneIndex, previ
   const suggestedWords = suggestScreenplayWordCount(targetScene.estimatedMinutes);
 
   let contents = `Story title: ${deck.title.en}\nLogline: ${deck.logline.en}\nTone/Genre: ${deck.toneGenre.en}\n\nFull scene outline for context (already established elsewhere — do not rewrite these, just stay consistent with them):\n${outlineText}\n\nNow write the FULL screenplay content — action lines and dialogue — for ONLY this one scene:\n${sceneOutlineLine(targetScene, sceneIndex)}\n\nThis scene is planned at ${targetScene.estimatedMinutes} minute(s) of screen time. LENGTH COMES FROM STORY, NOT DESCRIPTION: fill that time with real on-screen moments — actions, reactions and exchanges of dialogue — never with long description. A dialogue scene gets its length from the exchange itself (natural back-and-forth, interruptions, silences, a turn); an action scene from a run of distinct visible moments. Keep every action line lean: one image or one action, 1-2 short sentences. As a guide, about ${Math.max(4, Math.round((Number(targetScene.estimatedMinutes) || 1) * 12))} short beats (each one action beat or one line of dialogue) fill ${targetScene.estimatedMinutes} minute(s). Give the scene several beats — an obstacle, rising stakes, a turn — never just one quick moment.`;
+
+  const castText = castContext.getStore();
+  if (castText) contents += `\n\n${castText}`;
 
   if (controllingIdea) {
     contents += `\n\nThe story's Controlling Idea (theme) is: "${controllingIdea.en}" — let the dialogue and action reflect it where natural, without stating it outright.`;
@@ -16010,6 +16075,7 @@ const STAGE_CHECKLISTS = {
 - Every change of heart is earned over several beats; the last bits close right after the climax (no softening epilogue).
 - For a series: every episode opens on a hook, escalates, and ends on a cliffhanger — except the final episode, which resolves the story.`,
   sceneList: `- Every Bit Sheet beat is covered, in order; no scene is filler.
+- The key events (a death, a punishment, an attack, a reveal, the climax) happen on screen in their own scene, never only reported afterwards by someone who heard about it.
 - A scene is one place and one continuous time — no conversation split across several scenes in the same place and time.
 - Fuller scenes, each with several beats (an obstacle, rising stakes, a turn) — mostly 1.5-2.5 minutes, none a one-beat 30-second moment, none over 3 minutes except the climax, which must get enough screen time (3-5 minutes).
 - The story cuts between the main storyline and side stories (antagonist, other characters' goals) through varied places.
@@ -16556,7 +16622,9 @@ async function runAutoPipeline(runId, conceptText, format, dialogueLanguage, res
       alreadyWrittenResult.rows.map((row) => [`${row.episode_index}:${row.scene_index}`, row.content])
     );
 
-    await runScreenplayAndQualityPass(runId, deck, sceneList, sceneListId, dialogueLanguage, alreadyWritten);
+    await castContext.run(castListText(characterSheet), () =>
+      runScreenplayAndQualityPass(runId, deck, sceneList, sceneListId, dialogueLanguage, alreadyWritten)
+    );
     await updateAutoPipelineRun(runId, { status: "completed", progress_stage: "done" });
   } catch (error) {
     console.error("Auto-pipeline run failed:", runId, error);
@@ -16646,14 +16714,15 @@ function sequenceDraftText(deck, items, contents) {
       return `SCENE ${i + 1}${item.episodeIndex !== null ? ` (episode ${item.episodeIndex + 1})` : ""} — ${scene.intExt}. ${scene.location?.en ?? ""} — ${scene.timeOfDay}\nPlanned: ${scene.oneLiner?.en ?? ""} (planned ${scene.estimatedMinutes ?? "?"} min; plays in about ${Math.floor(plays / 60)} min ${plays % 60} sec)\n${lines}`;
     })
     .join("\n\n");
-  return capJudgeText(`${screenplayStoryContext(deck)}\n\n${body}`);
+  const castText = castContext.getStore();
+  return capJudgeText(`${screenplayStoryContext(deck)}${castText ? `\n\n${castText}` : ""}\n\n${body}`);
 }
 
 function sequenceChecklist(dialogueLanguage) {
   const language = MOVIE_LANGUAGE_NAMES[dialogueLanguage] ?? "English";
   return `- Every scene has a turn — something changes by its end; no scene just repeats what an earlier one did.
 - Dialogue is natural, spoken ${language} — how these people really talk: short, with subtext; never speeches, lectures, or exposition telling the audience what it already knows.
-- Each character keeps one consistent voice.
+- Each character keeps one consistent voice, and matches THE CAST list exactly: the same name, age and relationship to the hero in every scene (never a wife who becomes a sister, never a mother whose age changes).
 - Continuity from scene to scene: who is where, time of day, what each character already knows.
 - Action lines show only what the camera can see and hear (a brief smell or sound that sets the place is fine; inner thoughts and abstract feelings are not).
 - Action, dialogue and acting notes are in natural, everyday spoken ${language} — never bookish, never a translation of English${dialogueLanguage === "en" ? "" : "; character names stay in English capitals"}.

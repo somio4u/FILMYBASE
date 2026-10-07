@@ -1549,6 +1549,14 @@ async function storylineFromBible(bible) {
   );
 }
 
+// The parts of an approved Story Bible a scene writer needs (kept short —
+// it goes into every scene's request).
+function storyBibleEssentialsText(bible) {
+  const facts = Object.values(bible.facts ?? {}).flat().map((f) => `- ${f}`).join("\n");
+  const setups = (bible.setupsPayoffs ?? []).map((x) => `- ${x.setup} (planted ${x.plantedIn}) → ${x.payoff} (${x.paidOffIn})`).join("\n");
+  return `\n\nTHE APPROVED STORY BIBLE — ESSENTIALS (never contradict them):\nHIDDEN TRUTH: ${bible.hiddenTruth?.summary ?? ""}\nFACTS AND RULES OF THIS WORLD:\n${facts}\nSETUPS AND PAYOFFS:\n${setups}`;
+}
+
 // What every writer and judge of an approved-Bible run sees as "the user's
 // idea": the whole approved design, so nothing drifts from it.
 function bibleAsIdea(ideaText, bible) {
@@ -16751,10 +16759,15 @@ async function runAutoPipeline(runId, conceptText, format, dialogueLanguage, res
       alreadyWrittenResult.rows.map((row) => [`${row.episode_index}:${row.scene_index}`, row.content])
     );
 
+    // The approved Bible's facts, world rules, hidden truth and setups go to
+    // every scene writer and the script editor, so scenes never contradict
+    // the design (e.g. what the Goddess can do, who knows what, which
+    // object pays off where).
+    const bibleEssentials = storyBible ? storyBibleEssentialsText(storyBible) : "";
     const fixedNames = storyBible?.namesInOdia?.length
       ? `\n\nFIXED NAME SPELLINGS IN ODIA (use exactly these, every time): ${storyBible.namesInOdia.map((n) => `${n.name} = ${n.odia}`).join("; ")}`
       : "";
-    await castContext.run(castListText(characterSheet) + fixedNames, () =>
+    await castContext.run(castListText(characterSheet) + fixedNames + bibleEssentials, () =>
       runScreenplayAndQualityPass(runId, deck, sceneList, sceneListId, dialogueLanguage, alreadyWritten)
     );
     await updateAutoPipelineRun(runId, { status: "completed", progress_stage: "done" });

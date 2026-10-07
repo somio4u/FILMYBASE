@@ -290,17 +290,8 @@ function characterLine(c) {
 // adds up the tokens of every call (for the cost of the run).
 export async function designStoryBible(idea, format, { onProgress = () => {} } = {}) {
   const units = formatUnits(format);
-  const usage = { calls: 0, promptTokens: 0, outputTokens: 0, thinkingTokens: 0, models: new Set() };
-  const ask = async (label, contents, responseSchema) => {
-    onProgress(label);
-    const result = await generateBrainJson({ systemInstruction: STORY_BRAIN_SYSTEM, contents, responseSchema, label: `Story Brain — ${label}` });
-    usage.calls++;
-    usage.promptTokens += result.usage.promptTokenCount ?? 0;
-    usage.outputTokens += result.usage.candidatesTokenCount ?? 0;
-    usage.thinkingTokens += result.usage.thoughtsTokenCount ?? 0;
-    usage.models.add(result.model);
-    return result.data;
-  };
+  const usage = newUsage();
+  const ask = brainAsker(usage, onProgress);
   const ideaBlock = `THE USER'S IDEA (keep every fixed point):\n${idea}\n\nFORMAT: ${units.label}.`;
 
   // 1. Pitch room: three genuinely different directions, judged by an audience critic.
@@ -358,7 +349,183 @@ export async function designStoryBible(idea, format, { onProgress = () => {} } =
     ...ending,
     blueprint: blueprint.units,
   };
-  return { bible, usage: { ...usage, models: [...usage.models] } };
+
+  // 5. The critics read it; the head writer revises until it passes.
+  const reviewed = await reviewAndImproveBible(bible, { ask, onProgress });
+  return { bible: reviewed, usage: usageSummary(usage) };
+}
+
+function newUsage() {
+  return { calls: 0, promptTokens: 0, outputTokens: 0, thinkingTokens: 0, models: new Set() };
+}
+
+function usageSummary(usage) {
+  return { ...usage, models: [...usage.models] };
+}
+
+// One Brain call that also adds its tokens to the run's usage.
+function brainAsker(usage, onProgress = () => {}) {
+  return async (label, contents, responseSchema, systemInstruction = STORY_BRAIN_SYSTEM) => {
+    onProgress(label);
+    const result = await generateBrainJson({ systemInstruction, contents, responseSchema, label: `Story Brain — ${label}` });
+    usage.calls++;
+    usage.promptTokens += result.usage.promptTokenCount ?? 0;
+    usage.outputTokens += result.usage.candidatesTokenCount ?? 0;
+    usage.thinkingTokens += result.usage.thoughtsTokenCount ?? 0;
+    usage.models.add(result.model);
+    return result.data;
+  };
+}
+
+// ---------------------------------------------------------------------------
+// The critics: three independent readers, and the revision loop.
+// ---------------------------------------------------------------------------
+
+export const BIBLE_PASS_SCORE = 8;
+const MAX_BIBLE_REVISIONS = 3;
+
+const SCORE_SCALE = `SCORE HONESTLY on this scale: 10 = a masterpiece; 9 = exceptional; 8 = strong — a demanding producer would greenlight it as it stands; 7 = good but with clear flaws; 6 = average; 5 or below = weak. Any BLOCKER means the score is at most 6. Never inflate: the writers improve only when you are strict and specific.`;
+
+const CRITIC_SCHEMA = OBJ({
+  score: { type: "INTEGER", description: "0-10 on the given scale." },
+  verdict: S("Your overall verdict in two or three sentences."),
+  strengths: LIST(S("Something that works and must be kept.")),
+  problems: LIST(
+    OBJ({
+      where: S("Where — e.g. 'Episode 3, clue' or 'Facts: world rules' or 'Climax'."),
+      severity: { type: "STRING", enum: ["blocker", "major", "minor"] },
+      problem: S("What is wrong, concretely."),
+      fix: S("A concrete fix."),
+    }),
+    "Every real problem, most serious first."
+  ),
+});
+
+const CRITICS = [
+  {
+    key: "storyDoctor",
+    label: "Story doctor",
+    system: `You are a veteran script doctor who has fixed hundreds of films and web series. You read a Story Bible (a story design) and find every weakness before a single page is written. You are strict, specific and constructive.\n\n${SCORE_SCALE}`,
+    brief: `Check, and report every problem:
+1. LOGIC AND CAUSE-EFFECT: does every event follow from what came before? Is anyone somewhere without a reason the audience knows?
+2. THE BIBLE'S OWN FACTS AND RULES: any event that the facts sheet or the rules of this world make impossible is a BLOCKER (e.g. the supernatural doing something the rules say it cannot; a sold vehicle returning; a bedridden person walking). Any contradiction between two parts of the Bible is at least MAJOR.
+3. HERO AGENCY: does the hero earn every clue through his own action and skills? A clue found by luck, overhearing, or someone explaining the plot is MAJOR.
+4. THE MYSTERY: would an attentive viewer guess the hidden truth (or the big reveal) earlier than the Bible intends? Name the exact giveaway (MAJOR). Are red herrings convincing and cleared by evidence?
+5. SETUPS AND PAYOFFS: is every payoff set up earlier, and every setup paid off?
+6. THE VILLAIN: is his plan coherent, and does he act every episode?
+7. REAL-WORLD PLAUSIBILITY: police and legal procedure, medicine, technology, money, distances, time.
+8. THE USER'S IDEA: every fixed point kept? Dropping or changing one is a BLOCKER.`,
+  },
+  {
+    key: "audienceCritic",
+    label: "Audience critic",
+    system: `You are a sharp OTT commissioning editor and a passionate viewer who has watched every major Indian and international thriller and drama. You decide whether real audiences will stay. You are honest to the point of being harsh.\n\n${SCORE_SCALE}`,
+    brief: `Judge it as an audience would, and report every problem:
+1. THE OPENING: after the first 2 minutes, would you keep watching? After episode 1 (or the first act), would you IMMEDIATELY click the next? If not, that is a BLOCKER.
+2. EVERY ENDING HOOK: does each episode / sequence end on something you must see resolved?
+3. BOREDOM: where would you reach for your phone? Anything repeated, slow, or explained instead of shown.
+4. FRESHNESS: stock tropes (blackouts, mirror-staring, glowing eyes, blood from taps, public confessions, convenient diaries) without a new twist are MAJOR.
+5. THE CLIMAX: is it surprising yet inevitable — would people say "wow" and talk about it? A predictable or merely loud climax is MAJOR.
+6. EMOTION: do you care about the hero and his relationships? Does anyone feel like a plot device?
+7. THE FINAL IMAGE: will people remember it?`,
+  },
+  {
+    key: "cultureExpert",
+    label: "Odisha culture expert",
+    system: `You are an expert on Odisha — its festivals, temple rituals and their exact order and timing, seasons and months, regions and their distinct traditions, communities, village life, food, dress, language, and how police, courts and local government actually work there. Odia audiences will instantly notice any mistake, and some mistakes would offend devotees. You are precise.\n\n${SCORE_SCALE}`,
+    brief: `Check every cultural and local detail, and report every problem:
+1. FESTIVALS AND RITUALS: is each one real, in the right month/season, in the right region, and are its events in the right ORDER (e.g. what happens before or after the chariots move at Rath Yatra)? A wrong order or season for a central event is MAJOR (BLOCKER if the climax depends on it).
+2. TEMPLES AND DEITIES: are temple practices, servitor roles and worship shown correctly? Anything that would offend devotees is MAJOR.
+3. PLACES AND REGIONS: do places exist and fit the region? Are traditions from different parts of Odisha mixed up?
+4. PEOPLE AND LIFE: names, communities, dress, food, daily life, speech — right for the place and class?
+5. INSTITUTIONS: police, courts, panchayat, hospitals — would it really work this way in Odisha?
+Only report real errors; praise what is authentic.`,
+  },
+];
+
+function criticInput(bible) {
+  return `THE USER'S IDEA (its fixed points must be kept):\n${bible.idea}\n\nTHE STORY BIBLE:\n${storyBibleToMarkdown({ ...bible, pitchRoom: null, review: null })}`;
+}
+
+async function runCritics(bible, ask, round) {
+  const reports = await Promise.all(
+    CRITICS.map((critic) =>
+      ask(`${critic.label} (round ${round})`, `${criticInput(bible)}\n\n${critic.brief}`, CRITIC_SCHEMA, critic.system)
+    )
+  );
+  const byKey = Object.fromEntries(CRITICS.map((critic, i) => [critic.key, reports[i]]));
+  const scores = Object.fromEntries(CRITICS.map((critic) => [critic.key, byKey[critic.key].score]));
+  const blockers = CRITICS.flatMap((critic) => byKey[critic.key].problems.filter((p) => p.severity === "blocker"));
+  const passed = Object.values(scores).every((score) => score >= BIBLE_PASS_SCORE) && blockers.length === 0;
+  return { reports: byKey, scores, lowest: Math.min(...Object.values(scores)), total: Object.values(scores).reduce((a, b) => a + b, 0), passed };
+}
+
+const REVISED_BIBLE_SCHEMA = OBJ({
+  changes: LIST(S("What you changed and which critic's problem it fixes.")),
+  promise: OBJ({ title: S("Title."), logline: S("Logline."), centralQuestion: S("Central question."), genrePromise: S("Genre promise."), whyWow: S("Why wow.") }),
+  hiddenTruth: TRUTH_SCHEMA.properties.hiddenTruth,
+  characters: TRUTH_SCHEMA.properties.characters,
+  villainPlan: TRUTH_SCHEMA.properties.villainPlan,
+  facts: TRUTH_SCHEMA.properties.facts,
+  climax: CLIMAX_SCHEMA.properties.climax,
+  setupsPayoffs: CLIMAX_SCHEMA.properties.setupsPayoffs,
+  units: BLUEPRINT_SCHEMA.properties.units,
+});
+
+function criticNotesText(check) {
+  return CRITICS.map((critic) => {
+    const report = check.reports[critic.key];
+    const problems = report.problems.map((p) => `  - [${p.severity.toUpperCase()}] ${p.where}: ${p.problem} → FIX: ${p.fix}`).join("\n");
+    return `${critic.label.toUpperCase()} — score ${report.score}/10. ${report.verdict}\nKEEP: ${report.strengths.join("; ")}\nPROBLEMS:\n${problems || "  (none)"}`;
+  }).join("\n\n");
+}
+
+// Critics read the Bible; if any scores under 8 (or finds a blocker), the
+// head writer revises the whole Bible and the critics read it again — up to
+// MAX_BIBLE_REVISIONS times. The best version is kept, with its review.
+export async function reviewAndImproveBible(bible, { ask, onProgress = () => {}, usage } = {}) {
+  ask ??= brainAsker(usage ?? newUsage(), onProgress);
+  const history = [];
+  let current = bible;
+  let best = null;
+
+  for (let round = 1; ; round++) {
+    const check = await runCritics(current, ask, round);
+    history.push({ version: round, scores: check.scores, passed: check.passed });
+    if (!best || check.lowest > best.check.lowest || (check.lowest === best.check.lowest && check.total > best.check.total)) {
+      best = { bible: current, check, version: round };
+    }
+    if (check.passed || round > MAX_BIBLE_REVISIONS) break;
+
+    const revised = await ask(
+      `Head writer revises (version ${round + 1})`,
+      `THE USER'S IDEA (keep every fixed point):\n${current.idea}\n\nFORMAT: ${current.units.label}.\n\nYOUR CURRENT STORY BIBLE:\n${storyBibleToMarkdown({ ...current, pitchRoom: null, review: null })}\n\nTHREE CRITICS HAVE READ IT:\n${criticNotesText(check)}\n\nRevise the whole Story Bible. Fix EVERY blocker and major problem, and the minor ones where you can — not with patches, but by redesigning whatever is needed so the story is genuinely better. Keep everything the critics praised. Keep every fixed point of the user's idea. Keep it one coherent design: the hidden truth, facts sheet, climax, setups and every ${current.units.kind} must agree with each other. Return the complete revised Bible with exactly ${current.units.count} ${current.units.kind}s.`,
+      REVISED_BIBLE_SCHEMA
+    );
+    current = {
+      ...current,
+      promise: revised.promise,
+      hiddenTruth: revised.hiddenTruth,
+      characters: revised.characters,
+      villainPlan: revised.villainPlan,
+      facts: revised.facts,
+      climax: revised.climax,
+      setupsPayoffs: revised.setupsPayoffs,
+      blueprint: revised.units,
+      revisionNotes: [...(current.revisionNotes ?? []), { version: round + 1, changes: revised.changes }],
+    };
+  }
+
+  return {
+    ...best.bible,
+    review: {
+      passed: best.check.passed,
+      keptVersion: best.version,
+      scores: best.check.scores,
+      reports: best.check.reports,
+      history,
+    },
+  };
 }
 
 // The Story Bible as a readable document (Markdown).
@@ -366,6 +533,17 @@ export function storyBibleToMarkdown(bible, usage) {
   const lines = [];
   const p = bible.promise;
   lines.push(`# ${p.title} — Story Bible`, "", `*${bible.units.label}*`, "");
+  if (bible.review) {
+    const r = bible.review;
+    const labels = Object.fromEntries(CRITICS.map((critic) => [critic.key, critic.label]));
+    lines.push("## The critics' verdict", "");
+    lines.push(r.passed ? `**PASSED** — every critic scored ${BIBLE_PASS_SCORE} or more (version ${r.keptVersion}).` : `**NEEDS YOUR INPUT** — it didn't reach ${BIBLE_PASS_SCORE} from every critic; this is the best version (${r.keptVersion}).`, "");
+    lines.push("| Critic | Score | Verdict |", "|---|---|---|");
+    Object.entries(r.reports).forEach(([key, report]) => lines.push(`| ${labels[key]} | ${report.score}/10 | ${report.verdict} |`));
+    lines.push("", `Rounds: ${r.history.map((h) => `v${h.version} (${Object.values(h.scores).join("/")})`).join(" → ")}`, "");
+    const open = Object.entries(r.reports).flatMap(([key, report]) => report.problems.filter((x) => x.severity !== "minor").map((x) => `- **[${x.severity}] ${labels[key]} — ${x.where}:** ${x.problem} *Fix:* ${x.fix}`));
+    if (open.length) lines.push("**Problems still open:**", ...open, "");
+  }
   lines.push("## 1. The promise", "", `**Logline:** ${p.logline}`, "", `**The question that keeps people watching:** ${p.centralQuestion}`, "", `**What the audience is paying for:** ${p.genrePromise}`, "", `**Why "wow":** ${p.whyWow}`, "");
   lines.push("## 2. The hidden truth", "", bible.hiddenTruth.summary, "");
   bible.hiddenTruth.timeline.forEach((t) => lines.push(`- **${t.when}:** ${t.event}`));
@@ -398,6 +576,7 @@ export function storyBibleToMarkdown(bible, usage) {
     if (u.payoffs?.length) lines.push(`- **Pays off:** ${u.payoffs.join("; ")}`);
     lines.push("");
   });
+  if (!bible.pitchRoom) return lines.join("\n");
   lines.push("## Appendix: the pitch room", "");
   bible.pitchRoom.directions.forEach((d, i) => {
     const score = bible.pitchRoom.verdict.scores?.find((s) => s.direction === i + 1);

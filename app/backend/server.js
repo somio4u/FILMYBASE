@@ -19,6 +19,8 @@ import { XMLParser } from "fast-xml-parser";
 import AdmZip from "adm-zip";
 import crypto from "crypto";
 import { AsyncLocalStorage } from "async_hooks";
+import { marked } from "marked";
+import { BIBLE_PASS_SCORE, designStoryBible, reviseBibleWithNote, storyBibleToMarkdown } from "./storyBrain.js";
 import cookieParser from "cookie-parser";
 import { createClient } from "@supabase/supabase-js";
 import {
@@ -130,6 +132,9 @@ async function ensureAiMovieSchema() {
       updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
     )`,
     `ALTER TABLE ai_movie_projects ADD COLUMN IF NOT EXISTS stage_status JSONB NOT NULL DEFAULT '{}'`,
+    // The Story Brain's design (see storyBrain.js) lives on the run itself.
+    `ALTER TABLE auto_pipeline_runs ADD COLUMN IF NOT EXISTS story_bible JSONB`,
+    `ALTER TABLE auto_pipeline_runs ADD COLUMN IF NOT EXISTS story_bible_usage JSONB`,
     `CREATE TABLE IF NOT EXISTS ai_movie_reference_files (
       id SERIAL PRIMARY KEY,
       project_id INTEGER NOT NULL REFERENCES ai_movie_projects(id) ON DELETE CASCADE,
@@ -17052,14 +17057,126 @@ app.post("/api/auto-pipeline/start", requireRole("admin"), async (req, res) => {
     );
     const runId = insertResult.rows[0].id;
 
+    // Films and web series are designed by the Story Brain first and wait
+    // for the user's approval; vertical micro-dramas go straight to writing.
     // Deliberately not awaited — see runAutoPipeline's own comment.
-    runAutoPipeline(runId, concept, format, dialogueLanguage);
+    if (usesStoryBrain(format)) runStoryBrainStage(runId, concept, format);
+    else runAutoPipeline(runId, concept, format, dialogueLanguage);
 
     res.json({ runId });
   } catch (error) {
     console.error("Failed to start auto-pipeline run:", error.message);
     res.status(500).json({ error: error.message });
   }
+});
+
+// ---------------------------------------------------------------------------
+// The Story Brain stage (storyBrain.js): designs the Story Bible, then the
+// run waits ('awaiting_approval') until the user approves it or gives a note.
+// ---------------------------------------------------------------------------
+
+function usesStoryBrain(format) {
+  return format?.type === "film" || format?.type === "series";
+}
+
+// Runs one Brain job for a run (designing the Bible, or revising it with
+// the user's note), keeping the run alive and its feed up to date.
+async function runStoryBrainJob(runId, job) {
+  await updateAutoPipelineRun(runId, { progress_stage: "story-brain" });
+  // A Pro-model call can take minutes; the heartbeat stops the stale-run
+  // reaper from mistaking a long think for a dead run.
+  const heartbeat = setInterval(() => touchAutoPipelineRun(runId).catch(() => {}), 60 * 1000);
+  try {
+    const onProgress = (label) => appendAutoPipelineNote(runId, "story-brain", `Story Brain: ${label}…`).catch(() => {});
+    const { bible, usage } = await job(onProgress);
+    const previous = (await db.query("SELECT story_bible_usage FROM auto_pipeline_runs WHERE id = $1", [runId])).rows[0]?.story_bible_usage;
+    const totalUsage = previous
+      ? {
+          calls: previous.calls + usage.calls,
+          promptTokens: previous.promptTokens + usage.promptTokens,
+          outputTokens: previous.outputTokens + usage.outputTokens,
+          thinkingTokens: previous.thinkingTokens + usage.thinkingTokens,
+          models: [...new Set([...(previous.models ?? []), ...usage.models])],
+        }
+      : usage;
+    await db.query("UPDATE auto_pipeline_runs SET story_bible = $2, story_bible_usage = $3, updated_at = now() WHERE id = $1", [
+      runId,
+      JSON.stringify(bible),
+      JSON.stringify(totalUsage),
+    ]);
+    const scores = Object.values(bible.review?.scores ?? {}).join(" / ");
+    await appendAutoPipelineNote(
+      runId,
+      "story-brain",
+      bible.review?.passed
+        ? `Story Bible ready — the critics passed it (${scores}). Waiting for your approval.`
+        : `Story Bible ready, but the critics didn't all reach ${BIBLE_PASS_SCORE} (${scores}) — read the open problems and give a note, or approve it as it is.`
+    );
+    await updateAutoPipelineRun(runId, { status: "awaiting_approval", progress_stage: "story-bible" });
+  } catch (error) {
+    console.error(`Story Brain failed for run ${runId}:`, error.message);
+    await updateAutoPipelineRun(runId, { status: "failed", error: `The Story Brain stopped: ${friendlyGeminiErrorMessage(error.message)}` }).catch(() => {});
+  } finally {
+    clearInterval(heartbeat);
+  }
+}
+
+function runStoryBrainStage(runId, conceptText, format) {
+  return runStoryBrainJob(runId, (onProgress) => designStoryBible(conceptText, format, { onProgress }));
+}
+
+async function awaitingRun(req, res) {
+  const run = (await db.query("SELECT * FROM auto_pipeline_runs WHERE id = $1", [req.params.id])).rows[0];
+  if (!run) {
+    res.status(404).json({ error: "Run not found." });
+    return null;
+  }
+  if (run.status !== "awaiting_approval" || !run.story_bible) {
+    res.status(400).json({ error: "This run isn't waiting for a Story Bible approval." });
+    return null;
+  }
+  return run;
+}
+
+app.post("/api/auto-pipeline/:id/bible-approve", requireRole("admin"), async (req, res) => {
+  const run = await awaitingRun(req, res);
+  if (!run) return;
+  await appendAutoPipelineNote(run.id, "story-brain", "You approved the Story Bible.");
+  // Writing the script from the approved Bible is the next build step
+  // (STORY_BRAIN_DESIGN.md, step 5); for now the run rests here.
+  await updateAutoPipelineRun(run.id, { status: "approved", progress_stage: "story-bible-approved" });
+  res.json({ runId: run.id });
+});
+
+app.post("/api/auto-pipeline/:id/bible-note", requireRole("admin"), async (req, res) => {
+  const note = String(req.body?.note ?? "").trim();
+  if (!note) {
+    res.status(400).json({ error: "Write a note first." });
+    return;
+  }
+  const run = await awaitingRun(req, res);
+  if (!run) return;
+  await appendAutoPipelineNote(run.id, "story-brain", `Your note: ${note}`);
+  await updateAutoPipelineRun(run.id, { status: "running" });
+  runStoryBrainJob(run.id, (onProgress) => reviseBibleWithNote(run.story_bible, note, { onProgress }));
+  res.json({ runId: run.id });
+});
+
+// The full Bible as a printable page (the browser's Print can save it as a PDF).
+app.get("/api/auto-pipeline/:id/story-bible", requireLogin, async (req, res) => {
+  const run = (await db.query("SELECT story_bible, story_bible_usage FROM auto_pipeline_runs WHERE id = $1", [req.params.id])).rows[0];
+  if (!run?.story_bible) {
+    res.status(404).send("No Story Bible for this run yet.");
+    return;
+  }
+  const markdownText = storyBibleToMarkdown(run.story_bible, run.story_bible_usage);
+  const title = String(run.story_bible.promise?.title ?? "Story Bible").replace(/[<>&"]/g, "");
+  res.type("html").send(`<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${title} — Story Bible</title><style>
+body{font-family:Georgia,'Times New Roman',serif;max-width:860px;margin:0 auto;padding:24px 16px;line-height:1.55;color:#1a1a1a;background:#fff}
+h1{color:#5a0d0d;border-bottom:3px solid #8b1a1a;padding-bottom:6px}h2{color:#8b1a1a;border-bottom:1px solid #ddd;padding-bottom:3px;margin-top:28px}
+table{border-collapse:collapse;width:100%;font-size:14px}th,td{border:1px solid #ccc;padding:6px;vertical-align:top;text-align:left}th{background:#f3e9e9}
+em{color:#555}@media print{body{padding:0}}
+</style></head><body>${marked.parse(markdownText)}</body></html>`);
 });
 
 // Picks a failed run back up from the last stage that actually finished,
@@ -17077,6 +17194,18 @@ app.post("/api/auto-pipeline/:id/resume", requireRole("admin"), async (req, res)
   }
   if (run.status !== "failed") {
     res.status(400).json({ error: "Only a failed run can be resumed." });
+    return;
+  }
+  if (!run.concept_id && usesStoryBrain(run.format)) {
+    // Stopped while the Story Brain was working: a finished Bible goes back
+    // to waiting for approval; otherwise the Brain designs it again.
+    if (run.story_bible) {
+      await updateAutoPipelineRun(run.id, { status: "awaiting_approval", progress_stage: "story-bible", error: null });
+    } else {
+      await db.query("UPDATE auto_pipeline_runs SET status = 'running', error = NULL WHERE id = $1", [run.id]);
+      runStoryBrainStage(run.id, run.concept_text, run.format);
+    }
+    res.json({ runId: run.id });
     return;
   }
   if (!run.concept_id) {
@@ -17197,7 +17326,7 @@ app.get("/api/auto-pipeline/runs", requireLogin, async (req, res) => {
 
 app.get("/api/auto-pipeline/:id/status", requireLogin, async (req, res) => {
   const result = await db.query(
-    "SELECT id, concept_text, format, status, progress_stage, review_notes, concept_id, scene_list_id, error, created_at, updated_at FROM auto_pipeline_runs WHERE id = $1",
+    "SELECT id, concept_text, format, status, progress_stage, review_notes, concept_id, scene_list_id, error, created_at, updated_at, story_bible, story_bible_usage FROM auto_pipeline_runs WHERE id = $1",
     [req.params.id]
   );
   if (result.rows.length === 0) {
@@ -17217,6 +17346,8 @@ app.get("/api/auto-pipeline/:id/status", requireLogin, async (req, res) => {
     error: row.error,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
+    storyBible: row.story_bible,
+    storyBibleUsage: row.story_bible_usage,
   });
 });
 

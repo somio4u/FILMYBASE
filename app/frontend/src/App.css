@@ -4639,6 +4639,85 @@ button, input, textarea, select {
   gap: 8px;
 }
 
+/* The Story Bible's one-page summary in the pen window. */
+.story-bible-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-primary);
+}
+
+.story-bible-title {
+  margin: 0;
+  font-size: 16px;
+}
+
+.story-bible-logline {
+  margin: 0;
+  font-style: italic;
+  color: var(--text-secondary);
+}
+
+.story-bible-verdict {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--border-subtle);
+}
+
+.story-bible-verdict.is-passed strong {
+  color: var(--success);
+}
+
+.story-bible-verdict.is-open strong {
+  color: var(--warning);
+}
+
+.story-bible-scores {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.story-bible-points {
+  margin: 0;
+}
+
+.story-bible-points dt {
+  margin-top: 6px;
+  font-weight: 600;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.story-bible-points dd {
+  margin: 2px 0 0;
+}
+
+.story-bible-hooks {
+  margin: 0;
+  padding-left: 18px;
+}
+
+.story-bible-hooks li {
+  margin-bottom: 4px;
+}
+
+.story-bible-problems summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.story-bible-problems ul {
+  margin: 6px 0 0;
+  padding-left: 18px;
+  color: var(--text-secondary);
+}
+
 .floating-agent-done-title {
   margin: 0;
   font-weight: 600;

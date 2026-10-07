@@ -217,7 +217,7 @@ CREATE TABLE auto_pipeline_runs (
   id SERIAL PRIMARY KEY,
   concept_text TEXT NOT NULL,
   format JSONB NOT NULL,
-  status TEXT NOT NULL DEFAULT 'running', -- 'running' | 'completed' | 'failed'
+  status TEXT NOT NULL DEFAULT 'running', -- 'running' | 'awaiting_approval' | 'approved' | 'completed' | 'failed'
   progress_stage TEXT,
   review_notes JSONB NOT NULL DEFAULT '[]',
   concept_id INTEGER REFERENCES concepts(id) ON DELETE SET NULL,
@@ -226,6 +226,10 @@ CREATE TABLE auto_pipeline_runs (
   -- later without the caller having to remember/resupply it.
   dialogue_language TEXT NOT NULL DEFAULT 'en',
   error TEXT,
+  -- The Story Brain's design for films and web series (storyBrain.js) and
+  -- the tokens it used.
+  story_bible JSONB,
+  story_bible_usage JSONB,
   created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()

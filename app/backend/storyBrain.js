@@ -444,8 +444,14 @@ Only report real errors; praise what is authentic.`,
   },
 ];
 
+function userNotesText(bible) {
+  return bible.userNotes?.length
+    ? `\n\nTHE USER'S OWN NOTES (they outrank every critic — each one must be followed; ignoring one is a BLOCKER):\n${bible.userNotes.map((note, i) => `${i + 1}. ${note}`).join("\n")}`
+    : "";
+}
+
 function criticInput(bible) {
-  return `THE USER'S IDEA (its fixed points must be kept):\n${bible.idea}\n\nTHE STORY BIBLE:\n${storyBibleToMarkdown({ ...bible, pitchRoom: null, review: null })}`;
+  return `THE USER'S IDEA (its fixed points must be kept):\n${bible.idea}${userNotesText(bible)}\n\nTHE STORY BIBLE:\n${storyBibleToMarkdown({ ...bible, pitchRoom: null, review: null })}`;
 }
 
 async function runCritics(bible, ask, round) {
@@ -501,7 +507,7 @@ export async function reviewAndImproveBible(bible, { ask, onProgress = () => {},
 
     const revised = await ask(
       `Head writer revises (version ${round + 1})`,
-      `THE USER'S IDEA (keep every fixed point):\n${current.idea}\n\nFORMAT: ${current.units.label}.\n\nYOUR CURRENT STORY BIBLE:\n${storyBibleToMarkdown({ ...current, pitchRoom: null, review: null })}\n\nTHREE CRITICS HAVE READ IT:\n${criticNotesText(check)}\n\n${earlierNotes.length ? `PROBLEMS FROM EARLIER ROUNDS (already fixed — never bring any of them back):\n${earlierNotes.join("\n")}\n\n` : ""}Revise the Story Bible like a careful head writer:
+      `THE USER'S IDEA (keep every fixed point):\n${current.idea}${userNotesText(current)}\n\nFORMAT: ${current.units.label}.\n\nYOUR CURRENT STORY BIBLE:\n${storyBibleToMarkdown({ ...current, pitchRoom: null, review: null })}\n\nTHREE CRITICS HAVE READ IT:\n${criticNotesText(check)}\n\n${earlierNotes.length ? `PROBLEMS FROM EARLIER ROUNDS (already fixed — never bring any of them back):\n${earlierNotes.join("\n")}\n\n` : ""}Revise the Story Bible like a careful head writer:
 - Fix EVERY blocker and major problem, and the minor ones where you can. For a blocker, redesign the part of the story it breaks; for anything else, make the smallest change that truly fixes it.
 - CHANGE NOTHING ELSE: every part the critics didn't flag stays as it is, word for word where possible. Every rewrite risks new holes.
 - Before you finish, check every new or changed detail against the facts sheet, the rules of this world, the hidden truth, the timeline and every other ${current.units.kind}: who has which object, who knows what and when, what is physically, legally and technically possible, and what is culturally right. If a fix needs a new fact, add it to the facts sheet.
@@ -538,6 +544,34 @@ Return the complete revised Bible with exactly ${current.units.count} ${current.
   };
 }
 
+// The user read the Bible and gave a note: the head writer revises with the
+// note as the top priority, then the critics check it again (and check the
+// note was followed). Returns { bible, usage } like designStoryBible.
+export async function reviseBibleWithNote(bible, note, { onProgress = () => {} } = {}) {
+  const usage = newUsage();
+  const ask = brainAsker(usage, onProgress);
+  const withNote = { ...bible, userNotes: [...(bible.userNotes ?? []), note] };
+  const revised = await ask(
+    "Head writer follows your note",
+    `THE USER'S IDEA (keep every fixed point):\n${withNote.idea}${userNotesText(withNote)}\n\nFORMAT: ${withNote.units.label}.\n\nYOUR CURRENT STORY BIBLE:\n${storyBibleToMarkdown({ ...withNote, pitchRoom: null, review: null })}\n\nTHE USER HAS READ THIS BIBLE AND GIVES THIS NOTE (the most important instruction you have — follow it fully, however much of the story it changes):\n"${note}"\n\nRevise the Story Bible to follow the note. Change whatever the note needs; keep everything else. Then check every changed detail against the facts sheet, the rules of this world, the hidden truth and every other ${withNote.units.kind}, so the design stays one coherent whole. Return the complete revised Bible with exactly ${withNote.units.count} ${withNote.units.kind}s.`,
+    REVISED_BIBLE_SCHEMA
+  );
+  const updated = {
+    ...withNote,
+    promise: revised.promise,
+    hiddenTruth: revised.hiddenTruth,
+    characters: revised.characters,
+    villainPlan: revised.villainPlan,
+    facts: revised.facts,
+    climax: revised.climax,
+    setupsPayoffs: revised.setupsPayoffs,
+    blueprint: revised.units,
+    revisionNotes: [...(withNote.revisionNotes ?? []), { version: `your note ${withNote.userNotes.length}`, changes: revised.changes }],
+  };
+  const reviewed = await reviewAndImproveBible(updated, { ask, onProgress });
+  return { bible: reviewed, usage: usageSummary(usage) };
+}
+
 // The Story Bible as a readable document (Markdown).
 export function storyBibleToMarkdown(bible, usage) {
   const lines = [];
@@ -553,6 +587,9 @@ export function storyBibleToMarkdown(bible, usage) {
     lines.push("", `Rounds: ${r.history.map((h) => `v${h.version} (${Object.values(h.scores).join("/")})`).join(" → ")}`, "");
     const open = Object.entries(r.reports).flatMap(([key, report]) => report.problems.filter((x) => x.severity !== "minor").map((x) => `- **[${x.severity}] ${labels[key]} — ${x.where}:** ${x.problem} *Fix:* ${x.fix}`));
     if (open.length) lines.push("**Problems still open:**", "", ...open, "");
+  }
+  if (bible.userNotes?.length) {
+    lines.push("## Your notes", "", ...bible.userNotes.map((note, i) => `${i + 1}. ${note}`), "");
   }
   lines.push("## 1. The promise", "", `**Logline:** ${p.logline}`, "", `**The question that keeps people watching:** ${p.centralQuestion}`, "", `**What the audience is paying for:** ${p.genrePromise}`, "", `**Why "wow":** ${p.whyWow}`, "");
   lines.push("## 2. The hidden truth", "", bible.hiddenTruth.summary, "");

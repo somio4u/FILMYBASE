@@ -578,8 +578,32 @@ const LABELS = {
       'sequence-review': 'Script editor reviewing the screenplay, sequence by sequence',
       'quality-pass': 'Final quality pass — checking for repetition',
       'language-check': 'Final language check — grammar and natural dialogue',
+      'story-brain': 'Story Brain designing the story',
+      'story-bible': 'Story Bible — your approval',
+      'story-bible-approved': 'Story Bible approved',
       done: 'Done',
     },
+    floatingAgentStatusAwaiting: 'Waiting for you',
+    floatingAgentStatusApproved: 'Approved',
+    bibleReadyLabel: 'The Story Bible is ready. Read it, then approve it or give a note.',
+    bibleCriticsPassed: 'The critics passed it',
+    bibleCriticsNeedInput: "The critics didn't all reach 8 — see the open problems",
+    bibleCriticDoctor: 'Story doctor',
+    bibleCriticAudience: 'Audience',
+    bibleCriticCulture: 'Culture',
+    bibleQuestionLabel: 'The question that keeps people watching',
+    bibleOpeningLabel: 'Opening and its ending hook',
+    bibleClimaxLabel: 'Climax',
+    bibleFinalImageLabel: 'Final image',
+    bibleEpisodeHooksLabel: 'How each episode ends',
+    bibleSequenceHooksLabel: 'How each sequence ends',
+    bibleOpenProblemsLabel: (count) => `Problems the critics still see (${count})`,
+    bibleOpenFullButton: 'Open the full Story Bible',
+    bibleApproveButton: 'Approve',
+    bibleNotePlaceholder: 'Your note — what should change? e.g. "Keep the grandmother alive" or "The climax needs a bigger twist"',
+    bibleSendNoteButton: 'Revise with my note',
+    bibleSending: 'Sending...',
+    bibleApprovedLabel: 'Approved. Writing the script from this Story Bible is the next build step — coming soon.',
     floatingAgentSecondsSuffix: 's',
     floatingAgentFilmMinutesLabel: 'Film length (minutes)',
     floatingAgentStatusWorking: 'Working',
@@ -1272,8 +1296,32 @@ const LABELS = {
       'sequence-review': 'ସ୍କ୍ରିପ୍ଟ ଏଡିଟର ଦୃଶ୍ୟ ଗୁଚ୍ଛ ଅନୁସାରେ ସ୍କ୍ରିନପ୍ଲେ ଯାଞ୍ଚ କରୁଛନ୍ତି',
       'quality-pass': 'ଚୂଡ଼ାନ୍ତ ଗୁଣବତ୍ତା ଯାଞ୍ଚ — ପୁନରାବୃତ୍ତି ଯାଞ୍ଚ ହେଉଛି',
       'language-check': 'ଚୂଡ଼ାନ୍ତ ଭାଷା ଯାଞ୍ଚ — ବ୍ୟାକରଣ ଓ ସ୍ୱାଭାବିକ ସଂଳାପ',
+      'story-brain': 'ସ୍ଟୋରି ବ୍ରେନ୍ କାହାଣୀ ଡିଜାଇନ୍ କରୁଛି',
+      'story-bible': 'ସ୍ଟୋରି ବାଇବଲ୍ — ଆପଣଙ୍କ ଅନୁମୋଦନ',
+      'story-bible-approved': 'ସ୍ଟୋରି ବାଇବଲ୍ ଅନୁମୋଦିତ',
       done: 'ସମାପ୍ତ',
     },
+    floatingAgentStatusAwaiting: 'ଆପଣଙ୍କୁ ଅପେକ୍ଷା କରୁଛି',
+    floatingAgentStatusApproved: 'ଅନୁମୋଦିତ',
+    bibleReadyLabel: 'ସ୍ଟୋରି ବାଇବଲ୍ ପ୍ରସ୍ତୁତ। ପଢ଼ନ୍ତୁ, ତା\'ପରେ ଅନୁମୋଦନ କରନ୍ତୁ କିମ୍ବା ନୋଟ୍ ଦିଅନ୍ତୁ।',
+    bibleCriticsPassed: 'ସମୀକ୍ଷକମାନେ ପାସ୍ କରିଛନ୍ତି',
+    bibleCriticsNeedInput: 'ସବୁ ସମୀକ୍ଷକ ୮ରେ ପହଞ୍ଚିନାହାନ୍ତି — ବାକି ସମସ୍ୟା ଦେଖନ୍ତୁ',
+    bibleCriticDoctor: 'ସ୍କ୍ରିପ୍ଟ ଡାକ୍ତର',
+    bibleCriticAudience: 'ଦର୍ଶକ',
+    bibleCriticCulture: 'ସଂସ୍କୃତି',
+    bibleQuestionLabel: 'ଯେଉଁ ପ୍ରଶ୍ନ ଦର୍ଶକଙ୍କୁ ବାନ୍ଧି ରଖେ',
+    bibleOpeningLabel: 'ଆରମ୍ଭ ଆଉ ତା\'ର ଶେଷ ହୁକ୍',
+    bibleClimaxLabel: 'କ୍ଲାଇମାକ୍ସ',
+    bibleFinalImageLabel: 'ଶେଷ ଦୃଶ୍ୟ',
+    bibleEpisodeHooksLabel: 'ପ୍ରତି ଏପିସୋଡ୍ କେମିତି ଶେଷ ହୁଏ',
+    bibleSequenceHooksLabel: 'ପ୍ରତି ସିକ୍ୱେନ୍ସ କେମିତି ଶେଷ ହୁଏ',
+    bibleOpenProblemsLabel: (count) => `ସମୀକ୍ଷକମାନେ ଦେଖୁଥିବା ବାକି ସମସ୍ୟା (${count})`,
+    bibleOpenFullButton: 'ପୂରା ସ୍ଟୋରି ବାଇବଲ୍ ଖୋଲନ୍ତୁ',
+    bibleApproveButton: 'ଅନୁମୋଦନ କରନ୍ତୁ',
+    bibleNotePlaceholder: 'ଆପଣଙ୍କ ନୋଟ୍ — କ\'ଣ ବଦଳିବା ଦରକାର?',
+    bibleSendNoteButton: 'ମୋ ନୋଟ୍ ଅନୁସାରେ ବଦଳାନ୍ତୁ',
+    bibleSending: 'ପଠାଯାଉଛି...',
+    bibleApprovedLabel: 'ଅନୁମୋଦିତ। ଏହି ସ୍ଟୋରି ବାଇବଲ୍‌ରୁ ସ୍କ୍ରିପ୍ଟ ଲେଖିବା ପରବର୍ତ୍ତୀ ପଦକ୍ଷେପ — ଶୀଘ୍ର ଆସୁଛି।',
     floatingAgentSecondsSuffix: 'ସେ',
     floatingAgentFilmMinutesLabel: 'ଫିଲ୍ମର ଲମ୍ବ (ମିନିଟ୍)',
     floatingAgentStatusWorking: 'କାମ ଚାଲିଛି',
@@ -2039,11 +2087,66 @@ function floatingAgentFramesFor(runStatus) {
 // bar (not just a spinner) even though we don't have finer-grained percent
 // data from the server.
 const AUTO_PIPELINE_STAGE_ORDER = [
-  'starting', 'storylines', 'pitch-deck', 'character-sheet', 'three-act', 'bit-sheet', 'scene-list',
+  'starting', 'story-brain', 'story-bible', 'storylines', 'pitch-deck', 'character-sheet', 'three-act', 'bit-sheet', 'scene-list',
   'screenplay', 'sequence-review', 'quality-pass', 'language-check', 'done',
 ]
 // The stages the pen window's timeline lists (everything but start/done).
 const AUTO_PIPELINE_TIMELINE_STAGES = AUTO_PIPELINE_STAGE_ORDER.slice(1, -1)
+// The Story Brain designs films and web series first (STORY_BRAIN_DESIGN.md);
+// vertical micro-dramas skip it.
+const STORY_BRAIN_STAGES = ['story-brain', 'story-bible']
+function runUsesStoryBrain(format) {
+  return format?.type === 'film' || format?.type === 'series'
+}
+
+// The one-page summary of a Story Bible the user approves (or gives a note on).
+function StoryBibleSummary({ bible, t }) {
+  const p = bible.promise ?? {}
+  const units = bible.blueprint ?? []
+  const first = units[0]
+  const review = bible.review
+  const criticNames = { storyDoctor: t.bibleCriticDoctor, audienceCritic: t.bibleCriticAudience, cultureExpert: t.bibleCriticCulture }
+  const openProblems = Object.entries(review?.reports ?? {}).flatMap(([key, report]) =>
+    (report.problems ?? []).filter((x) => x.severity !== 'minor').map((x) => ({ critic: criticNames[key] ?? key, ...x }))
+  )
+  return (
+    <div className="story-bible-summary">
+      <h3 className="story-bible-title">{p.title}</h3>
+      <p className="story-bible-logline">{p.logline}</p>
+      {review && (
+        <div className={`story-bible-verdict ${review.passed ? 'is-passed' : 'is-open'}`}>
+          <strong>{review.passed ? t.bibleCriticsPassed : t.bibleCriticsNeedInput}</strong>
+          <div className="story-bible-scores">
+            {Object.entries(review.scores ?? {}).map(([key, score]) => (
+              <span key={key} className={`floating-agent-score ${autoPipelineScoreClass(score)}`}>{criticNames[key] ?? key} {score}/10</span>
+            ))}
+          </div>
+        </div>
+      )}
+      <dl className="story-bible-points">
+        <dt>{t.bibleQuestionLabel}</dt><dd>{p.centralQuestion}</dd>
+        {first && (<><dt>{t.bibleOpeningLabel}</dt><dd>{first.coldOpen}<br /><em>{first.endingHook}</em></dd></>)}
+        {bible.climax && (<><dt>{t.bibleClimaxLabel}</dt><dd>{bible.climax.reversal} {bible.climax.heroChoice}</dd><dt>{t.bibleFinalImageLabel}</dt><dd>{bible.climax.finalImage}</dd></>)}
+      </dl>
+      <p className="floating-agent-section-title">{bible.units?.kind === 'episode' ? t.bibleEpisodeHooksLabel : t.bibleSequenceHooksLabel}</p>
+      <ol className="story-bible-hooks">
+        {units.map((u) => (
+          <li key={u.number}><strong>{u.title}</strong> — {u.endingHook}</li>
+        ))}
+      </ol>
+      {openProblems.length > 0 && (
+        <details className="story-bible-problems">
+          <summary>{t.bibleOpenProblemsLabel(openProblems.length)}</summary>
+          <ul>
+            {openProblems.map((x, i) => (
+              <li key={i}><strong>{x.critic} — {x.where}:</strong> {x.problem}</li>
+            ))}
+          </ul>
+        </details>
+      )}
+    </div>
+  )
+}
 
 // One run-log note, split into the parts the pen window shows: the judge's
 // score (as a coloured chip), the version number, a small icon for the
@@ -2123,6 +2226,8 @@ function FloatingAgentWidget({ currentUser, t, onRunCompleted, onOpenProject }) 
   // notice it's running again.
   const [pollNonce, setPollNonce] = useState(0)
   const [errorMessage, setErrorMessage] = useState(null)
+  const [bibleNote, setBibleNote] = useState('')
+  const [isSendingBible, setIsSendingBible] = useState(false)
   const [nowTick, setNowTick] = useState(() => Date.now())
   const [frameIndex, setFrameIndex] = useState(0)
   const statusRef = useRef(null)
@@ -2162,7 +2267,9 @@ function FloatingAgentWidget({ currentUser, t, onRunCompleted, onOpenProject }) 
   }, [currentUser?.username])
 
   const poseState =
-    status?.status === 'running' ? 'working' : status?.status === 'completed' ? 'done' : status?.status === 'failed' ? 'failed' : 'idle'
+    status?.status === 'running' ? 'working'
+      : status?.status === 'completed' || status?.status === 'awaiting_approval' || status?.status === 'approved' ? 'done'
+      : status?.status === 'failed' ? 'failed' : 'idle'
   const currentFrames = floatingAgentFramesFor(poseState)
 
   // Cycles the character frames continuously — faster while a run is
@@ -2220,7 +2327,7 @@ function FloatingAgentWidget({ currentUser, t, onRunCompleted, onOpenProject }) 
 
     poll()
     const interval = setInterval(() => {
-      if (statusRef.current === 'completed' || statusRef.current === 'failed') {
+      if (statusRef.current === 'completed' || statusRef.current === 'failed' || statusRef.current === 'approved') {
         clearInterval(interval)
         return
       }
@@ -2332,6 +2439,31 @@ function FloatingAgentWidget({ currentUser, t, onRunCompleted, onOpenProject }) 
     setIsResuming(false)
   }
 
+  // Approve the Story Bible, or send a note for the Brain to revise it.
+  async function handleBibleAction(action) {
+    if (!runId) return
+    setIsSendingBible(true)
+    setErrorMessage(null)
+    try {
+      const response = await fetch(`${BACKEND_URL}/api/auto-pipeline/${runId}/${action === 'approve' ? 'bible-approve' : 'bible-note'}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(action === 'note' ? { note: bibleNote } : {}),
+      })
+      const data = await response.json()
+      if (!response.ok) {
+        setErrorMessage(data.error || t.genericError)
+      } else {
+        if (action === 'note') setBibleNote('')
+        statusRef.current = null
+        setPollNonce((n) => n + 1)
+      }
+    } catch {
+      setErrorMessage(t.genericError)
+    }
+    setIsSendingBible(false)
+  }
+
   function handleStartNew() {
     setRunId(null)
     setStatus(null)
@@ -2374,9 +2506,15 @@ function FloatingAgentWidget({ currentUser, t, onRunCompleted, onOpenProject }) 
           const scores = notes.filter((n) => n.stage === stage && n.score !== null).map((n) => n.score)
           return scores.length > 0 ? Math.max(...scores) : null
         }
-        const currentIndex = AUTO_PIPELINE_STAGE_ORDER.indexOf(status?.progressStage)
+        const currentIndex = status?.status === 'approved'
+          ? AUTO_PIPELINE_STAGE_ORDER.indexOf('story-bible') + 1
+          : AUTO_PIPELINE_STAGE_ORDER.indexOf(status?.progressStage)
+        const timelineStages = runUsesStoryBrain(status?.format)
+          ? AUTO_PIPELINE_TIMELINE_STAGES
+          : AUTO_PIPELINE_TIMELINE_STAGES.filter((stage) => !STORY_BRAIN_STAGES.includes(stage))
         const stageState = (stage) => {
           if (status?.status === 'completed') return 'done'
+          if (status?.status === 'awaiting_approval' && stage === 'story-bible') return 'current'
           const index = AUTO_PIPELINE_STAGE_ORDER.indexOf(stage)
           if (index < currentIndex) return 'done'
           if (index === currentIndex) return status?.status === 'failed' ? 'failed' : 'current'
@@ -2390,6 +2528,8 @@ function FloatingAgentWidget({ currentUser, t, onRunCompleted, onOpenProject }) 
         const statusLabel = status?.status === 'running' ? t.floatingAgentStatusWorking
           : status?.status === 'completed' ? t.floatingAgentStageNames.done
           : status?.status === 'failed' ? t.floatingAgentStatusStopped
+          : status?.status === 'awaiting_approval' ? t.floatingAgentStatusAwaiting
+          : status?.status === 'approved' ? t.floatingAgentStatusApproved
           : null
 
         return (
@@ -2460,6 +2600,31 @@ function FloatingAgentWidget({ currentUser, t, onRunCompleted, onOpenProject }) 
                   </div>
                 )}
 
+                {(status.status === 'awaiting_approval' || status.status === 'approved') && status.storyBible && (
+                  <div className="floating-agent-done story-bible-block">
+                    <p className="floating-agent-done-title">{status.status === 'approved' ? t.bibleApprovedLabel : t.bibleReadyLabel}</p>
+                    <StoryBibleSummary bible={status.storyBible} t={t} />
+                    <a className="cancel-button floating-agent-download" href={`${BACKEND_URL}/api/auto-pipeline/${runId}/story-bible`} target="_blank" rel="noreferrer">
+                      {t.bibleOpenFullButton}
+                    </a>
+                    {status.status === 'awaiting_approval' && (
+                      <>
+                        <button type="button" className="choose-button" onClick={() => handleBibleAction('approve')} disabled={isSendingBible}>
+                          {t.bibleApproveButton}
+                        </button>
+                        <MicTextarea placeholder={t.bibleNotePlaceholder} value={bibleNote} onChange={(e) => setBibleNote(e.target.value)} />
+                        <button type="button" className="cancel-button" onClick={() => handleBibleAction('note')} disabled={isSendingBible || !bibleNote.trim()}>
+                          {isSendingBible ? t.bibleSending : t.bibleSendNoteButton}
+                        </button>
+                      </>
+                    )}
+                    {errorMessage && <p className="feedback-note">{errorMessage}</p>}
+                    <button type="button" className="cancel-button" onClick={handleStartNew}>
+                      {t.floatingAgentNewRunButton}
+                    </button>
+                  </div>
+                )}
+
                 {status.status === 'completed' && (
                   <div className="floating-agent-done">
                     <p className="floating-agent-done-title">
@@ -2512,7 +2677,7 @@ function FloatingAgentWidget({ currentUser, t, onRunCompleted, onOpenProject }) 
                 <div className="floating-agent-section">
                   <p className="floating-agent-section-title">{t.floatingAgentTimelineTitle}</p>
                   <ol className="floating-agent-timeline">
-                    {AUTO_PIPELINE_TIMELINE_STAGES.map((stage) => {
+                    {timelineStages.map((stage) => {
                       const state = stageState(stage)
                       // The script editor scores each sequence separately, so
                       // one "best" number would hide the weaker sequences.

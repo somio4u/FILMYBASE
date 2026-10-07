@@ -15,6 +15,7 @@
 Rounds: v1 (6/8/9) → v2 (6/6/8) → v3 (8/8/8)
 
 **Problems still open:**
+
 - **[major] Story doctor — Episode 1, Ending hook:** Soumya wakes up with a blister that mirrors the victim's internal burn, and his fingers smell of Jhuna resin. This is a massive giveaway. The user's prompt specifically mandates that the audience must not know Soumya is the killer until the twist. Any viewer watching a psychological horror will immediately connect his matching wound to him committing the murder in his sleep, ruining the Episode 6 reveal. *Fix:* Remove the matching blister and the smell of Jhuna resin. Have Soumya wake up simply feeling inexplicably exhausted with intense muscle aches (which he dismisses as sleeping on a terrible clinic cot) and maybe finding local red dust on his shoes, which he assumes is just from walking around the village.
 - **[major] Story doctor — Episode 7, Clue (earned):** Soumya uses the chisel to 'pry deeper into the temple stones' and finds contractor Deba's 2009 ledger. This makes no logical sense. First, the Pujari died the day after the theft; why would he have Deba's financial ledger to hide? Second, Soumya already opened this exact hiding spot in Episode 4 to find the jewelry box. Prying 'deeper' into the same hole three episodes later feels highly contrived. *Fix:* Change the location of the ledger. When Soumya is hunted by the mob, he breaks into Deba's abandoned, sealed construction office in the temple courtyard using the heavy chisel to smash the door lock or a small lockbox, discovering the ledger that proves Balaram paid Deba on the exact night of the theft.
 - **[major] Story doctor — Episode 6, Cold open:** IIC Meera examines the corpse of the drowned police chief and finds the surgical incisions behind his ears. However, the police chief was murdered back in Episode 4. A two-episode delay for a police inspector to examine the murdered body of a former police chief breaks procedural plausibility. *Fix:* Have the local village doctor (in Balaram's pocket) quickly rule it an accidental drowning in Episode 4. In Episode 6, Meera receives the delayed official forensic autopsy report she secretly ordered from the district hospital, which flags the microscopic, expert surgical cuts that the local doctor missed.
@@ -44,6 +45,7 @@ Fifteen years ago, ambitious local politician Balaram Rout orchestrated the thef
 - **April 2024 (Start of Series):** Soumya returns to Rambhadipur to run a free health camp, unaware that at night his body is hunting down his father's killers.
 
 **Who knows what at the start:**
+
 - **Dr. Soumya Dash:** Thinks his father died in a random communal riot. He believes he is just suffering from severe exhaustion and heavy sleep, completely unaware of his violent night-terrors.
 - **Balaram Rout:** Knows he orchestrated the theft and murder, and hides the stolen diamond eyes in a secret vault.
 - **Deba:** Knows he physically stole the eyes and struck the first blow against the Pujari.
@@ -126,30 +128,35 @@ Fifteen years ago, ambitious local politician Balaram Rout orchestrated the thef
 ## 4. Facts sheet
 
 **Jobs and money:**
+
 - Dr. Soumya earns a lucrative salary at a private city hospital but carries a heavy mortgage, leaving him with little liquid cash.
 - Balaram Rout possesses massive untraceable cash reserves hidden in agricultural fronts, allowing him to buy off local authorities.
 - Rambhadipur's economy is entirely dependent on Balaram's construction jobs and seasonal farming, making the villagers fearful of crossing him.
 - IIC Meera operates out of an underfunded rural Rambhadipur Police Station, lacking the forensic resources of city police.
 
 **Health:**
+
 - Soumya suffers from severe repressed trauma that manifests as what he thinks is extreme exhaustion, but is actually an unknown parasomnia state where his mind is suppressed.
 - The victims die from bizarre trauma mimicking Danda Nata penances, but are actually executed via Soumya's terrifying medical precision (e.g., corrosive clinical chemicals to simulate internal fire, or severed vocal cord nerves causing dry drowning).
 - Sulochana died of a sudden, severe stroke, which acted as the psychological trigger for Soumya's repressed memories.
 - Due to his medical training, Soumya has high physical stamina and anatomical knowledge, which the Goddess utilizes to enact precise, lethal justice.
 
 **Belongings and vehicles:**
+
 - Soumya drives a mid-range, heavily financed SUV that stands out awkwardly in the dusty village streets.
 - Balaram travels in a convoy of matching white Scorpios, symbolizing his political dominance and intimidation.
 - Kavita carries a sealed pre-filled syringe (PFS) of Midazolam, a highly restricted city medical supply.
 - Balaram wields a prominent silver-headed walking stick that he uses aggressively to point and intimidate the villagers.
 
 **Places:**
+
 - Rambhadipur is a sweltering, drought-prone village characterized by red dust, intense heat, and narrow, claustrophobic lanes.
 - The old Kali temple is half-ruined, overgrown with banyan roots, and houses a terrifying, eyeless idol of the Goddess shrouded in darkness.
 - The village clinic is a dusty, poorly lit two-room concrete structure with flickering tube lights and a rusty examination table.
 - Soumya's apartment in Bhubaneswar is sleek, sterile, and heavily air-conditioned, representing the safe, modern world he is forced to abandon.
 
 **Rules of this world:**
+
 - The Goddess cannot manifest as a ghost or floating spirit; she strictly requires a traumatized human blood-vessel from the Pujari's lineage to affect the physical world.
 - The possession can only occur when the vessel's conscious mind is completely suppressed, which happens during Soumya's deep sleeping states.
 - Supernatural vengeance adheres strictly to the rules of karma and the specific rituals of the Danda Nata (Dhuli Danda for greed, Pani Danda for deceit).
@@ -167,6 +174,7 @@ Fifteen years ago, ambitious local politician Balaram Rout orchestrated the thef
 **The cost:** He permanently breaks his medical oath, becomes a wanted fugitive on the run, loses his modern life and fiancée, and accepts his fate as the eternal, unwilling vessel of Kali Mata.
 
 **Payoffs that fire:**
+
 - Kavita's Pre-Filled Syringe (PFS) of Midazolam.
 - Sulochana's cassette tape fable about the Demon King's silver leg.
 - The Danda Nata Jhuna (flammable resin) throwing ritual.

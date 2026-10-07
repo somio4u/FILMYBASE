@@ -552,12 +552,12 @@ export function storyBibleToMarkdown(bible, usage) {
     Object.entries(r.reports).forEach(([key, report]) => lines.push(`| ${labels[key]} | ${report.score}/10 | ${report.verdict} |`));
     lines.push("", `Rounds: ${r.history.map((h) => `v${h.version} (${Object.values(h.scores).join("/")})`).join(" → ")}`, "");
     const open = Object.entries(r.reports).flatMap(([key, report]) => report.problems.filter((x) => x.severity !== "minor").map((x) => `- **[${x.severity}] ${labels[key]} — ${x.where}:** ${x.problem} *Fix:* ${x.fix}`));
-    if (open.length) lines.push("**Problems still open:**", ...open, "");
+    if (open.length) lines.push("**Problems still open:**", "", ...open, "");
   }
   lines.push("## 1. The promise", "", `**Logline:** ${p.logline}`, "", `**The question that keeps people watching:** ${p.centralQuestion}`, "", `**What the audience is paying for:** ${p.genrePromise}`, "", `**Why "wow":** ${p.whyWow}`, "");
   lines.push("## 2. The hidden truth", "", bible.hiddenTruth.summary, "");
   bible.hiddenTruth.timeline.forEach((t) => lines.push(`- **${t.when}:** ${t.event}`));
-  lines.push("", "**Who knows what at the start:**");
+  lines.push("", "**Who knows what at the start:**", "");
   bible.hiddenTruth.whoKnowsWhat.forEach((k) => lines.push(`- **${k.character}:** ${k.knows}`));
   lines.push("", "## 3. Characters", "");
   bible.characters.forEach((c) => {
@@ -568,12 +568,12 @@ export function storyBibleToMarkdown(bible, usage) {
   lines.push("## 4. Facts sheet", "");
   const factGroups = { jobsAndMoney: "Jobs and money", healthAndBodies: "Health", belongingsAndVehicles: "Belongings and vehicles", places: "Places", worldRules: "Rules of this world" };
   Object.entries(factGroups).forEach(([key, label]) => {
-    lines.push(`**${label}:**`);
+    lines.push(`**${label}:**`, "");
     (bible.facts[key] ?? []).forEach((f) => lines.push(`- ${f}`));
     lines.push("");
   });
   const c = bible.climax;
-  lines.push("## 5. The climax (designed first)", "", `**Where/when:** ${c.setting}`, "", `**The reversal:** ${c.reversal}`, "", `**The hero's choice:** ${c.heroChoice}`, "", `**The cost:** ${c.cost}`, "", "**Payoffs that fire:**");
+  lines.push("## 5. The climax (designed first)", "", `**Where/when:** ${c.setting}`, "", `**The reversal:** ${c.reversal}`, "", `**The hero's choice:** ${c.heroChoice}`, "", `**The cost:** ${c.cost}`, "", "**Payoffs that fire:**", "");
   c.payoffs.forEach((x) => lines.push(`- ${x}`));
   lines.push("", `**Final image:** ${c.finalImage}`, "", `**Why "wow":** ${c.whyWow}`, "", `**After:** ${c.resolution}`, "");
   lines.push("## 6. Setups and payoffs", "", "| Setup | Planted | Payoff | Paid off |", "|---|---|---|---|");

@@ -15,6 +15,7 @@
 Rounds: v1 (8/6/6) → v2 (8/8/8) → v3 (7/8/6) → v4 (7/6/7)
 
 **Problems still open:**
+
 - **[major] Story doctor — Facts (Rules) and Sequence 8:** The rules state 'no ordinary person is allowed within 100 feet of the chariots'. If the crowd is 100 feet away, Babulu throwing his money 'slightly outside the inner cordon' lands the cash in a massive empty exclusion zone. The crowd wouldn't be able to reach it, let alone surge powerfully enough to force the NSG into a protective huddle over 100 scattered notes. *Fix:* Reduce the exclusion zone to 15-20 feet. Babulu (disguised as a servitor) throws the money directly over the heads of the outer police ring into the hyper-pressurized front rows of devotees. This causes a sudden, violent scramble that ripples into a crowd collapse against the barricades, triggering the NSG protocol.
 - **[major] Story doctor — Sequence 1 and Facts:** Soumya drops the phone with auto-lock disabled, and the screen actively looping the murder video. If Babulu steals it 'Two hours into Rath Yatra', the phone screen would have been intensely glowing inside a bag for two hours, draining the 40% battery to zero and likely alerting the pilgrim. *Fix:* Tighten the timeline. Babulu must steal the phone within 15-20 minutes of Soumya dropping it in the cold open. This preserves the phone's battery life and the ticking-clock tension for the rest of the film.
 - **[major] Story doctor — Sequence 1 / Cold Open:** DCP Rudra is a high-ranking, calculating syndicate boss who wears an impeccably ironed uniform. It is highly implausible and unnecessarily risky for him to personally physically tackle and stab a man in the middle of a massive morning crowd. *Fix:* Have a plainclothes hitman tackle and stab Soumya on Rudra's radio orders. Soumya's dying video still captures the hitman's face and links to the prior video of Rudra committing murder in the warehouse, keeping Rudra as the mastermind without making him a street brawler.
@@ -46,6 +47,7 @@ DCP Rudra Pratap, the Chief of Puri Police, has been running a massive, illegal 
 - **Two hours into Rath Yatra:** Babulu, working the crowd on Bada Danda, pickpockets the pilgrim's bag, acquiring the phone.
 
 **Who knows what at the start:**
+
 - **DCP Rudra Pratap:** He killed Soumya but the phone is missing. He knows the phone's MAC address and uses the festival watchtowers and IMSI catchers to track it.
 - **Babulu:** Discovers the murder video after stealing the phone, realizing the voice booming over the festival loudspeakers belongs to the killer.
 - **Gouri (The Pilgrim):** Nothing. She doesn't even realize a bleeding man dropped a phone in her bag, nor that Babulu stole it later.
@@ -118,26 +120,31 @@ DCP Rudra Pratap, the Chief of Puri Police, has been running a massive, illegal 
 ## 4. Facts sheet
 
 **Jobs and money:**
+
 - Pickpockets operate entirely in cash; Babulu's life savings (50,000 rupees) are entirely in 500-rupee notes.
 - DCP Rudra has off-the-books bank accounts but uses untraceable temple donation cash to pay his hitmen.
 - The local street vendors pay a protection fee to the police, which Babulu exploits to blend in behind their stalls.
 
 **Health:**
+
 - The extreme July humidity of Puri causes rapid dehydration; running through the dense crowd exhausts stamina quickly.
 - Soumya (the victim) died from a ruptured femoral artery; the blood on the phone case matches his DNA.
 - Baya Mamu's missing fingers mean he cannot execute complex sleight of hand anymore, forcing Babulu to do it.
 
 **Belongings and vehicles:**
+
 - The stolen phone has an encrypted screen but Babulu bypassed it because Soumya turned off auto-lock while recording his death.
 - The phone battery starts at 40% and ticks down in real-time throughout the movie, adding a relentless deadline.
 - Police vehicles cannot move through Bada Danda due to the million-person crowd; Rudra's men must pursue on foot.
 
 **Places:**
+
 - Bada Danda: The three-kilometer Grand Road where the chariots are pulled. A sea of a million people, claustrophobic and loud.
 - The Watchtowers: Elevated police platforms with sniper views and CCTV feeds, making stealth incredibly difficult.
 - The VVIP Dais: An elevated, heavily fortified viewing stage next to the chariot cordon during Chhera Pahanra, guarded by NSG commandos.
 
 **Rules of this world:**
+
 - There is no supernatural magic; survival depends entirely on analog street smarts, crowd physics, and physical sleight of hand.
 - Mobile networks and internet are completely shut down across Bada Danda because DCP Rudra declared a fake 'bomb threat' to lock the grid, meaning the video cannot be uploaded anywhere in the city.
 - During the Chhera Pahanra (chariot sweeping ritual), no ordinary person is allowed within 100 feet of the chariots, making physical approach to the Chief Minister seemingly impossible without a massive diversion.
@@ -153,6 +160,7 @@ DCP Rudra Pratap, the Chief of Puri Police, has been running a massive, illegal 
 **The cost:** He permanently loses his ticket to a clean life in Mumbai, trapping himself in the chaotic, dangerous streets of Puri forever.
 
 **Payoffs that fire:**
+
 - Babulu's hidden stash of 500-rupee notes.
 - Baya Mamu's lesson on reverse-pickpocketing ('giving is magic').
 - Soumya disabling the phone's auto-lock, keeping the screen alive despite the draining battery.

@@ -24,6 +24,7 @@ Fifteen years ago, ambitious local politician Balaram Rout orchestrated the thef
 - **April 2024 (Start of Series):** Soumya returns to Rambhadipur to run a free health camp, unaware that at night he is hunting down his father's killers.
 
 **Who knows what at the start:**
+
 - **Dr. Soumya Dash:** Thinks his father died in a random communal riot and believes his grandmother's stories were just folklore. He hides his severe sleepwalking condition from his colleagues.
 - **Balaram Rout:** Knows he orchestrated the theft and murder, and hides the stolen diamond eyes in a secret vault.
 - **Deba:** Knows he physically stole the eyes and struck the first blow against the Pujari.
@@ -106,30 +107,35 @@ Fifteen years ago, ambitious local politician Balaram Rout orchestrated the thef
 ## 4. Facts sheet
 
 **Jobs and money:**
+
 - Dr. Soumya earns a lucrative salary at a private city hospital but carries a heavy mortgage, leaving him with little liquid cash.
 - Balaram Rout possesses massive untraceable cash reserves hidden in agricultural fronts, allowing him to buy off local authorities.
 - Rambhadipur's economy is entirely dependent on Balaram's construction jobs and seasonal farming, making the villagers fearful of crossing him.
 - The local clinic is severely underfunded, relying on expired medicines and donations, prompting Soumya to fund it out of pocket.
 
 **Health:**
+
 - Soumya suffers from severe clinical parasomnia (sleepwalking) triggered by extreme stress; his body moves fluidly while his mind is completely unconscious.
 - The victims die from bizarre, medically inexplicable trauma mimicking Danda Nata penances, such as internal blistering without external fire, or drowning with dry lungs.
 - Sulochana died of a sudden, severe stroke, which acted as the psychological trigger for Soumya's repressed memories.
 - Due to his medical training, Soumya has high physical stamina and anatomical knowledge, which the Goddess utilizes to enact precise, lethal justice.
 
 **Belongings and vehicles:**
+
 - Soumya drives a mid-range, heavily financed SUV that stands out awkwardly in the dusty village streets.
 - Balaram travels in a convoy of matching white Scorpios, symbolizing his political dominance and intimidation.
 - Sulochana left behind a locked wooden box containing old cassette tapes and a rusted brass key to the temple's forgotten back door.
 - The local clinic lacks a working ambulance, forcing characters to rely on personal vehicles for emergency transport.
 
 **Places:**
+
 - Rambhadipur is a sweltering, drought-prone village characterized by red dust, intense heat, and narrow, claustrophobic lanes.
 - The old Kali temple is half-ruined, overgrown with banyan roots, and houses a terrifying, eyeless idol of the Goddess shrouded in darkness.
 - The village clinic is a dusty, poorly lit two-room concrete structure with flickering tube lights and a rusty examination table.
 - Soumya's apartment in Bhubaneswar is sleek, sterile, and heavily air-conditioned, representing the safe, modern world he is forced to abandon.
 
 **Rules of this world:**
+
 - The Goddess cannot manifest as a ghost or floating spirit; she strictly requires a willing or traumatized human blood-vessel from the Pujari's lineage to affect the physical world.
 - The possession can only occur when the vessel's conscious mind is completely suppressed, which happens during Soumya's deep sleepwalking states.
 - Supernatural vengeance adheres strictly to the rules of karma and the specific rituals of the Danda Nata (Dhuli Danda for greed, Pani Danda for deceit), meaning the Goddess cannot just strike someone down randomly.
@@ -146,6 +152,7 @@ Fifteen years ago, ambitious local politician Balaram Rout orchestrated the thef
 **The cost:** He permanently breaks his medical oath, becomes a wanted fugitive on the run, loses his modern life and fiancee, and accepts his fate as the eternal, unwilling vessel of Kali Mata.
 
 **Payoffs that fire:**
+
 - Kavita's psychiatric sedative syringe.
 - Sulochana's cassette tape fable about the Demon King's silver leg.
 - The Danda Nata Jhuna (flammable resin) throwing ritual.

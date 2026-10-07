@@ -384,7 +384,8 @@ function brainAsker(usage, onProgress = () => {}) {
 export const BIBLE_PASS_SCORE = 8;
 const MAX_BIBLE_REVISIONS = 3;
 
-const SCORE_SCALE = `SCORE HONESTLY on this scale: 10 = a masterpiece; 9 = exceptional; 8 = strong — a demanding producer would greenlight it as it stands; 7 = good but with clear flaws; 6 = average; 5 or below = weak. Any BLOCKER means the score is at most 6. Never inflate: the writers improve only when you are strict and specific.`;
+const SCORE_SCALE = `SCORE HONESTLY on this scale: 10 = a masterpiece; 9 = exceptional; 8 = strong — a demanding producer would greenlight it as it stands; 7 = good but with clear flaws; 6 = average; 5 or below = weak. Never inflate: the writers improve only when you are strict and specific.
+SEVERITY: BLOCKER = it breaks the premise, the user's idea, the central mystery or the climax, and can't be fixed without redesigning a big part of the story (any blocker means the score is at most 6). MAJOR = a real hole or weakness that a focused change can fix (e.g. a contradiction one detail resolves, an unearned clue, a weak hook). MINOR = polish.`;
 
 const CRITIC_SCHEMA = OBJ({
   score: { type: "INTEGER", description: "0-10 on the given scale." },
@@ -486,6 +487,7 @@ function criticNotesText(check) {
 export async function reviewAndImproveBible(bible, { ask, onProgress = () => {}, usage } = {}) {
   ask ??= brainAsker(usage ?? newUsage(), onProgress);
   const history = [];
+  const earlierNotes = [];
   let current = bible;
   let best = null;
 
@@ -499,8 +501,16 @@ export async function reviewAndImproveBible(bible, { ask, onProgress = () => {},
 
     const revised = await ask(
       `Head writer revises (version ${round + 1})`,
-      `THE USER'S IDEA (keep every fixed point):\n${current.idea}\n\nFORMAT: ${current.units.label}.\n\nYOUR CURRENT STORY BIBLE:\n${storyBibleToMarkdown({ ...current, pitchRoom: null, review: null })}\n\nTHREE CRITICS HAVE READ IT:\n${criticNotesText(check)}\n\nRevise the whole Story Bible. Fix EVERY blocker and major problem, and the minor ones where you can — not with patches, but by redesigning whatever is needed so the story is genuinely better. Keep everything the critics praised. Keep every fixed point of the user's idea. Keep it one coherent design: the hidden truth, facts sheet, climax, setups and every ${current.units.kind} must agree with each other. Return the complete revised Bible with exactly ${current.units.count} ${current.units.kind}s.`,
+      `THE USER'S IDEA (keep every fixed point):\n${current.idea}\n\nFORMAT: ${current.units.label}.\n\nYOUR CURRENT STORY BIBLE:\n${storyBibleToMarkdown({ ...current, pitchRoom: null, review: null })}\n\nTHREE CRITICS HAVE READ IT:\n${criticNotesText(check)}\n\n${earlierNotes.length ? `PROBLEMS FROM EARLIER ROUNDS (already fixed — never bring any of them back):\n${earlierNotes.join("\n")}\n\n` : ""}Revise the Story Bible like a careful head writer:
+- Fix EVERY blocker and major problem, and the minor ones where you can. For a blocker, redesign the part of the story it breaks; for anything else, make the smallest change that truly fixes it.
+- CHANGE NOTHING ELSE: every part the critics didn't flag stays as it is, word for word where possible. Every rewrite risks new holes.
+- Before you finish, check every new or changed detail against the facts sheet, the rules of this world, the hidden truth, the timeline and every other ${current.units.kind}: who has which object, who knows what and when, what is physically, legally and technically possible, and what is culturally right. If a fix needs a new fact, add it to the facts sheet.
+- Keep everything the critics praised and every fixed point of the user's idea.
+Return the complete revised Bible with exactly ${current.units.count} ${current.units.kind}s.`,
       REVISED_BIBLE_SCHEMA
+    );
+    earlierNotes.push(
+      ...CRITICS.flatMap((critic) => check.reports[critic.key].problems.filter((p) => p.severity !== "minor").map((p) => `- (round ${round}) ${p.where}: ${p.problem}`))
     );
     current = {
       ...current,

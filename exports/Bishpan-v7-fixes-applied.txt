@@ -1,0 +1,44 @@
+FIXES TO APPLY (from two script reviews of this scene list). Scene references are episode.scene, e.g. 4.2.
+
+THE SEDATION RULE AND THE MIDAZOLAM
+1. State the rule: on Sulochana's last tape she says it plainly — "when he sleeps, SHE comes" (the Goddess takes his body when his mind is asleep). The tape is the key to the rule, not a vague "she tells the whole truth".
+2. Kavita's pills: in 3.x (the phone call) Kavita tells Soumya to take the sleeping pills she gave him for his insomnia. In 4.2 he takes "Kavita's pills" — and the pill must WORK: we see his eyes glaze, he lies down, then (asleep) gets up with the torch. Never "takes a pill and marches out".
+3. The midazolam: Soumya pockets Kavita's midazolam in 5.7 and KEEPS it; it is never back in her bag. In 6.x Kavita's line "I gave him the key" lands because her pills (episode 4) were the key that let the Goddess in — she realises it when she hears the tape's rule.
+4. Kavita is the off-screen lab before she arrives: the tox report (1.9) and the soil/forensic report (2.8) come from Kavita, whom Soumya sends samples to (a phone call or a courier). This sets her up before 5.1 and explains her equipment.
+
+THE BIG REVEALS
+5. Split 6.3 into two scenes: first the FOOTAGE (proof), then the TAPE (meaning). Never stacked.
+6. The camera is on the EXTERIOR wall: the footage shows 2 a.m., Soumya climbing out of the window, the scalpel in his LEFT hand, walking wrongly (jerky, unnatural). Never "making cuts".
+7. The smartwatch: it records heart rate and steps only (no GPS). Kavita does NOT hand Meera incriminating data. In episode 5 she shows the smartwatch as a DEFENCE ("someone drugged him at these times — his heart rate spikes while he should be asleep") and in 6.x it flips into her own accusation when she lines up the times with the murders.
+8. Soumya must be AT Ratan's body at the pond (4.4): he has two coins in his pocket and sees the third in a dead man's mouth — the collision the middle builds to. (Meera can be there too.) Do NOT repeat the coin-from-Ratan beat in episode 6.
+
+THE CLIMAX (EPISODE 8)
+9. One continuous courtyard for the climax (8.2–8.5): the Meru fire brazier is in the courtyard. The sanctum appears only for restoring the eyes (8.8).
+10. The sanctum has been sealed since 2009 — Sulochana's box (with the last tape, 5.8) also holds the old SANCTUM KEY. Plant it; use it in 8.8.
+11. The injection: the goons are holding his arms, so give him the moment — Balaram, enjoying it, orders them to let go ("let him beg the village"); Soumya pulls the syringe and injects his own THIGH/arm while holding Balaram's eyes. The midazolam makes his body limp; the Goddess moves the limp body like a puppet — jerky, unnatural.
+12. Split the cane/diamonds/fire beat (8.4) into separate short beats: (a) the limp body catches the cane, (b) the cane snaps and the diamond eyes spill, (c) the burning Jhuna brazier engulfs Balaram (Agni Danda). The mob turns when the eyes spill (they see who desecrated Kali).
+13. Meera: she does NOT tear the warrant. She holsters her gun and KEEPS the warrant (the law still owes him), lets him walk. This matches the ending, where he is a fugitive.
+14. The final shadow stays AMBIGUOUS: torchlight and dust that might be many arms — or might not.
+
+CONTINUITY
+15. Madhab: when Meera stamps the warrant (6.x) she also unlocks Madhab's cell — one shot — so he can be at the river in 7.5.
+16. Ratan's body after the pond goes to the block mortuary (any later scene with it is slugged MORTUARY).
+17. The clinic is sealed in 5.6; after that, scenes are at the Pujari house (Soumya hides in the house his father was dragged out of), not the clinic.
+18. The idol: 1.2 is at the TEMPLE GATE (the eyeless idol seen through the gate), consistent with the sanctum later.
+19. Balaram's planted knife (7.6): it is the knife meant to be "found" on Soumya's corpse after the lynching. Meera's video is therefore proof of a PLANNED MURDER — and she uses it (it is why the warrant is never served and why Balaram's men cannot touch her).
+20. Restore the LOTUS carving: in 4.1 (flashback) young Soumya under the cot sees a carved lotus on the floor where his grandmother hides something; in 4.3 he finds the same lotus and digs there.
+21. Restore one QUIET minute in 7.x: after bolting the temple door, Soumya alone with the eyeless idol in the dark, before the first axe blow.
+22. The cane is Balaram's signature: show it also in 3.2, 5.6 and 7.1.
+23. Makara alive: 30 seconds in episode 2 before his death (like Ratan drinking with the photo).
+24. Meera earlier: one beat in episode 1 — the police post is empty or Meera arrives too late to stop the body being taken (choose one and show it).
+25. Motivate 2.2: something sends Soumya to the storeroom (Ratan's drunken words, the tape, or the coin's temple mark). Avoid a third "break in and find" — vary how he finds things.
+26. Episode 3: put the phone call before the SD-card scene and END the episode on 3.x where he pockets the card without watching it. Rename the episode if needed so the title fits its content.
+27. Merge repeated places: the three consecutive barricade scenes (4.8–4.10) and the two consecutive police-station scenes (3.7–3.8) become fewer, fuller scenes.
+28. Mirror cliché (6.4): replace with an action — e.g. he picks up a scalpel in his LEFT hand and it moves perfectly.
+29. 2.10: he says he is being framed TO someone (Kavita on the phone), not to himself.
+
+TONE, LANGUAGE AND TIME
+30. Halve the shouting: dread, not volume — most lines are spoken low; keep shouting only where it truly belongs (the mob, the climax).
+31. Honest durations: pulling an SD card is 1 minute, not 2; the climax beats get real time. Use the freed minutes for the new beats above. EACH EPISODE MUST STILL TOTAL 20 MINUTES (within 1) — the series totals 160 minutes.
+32. Odia: natural spoken Odia (no bookish words: not ଶଯ୍ୟାଶାୟୀ but ବିଛଣା ଧରିଥିବା; not ଚିରା ଲଗାଉଛି but କାଟୁଛି); the coin is always ମୁଦ୍ରା; names always ରାମଭଦ୍ରପୁର, ବଳରାମ, କବିତା, ମୀରା, ସୌମ୍ୟ, ସୁଲୋଚନା; "calls out the names" = ନାଁ ଡାକେ (never ନାଁ ଧରେ); state highway = ରାଜ୍ୟ ରାଜପଥ.
+33. E1S9 should not point straight at him: the burn on his hand has an innocent explanation in the moment (he touched the burnt body) — only later does it look impossible.

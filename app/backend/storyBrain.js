@@ -152,7 +152,13 @@ const STORY_CRAFT = `HOW GREAT SCREEN STORIES WORK — follow every rule:
 - CHARACTERS ARE PEOPLE, NOT SLOTS: each main character has a want, a need, a secret, a lie they believe, and at least one moment where THEY change the plot. The villain has a plan and makes a move in every episode, believing he is right.
 - REAL-WORLD LOGIC: money, jobs, health, belongings, distances and who-knows-what stay consistent. A well-paid professional doesn't suddenly go broke; a bedridden patient doesn't walk; nobody turns up somewhere without a reason the audience knows.
 - FRESHNESS: avoid stock tropes (blackouts, staring into mirrors, glowing eyes, throbbing marks, a villain confessing in public, a convenient diary explaining everything) unless given a genuinely new twist.
-- CULTURE AS ENGINE: real local festivals, rituals, beliefs, places and social structures DRIVE the plot and the set pieces — they are never just background.`;
+- CULTURE AS ENGINE: real local festivals, rituals, beliefs, places and social structures DRIVE the plot and the set pieces — they are never just background.
+- NOTHING DANGLES: every object, document, clue and named character the story introduces either pays off later or is cut. A clue the hero finds must DO something.
+- THE PAST HAS NAMES: everyone involved in the backstory crime is a named person with a fate in the story; when the story punishes or exposes people, the audience knows exactly who they are and why they are next.
+- TURNING POINTS ARE SCENES: a character's big decision, and the cost of a big event (grief, guilt, fear), each get a moment on screen — never happen between scenes.
+- DISCOVERIES OPEN QUESTIONS: in a mystery each answer the investigation finds opens a new, bigger question or impossibility; it never just confirms what we knew.
+- EVERY WITNESS REACTS: in a big public scene (a climax in front of a crowd, guards, police), everyone present reacts in a believable way — explain why no one intervenes, and let a crowd turn when the truth comes out.
+- VISUAL VARIETY: vary places and day/night across each episode; no episode stays in one room or one time of day.`;
 
 const STORY_BRAIN_SYSTEM = `You are the head writer of a top writers' room, designing a story for Odia (Odisha) cinema and web series — a master of hooks, mysteries, character and unforgettable climaxes, rooted in authentic Odisha culture (Ollywood sensibility, not generic Hollywood).
 
@@ -206,7 +212,15 @@ const TRUTH_SCHEMA = OBJ({
     summary: S("What REALLY happened before the story starts, and why — the truth the story slowly reveals."),
     timeline: LIST(OBJ({ when: S("When."), event: S("What happened.") }), "The backstory events in order."),
     whoKnowsWhat: LIST(OBJ({ character: S("Name."), knows: S("What they know or hide at the start.") })),
+    participants: LIST(
+      OBJ({ name: S("Name."), part: S("What they did in the backstory crime."), fate: S("What happens to them in the story, and in which episode / sequence.") }),
+      "EVERY person involved in the backstory crime, by name."
+    ),
   }),
+  namesInOdia: LIST(
+    OBJ({ name: S("The name as written in English."), odia: S("The one fixed spelling in Odia script.") }),
+    "Every character and place name, with its single fixed Odia spelling."
+  ),
   characters: LIST(
     OBJ({
       name: S("Name — every character has a different name."),
@@ -270,6 +284,8 @@ const BLUEPRINT_SCHEMA = OBJ({
       setPiece: S("The memorable sequence, rooted in real local culture."),
       sideStory: S("What another main character is pursuing."),
       turn: S("The midpoint turn."),
+      decisionMoment: S("The on-screen moment where a character makes this episode's key choice."),
+      emotionalBeat: S("The moment a character feels the cost of what happened (grief, guilt, fear) — given room on screen."),
       endingHook: S("How it ends — the hook into the next."),
       plants: LIST(S("Setups planted here.")),
       payoffs: LIST(S("Setups paid off here.")),
@@ -313,7 +329,7 @@ export async function designStoryBible(idea, format, { onProgress = () => {} } =
   // 2. Truth first: what really happened, who these people are, and the facts.
   const truth = await ask(
     "Hidden truth, characters and facts",
-    `${ideaBlock}\n\nTHE CHOSEN DIRECTION:\n${chosenText}\n\nDesign the foundation before any episode is planned:\n- The HIDDEN TRUTH: what really happened before the story starts, as a timeline, and who knows what at the start.\n- The MAIN CAST as real people (every name different; ages and relationships fixed for the whole story).\n- The VILLAIN'S PLAN.\n- The FACTS SHEET: jobs and money, health, belongings and vehicles, places, and the rules of this world (including exactly what any supernatural force can and cannot do).`,
+    `${ideaBlock}\n\nTHE CHOSEN DIRECTION:\n${chosenText}\n\nDesign the foundation before any episode is planned:\n- The HIDDEN TRUTH: what really happened before the story starts, as a timeline, and who knows what at the start.\n- The MAIN CAST as real people (every name different; ages and relationships fixed for the whole story).\n- EVERY PARTICIPANT in the backstory crime, by name, with their fate in the story.\n- The ONE fixed Odia spelling of every character and place name.\n- The VILLAIN'S PLAN.\n- The FACTS SHEET: jobs and money, health, belongings and vehicles, places, and the rules of this world (including exactly what any supernatural force can and cannot do).`,
     TRUTH_SCHEMA
   );
   const foundation = `HIDDEN TRUTH: ${truth.hiddenTruth.summary}\nTIMELINE:\n${truth.hiddenTruth.timeline.map((t) => `- ${t.when}: ${t.event}`).join("\n")}\nCAST:\n${truth.characters.map((c) => `- ${characterLine(c)}`).join("\n")}\nVILLAIN'S PLAN: ${truth.villainPlan}\nFACTS:\n${Object.values(truth.facts).flat().map((f) => `- ${f}`).join("\n")}`;
@@ -415,7 +431,13 @@ const CRITICS = [
 5. SETUPS AND PAYOFFS: is every payoff set up earlier, and every setup paid off?
 6. THE VILLAIN: is his plan coherent, and does he act every episode?
 7. REAL-WORLD PLAUSIBILITY: police and legal procedure, medicine, technology, money, distances, time.
-8. THE USER'S IDEA: every fixed point kept? Dropping or changing one is a BLOCKER.`,
+8. THE USER'S IDEA: every fixed point kept? Dropping or changing one is a BLOCKER.
+9. NOTHING DANGLES: list every object, document, clue and named character that is introduced and never pays off (MAJOR each).
+10. THE PAST HAS NAMES: are the people punished or exposed clearly the named participants of the backstory crime, so the audience knows who is next? Anonymous victims are MAJOR.
+11. TURNING POINTS ON SCREEN: is every big decision and every big loss given its own on-screen moment? A decision or grief that happens between scenes is MAJOR.
+12. THE CLIMAX'S WITNESSES: in the climax, does everyone present (crowd, guards, police, allies) react believably — why does no one stop it, and what changes in them? Missing reactions are MAJOR.
+13. TIME AND AGES: do the dates, ages and timeline add up (e.g. how old each character was at the time of the backstory)?
+14. DISCOVERIES: does each discovery open a new question, or does it merely confirm what we knew (MINOR/MAJOR)?`,
   },
   {
     key: "audienceCritic",
@@ -428,7 +450,9 @@ const CRITICS = [
 4. FRESHNESS: stock tropes (blackouts, mirror-staring, glowing eyes, blood from taps, public confessions, convenient diaries) without a new twist are MAJOR.
 5. THE CLIMAX: is it surprising yet inevitable — would people say "wow" and talk about it? A predictable or merely loud climax is MAJOR.
 6. EMOTION: do you care about the hero and his relationships? Does anyone feel like a plot device?
-7. THE FINAL IMAGE: will people remember it?`,
+7. THE FINAL IMAGE: will people remember it?
+8. ROOM TO FEEL: after the biggest shocks (a death, the reveal), does the story give a moment for grief or guilt, or does it rush on?
+9. VARIETY: does any stretch stay in one place or one time of day so long that it looks monotonous?`,
   },
   {
     key: "cultureExpert",
@@ -471,6 +495,7 @@ const REVISED_BIBLE_SCHEMA = OBJ({
   changes: LIST(S("What you changed and which critic's problem it fixes.")),
   promise: OBJ({ title: S("Title."), logline: S("Logline."), centralQuestion: S("Central question."), genrePromise: S("Genre promise."), whyWow: S("Why wow.") }),
   hiddenTruth: TRUTH_SCHEMA.properties.hiddenTruth,
+  namesInOdia: TRUTH_SCHEMA.properties.namesInOdia,
   characters: TRUTH_SCHEMA.properties.characters,
   villainPlan: TRUTH_SCHEMA.properties.villainPlan,
   facts: TRUTH_SCHEMA.properties.facts,
@@ -522,6 +547,7 @@ Return the complete revised Bible with exactly ${current.units.count} ${current.
       ...current,
       promise: revised.promise,
       hiddenTruth: revised.hiddenTruth,
+      namesInOdia: revised.namesInOdia,
       characters: revised.characters,
       villainPlan: revised.villainPlan,
       facts: revised.facts,
@@ -560,6 +586,7 @@ export async function reviseBibleWithNote(bible, note, { onProgress = () => {} }
     ...withNote,
     promise: revised.promise,
     hiddenTruth: revised.hiddenTruth,
+    namesInOdia: revised.namesInOdia,
     characters: revised.characters,
     villainPlan: revised.villainPlan,
     facts: revised.facts,
@@ -594,6 +621,10 @@ export function storyBibleToMarkdown(bible, usage) {
   lines.push("## 1. The promise", "", `**Logline:** ${p.logline}`, "", `**The question that keeps people watching:** ${p.centralQuestion}`, "", `**What the audience is paying for:** ${p.genrePromise}`, "", `**Why "wow":** ${p.whyWow}`, "");
   lines.push("## 2. The hidden truth", "", bible.hiddenTruth.summary, "");
   bible.hiddenTruth.timeline.forEach((t) => lines.push(`- **${t.when}:** ${t.event}`));
+  if (bible.hiddenTruth.participants?.length) {
+    lines.push("", "**Everyone involved in the backstory crime:**", "");
+    bible.hiddenTruth.participants.forEach((x) => lines.push(`- **${x.name}:** ${x.part} → *${x.fate}*`));
+  }
   lines.push("", "**Who knows what at the start:**", "");
   bible.hiddenTruth.whoKnowsWhat.forEach((k) => lines.push(`- **${k.character}:** ${k.knows}`));
   lines.push("", "## 3. Characters", "");
@@ -602,6 +633,9 @@ export function storyBibleToMarkdown(bible, usage) {
     lines.push(`- **Wants:** ${c.want}`, `- **Needs:** ${c.need}`, `- **Secret:** ${c.secret}`, `- **Lie they believe:** ${c.lie}`, `- **Changes the plot when:** ${c.plotMove}`, `- **Arc:** ${c.arc}`, "");
   });
   lines.push(`**The villain's plan:** ${bible.villainPlan}`, "");
+  if (bible.namesInOdia?.length) {
+    lines.push("**Names in Odia (fixed spellings):**", "", ...bible.namesInOdia.map((n) => `- ${n.name} — ${n.odia}`), "");
+  }
   lines.push("## 4. Facts sheet", "");
   const factGroups = { jobsAndMoney: "Jobs and money", healthAndBodies: "Health", belongingsAndVehicles: "Belongings and vehicles", places: "Places", worldRules: "Rules of this world" };
   Object.entries(factGroups).forEach(([key, label]) => {
@@ -618,7 +652,7 @@ export function storyBibleToMarkdown(bible, usage) {
   lines.push("", `## 7. ${bible.units.kind === "episode" ? "Episode" : "Sequence"} blueprints`, "");
   bible.blueprint.forEach((u) => {
     lines.push(`### ${bible.units.kind === "episode" ? "Episode" : "Sequence"} ${u.number}: ${u.title}`, "");
-    lines.push(`- **Cold open:** ${u.coldOpen}`, `- **Question:** ${u.question}`, `- **Hero's move:** ${u.heroMove}`, `- **Villain's move:** ${u.villainMove}`, `- **Clue (earned):** ${u.clue}`, `- **False lead:** ${u.falseLead}`, `- **Hero learns:** ${u.heroLearns}`, `- **Audience learns:** ${u.audienceLearns}`, `- **Set piece:** ${u.setPiece}`, `- **Side story:** ${u.sideStory}`, `- **Turn:** ${u.turn}`, `- **Ending hook:** ${u.endingHook}`);
+    lines.push(`- **Cold open:** ${u.coldOpen}`, `- **Question:** ${u.question}`, `- **Hero's move:** ${u.heroMove}`, `- **Villain's move:** ${u.villainMove}`, `- **Clue (earned):** ${u.clue}`, `- **False lead:** ${u.falseLead}`, `- **Hero learns:** ${u.heroLearns}`, `- **Audience learns:** ${u.audienceLearns}`, `- **Set piece:** ${u.setPiece}`, `- **Side story:** ${u.sideStory}`, `- **Turn:** ${u.turn}`, ...(u.decisionMoment ? [`- **Decision moment:** ${u.decisionMoment}`] : []), ...(u.emotionalBeat ? [`- **Emotional beat:** ${u.emotionalBeat}`] : []), `- **Ending hook:** ${u.endingHook}`);
     if (u.plants?.length) lines.push(`- **Plants:** ${u.plants.join("; ")}`);
     if (u.payoffs?.length) lines.push(`- **Pays off:** ${u.payoffs.join("; ")}`);
     lines.push("");

@@ -20,7 +20,7 @@ import AdmZip from "adm-zip";
 import crypto from "crypto";
 import { AsyncLocalStorage } from "async_hooks";
 import { marked } from "marked";
-import { BIBLE_PASS_SCORE, designStoryBible, reviseBibleWithNote, storyBibleToMarkdown } from "./storyBrain.js";
+import { BIBLE_PASS_SCORE, designStoryBible, generateBrainJson, reviseBibleWithNote, storyBibleToMarkdown } from "./storyBrain.js";
 import cookieParser from "cookie-parser";
 import { createClient } from "@supabase/supabase-js";
 import {
@@ -269,6 +269,11 @@ function castListText(characterSheet) {
     : "";
 }
 
+// The strongest model (Gemini 3.1 Pro) lives on an endpoint the app's old
+// Gemini library can't reach, so calls asking for it go through the Story
+// Brain's own direct access (storyBrain.js), with its 2.5 Pro fallback.
+const SCENE_LIST_STRONG_MODEL_NAME = "gemini-3.1-pro-preview";
+
 async function generateJsonContent(params, { jsonRetries = 3 } = {}) {
   const userIdea = userIdeaContext.getStore();
   if (userIdea && typeof params.contents === "string") {
@@ -276,6 +281,15 @@ async function generateJsonContent(params, { jsonRetries = 3 } = {}) {
       ...params,
       contents: `THE USER'S ORIGINAL IDEA — stay true to every point in it (who the characters are and how they are related, where they live, the twists the user asked for):\n${userIdea}\n\n${params.contents}`,
     };
+  }
+  if (params.model === SCENE_LIST_STRONG_MODEL_NAME) {
+    const { data } = await generateBrainJson({
+      systemInstruction: params.config?.systemInstruction,
+      contents: params.contents,
+      responseSchema: params.config?.responseSchema,
+      label: "Scene list (Gemini 3.1 Pro)",
+    });
+    return data;
   }
   let lastError;
   for (let attempt = 0; attempt <= jsonRetries; attempt++) {
@@ -387,7 +401,7 @@ const FONTS = {
 // ପହଞ୍ଚନ୍ତି, ... ପ୍ରାରମ୍ଭିକ ଭାବେ ଖାରଜ କରି ..." reads like a newspaper, a
 // word-for-word translation of the English. The user's own rewrite is the
 // example below.
-const COLLOQUIAL_LANGUAGE_RULE = `ODIA AND HINDI MUST BE EVERYDAY SPOKEN LANGUAGE: write the Odia and the Hindi the way a person from Odisha (or a Hindi speaker) would actually tell this story out loud — natural, colloquial Chalita Odia / bolchaal Hindi, short clear sentences, a storyteller's rhythm. RETELL it in each language; never translate the English sentence by sentence, and never use bookish, Sanskritized or newspaper words. English words people really say stay English but written in Odia/Devanagari script (ଟାଉନ୍ ପ୍ଲାନର୍, ସିଟି ପ୍ଲାନିଂ, ଫାଲ୍ତୁ; टाउन प्लानर, प्लान). Character names stay as they are.
+const COLLOQUIAL_LANGUAGE_RULE = `ODIA AND HINDI MUST BE EVERYDAY SPOKEN LANGUAGE: write the Odia and the Hindi the way a person from Odisha (or a Hindi speaker) would actually tell this story out loud — natural, colloquial Chalita Odia / bolchaal Hindi, short clear sentences, a storyteller's rhythm. RETELL it in each language; never translate the English sentence by sentence, and never use bookish, Sanskritized or newspaper words. English words people really say stay English but written in Odia/Devanagari script (ଟାଉନ୍ ପ୍ଲାନର୍, ସିଟି ପ୍ଲାନିଂ, ଫାଲ୍ତୁ; टाउन प्लानर, प्लान) — but where Odia has its own everyday word, use it (ବେଦୀ or ପୀଠ, never "ଅଲ୍ଟାର୍"; ରାଜ୍ୟ ରାଜପଥ for a state highway). Character and place names stay as they are, with ONE spelling each, every time.
 WRONG (bookish Odia): "ଆଧୁନିକ ସହର ଯୋଜନାକାରୀ ବିକ୍ରମ ନିଜ ପୈତୃକ ଗ୍ରାମ ତରଙ୍ଗପୁରରେ ବିକାଶ ପାଇଁ ମହତ୍ୱାକାଂକ୍ଷୀ ଯୋଜନା ନେଇ ପହଞ୍ଚନ୍ତି, ସ୍ଥାନୀୟ ଭୟ ଏବଂ ଆଧ୍ୟାତ୍ମିକ ଘଟଣାଗୁଡ଼ିକୁ ପ୍ରାରମ୍ଭିକ ଭାବେ ଖାରଜ କରି ଆଶାବାଦରେ ଭରି ରହିଛନ୍ତି।"
 RIGHT (natural Odia): "ବଡ଼ ସହରରୁ ଫେରିଥିବା ଟାଉନ୍ ପ୍ଲାନର୍ ବିକ୍ରମ, ଗାଁ ତରଙ୍ଗପୁରର ରୂପରେଖ ବଦଳାଇବାକୁ ଏକ ବଡ଼ ସ୍ୱପ୍ନ ନେଇ ପହଞ୍ଚେ। ଲୋକଙ୍କ ଡର ଆଉ ଗାଁର ଅଲୌକିକ କାହାଣୀସବୁକୁ ହାଲୁକା ଭାବେ ଉଡ଼ାଇ ଦେଇ, ସେ ଖାଲି ବିକାଶର ନୂଆ ଆଶା ଦେଖୁଥାଏ।"
 WRONG (bookish Hindi): "आधुनिक नगर योजनाकार विक्रम महत्वाकांक्षी योजना के साथ अपने पैतृक ग्राम पहुँचते हैं।" RIGHT (natural Hindi): "बड़े शहर से लौटा टाउन प्लानर विक्रम अपने गाँव को बदलने का बड़ा सपना लेकर पहुँचता है।"
@@ -9487,7 +9501,7 @@ function estimateTokenBudget(totalTargetMinutes, isSeries) {
   return Math.min(MAX_GEMINI_OUTPUT_TOKENS, Math.max(fallback, estimated));
 }
 
-async function callSceneListGemini(contents, isSeries, totalTargetMinutes) {
+async function callSceneListGemini(contents, isSeries, totalTargetMinutes, model = STORY_WRITER_MODEL_NAME) {
   const properties = isSeries
     ? {
         episodeScenes: {
@@ -9503,7 +9517,7 @@ async function callSceneListGemini(contents, isSeries, totalTargetMinutes) {
   const required = isSeries ? ["episodeScenes"] : ["scenes"];
 
   const parsed = await generateJsonContent({
-    model: STORY_WRITER_MODEL_NAME,
+    model,
     contents,
     config: {
       systemInstruction: SCENE_SYSTEM_PROMPT,
@@ -9588,7 +9602,11 @@ async function generateSceneListEpisodeBatch(deck, bitSheet, episodesChunk, star
   }
 
   const totalTargetForBatch = episodeTargetMinutes ? episodeTargetMinutes * episodesChunk.length : null;
-  let content = await callSceneListGemini(contents, true, totalTargetForBatch);
+  // Films and web series get the strongest model for the scene list (the
+  // stage reviews kept finding weak scene engineering from the fast one);
+  // a 60-episode vertical drama stays on the fast model for cost.
+  const sceneListModel = isVerticalDrama ? STORY_WRITER_MODEL_NAME : SCENE_LIST_STRONG_MODEL_NAME;
+  let content = await callSceneListGemini(contents, true, totalTargetForBatch, sceneListModel);
 
   // Per-batch retry if THIS batch's own runtime total is far off target —
   // capped at one retry so a persistently stubborn response can't burn
@@ -9603,7 +9621,7 @@ async function generateSceneListEpisodeBatch(deck, bitSheet, episodesChunk, star
       )
       .filter(Boolean)
       .join("\n");
-    content = await callSceneListGemini(contents + `\n\nIMPORTANT CORRECTION NEEDED:\n${lines}`, true, totalTargetForBatch);
+    content = await callSceneListGemini(contents + `\n\nIMPORTANT CORRECTION NEEDED:\n${lines}`, true, totalTargetForBatch, sceneListModel);
   }
 
   return content.episodeScenes;
@@ -9665,7 +9683,7 @@ async function generateFilmSceneListPart(bitSheet, part, partIndex, partCount, f
     contents += `\n\nThis is a REVISION of a previous scene list. The Screenplay Writer reviewed it and requested changes.\nFeedback: "${revision.feedback}"\n${revision.previous?.scenes ? `${previousDraftForRevision({ scenes: revision.previous.scenes }, [], revision.fresh)}\n${partCount > 1 ? "(That is the whole film's previous list; write only this part's scenes.)\n" : ""}` : ""}Revise the scene list to address this feedback directly, keeping the same overall structure otherwise.`;
   }
 
-  let content = await callSceneListGemini(contents, false, part.targetMinutes);
+  let content = await callSceneListGemini(contents, false, part.targetMinutes, SCENE_LIST_STRONG_MODEL_NAME);
   content = annotateSceneListTotals(content, false, null, part.targetMinutes);
 
   // If the estimated total is far from the target runtime, give the model one
@@ -9673,7 +9691,7 @@ async function generateFilmSceneListPart(bitSheet, part, partIndex, partCount, f
   // stubborn response can't burn through the daily API quota.
   if (sceneListNeedsRetry(content)) {
     const correctionNote = buildRetryCorrectionNote(content);
-    content = await callSceneListGemini(contents + correctionNote, false, part.targetMinutes);
+    content = await callSceneListGemini(contents + correctionNote, false, part.targetMinutes, SCENE_LIST_STRONG_MODEL_NAME);
   }
   return content.scenes ?? [];
 }
@@ -16405,6 +16423,55 @@ const AUTO_PIPELINE_SCREENPLAY_CONCURRENCY = 4;
 // Too many beats for the running time can't become good scenes: a real
 // 10-minute film got 12 rich beats (8 asked for) and its scene list was
 // squeezed version after version. A blocking check on the bit sheet.
+// Plain-code checks on a film / web-series scene list, run every round as
+// blocking problems (several script reviews of a real draft found exactly
+// these, and the model's own judge kept letting them through).
+const UNFILMABLE_ONE_LINER = /\b(realiz|realis|understands?\b|feels?\b|felt\b|stares? at|staring|gazes?\b|wonders?\b|contemplat|ponders?|reflects? on|surveys?\b|lost in thought)/i;
+
+function oneLinerWords(text) {
+  return new Set(String(text ?? "").toLowerCase().match(/[a-z']{4,}/g) ?? []);
+}
+
+function sceneListHardIssues(sceneList, deck) {
+  if (deck.format?.type === "vertical") return null;
+  const episodes = Array.isArray(sceneList.episodeScenes)
+    ? sceneList.episodeScenes.map((ep, i) => ({ label: `Episode ${i + 1}`, scenes: ep.scenes ?? [], target: Number(deck.format?.episodeMinutes) || null }))
+    : [{ label: "The film", scenes: sceneList.scenes ?? [], target: null }];
+  const problems = [];
+  const all = [];
+  for (const ep of episodes) {
+    ep.scenes.forEach((scene, i) => all.push({ where: `${ep.label}, scene ${i + 1}`, text: scene.oneLiner?.en ?? "" }));
+    const unfilmable = ep.scenes.map((scene, i) => (UNFILMABLE_ONE_LINER.test(scene.oneLiner?.en ?? "") ? i + 1 : null)).filter(Boolean);
+    if (unfilmable.length) problems.push(`${ep.label}, scene(s) ${unfilmable.join(", ")}: a one-liner says what someone realises, feels or stares at — say instead what the camera sees them DO or SAY.`);
+    const doubled = ep.scenes.map((scene, i) => ((scene.oneLiner?.en ?? "").split(/[.!?](\s|$)/).filter((x) => x && x.trim().length > 25).length > 1 ? i + 1 : null)).filter(Boolean);
+    if (doubled.length) problems.push(`${ep.label}, scene(s) ${doubled.join(", ")}: two beats crammed into one scene — one scene, one beat (split it or cut one).`);
+    if (ep.scenes.length >= 6) {
+      const places = new Map();
+      ep.scenes.forEach((scene) => {
+        const key = String(scene.location?.en ?? "").toLowerCase().split(/[-/,(]/)[0].trim();
+        places.set(key, (places.get(key) ?? 0) + 1);
+      });
+      const [topPlace, topCount] = [...places.entries()].sort((a, b) => b[1] - a[1])[0] ?? [];
+      if (topCount > ep.scenes.length / 2) problems.push(`${ep.label}: ${topCount} of ${ep.scenes.length} scenes are at "${topPlace}" — move some beats to other places.`);
+      if (new Set(ep.scenes.map((scene) => scene.timeOfDay)).size === 1) problems.push(`${ep.label}: every scene is ${ep.scenes[0].timeOfDay} — vary the time of day.`);
+    }
+    if (ep.target) {
+      const total = sumSceneMinutes(ep.scenes);
+      if (total < ep.target - 2 || total > ep.target + 2) problems.push(`${ep.label}: scenes add up to ${total} minutes against ${ep.target} — bring it within 2 minutes of the target.`);
+    }
+  }
+  for (let a = 0; a < all.length; a++) {
+    const wordsA = oneLinerWords(all[a].text);
+    for (let b = a + 1; b < all.length; b++) {
+      const wordsB = oneLinerWords(all[b].text);
+      const shared = [...wordsA].filter((w) => wordsB.has(w)).length;
+      const union = new Set([...wordsA, ...wordsB]).size;
+      if (union && shared / union > 0.5) problems.push(`${all[a].where} and ${all[b].where} repeat the same beat — cut one or make it new.`);
+    }
+  }
+  return problems.length ? `SCENE LIST CHECKS: ${problems.join(" ")}` : null;
+}
+
 function bitSheetBeatCountIssue(bitSheet, deck) {
   const tooMany = (count, minutes, label) => {
     const suggested = suggestBitCount(minutes);
@@ -16652,6 +16719,7 @@ async function runAutoPipeline(runId, conceptText, format, dialogueLanguage, res
           return { issues: [...budget.issues, ...pacing, ...(story.issues ?? [])] };
         },
         revise: (d, feedback, opts) => writeSceneList(bitSheet, deck, { feedback, previous: d, fresh: opts?.fresh }),
+        mustFix: (d) => sceneListHardIssues(d, deck),
         secondBatch: true,
       });
       if (Array.isArray(deck.episodes)) {
@@ -16677,7 +16745,10 @@ async function runAutoPipeline(runId, conceptText, format, dialogueLanguage, res
       alreadyWrittenResult.rows.map((row) => [`${row.episode_index}:${row.scene_index}`, row.content])
     );
 
-    await castContext.run(castListText(characterSheet), () =>
+    const fixedNames = storyBible?.namesInOdia?.length
+      ? `\n\nFIXED NAME SPELLINGS IN ODIA (use exactly these, every time): ${storyBible.namesInOdia.map((n) => `${n.name} = ${n.odia}`).join("; ")}`
+      : "";
+    await castContext.run(castListText(characterSheet) + fixedNames, () =>
       runScreenplayAndQualityPass(runId, deck, sceneList, sceneListId, dialogueLanguage, alreadyWritten)
     );
     await updateAutoPipelineRun(runId, { status: "completed", progress_stage: "done" });

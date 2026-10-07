@@ -1554,7 +1554,12 @@ async function storylineFromBible(bible) {
 function storyBibleEssentialsText(bible) {
   const facts = Object.values(bible.facts ?? {}).flat().map((f) => `- ${f}`).join("\n");
   const setups = (bible.setupsPayoffs ?? []).map((x) => `- ${x.setup} (planted ${x.plantedIn}) → ${x.payoff} (${x.paidOffIn})`).join("\n");
-  return `\n\nTHE APPROVED STORY BIBLE — ESSENTIALS (never contradict them):\nHIDDEN TRUTH: ${bible.hiddenTruth?.summary ?? ""}\nFACTS AND RULES OF THIS WORLD:\n${facts}\nSETUPS AND PAYOFFS:\n${setups}`;
+  // The user's own writing directions (e.g. from their revision notes) —
+  // how to stage things, not new plot.
+  const writerNotes = (bible.writerNotes ?? []).map((n) => `- ${n}`).join("\n");
+  return `\n\nTHE APPROVED STORY BIBLE — ESSENTIALS (never contradict them):\nHIDDEN TRUTH: ${bible.hiddenTruth?.summary ?? ""}\nFACTS AND RULES OF THIS WORLD:\n${facts}\nSETUPS AND PAYOFFS:\n${setups}${
+    writerNotes ? `\nTHE USER'S WRITING DIRECTIONS (follow them in every scene):\n${writerNotes}` : ""
+  }`;
 }
 
 // What every writer and judge of an approved-Bible run sees as "the user's

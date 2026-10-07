@@ -16457,8 +16457,14 @@ function sceneListHardIssues(sceneList, deck) {
     }
     if (ep.target) {
       const total = sumSceneMinutes(ep.scenes);
-      if (total < ep.target - 2 || total > ep.target + 2) problems.push(`${ep.label}: scenes add up to ${total} minutes against ${ep.target} — bring it within 2 minutes of the target.`);
+      if (Math.abs(total - ep.target) > 1) problems.push(`${ep.label}: scenes add up to ${total} minutes against ${ep.target} — bring it within 1 minute of the target.`);
     }
+  }
+  // The whole series must add up to its total runtime (e.g. 8 x 20 = 160).
+  if (episodes.length > 1 && episodes[0].target) {
+    const seriesTotal = episodes.reduce((sum, ep) => sum + sumSceneMinutes(ep.scenes), 0);
+    const seriesTarget = episodes[0].target * episodes.length;
+    if (Math.abs(seriesTotal - seriesTarget) > 3) problems.push(`The whole series adds up to ${seriesTotal} minutes against ${seriesTarget} — it must total ${seriesTarget} minutes (within 3).`);
   }
   for (let a = 0; a < all.length; a++) {
     const wordsA = oneLinerWords(all[a].text);

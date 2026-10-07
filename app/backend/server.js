@@ -855,6 +855,12 @@ CHALITA BHASHA, NOT SADHU BHASHA — this is the single most important rule. Wri
 - Always reach for the local, everyday word over the Sanskritized/formal one. For example: "ଗ୍ରହଣ କରନ୍ତୁ" (Grahana Karantu) → "ନିଅ" (Nia) or "ଧର" (Dhara); "ପ୍ରସ୍ଥାନ କରିବା" (Prasthana Kariba) → "ବାହାରିବା" (Bahariba) or "ଯିବା" (Jiba); "ବାର୍ତ୍ତାଳାପ" (Bartalapa) → "କଥାବାର୍ତ୍ତା" (Kathabarta); "କ୍ରୋଧିତ" (Krodhita) → "ରାଗି" (Ragi). This applies throughout — nouns, adjectives, and verbs alike.
 - Verb endings must match WHO is talking to WHOM, not default to the formal/respectful form for everyone. Toward an elder, a boss, or anyone owed respect, the respectful ଛନ୍ତି/କରନ୍ତି form is correct. But toward a friend, a junior, a child, or in most intimate family address, use the casual ଛି/ଛୁ/ଛ form instead ("କରୁଛନ୍ତି" → "କରୁଛି"/"କରୁଛ"/"କରୁଛୁ" depending on who's speaking to whom) — an AI default of "ଛନ୍ତି" for every single line is exactly the textbook-Odia mistake to avoid.
 - Sentences are often short, broken, and imperfect — trailing off, repeating a word for emphasis, talking over each other — the way people actually speak, not complete grammatical sentences.
+- NEVER TRANSLATE AN ENGLISH LINE INTO ODIA — say it the way an Odia family really says it. Real lines from a draft the user corrected:
+  WRONG: "ସେଠାରେ ହିଁ ଆମର ମୂଳ ଅଛି, ଆମ ଜେଜେମାଙ୍କର ପ୍ରାଣ।" RIGHT: "ସେଇଠି ସବୁ ସମସ୍ୟାର ସମାଧାନ ଅଛି।" (nobody says ମୂଳ or ପ୍ରାଣ like this in talk)
+  WRONG: "ମା' କାଳୀଙ୍କ ଆଶୀର୍ବାଦ ସେଇଠି ଅଛି। ସେଇଠି ହିଁ ଆରୋଗ୍ୟ ଆରମ୍ଭ ହେବ। ମା' କାଳୀଙ୍କ ମନ୍ଦିର ହିଁ ଆମକୁ ରକ୍ଷା କରିବ।" RIGHT: "ସେଇଠି ମା' କାଳୀଙ୍କ ଆଶୀର୍ବାଦ ଅଛି। ମା' ସେଠିକି ଗଲେ ହିଁ ଠିକ୍ ହେବେ। ମୋର ବିଶ୍ୱାସ ଅଛି, ମା' କାଳୀ ନିଶ୍ଚୟ ଆମମାନଙ୍କୁ ଠିକ୍ କରିଦେବେ।" (nobody says "ଆରୋଗ୍ୟ ଆରମ୍ଭ ହେବ")
+  WRONG: "ନିଶ୍ଚୟ। ମୁଁ ସେଥିପାଇଁ ମଧ୍ୟ କିଛି ଆଇଡିଆ ରଖିଛି।" RIGHT: "ହଁ, ସେଥିପାଇଁ ବି ମୋ ପାଖରେ ଆଇଡିଆ ଅଛି।"
+  WRONG: "ତୁମର ଏଇ ସବୁଜ କରିଡରର ଧାରଣା..." RIGHT: "ତୁମର ଏଇ ଗ୍ରୀନ୍ କରିଡର୍ ଆଇଡିଆ..." (a work term people say in English stays English, written in Odia script)
+  Spoken, not written: ସେଠାରେ → ସେଠି/ସେଇଠି, ଏଠାରେ → ଏଠି, ମଧ୍ୟ → ବି, ଧାରଣା → ଆଇଡିଆ, ଅତ୍ୟନ୍ତ → ବହୁତ, ଆରୋଗ୍ୟ ହେବା → ଭଲ ହେବା/ଠିକ୍ ହେବା.
 - EVERY LINE MUST CARRY EMOTION, NOT JUST INFORMATION. Never write dialogue as flat, cut-to-cut information-passing (character A states a fact, character B states the next fact). Real people hesitate, deflect, repeat themselves, ask questions instead of answering, or say something adjacent to what they mean when they're upset, scared, or holding something back. Preserve every beat of drama already established in the scene's one-liner and turn — do not summarize or compress it into fewer, flatter lines.
 - Natural code-switching with English is common and should be used wherever a character genuinely would: urban, educated, or younger characters casually drop English words or whole phrases into an Odia sentence (a workplace term, a brand or app name, "seriously", "what a taste", or everyday loanwords like "ରୁମ୍", "ବ୍ୟାଗ୍", "ଅଙ୍କଲ୍"); older, rural, or working-class characters use little to no English and lean on regional idiom instead.
 - Speech register must match the character: a security guard, a strict grandmother, a nagging in-law, joking office colleagues, and a frightened teenager should all sound distinctly different from each other in vocabulary, formality, and rhythm — never one uniform "polite Odia" voice for everyone.
@@ -10340,7 +10346,8 @@ function buildMovieScriptCorrectorPrompt(dialogueLanguage) {
 3. DIALOGUE lines and ACTING NOTES are in ${languageName}. Any part written in another language, or written with English letters (romanized ${languageName}), must become proper ${languageName} in its own script with the same meaning — except a minor character the story clearly marks as speaking another language, whose line stays as it is.${dialogueLanguage === "en" ? "" : `
    No English letters may be left in a ${languageName} dialogue line or acting note. An English word the character would really say (like "phone" or "seriously") can stay as that English word, but spelled out in ${languageName} script — never in English letters.`}
 4. Judge what correct, natural ${languageName} dialogue looks like by the writer's own dialogue style guide below — use it ONLY to spot real mistakes; never rewrite a line that is already fine.
-5. Keep everything else exactly as it is: the same events, lines, meaning, order and characters. Do not add or remove anything, and do not improve the style, the wording or the drama.
+5. Keep everything else exactly as it is: the same events, lines, meaning, order and characters. Do not add or remove anything, and do not improve the style, the wording or the drama.${dialogueLanguage === "en" ? "" : `
+   ONE EXCEPTION: a ${languageName} dialogue line that sounds bookish or like a translation of an English sentence (the WRONG examples in the style guide) IS a real mistake — rewrite just that line the way a person really says it, with the same meaning.`}
 6. "fixes": a short list, in simple English, of what you corrected.
 
 THE WRITER'S DIALOGUE STYLE GUIDE:
@@ -16076,6 +16083,9 @@ const STAGE_CHECKLISTS = {
 - For a series: every episode opens on a hook, escalates, and ends on a cliffhanger — except the final episode, which resolves the story.`,
   sceneList: `- Every Bit Sheet beat is covered, in order; no scene is filler.
 - The key events (a death, a punishment, an attack, a reveal, the climax) happen on screen in their own scene, never only reported afterwards by someone who heard about it.
+- Cause and effect: every scene follows from the one before; a character is only somewhere for a reason the audience knows (no family turning up at a stranger's funeral), and the hero finds clues through his own effort and skills, not by luck or by overhearing.
+- Real-world logic: money, jobs, health and belongings stay consistent (a well-paid professional doesn't sell his bike for small cash; a bedridden patient doesn't walk to the temple; a vehicle that was sold doesn't come back).
+- Episode 1 (or a film's first act) shows the story's genre promise early (the first death, the mystery, the threat) and ends on a hook — never only travel or set-up.
 - A scene is one place and one continuous time — no conversation split across several scenes in the same place and time.
 - Fuller scenes, each with several beats (an obstacle, rising stakes, a turn) — mostly 1.5-2.5 minutes, none a one-beat 30-second moment, none over 3 minutes except the climax, which must get enough screen time (3-5 minutes).
 - The story cuts between the main storyline and side stories (antagonist, other characters' goals) through varied places.
@@ -16723,6 +16733,7 @@ function sequenceChecklist(dialogueLanguage) {
   return `- Every scene has a turn — something changes by its end; no scene just repeats what an earlier one did.
 - Dialogue is natural, spoken ${language} — how these people really talk: short, with subtext; never speeches, lectures, or exposition telling the audience what it already knows.
 - Each character keeps one consistent voice, and matches THE CAST list exactly: the same name, age and relationship to the hero in every scene (never a wife who becomes a sister, never a mother whose age changes).
+- Real-world logic: a character is only in a place for a reason; money, jobs, health and belongings stay consistent with what was set up earlier (a bedridden patient stays in bed; something sold or lost doesn't come back).
 - Continuity from scene to scene: who is where, time of day, what each character already knows.
 - Action lines show only what the camera can see and hear (a brief smell or sound that sets the place is fine; inner thoughts and abstract feelings are not).
 - Action, dialogue and acting notes are in natural, everyday spoken ${language} — never bookish, never a translation of English${dialogueLanguage === "en" ? "" : "; character names stay in English capitals"}.

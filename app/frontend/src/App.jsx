@@ -91,6 +91,8 @@ const LABELS = {
     roleDirector: 'Director',
     roleProductionManager: 'Production Manager',
     roleProductionOnly: 'Production only',
+    newUserMissingFields: (fields) => `Please fill in: ${fields}.`,
+    newUserNeedsProject: 'Choose which project this login can open (or pick "Production only", which needs no project).',
     emptyGreeting: 'Type your idea and explore',
     newIdeaButton: 'New Idea',
     regeneratePlaceholder: 'Press Enter for 2 new options, or type feedback first',
@@ -836,6 +838,8 @@ const LABELS = {
     roleDirector: 'ଡିରେକ୍ଟର୍',
     roleProductionManager: 'ପ୍ରଡକ୍ସନ୍ ମ୍ୟାନେଜର୍',
     roleProductionOnly: 'କେବଳ ପ୍ରଡକ୍ସନ୍',
+    newUserMissingFields: (fields) => `ଦୟାକରି ଭରନ୍ତୁ: ${fields}।`,
+    newUserNeedsProject: 'ଏହି ଲଗଇନ୍ କେଉଁ ପ୍ରୋଜେକ୍ଟ ଖୋଲିବ ବାଛନ୍ତୁ (କିମ୍ବା "କେବଳ ପ୍ରଡକ୍ସନ୍" ବାଛନ୍ତୁ, ସେଥିରେ ପ୍ରୋଜେକ୍ଟ ଦରକାର ନାହିଁ)।',
     emptyGreeting: 'ଆପଣଙ୍କ ଧାରଣା ଲେଖନ୍ତୁ ଏବଂ ଅନୁସନ୍ଧାନ କରନ୍ତୁ',
     newIdeaButton: 'ନୂଆ ଧାରଣା',
     regeneratePlaceholder: '2 ନୂଆ ବିକଳ୍ପ ପାଇଁ Enter ଦବାନ୍ତୁ, କିମ୍ବା ମତାମତ ଲେଖନ୍ତୁ',
@@ -7368,6 +7372,21 @@ function App() {
 
   async function handleCreateUserSubmit(e) {
     e.preventDefault()
+    // Say exactly what's missing rather than silently greying the button
+    // out (browser autofill can show text the app never received).
+    const missing = [
+      !newUserName.trim() && t.crewNameLabel,
+      !newUserUsername.trim() && t.usernameLabel,
+      !newUserPassword && t.passwordLabel,
+    ].filter(Boolean)
+    if (missing.length > 0) {
+      setUserManagementError(t.newUserMissingFields(missing.join(', ')))
+      return
+    }
+    if (newUserRole !== 'admin' && newUserRole !== 'production' && !newUserConceptId) {
+      setUserManagementError(t.newUserNeedsProject)
+      return
+    }
     setIsCreatingUser(true)
     setUserManagementError(null)
 
@@ -11445,9 +11464,9 @@ function App() {
                   </div>
                 ))}
                 <form className="crew-add-form" onSubmit={handleCreateUserSubmit}>
-                  <MicInput placeholder={t.crewNameLabel} value={newUserName} onChange={(e) => setNewUserName(e.target.value)} />
-                  <input type="text" placeholder={t.usernameLabel} value={newUserUsername} onChange={(e) => setNewUserUsername(e.target.value)} />
-                  <input type="password" placeholder={t.passwordLabel} value={newUserPassword} onChange={(e) => setNewUserPassword(e.target.value)} />
+                  <MicInput placeholder={t.crewNameLabel} value={newUserName} onChange={(e) => setNewUserName(e.target.value)} autoComplete="off" />
+                  <input type="text" placeholder={t.usernameLabel} value={newUserUsername} onChange={(e) => setNewUserUsername(e.target.value)} autoComplete="off" name="new-user-username" />
+                  <input type="text" placeholder={t.passwordLabel} value={newUserPassword} onChange={(e) => setNewUserPassword(e.target.value)} autoComplete="off" name="new-user-password" spellCheck={false} />
                   <select value={newUserRole} onChange={(e) => setNewUserRole(e.target.value)}>
                     <option value="production_manager">{t.roleProductionManager}</option>
                     <option value="director">{t.roleDirector}</option>
@@ -11465,13 +11484,7 @@ function App() {
                   <button
                     className="breakdown-action-button"
                     type="submit"
-                    disabled={
-                      isCreatingUser ||
-                      !newUserName.trim() ||
-                      !newUserUsername.trim() ||
-                      !newUserPassword ||
-                      (newUserRole !== 'admin' && newUserRole !== 'production' && !newUserConceptId)
-                    }
+                    disabled={isCreatingUser}
                   >
                     {t.addCrewMemberButton}
                   </button>

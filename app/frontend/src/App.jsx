@@ -399,6 +399,7 @@ const LABELS = {
     scriptEditStartButton: '✎ Edit scene',
     scriptEditEditingNote: 'Editing on the page — type straight into the script, then press Submit under the scene.',
     scriptEditDoubleClickHint: 'Double-click to edit this scene',
+    scriptRequestChangesWhileEditingNote: 'To ask the AI for changes, first Submit or Cancel your edit below the scene.',
     sceneManageTitle: 'Add or remove scenes',
     sceneAddBeforeButton: '＋ Add scene before',
     sceneAddAfterButton: '＋ Add scene after',
@@ -1138,6 +1139,7 @@ const LABELS = {
     scriptEditStartButton: '✎ ଦୃଶ୍ୟ ସମ୍ପାଦନ',
     scriptEditEditingNote: 'ପୃଷ୍ଠାରେ ସମ୍ପାଦନା ଚାଲିଛି — ସିଧା ସ୍କ୍ରିପ୍ଟରେ ଲେଖନ୍ତୁ, ତାପରେ ଦୃଶ୍ୟ ତଳେ Submit ଦବାନ୍ତୁ।',
     scriptEditDoubleClickHint: 'ଏହି ଦୃଶ୍ୟ ସମ୍ପାଦନ ପାଇଁ ଦୁଇଥର କ୍ଲିକ୍ କରନ୍ତୁ',
+    scriptRequestChangesWhileEditingNote: 'AI ରୁ ପରିବର୍ତ୍ତନ ମାଗିବା ପାଇଁ, ଆଗେ ଦୃଶ୍ୟ ତଳେ ଥିବା Submit ବା Cancel ଦବାନ୍ତୁ।',
     sceneManageTitle: 'ଦୃଶ୍ୟ ଯୋଡ଼ନ୍ତୁ ବା ହଟାନ୍ତୁ',
     sceneAddBeforeButton: '＋ ଆଗରେ ଦୃଶ୍ୟ ଯୋଡ଼ନ୍ତୁ',
     sceneAddAfterButton: '＋ ପରେ ଦୃଶ୍ୟ ଯୋଡ଼ନ୍ତୁ',
@@ -2029,7 +2031,10 @@ function ScreenplayElements({ elements, language }) {
   )
 }
 
-function ScreenplayBlock({ episodeIndex, sceneIndex, t, language, screenplay, toolsOnly = false }) {
+// `editingNote` is set while this scene is open in the manual editor: asking
+// the AI for changes then would be hidden behind (and later overwritten by)
+// the editor's older copy, so it waits until the edit is saved or cancelled.
+function ScreenplayBlock({ episodeIndex, sceneIndex, t, language, screenplay, toolsOnly = false, editingNote = null }) {
   if (!screenplay) return null
 
   const key = screenplayKey(episodeIndex, sceneIndex)
@@ -2078,10 +2083,11 @@ function ScreenplayBlock({ episodeIndex, sceneIndex, t, language, screenplay, to
       )}
 
       <div className="screenplay-block-actions">
-        <button className="cancel-button" onClick={() => screenplay.onToggleFeedback(key)}>
+        <button className="cancel-button" onClick={() => screenplay.onToggleFeedback(key)} disabled={Boolean(editingNote)}>
           {t.requestChangesButton}
         </button>
       </div>
+      {editingNote && <p className="script-tools-editing-note">{editingNote}</p>}
 
       {showFeedbackForm && (
         <div className="feedback-form">
@@ -2094,7 +2100,7 @@ function ScreenplayBlock({ episodeIndex, sceneIndex, t, language, screenplay, to
           <button
             className="choose-button"
             onClick={() => screenplay.onSubmitFeedback(key, draft.id)}
-            disabled={isSubmittingFeedback || !(screenplay.feedbackTextByKey[key] || '').trim()}
+            disabled={Boolean(editingNote) || isSubmittingFeedback || !(screenplay.feedbackTextByKey[key] || '').trim()}
           >
             {isSubmittingFeedback ? t.submittingFeedback : t.submitFeedback}
           </button>
@@ -2971,6 +2977,15 @@ function MovieScreenplayWorkspace({
     setEditing(null)
   }, [groupIndex])
 
+  // A newer version of the scene being edited arrived (e.g. an AI rewrite):
+  // close the editor so the new version shows and the editor's older copy
+  // can't be saved over it.
+  const editingDraftId = editing ? screenplay?.scenesByKey?.[editing.key]?.id : null
+  useEffect(() => {
+    if (editing && editingDraftId && editingDraftId !== editing.draftId) setEditing(null)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editingDraftId])
+
   function selectScene(index, scrollToIt) {
     setSelectedIndex(index)
     if (scrollToIt) document.getElementById(`movie-script-scene-${index}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
@@ -3343,7 +3358,10 @@ function MovieScreenplayWorkspace({
                         {editFixes.fixes.length === 0 ? <p>{t.scriptEditNoFixesNote}</p> : <ul>{editFixes.fixes.map((fix, i) => <li key={i}>{fix}</li>)}</ul>}
                       </div>
                     )}
-                    <ScreenplayBlock episodeIndex={group.episodeIndex} sceneIndex={sceneIndex} t={t} language={language} screenplay={screenplay} toolsOnly />
+                    <ScreenplayBlock
+                      episodeIndex={group.episodeIndex} sceneIndex={sceneIndex} t={t} language={language} screenplay={screenplay} toolsOnly
+                      editingNote={editing?.key === selectedKey ? t.scriptRequestChangesWhileEditingNote : null}
+                    />
                   </>
                 )}
               </div>

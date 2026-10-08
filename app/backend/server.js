@@ -17699,7 +17699,9 @@ function safeUpper(value, fallback) {
 // parenthetical, transition — using standard screenplay column positions.
 // Unlike the per-character "Character Script" export, this is the FULL
 // script, meant to be read start to finish, not filtered to one actor.
-function renderFullScreenplayPdf(res, deck, sceneList, scenesByEpisode) {
+// `onlyEpisode` prints just that episode of a series (the per-episode
+// download in the screenplay view); `fileLabel` names the downloaded file.
+function renderFullScreenplayPdf(res, deck, sceneList, scenesByEpisode, { onlyEpisode = null, fileLabel = "full-screenplay" } = {}) {
   const isSeries = Array.isArray(sceneList.episodeScenes);
   const margin = 72; // 1 inch, standard screenplay margin
   const doc = new PDFDocument({ size: "LETTER", margin });
@@ -17711,7 +17713,7 @@ function renderFullScreenplayPdf(res, deck, sceneList, scenesByEpisode) {
   res.setHeader("Content-Type", "application/pdf");
   res.setHeader(
     "Content-Disposition",
-    `attachment; filename="${(deck.title?.en ?? "screenplay").replace(/[^a-z0-9]+/gi, "-")}-full-screenplay-${formatExportTimestamp()}.pdf"`
+    `attachment; filename="${(deck.title?.en ?? "screenplay").replace(/[^a-z0-9]+/gi, "-")}-${fileLabel}-${formatExportTimestamp()}.pdf"`
   );
   doc.pipe(res);
 
@@ -17787,6 +17789,7 @@ function renderFullScreenplayPdf(res, deck, sceneList, scenesByEpisode) {
 
   if (isSeries) {
     deck.episodes.forEach((episode, episodeIndex) => {
+      if (onlyEpisode !== null && episodeIndex !== onlyEpisode) return;
       doc.addPage();
       doc.font("Courier-Bold").fontSize(18).text(`EPISODE ${episodeIndex + 1}: ${safeUpper(episode.title?.en, "UNTITLED")}`, { align: "center" });
       const scenes = sceneList.episodeScenes[episodeIndex]?.scenes ?? [];
@@ -17853,9 +17856,14 @@ async function fetchAutoPipelineScreenplayData(runId, targetLang) {
   if (status !== "completed" || !sceneListId) {
     return { error: "This run hasn't finished yet.", status: 400 };
   }
+  return fetchSceneListScreenplayData(sceneListId, targetLang);
+}
 
+// The scene list, its pitch deck and the latest written version of every
+// scene, grouped by episode (null for a film).
+async function fetchSceneListScreenplayData(sceneListId, targetLang) {
   const sceneListResult = await db.query(
-    `SELECT sl.content AS scene_list_content, pd.content AS pitch_deck_content
+    `SELECT sl.content AS scene_list_content, pd.content AS pitch_deck_content, pd.concept_id
      FROM scene_lists sl
      JOIN bit_sheets bs ON bs.id = sl.bit_sheet_id
      JOIN three_act_structures tas ON tas.id = bs.three_act_structure_id
@@ -17866,7 +17874,7 @@ async function fetchAutoPipelineScreenplayData(runId, targetLang) {
   if (sceneListResult.rows.length === 0) {
     return { error: "Scene list not found", status: 404 };
   }
-  const { scene_list_content: sceneList, pitch_deck_content: deck } = sceneListResult.rows[0];
+  const { scene_list_content: sceneList, pitch_deck_content: deck, concept_id: conceptId } = sceneListResult.rows[0];
 
   const scenesResult = await db.query(
     `SELECT DISTINCT ON (episode_index, scene_index) episode_index, scene_index, content, created_at
@@ -17886,8 +17894,54 @@ async function fetchAutoPipelineScreenplayData(runId, targetLang) {
     await translateScreenplayScenesByEpisode(scenesByEpisode, targetLang);
   }
 
-  return { deck, sceneList, scenesByEpisode };
+  return { deck, sceneList, scenesByEpisode, conceptId };
 }
+
+// The screenplay view's download buttons: one episode (?episode=0-based
+// index) or, with no episode, the whole script — always in the language
+// each scene was written in. PDF by default, Word with ?format=docx.
+app.get("/api/scene-lists/:id/screenplay-pdf", requireLogin, async (req, res) => {
+  if (!/^\d+$/.test(req.params.id)) {
+    res.status(400).json({ error: "Invalid scene list id." });
+    return;
+  }
+  const data = await fetchSceneListScreenplayData(req.params.id, null);
+  if (data.error) {
+    res.status(data.status).json({ error: data.error });
+    return;
+  }
+  if (req.user.role !== "admin" && String(req.user.concept_id) !== String(data.conceptId)) {
+    res.status(403).json({ error: "You don't have access to this project." });
+    return;
+  }
+  const isSeries = Array.isArray(data.sceneList.episodeScenes);
+  const episode = req.query.episode === undefined ? null : Number(req.query.episode);
+  if (episode !== null && (!isSeries || !Number.isInteger(episode) || episode < 0 || episode >= data.sceneList.episodeScenes.length)) {
+    res.status(400).json({ error: "That episode doesn't exist." });
+    return;
+  }
+
+  const fileLabel = episode === null ? (isSeries ? "all-episodes" : "screenplay") : `episode-${episode + 1}`;
+
+  try {
+    if (req.query.format === "docx") {
+      const paragraphs = buildFullScreenplayDocxParagraphs(data.deck, data.sceneList, data.scenesByEpisode, { onlyEpisode: episode });
+      const buffer = await Packer.toBuffer(new Document({ sections: [{ children: paragraphs }] }));
+      res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.wordprocessingml.document");
+      res.setHeader(
+        "Content-Disposition",
+        `attachment; filename="${(data.deck.title?.en ?? "screenplay").replace(/[^a-z0-9]+/gi, "-")}-${fileLabel}-${formatExportTimestamp()}.docx"`
+      );
+      res.send(buffer);
+      return;
+    }
+    renderFullScreenplayPdf(res, data.deck, data.sceneList, data.scenesByEpisode, { onlyEpisode: episode, fileLabel });
+  } catch (error) {
+    console.error("Screenplay PDF export failed:", error.message);
+    if (!res.headersSent) res.status(500).json({ error: error.message });
+    else res.end();
+  }
+});
 
 app.get("/api/auto-pipeline/:id/screenplay-pdf", requireLogin, async (req, res) => {
   const targetLang = ["en", "hi"].includes(req.query.lang) ? req.query.lang : "or";
@@ -17914,7 +17968,7 @@ app.get("/api/auto-pipeline/:id/screenplay-pdf", requireLogin, async (req, res) 
 // screenplay (centered/bold character names, an indented dialogue column,
 // right-aligned transitions) since Word has no page-layout primitives like
 // PDFKit's explicit x/y positioning.
-function buildFullScreenplayDocxParagraphs(deck, sceneList, scenesByEpisode) {
+function buildFullScreenplayDocxParagraphs(deck, sceneList, scenesByEpisode, { onlyEpisode = null } = {}) {
   const isSeries = Array.isArray(sceneList.episodeScenes);
   const paragraphs = [];
 
@@ -18005,6 +18059,7 @@ function buildFullScreenplayDocxParagraphs(deck, sceneList, scenesByEpisode) {
 
   if (isSeries) {
     deck.episodes.forEach((episode, episodeIndex) => {
+      if (onlyEpisode !== null && episodeIndex !== onlyEpisode) return;
       paragraphs.push(
         new Paragraph({
           text: `EPISODE ${episodeIndex + 1}: ${safeUpper(episode.title?.en, "UNTITLED")}`,

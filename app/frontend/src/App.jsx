@@ -399,6 +399,10 @@ const LABELS = {
     scriptEditStartButton: '✎ Edit scene',
     scriptEditEditingNote: 'Editing on the page — type straight into the script, then press Submit under the scene.',
     scriptEditDoubleClickHint: 'Double-click to edit this scene',
+    screenplayDownloadEpisode: (number) => `⬇ Download Episode ${number}`,
+    screenplayDownloadAllEpisodes: '⬇ Download all episodes',
+    screenplayDownloadFilm: '⬇ Download screenplay',
+    downloadFormatWord: 'Word',
     scriptRequestChangesWhileEditingNote: 'To ask the AI for changes, first Submit or Cancel your edit below the scene.',
     sceneManageTitle: 'Add or remove scenes',
     sceneAddBeforeButton: '＋ Add scene before',
@@ -1139,6 +1143,10 @@ const LABELS = {
     scriptEditStartButton: '✎ ଦୃଶ୍ୟ ସମ୍ପାଦନ',
     scriptEditEditingNote: 'ପୃଷ୍ଠାରେ ସମ୍ପାଦନା ଚାଲିଛି — ସିଧା ସ୍କ୍ରିପ୍ଟରେ ଲେଖନ୍ତୁ, ତାପରେ ଦୃଶ୍ୟ ତଳେ Submit ଦବାନ୍ତୁ।',
     scriptEditDoubleClickHint: 'ଏହି ଦୃଶ୍ୟ ସମ୍ପାଦନ ପାଇଁ ଦୁଇଥର କ୍ଲିକ୍ କରନ୍ତୁ',
+    screenplayDownloadEpisode: (number) => `⬇ ଏପିସୋଡ୍ ${number} ଡାଉନଲୋଡ୍`,
+    screenplayDownloadAllEpisodes: '⬇ ସବୁ ଏପିସୋଡ୍ ଡାଉନଲୋଡ୍',
+    screenplayDownloadFilm: '⬇ ଚିତ୍ରନାଟ୍ୟ ଡାଉନଲୋଡ୍',
+    downloadFormatWord: 'Word',
     scriptRequestChangesWhileEditingNote: 'AI ରୁ ପରିବର୍ତ୍ତନ ମାଗିବା ପାଇଁ, ଆଗେ ଦୃଶ୍ୟ ତଳେ ଥିବା Submit ବା Cancel ଦବାନ୍ତୁ।',
     sceneManageTitle: 'ଦୃଶ୍ୟ ଯୋଡ଼ନ୍ତୁ ବା ହଟାନ୍ତୁ',
     sceneAddBeforeButton: '＋ ଆଗରେ ଦୃଶ୍ୟ ଯୋଡ଼ନ୍ତୁ',
@@ -3325,6 +3333,30 @@ function MovieScreenplayWorkspace({
                   })}
                 </div>
               </div>
+              {screenplay && (() => {
+                const base = `${BACKEND_URL}/api/scene-lists/${sceneList.id}/screenplay-pdf`
+                const episodeUrl = group.episodeIndex === null ? `${base}?` : `${base}?episode=${group.episodeIndex}&`
+                return (
+                  <div className="script-download-bar">
+                    <DownloadChoiceButton
+                      t={t}
+                      label={group.episodeIndex === null ? t.screenplayDownloadFilm : t.screenplayDownloadEpisode(group.episodeIndex + 1)}
+                      pdfUrl={episodeUrl}
+                      excelUrl={`${episodeUrl}format=docx`}
+                      excelLabel={t.downloadFormatWord}
+                    />
+                    {group.episodeIndex !== null && group.episodeIndex === groups.length - 1 && (
+                      <DownloadChoiceButton
+                        t={t}
+                        label={t.screenplayDownloadAllEpisodes}
+                        pdfUrl={base}
+                        excelUrl={`${base}?format=docx`}
+                        excelLabel={t.downloadFormatWord}
+                      />
+                    )}
+                  </div>
+                )
+              })()}
             </div>
 
             <aside className="script-tools" aria-label={t.scriptSelectedSceneTitle(numberOf(scene, sceneIndex))}>

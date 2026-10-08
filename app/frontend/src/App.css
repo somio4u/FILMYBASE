@@ -6128,3 +6128,20 @@ button:not(:disabled):active {
   background: var(--bg-surface-raised);
   color: var(--text-primary);
 }
+
+/* Download buttons at the end of an episode's (or the film's) script */
+.script-download-bar {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px;
+  margin: 20px 0 8px;
+  position: relative;
+  z-index: 30;
+}
+
+/* At the end of the script the menu opens upward, clear of what follows. */
+.script-download-bar .download-choice-menu {
+  top: auto;
+  bottom: calc(100% + 6px);
+}

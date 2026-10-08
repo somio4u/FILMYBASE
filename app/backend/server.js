@@ -135,6 +135,9 @@ async function ensureAiMovieSchema() {
     // The Story Brain's design (see storyBrain.js) lives on the run itself.
     `ALTER TABLE auto_pipeline_runs ADD COLUMN IF NOT EXISTS story_bible JSONB`,
     `ALTER TABLE auto_pipeline_runs ADD COLUMN IF NOT EXISTS story_bible_usage JSONB`,
+    // Which "Production only" login uploaded a production project (null for
+    // everything the admin made) — that login sees only its own projects.
+    `ALTER TABLE concepts ADD COLUMN IF NOT EXISTS owner_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL`,
     `CREATE TABLE IF NOT EXISTS ai_movie_reference_files (
       id SERIAL PRIMARY KEY,
       project_id INTEGER NOT NULL REFERENCES ai_movie_projects(id) ON DELETE CASCADE,
@@ -1331,6 +1334,13 @@ function requireRole(...roles) {
       res.status(401).json({ error: "Please log in." });
       return;
     }
+    // A "Production only" login reaches a route only after the gatekeeper
+    // below has matched it against PRODUCTION_ONLY_ROUTES and checked the
+    // project is his own.
+    if (req.user.role === PRODUCTION_ONLY_ROLE && req.productionOnlyAllowed) {
+      next();
+      return;
+    }
     if (!roles.includes(req.user.role)) {
       res.status(403).json({ error: "You don't have permission to do that." });
       return;
@@ -1344,6 +1354,109 @@ function requireRole(...roles) {
 // GET to e.g. /api/concepts/:id/full would otherwise hand out the whole
 // project to anyone with the link.
 const requireLogin = requireRole("admin", "director", "production_manager");
+
+// --- "Production only" logins (role "production"): an outside user who
+// uploads his own screenplays and uses Production Management on them —
+// nothing else. Every request from such a login must match one of these
+// routes, and where the route names a project (directly, or through a scene
+// list, breakdown, shoot schedule or crew member) it must be a project he
+// uploaded himself. Anything not listed is refused, even a route that would
+// otherwise let any logged-in user through.
+const PRODUCTION_ONLY_ROLE = "production";
+
+const PRODUCTION_ONLY_ROUTES = [
+  ["POST", /^\/api\/auth\/(login|logout)$/, null],
+  ["GET", /^\/api\/auth\/me$/, null],
+  ["GET", /^\/api\/health$/, null],
+  ["GET", /^\/api\/concepts$/, null], // the route lists only his own projects
+  ["GET", /^\/api\/concepts\/(\d+)\/full$/, "concept"],
+  ["POST", /^\/api\/concepts\/(\d+)\/(title|pin)$/, "concept"],
+  ["DELETE", /^\/api\/concepts\/(\d+)$/, "concept"],
+  ["POST", /^\/api\/import-screenplay-for-production(\/file)?$/, null], // creates a project he owns
+  ["POST", /^\/api\/scene-lists\/(\d+)\/reimport-screenplay(\/file)?$/, "sceneList"],
+  ["GET", /^\/api\/scene-lists\/(\d+)\/(breakdown-freshness|director-overview|character-script(\/export|\/export-excel|\/share-link)?)$/, "sceneList"],
+  ["GET", /^\/api\/screenplay\/scenes$/, "querySceneList"],
+  ["POST", /^\/api\/script-breakdown$/, "bodySceneList"],
+  ["POST", /^\/api\/script-breakdown\/(\d+)\/[a-z-]+$/, "breakdown"],
+  ["GET", /^\/api\/script-breakdown\/(\d+)\/(export|export-excel|export-ad-sheet|export-ad-sheet-excel)$/, "breakdown"],
+  ["POST", /^\/api\/shoot-schedule$/, "bodySceneList"],
+  ["POST", /^\/api\/shoot-schedule\/(\d+)\/(parse-day-completion|interpret-handwritten-note|apply-handwritten-changes|record-day)$/, "sceneList"],
+  ["POST", /^\/api\/shoot-schedule\/(\d+)\/(edit-scene|approve|request-changes)$/, "schedule"],
+  ["GET", /^\/api\/shoot-schedule\/(\d+)\/(export|export-excel|export-day|export-day-excel|call-sheet|call-sheet-excel)$/, "schedule"],
+  ["GET", /^\/api\/crew(\/export-excel)?$/, "querySceneList"],
+  ["POST", /^\/api\/crew$/, null], // a photo upload: the route itself checks the scene list is his
+  ["PATCH", /^\/api\/crew\/(\d+)$/, "crew"],
+  ["DELETE", /^\/api\/crew\/(\d+)$/, "crew"],
+  ["POST", /^\/api\/crew\/rename-link$/, "bodySceneList"],
+  ["GET", /^\/api\/clapboard\/(\d+)\/log$/, "sceneList"],
+  ["POST", /^\/api\/clapboard\/(\d+)\/log$/, "sceneList"],
+  ["POST", /^\/api\/concept\/(\d+)\/clapboard-banner$/, "concept"],
+  ["DELETE", /^\/api\/concept\/(\d+)\/clapboard-banner$/, "concept"],
+  // The Production Management chat helper — breakdown and schedule only.
+  ["GET", /^\/api\/agent-chat\/(\d+)\/(breakdown|schedule)\/history$/, "concept"],
+  ["POST", /^\/api\/agent-chat\/(\d+)\/(breakdown|schedule)\/(message|resolve-action)$/, "concept"],
+];
+
+async function sceneListConceptId(sceneListId) {
+  if (!/^\d+$/.test(String(sceneListId ?? ""))) return null;
+  const result = await db.query(
+    `SELECT COALESCE(sl.concept_id, pd.concept_id) AS concept_id
+     FROM scene_lists sl
+     LEFT JOIN bit_sheets bs ON bs.id = sl.bit_sheet_id
+     LEFT JOIN three_act_structures tas ON tas.id = bs.three_act_structure_id
+     LEFT JOIN pitch_decks pd ON pd.id = tas.pitch_deck_id
+     WHERE sl.id = $1`,
+    [sceneListId]
+  );
+  return result.rows[0]?.concept_id ?? null;
+}
+
+async function productionOnlyUserOwnsConcept(user, conceptId) {
+  if (conceptId == null) return false;
+  const result = await db.query("SELECT owner_user_id FROM concepts WHERE id = $1", [conceptId]);
+  return result.rows[0]?.owner_user_id === user.id;
+}
+
+const sceneListIdOf = async (table, id) => {
+  if (!/^\d+$/.test(String(id ?? ""))) return null;
+  return (await db.query(`SELECT scene_list_id FROM ${table} WHERE id = $1`, [id])).rows[0]?.scene_list_id ?? null;
+};
+
+// The project a matched production-only request is about.
+async function productionOnlyTargetConcept(kind, match, req) {
+  switch (kind) {
+    case "concept": return match[1];
+    case "sceneList": return sceneListConceptId(match[1]);
+    case "querySceneList": return sceneListConceptId(req.query.sceneListId);
+    case "bodySceneList": return sceneListConceptId(req.body?.sceneListId);
+    case "breakdown": return sceneListConceptId(await sceneListIdOf("script_breakdowns", match[1]));
+    case "schedule": return sceneListConceptId(await sceneListIdOf("shoot_schedules", match[1]));
+    case "crew": return sceneListConceptId(await sceneListIdOf("crew_members", match[1]));
+    default: return null;
+  }
+}
+
+app.use(async (req, res, next) => {
+  if (req.user?.role !== PRODUCTION_ONLY_ROLE || !req.path.startsWith("/api/")) {
+    next();
+    return;
+  }
+  const rule = PRODUCTION_ONLY_ROUTES.find(([method, pattern]) => method === req.method && pattern.test(req.path));
+  if (!rule) {
+    res.status(403).json({ error: "This login can only use Production Management." });
+    return;
+  }
+  const [, pattern, kind] = rule;
+  if (kind) {
+    const conceptId = await productionOnlyTargetConcept(kind, req.path.match(pattern), req);
+    if (!(await productionOnlyUserOwnsConcept(req.user, conceptId))) {
+      res.status(403).json({ error: "You don't have access to this project." });
+      return;
+    }
+  }
+  req.productionOnlyAllowed = true;
+  next();
+});
 
 app.post("/api/auth/login", async (req, res) => {
   const { username, password } = req.body;
@@ -1385,13 +1498,15 @@ app.get("/api/auth/me", async (req, res) => {
 app.post("/api/auth/users", requireRole("admin"), async (req, res) => {
   const { name, username, password, role, conceptId } = req.body;
 
-  if (!name || !username || !password || !["director", "production_manager", "admin"].includes(role)) {
+  if (!name || !username || !password || !["director", "production_manager", "admin", PRODUCTION_ONLY_ROLE].includes(role)) {
     res.status(400).json({ error: "Name, username, password, and a valid role are required." });
     return;
   }
   // Non-admin logins are scoped to exactly one project — a team account
   // with no assignment would otherwise see every project in the system.
-  if (role !== "admin" && !conceptId) {
+  // A "Production only" login isn't assigned a project — it sees only the
+  // screenplays it uploads itself.
+  if (role !== "admin" && role !== PRODUCTION_ONLY_ROLE && !conceptId) {
     res.status(400).json({ error: "Director and Production Manager accounts must be assigned to a project." });
     return;
   }
@@ -1400,7 +1515,7 @@ app.post("/api/auth/users", requireRole("admin"), async (req, res) => {
   try {
     const result = await db.query(
       "INSERT INTO users (name, username, password_hash, password_salt, role, concept_id) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id, name, username, role, concept_id",
-      [name, username.toLowerCase(), hash, salt, role, role === "admin" ? null : conceptId]
+      [name, username.toLowerCase(), hash, salt, role, role === "admin" || role === PRODUCTION_ONLY_ROLE ? null : conceptId]
     );
     res.json(result.rows[0]);
   } catch (error) {
@@ -1621,6 +1736,11 @@ app.get("/api/concepts", requireLogin, async (req, res) => {
   const result =
     req.user.role === "admin"
       ? await db.query("SELECT id, concept_text, title, pinned, project_type, created_at FROM concepts ORDER BY pinned DESC, created_at DESC")
+      : req.user.role === PRODUCTION_ONLY_ROLE
+      ? await db.query(
+          "SELECT id, concept_text, title, pinned, project_type, created_at FROM concepts WHERE owner_user_id = $1 AND project_type = 'production' ORDER BY pinned DESC, created_at DESC",
+          [req.user.id]
+        )
       : await db.query(
           "SELECT id, concept_text, title, pinned, project_type, created_at FROM concepts WHERE id = $1 ORDER BY pinned DESC, created_at DESC",
           [req.user.concept_id]
@@ -1686,7 +1806,7 @@ app.get("/api/projects/master-list", requireRole("admin"), async (req, res) => {
 app.post("/api/concepts/:id/title", requireLogin, async (req, res) => {
   const { title } = req.body;
 
-  if (req.user.role !== "admin" && String(req.user.concept_id) !== String(req.params.id)) {
+  if (!requireConceptAccess(req, req.params.id)) {
     res.status(403).json({ error: "You don't have access to this project." });
     return;
   }
@@ -1707,7 +1827,7 @@ app.post("/api/concepts/:id/title", requireLogin, async (req, res) => {
 app.post("/api/concepts/:id/pin", requireRole("admin", "production_manager"), async (req, res) => {
   const { pinned } = req.body;
 
-  if (req.user.role !== "admin" && String(req.user.concept_id) !== String(req.params.id)) {
+  if (!requireConceptAccess(req, req.params.id)) {
     res.status(403).json({ error: "You don't have access to this project." });
     return;
   }
@@ -1823,7 +1943,7 @@ app.get("/api/concepts/:id/full", requireLogin, async (req, res) => {
     return;
   }
 
-  if (req.user.role !== "admin" && String(req.user.concept_id) !== String(req.params.id)) {
+  if (!requireConceptAccess(req, req.params.id)) {
     res.status(403).json({ error: "You don't have access to this project." });
     return;
   }
@@ -2364,6 +2484,8 @@ async function generateAgentChatReply(stageKey, stateSummaryText, history, userM
 }
 
 function requireConceptAccess(req, conceptId) {
+  // A production-only login was already checked against the project's owner by the gatekeeper.
+  if (req.user.role === PRODUCTION_ONLY_ROLE) return Boolean(req.productionOnlyAllowed);
   return req.user.role === "admin" || String(req.user.concept_id) === String(conceptId);
 }
 
@@ -7484,12 +7606,12 @@ async function parseScreenplayIntoSceneListContent(pastedText, format) {
   return { metadata, sceneListContent };
 }
 
-async function createProductionProjectFromScreenplayText(pastedText, format) {
+async function createProductionProjectFromScreenplayText(pastedText, format, user) {
   const { metadata, sceneListContent } = await parseScreenplayIntoSceneListContent(pastedText, format);
 
   const conceptResult = await db.query(
-    "INSERT INTO concepts (concept_text, storylines, title, project_type) VALUES ($1, $2, $3, 'production') RETURNING id",
-    [metadata.title, JSON.stringify([]), metadata.title]
+    "INSERT INTO concepts (concept_text, storylines, title, project_type, owner_user_id) VALUES ($1, $2, $3, 'production', $4) RETURNING id",
+    [metadata.title, JSON.stringify([]), metadata.title, user?.role === PRODUCTION_ONLY_ROLE ? user.id : null]
   );
   const conceptId = conceptResult.rows[0].id;
 
@@ -7510,7 +7632,7 @@ app.post("/api/import-screenplay-for-production", requireRole("admin"), async (r
   }
 
   try {
-    const conceptId = await createProductionProjectFromScreenplayText(pastedText, format);
+    const conceptId = await createProductionProjectFromScreenplayText(pastedText, format, req.user);
     res.json({ conceptId });
   } catch (error) {
     console.error("Gemini API call failed:", error.message);
@@ -7662,7 +7784,7 @@ app.post("/api/import-screenplay-for-production/file", requireRole("admin"), scr
 
     // multer puts non-file multipart fields into req.body as plain strings.
     const format = req.body.format ? JSON.parse(req.body.format) : null;
-    const conceptId = await createProductionProjectFromScreenplayText(text, format);
+    const conceptId = await createProductionProjectFromScreenplayText(text, format, req.user);
     res.json({ conceptId });
   } catch (error) {
     console.error("Screenplay file import failed:", error.message);
@@ -15547,6 +15669,7 @@ const CREW_CATEGORIES = [
 async function userOwnsSceneList(user, sceneListId) {
   if (user.role === "admin") return true;
   if (!sceneListId) return false;
+  if (user.role === PRODUCTION_ONLY_ROLE) return productionOnlyUserOwnsConcept(user, await sceneListConceptId(sceneListId));
 
   const result = await db.query(
     `SELECT COALESCE(sl.concept_id, pd.concept_id) AS concept_id

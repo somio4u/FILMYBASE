@@ -90,6 +90,7 @@ const LABELS = {
     roleAdmin: 'Admin',
     roleDirector: 'Director',
     roleProductionManager: 'Production Manager',
+    roleProductionOnly: 'Production only',
     emptyGreeting: 'Type your idea and explore',
     newIdeaButton: 'New Idea',
     regeneratePlaceholder: 'Press Enter for 2 new options, or type feedback first',
@@ -834,6 +835,7 @@ const LABELS = {
     roleAdmin: 'ଆଡମିନ୍',
     roleDirector: 'ଡିରେକ୍ଟର୍',
     roleProductionManager: 'ପ୍ରଡକ୍ସନ୍ ମ୍ୟାନେଜର୍',
+    roleProductionOnly: 'କେବଳ ପ୍ରଡକ୍ସନ୍',
     emptyGreeting: 'ଆପଣଙ୍କ ଧାରଣା ଲେଖନ୍ତୁ ଏବଂ ଅନୁସନ୍ଧାନ କରନ୍ତୁ',
     newIdeaButton: 'ନୂଆ ଧାରଣା',
     regeneratePlaceholder: '2 ନୂଆ ବିକଳ୍ପ ପାଇଁ Enter ଦବାନ୍ତୁ, କିମ୍ବା ମତାମତ ଲେଖନ୍ତୁ',
@@ -2297,7 +2299,8 @@ function FloatingAgentWidget({ currentUser, t, onRunCompleted, onOpenProject }) 
   // most recently started and adopt it — same account, same progress,
   // whichever device it's opened on.
   useEffect(() => {
-    if (!currentUser) return undefined
+    // The widget is admin-only (it renders nothing for other logins).
+    if (currentUser?.role !== 'admin') return undefined
     let cancelled = false
     async function syncActiveRun() {
       try {
@@ -5780,14 +5783,18 @@ function App() {
   // sees an Edit/Generate button that would just 403 if clicked, and a
   // production manager never sees an Approve button for work they did
   // themselves.
-  const canEditProduction = currentUser?.role === 'admin' || currentUser?.role === 'production_manager'
-  const canReviewProduction = currentUser?.role === 'admin' || currentUser?.role === 'director'
+  // A "Production only" login (role 'production') works alone on screenplays
+  // it uploads itself, so it imports, edits and approves its own production
+  // work — and sees nothing outside Production Management.
+  const isProductionOnly = currentUser?.role === 'production'
+  const canEditProduction = currentUser?.role === 'admin' || currentUser?.role === 'production_manager' || isProductionOnly
+  const canReviewProduction = currentUser?.role === 'admin' || currentUser?.role === 'director' || isProductionOnly
   // Narrower than canEditProduction: importing/analyzing a script is a
   // one-time curation step, not ongoing production work — a per-project
   // team account keeps Crew & Cast and Shoot Schedule generation, but only
   // the admin can import a new screenplay or re-run/edit the breakdown, so
   // a team can't repurpose the analysis pipeline for something else.
-  const canAnalyzeScript = currentUser?.role === 'admin'
+  const canAnalyzeScript = currentUser?.role === 'admin' || isProductionOnly
   const isScopedToOneProject = currentUser?.role !== 'admin'
 
   function buildFormatObject() {
@@ -7420,7 +7427,7 @@ function App() {
       }
     }
 
-    if (currentUser.role !== 'director') {
+    if (currentUser.role !== 'director' && currentUser.role !== 'production') {
       fetch(`${BACKEND_URL}/api/google/status`)
         .then((res) => res.json())
         .then((data) => setGoogleConnected(data.connected))
@@ -10129,7 +10136,7 @@ function App() {
     )
   }
 
-  if (appMode === null) {
+  if (appMode === null && !isProductionOnly) {
     return (
       <div className="login-screen">
         <div className="format-picker">
@@ -11444,9 +11451,10 @@ function App() {
                   <select value={newUserRole} onChange={(e) => setNewUserRole(e.target.value)}>
                     <option value="production_manager">{t.roleProductionManager}</option>
                     <option value="director">{t.roleDirector}</option>
+                    <option value="production">{t.roleProductionOnly}</option>
                     <option value="admin">{t.roleAdmin}</option>
                   </select>
-                  {newUserRole !== 'admin' && (
+                  {newUserRole !== 'admin' && newUserRole !== 'production' && (
                     <select value={newUserConceptId} onChange={(e) => setNewUserConceptId(e.target.value)}>
                       <option value="">{t.assignProjectPlaceholder}</option>
                       {projectHistory.map((p) => (
@@ -11462,7 +11470,7 @@ function App() {
                       !newUserName.trim() ||
                       !newUserUsername.trim() ||
                       !newUserPassword ||
-                      (newUserRole !== 'admin' && !newUserConceptId)
+                      (newUserRole !== 'admin' && newUserRole !== 'production' && !newUserConceptId)
                     }
                   >
                     {t.addCrewMemberButton}
@@ -11474,7 +11482,7 @@ function App() {
           </div>
         )}
 
-        {!isScopedToOneProject && (
+        {(!isScopedToOneProject || isProductionOnly) && (
           <button className="new-idea-button" onClick={handleNewIdeaClick}>
             <span className="new-idea-icon">{ICONS.lightbulb}</span>
             {activeAgent === 'production' ? t.newProductionButton : t.newIdeaButton}
@@ -11588,7 +11596,7 @@ function App() {
           </div>
         </div>
 
-        {currentUser.role === 'admin' && (
+        {(currentUser.role === 'admin' || isProductionOnly) && (
         <div className="sidebar-section">
           <h4 className="sidebar-section-title">{t.sidebarHistoryLabel}</h4>
           <p className="sidebar-section-note">{t.sidebarHistoryNote}</p>
@@ -11622,7 +11630,7 @@ function App() {
                   >
                     {ICONS.pin}
                   </button>
-                  {currentUser.role === 'admin' && (
+                  {(currentUser.role === 'admin' || isProductionOnly) && (
                     <button
                       className="sidebar-history-icon-button"
                       onClick={() => handleDeleteProjectClick(item)}

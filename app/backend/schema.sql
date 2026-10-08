@@ -141,7 +141,11 @@ CREATE TABLE google_auth_tokens (
 -- 'director' is review-only (approve / request changes) so two people can
 -- never silently overwrite each other's work on the same bulk-replace
 -- action. concept_id scopes a non-admin login to exactly one project —
--- NULL for admin (who isn't scoped at all).
+-- NULL for admin (who isn't scoped at all). 'production' ("Production
+-- only") is an outside user who uploads his own screenplays and uses only
+-- Production Management on them: concept_id stays NULL and he sees just the
+-- projects whose concepts.owner_user_id is his (enforced by the gatekeeper
+-- in server.js, which refuses every other route).
 CREATE TABLE users (
   id SERIAL PRIMARY KEY,
   name TEXT NOT NULL,
@@ -284,3 +288,7 @@ CREATE TABLE ai_movie_reference_files (
   content TEXT NOT NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+-- Which "Production only" login uploaded a production project (NULL for
+-- projects the admin made). Added after the users table exists.
+ALTER TABLE concepts ADD COLUMN IF NOT EXISTS owner_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL;

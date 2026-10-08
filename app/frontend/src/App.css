@@ -5157,6 +5157,66 @@ button, input, textarea, select {
   gap: 8px;
 }
 
+/* Add / delete scenes, under the selected scene's tools */
+.script-scene-manage {
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border-subtle);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.script-scene-manage-buttons,
+.script-scene-form-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.script-scene-manage .cancel-button,
+.script-scene-form-actions .choose-button {
+  width: 100%;
+  margin: 0;
+}
+
+.script-scene-manage .script-scene-delete-button {
+  color: var(--danger);
+  border-color: var(--danger);
+}
+
+.script-scene-form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.script-scene-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.script-scene-form input,
+.script-scene-form select,
+.script-scene-form textarea {
+  font: inherit;
+  font-size: 14px;
+  padding: 6px 8px;
+  color: var(--text-primary);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+}
+
+.script-scene-manage .error-text {
+  color: var(--danger);
+  font-size: 13px;
+  margin: 0;
+}
+
 .script-tools-actions .ai-movie-revise-scene-button {
   margin-top: 0;
   width: 100%;

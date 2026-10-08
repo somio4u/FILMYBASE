@@ -399,6 +399,27 @@ const LABELS = {
     scriptEditStartButton: '✎ Edit scene',
     scriptEditEditingNote: 'Editing on the page — type straight into the script, then press Submit under the scene.',
     scriptEditDoubleClickHint: 'Double-click to edit this scene',
+    sceneManageTitle: 'Add or remove scenes',
+    sceneAddBeforeButton: '＋ Add scene before',
+    sceneAddAfterButton: '＋ Add scene after',
+    sceneDeleteButton: '🗑 Delete scene',
+    sceneDeleteConfirm: (number) => `Delete scene ${number}? Its script is removed for good and the scenes after it move up by one.`,
+    sceneNewTitle: (number) => `New scene ${number}`,
+    sceneNewIntExtLabel: 'Inside or outside',
+    sceneNewInt: 'INT (inside)',
+    sceneNewExt: 'EXT (outside)',
+    sceneNewLocationLabel: 'Place',
+    sceneNewLocationPlaceholder: 'e.g. Temple courtyard',
+    sceneNewTimeLabel: 'Time',
+    sceneNewTimeOptions: { DAY: 'Day', NIGHT: 'Night', MORNING: 'Morning', EVENING: 'Evening' },
+    sceneNewWhatLabel: 'What happens',
+    sceneNewWhatPlaceholder: 'One or two lines: who is there, what happens, how it ends',
+    sceneNewMinutesLabel: 'Length (minutes)',
+    sceneNewWriteAiButton: 'Add and write with AI',
+    sceneNewBlankButton: 'Add blank (I will write it)',
+    sceneNewCancelButton: 'Cancel',
+    sceneNewSavingLabel: 'Adding…',
+    sceneNewNoteAfterChange: 'The scene numbers after it have moved. If you already made a script breakdown or shoot schedule, check them again.',
     scriptEditHeadingLabel: 'Scene heading',
     scriptEditCharacterPlaceholder: 'CHARACTER',
     scriptEditParentheticalPlaceholder: '(acting note — optional)',
@@ -1117,6 +1138,27 @@ const LABELS = {
     scriptEditStartButton: '✎ ଦୃଶ୍ୟ ସମ୍ପାଦନ',
     scriptEditEditingNote: 'ପୃଷ୍ଠାରେ ସମ୍ପାଦନା ଚାଲିଛି — ସିଧା ସ୍କ୍ରିପ୍ଟରେ ଲେଖନ୍ତୁ, ତାପରେ ଦୃଶ୍ୟ ତଳେ Submit ଦବାନ୍ତୁ।',
     scriptEditDoubleClickHint: 'ଏହି ଦୃଶ୍ୟ ସମ୍ପାଦନ ପାଇଁ ଦୁଇଥର କ୍ଲିକ୍ କରନ୍ତୁ',
+    sceneManageTitle: 'ଦୃଶ୍ୟ ଯୋଡ଼ନ୍ତୁ ବା ହଟାନ୍ତୁ',
+    sceneAddBeforeButton: '＋ ଆଗରେ ଦୃଶ୍ୟ ଯୋଡ଼ନ୍ତୁ',
+    sceneAddAfterButton: '＋ ପରେ ଦୃଶ୍ୟ ଯୋଡ଼ନ୍ତୁ',
+    sceneDeleteButton: '🗑 ଦୃଶ୍ୟ ହଟାନ୍ତୁ',
+    sceneDeleteConfirm: (number) => `ଦୃଶ୍ୟ ${number} ହଟାଇବେ? ଏହାର ସ୍କ୍ରିପ୍ଟ ସବୁଦିନ ପାଇଁ ଚାଲିଯିବ ଏବଂ ପରର ଦୃଶ୍ୟଗୁଡ଼ିକ ଗୋଟିଏ ଲେଖାଏଁ ଆଗକୁ ଆସିବ।`,
+    sceneNewTitle: (number) => `ନୂଆ ଦୃଶ୍ୟ ${number}`,
+    sceneNewIntExtLabel: 'ଭିତର ନା ବାହାର',
+    sceneNewInt: 'INT (ଭିତର)',
+    sceneNewExt: 'EXT (ବାହାର)',
+    sceneNewLocationLabel: 'ସ୍ଥାନ',
+    sceneNewLocationPlaceholder: 'ଯେମିତି: ମନ୍ଦିର ବେଢ଼ା',
+    sceneNewTimeLabel: 'ସମୟ',
+    sceneNewTimeOptions: { DAY: 'ଦିନ', NIGHT: 'ରାତି', MORNING: 'ସକାଳ', EVENING: 'ସନ୍ଧ୍ୟା' },
+    sceneNewWhatLabel: "କ'ଣ ହୁଏ",
+    sceneNewWhatPlaceholder: "ଏକ ବା ଦୁଇ ଧାଡ଼ି: କିଏ ଅଛି, କ'ଣ ହୁଏ, କେମିତି ଶେଷ ହୁଏ",
+    sceneNewMinutesLabel: 'ଲମ୍ବ (ମିନିଟ୍)',
+    sceneNewWriteAiButton: 'ଯୋଡ଼ି AI ରେ ଲେଖନ୍ତୁ',
+    sceneNewBlankButton: 'ଖାଲି ଯୋଡ଼ନ୍ତୁ (ମୁଁ ଲେଖିବି)',
+    sceneNewCancelButton: 'ବାତିଲ୍',
+    sceneNewSavingLabel: 'ଯୋଡ଼ାଯାଉଛି…',
+    sceneNewNoteAfterChange: 'ପରର ଦୃଶ୍ୟ ନମ୍ବର ବଦଳିଛି। ସ୍କ୍ରିପ୍ଟ ବ୍ରେକଡାଉନ୍ ବା ସୁଟିଂ ସିଡ୍ୟୁଲ୍ ଆଗରୁ ତିଆରି ହୋଇଥିଲେ, ସେଗୁଡ଼ିକୁ ପୁଣି ଦେଖନ୍ତୁ।',
     scriptEditHeadingLabel: 'ଦୃଶ୍ୟ ଶୀର୍ଷକ',
     scriptEditCharacterPlaceholder: 'ଚରିତ୍ର',
     scriptEditParentheticalPlaceholder: '(ଅଭିନୟ ଟିପ୍ପଣୀ — ଇଚ୍ଛାଧୀନ)',
@@ -2850,7 +2892,7 @@ function MovieBreakdownFreshnessNote({ sceneListId, t }) {
 }
 
 function MovieScreenplayWorkspace({
-  sceneList, episodes, t, language, screenplay, scriptTheme, onChangeScriptTheme, onSceneSaved, onReloadScenes,
+  sceneList, episodes, t, language, screenplay, scriptTheme, onChangeScriptTheme, onSceneSaved, onReloadScenes, onSceneListChanged,
 }) {
   const groups = sceneList.episodeScenes
     ? sceneList.episodeScenes.map((episodeScene, index) => ({
@@ -2872,6 +2914,11 @@ function MovieScreenplayWorkspace({
   const [checkError, setCheckError] = useState(null)
   const [showReport, setShowReport] = useState(false)
   const [breakdownStale, setBreakdownStale] = useState(false)
+  // The "add a scene" form ({ position, intExt, location, timeOfDay, oneLiner, estimatedMinutes }) or null.
+  const [sceneForm, setSceneForm] = useState(null)
+  const [isChangingScenes, setIsChangingScenes] = useState(false)
+  const [sceneChangeError, setSceneChangeError] = useState(null)
+  const [scenesMoved, setScenesMoved] = useState(false)
 
   const group = groups[Math.min(groupIndex, groups.length - 1)] ?? groups[0]
   const scenes = group.scenes
@@ -2946,6 +2993,71 @@ function MovieScreenplayWorkspace({
     setEditError(null)
     setEditFixes(null)
     setSelectedIndex(index)
+  }
+
+  function openSceneForm(position) {
+    setSceneForm({ position, intExt: 'INT', location: '', timeOfDay: 'DAY', oneLiner: '', estimatedMinutes: 2 })
+    setSceneChangeError(null)
+  }
+
+  // Adds the new scene to the scene list (later scenes move down by one),
+  // then either asks the AI to write it or leaves the user's line as a blank
+  // scene to edit by hand.
+  async function submitNewScene(writeWithAi) {
+    if (!sceneForm || !sceneForm.location.trim() || !sceneForm.oneLiner.trim()) return
+    setIsChangingScenes(true)
+    setSceneChangeError(null)
+    try {
+      const dialogueLanguage = draftOf(sceneIndex)?.dialogueLanguage ?? 'or'
+      const response = await fetch(`${BACKEND_URL}/api/scene-lists/${sceneList.id}/scenes`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...sceneForm, episodeIndex: group.episodeIndex, blank: !writeWithAi, dialogueLanguage }),
+      })
+      const data = await response.json()
+      if (!response.ok) {
+        setSceneChangeError(data.error || t.genericError)
+        setIsChangingScenes(false)
+        return
+      }
+      setEditing(null)
+      setEditFixes(null)
+      setSceneForm(null)
+      await onSceneListChanged?.(data.sceneList)
+      setSelectedIndex(data.sceneIndex)
+      setScenesMoved(true)
+      setIsChangingScenes(false)
+      if (writeWithAi) await screenplay?.onWriteScene?.(group.episodeIndex, data.sceneIndex, dialogueLanguage)
+    } catch {
+      setSceneChangeError(t.genericError)
+      setIsChangingScenes(false)
+    }
+  }
+
+  async function deleteSelectedScene() {
+    if (!window.confirm(t.sceneDeleteConfirm(numberOf(scene, sceneIndex)))) return
+    setIsChangingScenes(true)
+    setSceneChangeError(null)
+    try {
+      const response = await fetch(`${BACKEND_URL}/api/scene-lists/${sceneList.id}/scenes`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ episodeIndex: group.episodeIndex, sceneIndex }),
+      })
+      const data = await response.json()
+      if (!response.ok) {
+        setSceneChangeError(data.error || t.genericError)
+      } else {
+        setEditing(null)
+        setEditFixes(null)
+        await onSceneListChanged?.(data.sceneList)
+        setSelectedIndex(Math.max(0, sceneIndex - 1))
+        setScenesMoved(true)
+      }
+    } catch {
+      setSceneChangeError(t.genericError)
+    }
+    setIsChangingScenes(false)
   }
 
   const updateElement = (i, patch) => setEditing((prev) => prev && { ...prev, elements: prev.elements.map((e, j) => (j === i ? { ...e, ...patch } : e)) })
@@ -3235,6 +3347,66 @@ function MovieScreenplayWorkspace({
                   </>
                 )}
               </div>
+              {screenplay && (
+                <div className="script-scene-manage">
+                  <p className="script-panel-title">{t.sceneManageTitle}</p>
+                  {sceneForm ? (
+                    <form className="script-scene-form" onSubmit={(event) => { event.preventDefault(); submitNewScene(true) }}>
+                      <p className="script-tools-heading">{t.sceneNewTitle(sceneForm.position + 1)}</p>
+                      <label>
+                        {t.sceneNewIntExtLabel}
+                        <select value={sceneForm.intExt} onChange={(event) => setSceneForm({ ...sceneForm, intExt: event.target.value })}>
+                          <option value="INT">{t.sceneNewInt}</option>
+                          <option value="EXT">{t.sceneNewExt}</option>
+                        </select>
+                      </label>
+                      <label>
+                        {t.sceneNewLocationLabel}
+                        <input type="text" value={sceneForm.location} placeholder={t.sceneNewLocationPlaceholder} onChange={(event) => setSceneForm({ ...sceneForm, location: event.target.value })} />
+                      </label>
+                      <label>
+                        {t.sceneNewTimeLabel}
+                        <select value={sceneForm.timeOfDay} onChange={(event) => setSceneForm({ ...sceneForm, timeOfDay: event.target.value })}>
+                          {Object.entries(t.sceneNewTimeOptions).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+                        </select>
+                      </label>
+                      <label>
+                        {t.sceneNewWhatLabel}
+                        <textarea rows={3} value={sceneForm.oneLiner} placeholder={t.sceneNewWhatPlaceholder} onChange={(event) => setSceneForm({ ...sceneForm, oneLiner: event.target.value })} />
+                      </label>
+                      <label>
+                        {t.sceneNewMinutesLabel}
+                        <input type="number" min="0.5" max="15" step="0.5" value={sceneForm.estimatedMinutes} onChange={(event) => setSceneForm({ ...sceneForm, estimatedMinutes: event.target.value })} />
+                      </label>
+                      <div className="script-scene-form-actions">
+                        <button type="submit" className="choose-button" disabled={isChangingScenes || !sceneForm.location.trim() || !sceneForm.oneLiner.trim()}>
+                          {isChangingScenes ? t.sceneNewSavingLabel : t.sceneNewWriteAiButton}
+                        </button>
+                        <button type="button" className="cancel-button" onClick={() => submitNewScene(false)} disabled={isChangingScenes || !sceneForm.location.trim() || !sceneForm.oneLiner.trim()}>
+                          {t.sceneNewBlankButton}
+                        </button>
+                        <button type="button" className="cancel-button" onClick={() => setSceneForm(null)} disabled={isChangingScenes}>
+                          {t.sceneNewCancelButton}
+                        </button>
+                      </div>
+                    </form>
+                  ) : (
+                    <div className="script-scene-manage-buttons">
+                      <button type="button" className="cancel-button" onClick={() => openSceneForm(sceneIndex)} disabled={Boolean(editing) || isAiWriting || isChecking || isChangingScenes}>
+                        {t.sceneAddBeforeButton}
+                      </button>
+                      <button type="button" className="cancel-button" onClick={() => openSceneForm(sceneIndex + 1)} disabled={Boolean(editing) || isAiWriting || isChecking || isChangingScenes}>
+                        {t.sceneAddAfterButton}
+                      </button>
+                      <button type="button" className="cancel-button script-scene-delete-button" onClick={deleteSelectedScene} disabled={Boolean(editing) || isAiWriting || isChecking || isChangingScenes || scenes.length < 2}>
+                        {t.sceneDeleteButton}
+                      </button>
+                    </div>
+                  )}
+                  {sceneChangeError && <p className="error-text">{sceneChangeError}</p>}
+                  {scenesMoved && !sceneForm && <p className="script-tools-editing-note">{t.sceneNewNoteAfterChange}</p>}
+                </div>
+              )}
             </aside>
           </div>
         )}
@@ -5581,13 +5753,26 @@ function App() {
     setStructureHistory(data)
   }
 
-  async function loadScreenplayScenes(sceneListId) {
+  async function fetchScreenplayScenesMap(sceneListId) {
     const response = await fetch(`${BACKEND_URL}/api/screenplay/scenes?sceneListId=${sceneListId}`)
     const data = await response.json()
     const map = {}
     data.forEach((scene) => {
       map[screenplayKey(scene.episodeIndex, scene.sceneIndex)] = scene
     })
+    return map
+  }
+
+  async function loadScreenplayScenes(sceneListId) {
+    setScreenplayScenesByKey(await fetchScreenplayScenesMap(sceneListId))
+  }
+
+  // After a scene is added or deleted every later scene has a new position,
+  // so the scene list and the written scenes are swapped in together (never
+  // a moment where a heading sits over the wrong scene's script).
+  async function applySceneListChange(content) {
+    const map = await fetchScreenplayScenesMap(sceneList.id)
+    setSceneList((prev) => ({ ...prev, ...content }))
     setScreenplayScenesByKey(map)
   }
 
@@ -12229,6 +12414,7 @@ function App() {
             onChangeScriptTheme={changeScriptTheme}
             onSceneSaved={(key, scene) => setScreenplayScenesByKey((prev) => ({ ...prev, [key]: scene }))}
             onReloadScenes={() => loadScreenplayScenes(sceneList.id)}
+            onSceneListChanged={applySceneListChange}
             screenplay={
               sceneList.status === 'approved'
                 ? {

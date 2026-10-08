@@ -10639,6 +10639,195 @@ app.get("/api/scene-lists/:id/script-check", requireLogin, (req, res) => {
 // scene edited (or corrected by the full check) after the breakdown was
 // made leaves the breakdown out of date. The screen asks this and shows
 // a plain note rather than letting the two drift apart silently.
+// --- Adding and deleting a scene inside the screenplay. Scenes are stored
+// by position (the scene list's array, every screenplay_scenes version, and
+// the shoot schedule's sceneRefs), so a new or removed scene shifts every
+// later scene's position by one, all in one transaction.
+
+// The scene array for a film (`scenes`) or one episode of a series.
+function sceneArrayOf(content, episodeIndex) {
+  return episodeIndex === null ? content.scenes : content.episodeScenes?.[episodeIndex]?.scenes;
+}
+
+function withRecountedMinutes(content, episodeIndex) {
+  const sum = (scenes) => Math.round(scenes.reduce((total, s) => total + (Number(s.estimatedMinutes) || 0), 0) * 10) / 10;
+  if (episodeIndex === null) return { ...content, totalEstimatedMinutes: sum(content.scenes) };
+  return {
+    ...content,
+    episodeScenes: content.episodeScenes.map((episode, i) =>
+      i === episodeIndex ? { ...episode, totalEstimatedMinutes: sum(episode.scenes) } : episode
+    ),
+  };
+}
+
+function withSceneArray(content, episodeIndex, scenes) {
+  if (episodeIndex === null) return { ...content, scenes };
+  return { ...content, episodeScenes: content.episodeScenes.map((episode, i) => (i === episodeIndex ? { ...episode, scenes } : episode)) };
+}
+
+// Moves every stored scene at position >= fromIndex (in this film or
+// episode) by `delta`: all screenplay versions and the shoot schedule.
+async function shiftScenePositions(client, sceneListId, episodeIndex, fromIndex, delta) {
+  await client.query(
+    `UPDATE screenplay_scenes SET scene_index = scene_index + $4
+     WHERE scene_list_id = $1 AND episode_index IS NOT DISTINCT FROM $2 AND scene_index >= $3`,
+    [sceneListId, episodeIndex, fromIndex, delta]
+  );
+  const schedules = await client.query("SELECT id, content FROM shoot_schedules WHERE scene_list_id = $1", [sceneListId]);
+  for (const row of schedules.rows) {
+    if (!Array.isArray(row.content?.scheduleDays)) continue;
+    const sameGroup = (ref) => (episodeIndex === null ? true : ref.episodeIndex === episodeIndex);
+    const scheduleDays = row.content.scheduleDays.map((day) => ({
+      ...day,
+      sceneRefs: (day.sceneRefs ?? []).map((ref) =>
+        sameGroup(ref) && ref.sceneIndex >= fromIndex ? { ...ref, sceneIndex: ref.sceneIndex + delta } : ref
+      ),
+    }));
+    await client.query("UPDATE shoot_schedules SET content = $1 WHERE id = $2", [JSON.stringify({ ...row.content, scheduleDays }), row.id]);
+  }
+}
+
+// Locks the scene list for an add/delete and checks it can be changed.
+async function lockSceneListForSceneEdit(client, sceneListId, episodeIndex) {
+  const result = await client.query("SELECT content, status FROM scene_lists WHERE id = $1 FOR UPDATE", [sceneListId]);
+  const row = result.rows[0];
+  if (!row) return { error: "Scene list not found", status: 404 };
+  if (row.status !== "approved") return { error: "The scene list must be approved before changing the screenplay.", status: 400 };
+  // An automatic run still writing this script saves scenes by position, so
+  // moving them under it would put its scenes in the wrong places.
+  const running = await client.query("SELECT 1 FROM auto_pipeline_runs WHERE scene_list_id = $1 AND status = 'running' LIMIT 1", [sceneListId]);
+  if (running.rows.length > 0) return { error: "The AI is still writing this script. Add or delete scenes once it has finished.", status: 409 };
+  const scenes = sceneArrayOf(row.content, episodeIndex);
+  if (!Array.isArray(scenes)) return { error: "That episode doesn't exist.", status: 400 };
+  return { content: row.content, scenes };
+}
+
+app.post("/api/scene-lists/:id/scenes", requireRole("admin"), async (req, res) => {
+  const sceneListId = Number(req.params.id);
+  const { position, intExt, location, timeOfDay, oneLiner, estimatedMinutes, blank, dialogueLanguage: rawLanguage } = req.body;
+  const episodeIndex = req.body.episodeIndex === null || req.body.episodeIndex === undefined ? null : Number(req.body.episodeIndex);
+  const dialogueLanguage = ["en", "hi"].includes(rawLanguage) ? rawLanguage : "or";
+  if (!String(location ?? "").trim() || !String(oneLiner ?? "").trim()) {
+    res.status(400).json({ error: "Please give the place and what happens in the scene." });
+    return;
+  }
+
+  const client = await db.connect();
+  try {
+    await client.query("BEGIN");
+    const locked = await lockSceneListForSceneEdit(client, sceneListId, episodeIndex);
+    if (locked.error) {
+      await client.query("ROLLBACK");
+      res.status(locked.status).json({ error: locked.error });
+      return;
+    }
+    const { content, scenes } = locked;
+    const at = Math.max(0, Math.min(Number(position) || 0, scenes.length));
+    const neighbour = scenes[at - 1] ?? scenes[at] ?? {};
+    const text = (value) => {
+      const trimmed = String(value).trim();
+      return { en: trimmed, or: trimmed, hi: trimmed };
+    };
+    const newScene = {
+      actNumber: neighbour.actNumber ?? 1,
+      intExt: intExt === "EXT" ? "EXT" : "INT",
+      location: text(location),
+      timeOfDay: String(timeOfDay || "DAY").toUpperCase(),
+      oneLiner: text(oneLiner),
+      estimatedMinutes: Math.max(0.5, Math.min(15, Number(estimatedMinutes) || 2)),
+      purpose: neighbour.purpose ?? "plot_advancing",
+      addedByUser: true,
+    };
+    // Scene numbers ("12", "E3S4") stay sequential when they are simple;
+    // otherwise the new scene gets the film-industry style "12A".
+    const everyNumbered = scenes.length > 0 && scenes.every((s) => s.sceneNumber);
+    const simpleNumbers = everyNumbered && scenes.every((s) => /^(.*?)(\d+)$/.test(String(s.sceneNumber)));
+    if (simpleNumbers) newScene.sceneNumber = String(scenes[0].sceneNumber); // renumbered just below
+    else if (everyNumbered) newScene.sceneNumber = `${(scenes[at - 1] ?? scenes[0]).sceneNumber}A`;
+    let nextScenes = [...scenes.slice(0, at), newScene, ...scenes.slice(at)];
+    if (simpleNumbers) nextScenes = renumberSimpleScenes(nextScenes);
+
+    await shiftScenePositions(client, sceneListId, episodeIndex, at, 1);
+    const nextContent = withRecountedMinutes(withSceneArray(content, episodeIndex, nextScenes), episodeIndex);
+    await client.query("UPDATE scene_lists SET content = $1 WHERE id = $2", [JSON.stringify(nextContent), sceneListId]);
+    // A blank scene gets the user's line as its only action line, so it
+    // can be opened in the editor straight away.
+    if (blank) {
+      await client.query(
+        "INSERT INTO screenplay_scenes (scene_list_id, episode_index, scene_index, content) VALUES ($1, $2, $3, $4)",
+        [sceneListId, episodeIndex, at, JSON.stringify({ elements: [{ type: "action", character: "", text: String(oneLiner).trim() }], dialogueLanguage, editedByUser: true })]
+      );
+    }
+    await client.query("COMMIT");
+    res.json({ sceneList: nextContent, sceneIndex: at });
+  } catch (error) {
+    await client.query("ROLLBACK").catch(() => {});
+    console.error("Adding a scene failed:", error.message);
+    res.status(500).json({ error: error.message });
+  } finally {
+    client.release();
+  }
+});
+
+app.delete("/api/scene-lists/:id/scenes", requireRole("admin"), async (req, res) => {
+  const sceneListId = Number(req.params.id);
+  const episodeIndex = req.body.episodeIndex === null || req.body.episodeIndex === undefined ? null : Number(req.body.episodeIndex);
+  const sceneIndex = Number(req.body.sceneIndex);
+
+  const client = await db.connect();
+  try {
+    await client.query("BEGIN");
+    const locked = await lockSceneListForSceneEdit(client, sceneListId, episodeIndex);
+    if (locked.error) {
+      await client.query("ROLLBACK");
+      res.status(locked.status).json({ error: locked.error });
+      return;
+    }
+    const { content, scenes } = locked;
+    if (!Number.isInteger(sceneIndex) || sceneIndex < 0 || sceneIndex >= scenes.length) {
+      await client.query("ROLLBACK");
+      res.status(400).json({ error: "That scene doesn't exist." });
+      return;
+    }
+    if (scenes.length === 1) {
+      await client.query("ROLLBACK");
+      res.status(400).json({ error: "This is the only scene left here, so it can't be deleted." });
+      return;
+    }
+
+    await client.query(
+      "DELETE FROM screenplay_scenes WHERE scene_list_id = $1 AND episode_index IS NOT DISTINCT FROM $2 AND scene_index = $3",
+      [sceneListId, episodeIndex, sceneIndex]
+    );
+    // The deleted scene leaves the shoot schedule before the later scenes move up.
+    const schedules = await client.query("SELECT id, content FROM shoot_schedules WHERE scene_list_id = $1", [sceneListId]);
+    for (const row of schedules.rows) {
+      if (!Array.isArray(row.content?.scheduleDays)) continue;
+      const scheduleDays = row.content.scheduleDays.map((day) => ({
+        ...day,
+        sceneRefs: (day.sceneRefs ?? []).filter(
+          (ref) => !(ref.sceneIndex === sceneIndex && (episodeIndex === null || ref.episodeIndex === episodeIndex))
+        ),
+      }));
+      await client.query("UPDATE shoot_schedules SET content = $1 WHERE id = $2", [JSON.stringify({ ...row.content, scheduleDays }), row.id]);
+    }
+    await shiftScenePositions(client, sceneListId, episodeIndex, sceneIndex + 1, -1);
+
+    const remaining = scenes.filter((_, i) => i !== sceneIndex);
+    const nextScenes = remaining.every((s) => s.sceneNumber) ? renumberSimpleScenes(remaining) : remaining;
+    const nextContent = withRecountedMinutes(withSceneArray(content, episodeIndex, nextScenes), episodeIndex);
+    await client.query("UPDATE scene_lists SET content = $1 WHERE id = $2", [JSON.stringify(nextContent), sceneListId]);
+    await client.query("COMMIT");
+    res.json({ sceneList: nextContent });
+  } catch (error) {
+    await client.query("ROLLBACK").catch(() => {});
+    console.error("Deleting a scene failed:", error.message);
+    res.status(500).json({ error: error.message });
+  } finally {
+    client.release();
+  }
+});
+
 app.get("/api/scene-lists/:id/breakdown-freshness", requireLogin, async (req, res) => {
   const result = await db.query(
     `SELECT (SELECT max(created_at) FROM script_breakdowns WHERE scene_list_id = $1) AS breakdown_at,

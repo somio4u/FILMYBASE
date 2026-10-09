@@ -9,8 +9,10 @@ import TaskBrief from './TaskBrief.jsx'
 import TaskComments from './TaskComments.jsx'
 import SubmissionPanel from './SubmissionPanel.jsx'
 import DriveCard from './DriveCard.jsx'
+import SceneList from './SceneList.jsx'
 
 const KIND_TABS = [
+  { key: 'scenes', label: 'Scenes' },
   { key: 'character', label: 'Characters' },
   { key: 'prop', label: 'Properties' },
   { key: 'location', label: 'Locations' },
@@ -33,6 +35,9 @@ const ISSUE_CATEGORY_TEXT = {
   ambiguous_match: 'Needs a decision',
   duplicate_in_output: 'Listed twice',
   quarantined: 'Skipped entry',
+  not_in_any_scene: 'Not found in the screenplay',
+  screenplay_unknown_speaker: 'Speaker not in the dossier',
+  screenplay_no_location: 'Scene without a location',
 }
 
 // "CONFLICT: ..." / "DECISION: ..." notes written by the agent are the ones
@@ -55,7 +60,8 @@ export default function ProductionDossier({ projectId, backendUrl, onProjectCrea
   const [issues, setIssues] = useState([])
   const [tasks, setTasks] = useState([])
   const [selectedTaskId, setSelectedTaskId] = useState(null)
-  const [tab, setTab] = useState('character')
+  const [sceneRefresh, setSceneRefresh] = useState(0)
+  const [tab, setTab] = useState('scenes')
   const [selectedId, setSelectedId] = useState(null)
   const [loadError, setLoadError] = useState(null)
   const [isBusy, setIsBusy] = useState(false)
@@ -99,6 +105,9 @@ export default function ProductionDossier({ projectId, backendUrl, onProjectCrea
       else if (data.outcome === 'duplicate') setMessage('Nothing new: the agent’s output has not changed since the last import.')
       else if (data.outcome === 'failed') setMessage(data.error)
       else setMessage(`Imported: ${data.summary.created} new, ${data.summary.updated} updated, ${data.summary.unchanged} unchanged.`)
+      // the dossier may have changed: re-link the scenes to it (quietly; fine if there is no screenplay yet)
+      await fetch(`${api}/${projectId}/analyze-screenplay`, { method: 'POST' }).catch(() => {})
+      setSceneRefresh((n) => n + 1)
       await reload()
     } catch {
       setMessage('Could not reach the server.')
@@ -157,7 +166,7 @@ export default function ProductionDossier({ projectId, backendUrl, onProjectCrea
 
       <nav className="dossier-tabs" aria-label="Dossier sections">
         {KIND_TABS.map(({ key, label }) => {
-          const n = key === 'issues' ? issues.length : key === 'tasks' ? tasks.filter((t) => t.state !== 'cancelled').length : counts[key] ?? 0
+          const n = key === 'scenes' ? null : key === 'issues' ? issues.length : key === 'tasks' ? tasks.filter((t) => t.state !== 'cancelled').length : counts[key] ?? 0
           return (
             <button
               key={key}
@@ -165,13 +174,24 @@ export default function ProductionDossier({ projectId, backendUrl, onProjectCrea
               className={tab === key ? 'dossier-tab active' : 'dossier-tab'}
               onClick={() => { setTab(key); setSelectedId(null); setSelectedTaskId(null) }}
             >
-              {label} <span className="dossier-tab-count">{n}</span>
+              {label}{n === null ? null : <span className="dossier-tab-count"> {n}</span>}
             </button>
           )
         })}
       </nav>
 
-      {tab === 'tasks' ? (
+      {tab === 'scenes' ? (
+        <SceneList
+          projectId={projectId}
+          api={api}
+          refreshKey={sceneRefresh}
+          onAnalyzed={reload}
+          onOpenAsset={(assetId) => {
+            const asset = assets.find((a) => a.id === assetId)
+            if (asset) { setTab(asset.kind); setSelectedId(asset.id) }
+          }}
+        />
+      ) : tab === 'tasks' ? (
         <TasksView
           tasks={tasks}
           selectedTaskId={selectedTaskId}

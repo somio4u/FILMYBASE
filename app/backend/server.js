@@ -22,6 +22,7 @@ import { AsyncLocalStorage } from "async_hooks";
 import { marked } from "marked";
 import { registerProductionRoutes, syncProductionQuietly } from "./production.js";
 import { ensureAllProductionSchemas } from "./productionSchema.js";
+import { registerScreenplayRoutes } from "./screenplayAnalysis.js";
 import { setupProductionMedia } from "./productionMedia.js";
 import { registerDesignTaskRoutes } from "./designTasks.js";
 import { registerSubmissionRoutes, designerGatekeeper, DESIGNER_ROLE } from "./designSubmissions.js";
@@ -18939,6 +18940,7 @@ process.on("uncaughtException", (err) => console.error("Uncaught exception:", er
 // Production workflow routes (agent data -> Production Dossier). See production.js.
 registerProductionRoutes(app, db, requireRole);
 registerDesignTaskRoutes(app, db, requireRole);
+registerScreenplayRoutes(app, db, requireRole);
 registerSubmissionRoutes(app, db, requireRole, { store: productionMedia.store, serveMedia: productionMedia.serveMedia });
 
 // Schema self-heal runs before the server starts accepting traffic — worst

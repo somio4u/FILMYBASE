@@ -10,6 +10,7 @@ import { ensureProductionSchema } from "./production.js";
 import { ensureMediaSchema } from "./mediaStore.js";
 import { ensureDesignTaskSchema } from "./designTasks.js";
 import { ensureSubmissionSchema } from "./designSubmissions.js";
+import { ensureScreenplayAnalysisSchema } from "./screenplayAnalysis.js";
 
 export async function ensureAllProductionSchemas(db, log = console.error) {
   const steps = [
@@ -17,6 +18,7 @@ export async function ensureAllProductionSchemas(db, log = console.error) {
     ["media storage", ensureMediaSchema],
     ["designer tasks", ensureDesignTaskSchema],
     ["designer submissions", ensureSubmissionSchema],
+    ["screenplay scenes", ensureScreenplayAnalysisSchema],
   ];
   const failures = [];
   for (const [name, step] of steps) {

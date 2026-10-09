@@ -96,6 +96,25 @@ export default function AiBackground() {
     let busyRequests = 0
     let busy = 0 // eased 0 → 1 while the AI is working
     let warpStartedAt = null
+    // The tunnel is centred on the main work area (right of the sidebar),
+    // not the whole window. areaLeft/areaWidth follow the page's main panel;
+    // centerX eases toward its middle so a sidebar opening/closing glides.
+    let areaLeft = 0
+    let areaWidth = 0
+    let centerX = null
+    let lastAreaCheck = 0
+
+    function measureArea() {
+      const main = document.querySelector('.chat-viewport')
+      const rect = main?.getBoundingClientRect()
+      if (rect && rect.width > 200) {
+        areaLeft = rect.left
+        areaWidth = rect.width
+      } else {
+        areaLeft = 0
+        areaWidth = width
+      }
+    }
 
     function resize() {
       const ratio = Math.min(window.devicePixelRatio || 1, 1.5)
@@ -104,7 +123,8 @@ export default function AiBackground() {
       canvas.width = Math.round(width * ratio)
       canvas.height = Math.round(height * ratio)
       ctx.setTransform(ratio, 0, 0, ratio, 0, 0)
-      rings = buildRings(width, height)
+      measureArea()
+      rings = buildRings(areaWidth, height)
     }
 
     function draw(now) {
@@ -120,7 +140,15 @@ export default function AiBackground() {
       }
       const speed = 1 + busy * 3 + warp * 7
       const zoom = 1 + warp * 2.2
-      const cx = width / 2
+      if (now - lastAreaCheck > 500) {
+        lastAreaCheck = now
+        const previousWidth = areaWidth
+        measureArea()
+        if (Math.abs(areaWidth - previousWidth) > 60) rings = buildRings(areaWidth, height)
+      }
+      const targetX = areaLeft + areaWidth / 2
+      centerX = centerX === null ? targetX : centerX + (targetX - centerX) * Math.min(1, dt * 4)
+      const cx = centerX
       const cy = height / 2
 
       const backdrop = ctx.createRadialGradient(cx, cy, 0, cx, cy, Math.hypot(width, height) / 2)

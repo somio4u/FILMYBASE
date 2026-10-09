@@ -52,3 +52,58 @@ Added 2026-10-09 (all optional — old stored rows without them still work):
    (MUST KEEP / MAY EXPLORE / NEEDS DECISION). 5. Uploads + submit.
 6. Exact-version approval + approved library. 7. ZIP export.
 Each verified before the next.
+
+---
+
+# Media storage design (requested 2026-10-09)
+
+**Rule:** every generated or uploaded image, video clip, audio file and
+export lives in storage the user owns — **local disk or Google Drive** —
+never only at the AI provider and never in the database.
+
+## One interface, two backends
+All production code calls one small `mediaStore` (built in the uploads step):
+`put(projectId, role, stream, meta)`, `get(mediaId)` (stream, with Range),
+`exists`, `remove` (refused for anything approved or used by a take).
+The `media_files` table records: project_id, backend (`local` | `gdrive`),
+**key** (relative path, or Drive fileId), sha256, bytes, mime,
+width/height/duration, role, created_by. Provider URLs are never stored.
+
+- **Local**: folder from `MEDIA_ROOT` (default `app/backend/media/`, git-ignored).
+- **Google Drive**: Drive API v3, scope `drive.file` (the app only sees files
+  it created itself). Reuses the app's existing Google sign-in (currently
+  Contacts-only) with the extra scope + a one-time re-consent; the refresh
+  token goes in the existing token table. Files sit in the user's own Drive
+  quota. Optional `GOOGLE_DRIVE_ROOT_FOLDER_ID` (variable name only).
+- Choose with `MEDIA_BACKEND=local|gdrive`; optional `MEDIA_MIRROR=gdrive`
+  writes a second copy.
+
+## Same folder layout in both
+`<root>/<project>/{designs,storyboard,keyframes,video-takes,audio,exports}/<CODE>_v<N>_<hash8>.<ext>`
+(e.g. `CHAR001_v2_9f3a1c7e.png`) — readable by a person browsing Drive or the folder.
+
+## Generation flow
+1. Job gets a provider result (image or video).
+2. **Immediately** download it (provider links expire — Veo files in ~2 days)
+   and stream it into `mediaStore` (never held fully in memory; Drive uses
+   resumable upload).
+3. Verify type, size and sha256; only then create the take as "ready".
+4. If Drive is down: keep the file in a local spool, mark `pending_upload`,
+   retry with capped backoff. A take never points at media that isn't stored.
+
+## Viewing / security
+- Browser never gets a Drive link. The backend streams media through
+  `/api/production/media/:id` after checking login, role and project.
+- Drive files are never made public; no credentials in manifests/logs/ZIPs.
+- Identical content in one project is stored once (hash match).
+
+## Honest limits
+- **Local disk on Render's free tier is wiped on every deploy/restart** (the
+  app's own existing note says so). Local mode is only safe when the backend
+  runs on your own computer or a host with a persistent disk. On Render
+  free tier use `gdrive`.
+- The Drive backend can only be tested with a mock in this sandbox; a real
+  upload test needs your Google consent, so it will be reported as
+  "tested with fixture only" until you try it.
+- Drive API limits (per-user rate limits, 750 GB/day upload) are far above a
+  film's needs, but very large videos should upload in the background.

@@ -13,7 +13,9 @@ Brief: the uploaded "Claude Code Production Workflow Brief". Phases 0-5; only Ph
 
 - [x] **Phase 0 — inspect and map.** Found the silent agent (asset extraction → `ai_movie_projects.assets`) and wrote `PRODUCTION_WORKFLOW_MAPPING.md` (shape, gaps, change list).
 - [x] **Silent agent told the production requirements (user asked).** It now also captures aliases, scene references, states, missing details, costumes and other assets (letters/signs/vehicles/songs) — all optional extras, nothing old removed — and now also refreshes every 5th approved screenplay beat, not only at the end. Syntax-checked only; real output quality needs a live Gemini key.
-- [ ] **Phase 1 — adapter, Production Dossier, designer tasks, uploads, approval, export.** Not started. Next: database tables + the adapter.
+- [x] **Phase 1, step 1 — database tables + adapter (done).** New `app/backend/production.js`: reads the silent agent's saved output, keeps an unchangeable snapshot (hash), creates one dossier record per character/prop/location/other asset (codes CHAR001, PROP001…), records missing info in an issues inbox, never duplicates on re-import, never overwrites human edits. Read-only endpoints under `/api/production/:projectId/` (import, overview, assets, issues), admin only. 10 automated tests pass against a real local Postgres using a labelled fake agent output (they caught and fixed a Hindi-name bug). Not yet: automatic import after the agent runs, the dossier screen.
+- [x] **Media storage design (user request: all images/videos stored locally or in Google Drive).** Written in `PRODUCTION_WORKFLOW_MAPPING.md`. Design only — built with the uploads step.
+- [ ] **Phase 1, next steps:** (2) Production Dossier screen, (3) designer tasks + briefs, (4) media storage (local first, then Drive) + uploads, (5) exact-version approval + library, (6) ZIP export.
 
 ---
 

@@ -20,6 +20,7 @@ import AdmZip from "adm-zip";
 import crypto from "crypto";
 import { AsyncLocalStorage } from "async_hooks";
 import { marked } from "marked";
+import { ensureProductionSchema, registerProductionRoutes } from "./production.js";
 import { BIBLE_PASS_SCORE, designStoryBible, generateBrainJson, reviseBibleWithNote, storyBibleToMarkdown } from "./storyBrain.js";
 import cookieParser from "cookie-parser";
 import { createClient } from "@supabase/supabase-js";
@@ -18913,10 +18914,16 @@ app.use((err, req, res, next) => {
 process.on("unhandledRejection", (err) => console.error("Unhandled rejection:", err));
 process.on("uncaughtException", (err) => console.error("Uncaught exception:", err));
 
+// Production workflow routes (agent data -> Production Dossier). See production.js.
+registerProductionRoutes(app, db, requireRole);
+
 // Schema self-heal runs before the server starts accepting traffic — worst
 // case (the database is briefly unreachable) it logs and the server still
 // starts, rather than blocking startup entirely.
-ensureAiMovieSchema().finally(() => {
+ensureAiMovieSchema()
+  .then(() => ensureProductionSchema(db))
+  .catch((error) => console.error("Production schema setup failed:", error.message))
+  .finally(() => {
   app.listen(PORT, () => {
     console.log(`Backend server running at http://localhost:${PORT}`);
   });

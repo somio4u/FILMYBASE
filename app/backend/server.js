@@ -10345,9 +10345,13 @@ function elementsToPlainText(elements) {
 // defensive backstop for whenever it does anyway.
 const SLUGLINE_REGEX = /^\s*(INT|EXT)\b/i;
 
-function sanitizeScreenplayElements(elements, dialogueLanguage) {
-  const dialogueRegex =
-    dialogueLanguage === "or" ? FOREIGN_SCRIPT_REGEX : dialogueLanguage === "hi" ? HI_FOREIGN_SCRIPT_REGEX : EN_FOREIGN_SCRIPT_REGEX;
+// actionLanguage: a scene can have its action lines in a different language
+// from its dialogue (the "Change language" tool); defaults to the same.
+function sanitizeScreenplayElements(elements, dialogueLanguage, actionLanguage = dialogueLanguage) {
+  const regexFor = (language) =>
+    language === "or" ? FOREIGN_SCRIPT_REGEX : language === "hi" ? HI_FOREIGN_SCRIPT_REGEX : EN_FOREIGN_SCRIPT_REGEX;
+  const dialogueRegex = regexFor(dialogueLanguage);
+  const actionRegex = regexFor(["en", "or", "hi"].includes(actionLanguage) ? actionLanguage : dialogueLanguage);
   const clean = (text, regex) => (typeof text === "string" ? text.replace(regex, "").replace(/ {2,}/g, " ").trim() : text);
 
   const cleaned = (elements ?? []).map((element) => {
@@ -10369,7 +10373,7 @@ function sanitizeScreenplayElements(elements, dialogueLanguage) {
       ...element,
       // Action and flashback text follow the scene's language (an Odia scene
       // has Odia action); a transition is a technical marker, always English.
-      text: clean(element.text, element.type === "transition" ? EN_FOREIGN_SCRIPT_REGEX : dialogueRegex),
+      text: clean(element.text, element.type === "transition" ? EN_FOREIGN_SCRIPT_REGEX : isDialogue ? dialogueRegex : actionRegex),
       parenthetical: element.parenthetical != null ? clean(element.parenthetical, dialogueRegex) : element.parenthetical,
     };
   });
@@ -10846,7 +10850,7 @@ app.post("/api/screenplay/scene/:id/edit", requireRole("admin"), async (req, res
     const scenes = [{ elements }];
     const { pieces, corrections, fixes } = await generateMovieScriptCorrections(scenes, dialogueLanguage, characterNames);
     const { elementsByScene } = applyMovieScriptCorrections(scenes, pieces, corrections);
-    const saved = await insertMovieScreenplayVersion(previousRow, sanitizeScreenplayElements(elementsByScene[0], dialogueLanguage), { editedByUser: true });
+    const saved = await insertMovieScreenplayVersion(previousRow, sanitizeScreenplayElements(elementsByScene[0], dialogueLanguage, previousRow.content?.actionLanguage), { editedByUser: true });
     res.json({ scene: saved, fixes: fixes.map((f) => f.fix) });
   } catch (error) {
     console.error(`Movie screenplay scene ${req.params.id} edit failed:`, error.message);
@@ -10884,7 +10888,7 @@ async function runMovieScriptCheck(sceneListId, state) {
         const { elementsByScene, changedByScene } = applyMovieScriptCorrections(scenes, pieces, corrections);
         for (let i = 0; i < batch.rows.length; i++) {
           const row = batch.rows[i];
-          if (changedByScene[i] > 0) await insertMovieScreenplayVersion(row, sanitizeScreenplayElements(elementsByScene[i], batch.language));
+          if (changedByScene[i] > 0) await insertMovieScreenplayVersion(row, sanitizeScreenplayElements(elementsByScene[i], batch.language, row.content?.actionLanguage));
           state.report.push({
             episodeIndex: row.episode_index,
             sceneIndex: row.scene_index,
@@ -10933,6 +10937,154 @@ app.get("/api/scene-lists/:id/script-check", requireLogin, (req, res) => {
 // later scene's position by one, all in one transaction.
 
 // The scene array for a film (`scenes`) or one episode of a series.
+// ---- "Change language": rewrite a written scene's dialogue and/or action
+// lines into Odia, Hindi or English — same story, same meaning, natural
+// spoken language. Each changed scene is saved as a new version (so Undo
+// takes it back). One scene, one episode or the whole screenplay; the work
+// runs in the background and the page polls its progress.
+const SCREENPLAY_LANGUAGES = ["or", "hi", "en"];
+const languageJobs = new Map();
+
+async function convertScreenplaySceneLanguage(elements, dialogueTo, actionTo) {
+  const needs = (text, language) => typeof text === "string" && text.trim() && !textIsInLanguage(text, language);
+  const pieceIndexes = elements
+    .map((el, i) => {
+      if (el.type === "transition") return null;
+      if (el.type === "dialogue") return needs(el.text, dialogueTo) || needs(el.parenthetical, dialogueTo) ? i : null;
+      return needs(el.text, actionTo) ? i : null;
+    })
+    .filter((i) => i !== null);
+  if (pieceIndexes.length === 0) return null;
+
+  const label = (language) => TRANSLATION_LANGUAGE_LABELS[language] ?? "English";
+  const whole = elements
+    .map((el) => (el.type === "dialogue" ? `${el.character}${el.parenthetical ? ` (${el.parenthetical})` : ""}: ${el.text}` : `[${el.type}] ${el.text}`))
+    .join("\n");
+  const lines = pieceIndexes.map((i, n) => {
+    const el = elements[i];
+    return el.type === "dialogue"
+      ? `${n + 1}. [DIALOGUE of ${el.character} -> ${label(dialogueTo)}] ${el.text}${el.parenthetical ? ` [acting note: ${el.parenthetical}]` : ""}`
+      : `${n + 1}. [ACTION -> ${label(actionTo)}] ${el.text}`;
+  });
+  const rules = [
+    dialogueTo !== "en" || actionTo !== "en" ? COLLOQUIAL_LANGUAGE_RULE : "",
+    dialogueTo !== "en" ? SCREENPLAY_DIALOGUE_CRAFT[dialogueTo] ?? "" : "",
+    actionTo !== "en" ? SCREENPLAY_ACTION_LANGUAGE_RULES[actionTo] ?? "" : "Action lines in English are plain, simple, present-tense screenplay English.",
+  ].filter(Boolean).join("\n\n");
+
+  const parsed = await generateJsonContent({
+    model: STORY_WRITER_MODEL_NAME,
+    contents: `THE WHOLE SCENE (for context):\n${whole}\n\nRewrite each numbered piece below into the language named after its arrow — the way a person would actually say it in that language, never a stiff word-for-word translation. Keep the exact meaning, events, tone and emotion; do not add, drop or improve anything. Character names stay in English capital letters, with the same spelling. For dialogue, also rewrite its acting note (if any) into the same language as the dialogue.\n\n${rules}\n\nReturn one item per numbered piece, in the same order.\n\n${lines.join("\n")}`,
+    config: {
+      systemInstruction: "You are an expert screenplay writer who moves scenes between Odia, Hindi and English, keeping every line faithful and natural.",
+      responseMimeType: "application/json",
+      maxOutputTokens: 16384,
+      responseSchema: {
+        type: Type.OBJECT,
+        properties: {
+          lines: {
+            type: Type.ARRAY,
+            items: { type: Type.OBJECT, properties: { text: { type: Type.STRING }, parenthetical: { type: Type.STRING } }, required: ["text"] },
+          },
+        },
+        required: ["lines"],
+      },
+    },
+  });
+
+  const converted = [...elements];
+  pieceIndexes.forEach((i, n) => {
+    const line = parsed.lines?.[n];
+    if (!line?.text?.trim()) return;
+    converted[i] = {
+      ...converted[i],
+      text: line.text.trim(),
+      ...(converted[i].type === "dialogue" && converted[i].parenthetical ? { parenthetical: (line.parenthetical || converted[i].parenthetical).trim() } : {}),
+    };
+  });
+  return converted;
+}
+
+app.post("/api/scene-lists/:id/convert-language", requireRole("admin"), async (req, res) => {
+  const sceneListId = Number(req.params.id);
+  const { scope, dialogueLanguage, actionLanguage } = req.body;
+  const episodeIndex = req.body.episodeIndex === null || req.body.episodeIndex === undefined ? null : Number(req.body.episodeIndex);
+  const sceneIndex = Number(req.body.sceneIndex);
+  if (!SCREENPLAY_LANGUAGES.includes(dialogueLanguage) || !SCREENPLAY_LANGUAGES.includes(actionLanguage) || !["scene", "episode", "all"].includes(scope)) {
+    res.status(400).json({ error: "Pick a language for the dialogue and the action lines." });
+    return;
+  }
+  try {
+    const listRow = (await db.query("SELECT content FROM scene_lists WHERE id = $1", [sceneListId])).rows[0];
+    if (!listRow) {
+      res.status(404).json({ error: "Scene list not found" });
+      return;
+    }
+    const running = await db.query("SELECT 1 FROM auto_pipeline_runs WHERE scene_list_id = $1 AND status = 'running' LIMIT 1", [sceneListId]);
+    if (running.rows.length > 0) {
+      res.status(409).json({ error: "The AI is still writing this script. Try again once it has finished." });
+      return;
+    }
+    if ([...languageJobs.values()].some((job) => job.sceneListId === sceneListId && job.status === "running")) {
+      res.status(409).json({ error: "A language change is already running on this script — wait for it to finish." });
+      return;
+    }
+
+    const targets = [];
+    const content = listRow.content;
+    const episodes = content.episodeScenes ? content.episodeScenes.map((_, i) => i) : [null];
+    for (const ep of episodes) {
+      if (scope !== "all" && ep !== episodeIndex) continue;
+      (sceneArrayOf(content, ep) ?? []).forEach((_, i) => {
+        if (scope === "scene" && i !== sceneIndex) return;
+        targets.push({ episodeIndex: ep, sceneIndex: i });
+      });
+    }
+
+    const job = { id: crypto.randomUUID(), sceneListId, status: "running", total: targets.length, done: 0, changed: 0, failed: 0, startedAt: Date.now() };
+    languageJobs.set(job.id, job);
+    res.json({ jobId: job.id, total: job.total });
+
+    await mapWithConcurrency(targets, 3, async (target) => {
+      try {
+        const latest = await fetchLatestScreenplayScene(sceneListId, target.episodeIndex, target.sceneIndex);
+        const elements = latest?.content?.elements;
+        if (Array.isArray(elements) && elements.length > 0) {
+          const converted = await convertScreenplaySceneLanguage(elements, dialogueLanguage, actionLanguage);
+          const sameSettings = latest.content.dialogueLanguage === dialogueLanguage && (latest.content.actionLanguage ?? latest.content.dialogueLanguage) === actionLanguage;
+          if (converted || !sameSettings) {
+            await insertMovieScreenplayVersion(
+              { scene_list_id: sceneListId, episode_index: target.episodeIndex, scene_index: target.sceneIndex, content: latest.content },
+              sanitizeScreenplayElements(converted ?? elements, dialogueLanguage, actionLanguage),
+              { dialogueLanguage, actionLanguage, languageChanged: true }
+            );
+            job.changed++;
+          }
+        }
+      } catch (error) {
+        job.failed++;
+        console.error("Language change failed for a scene:", error.message);
+      }
+      job.done++;
+    });
+    job.status = "done";
+    // Finished jobs are forgotten after an hour.
+    setTimeout(() => languageJobs.delete(job.id), 60 * 60 * 1000);
+  } catch (error) {
+    console.error("Language change failed:", error.message);
+    if (!res.headersSent) res.status(502).json({ error: error.message });
+  }
+});
+
+app.get("/api/language-jobs/:id", requireRole("admin"), (req, res) => {
+  const job = languageJobs.get(req.params.id);
+  if (!job) {
+    res.status(404).json({ error: "That language change is no longer running." });
+    return;
+  }
+  res.json(job);
+});
+
 function sceneArrayOf(content, episodeIndex) {
   return episodeIndex === null ? content.scenes : content.episodeScenes?.[episodeIndex]?.scenes;
 }

@@ -7428,3 +7428,43 @@ button:not(:disabled):active {
 @media (prefers-reduced-motion: reduce) {
   .adu-body, .adu-shadow, .adu-sparkles i, .adu-orbit { animation: none !important; }
 }
+
+/* "🌐 Change language" in the scene tools. */
+.language-changer {
+  margin-top: 10px;
+}
+
+.language-changer-open {
+  width: 100%;
+}
+
+.language-changer-form,
+.language-changer-progress {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 14px;
+  border-radius: 18px;
+  border: 1px solid var(--neo-edge);
+  background: var(--neo-tray);
+}
+
+.language-changer-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.language-changer-form select {
+  padding: 7px 10px;
+  background: var(--bg-input);
+  color: var(--text-primary);
+  border: 1px solid var(--border-subtle);
+}
+
+.language-changer-progress p {
+  margin: 0;
+  font-size: 13px;
+}

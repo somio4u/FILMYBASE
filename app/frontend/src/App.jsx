@@ -554,6 +554,23 @@ const LABELS = {
     ageLabel: 'Age',
     genderMaleLabel: 'Male',
     genderFemaleLabel: 'Female',
+    languageNames: { or: 'Odia', hi: 'Hindi', en: 'English' },
+    actionLanguageLabel: 'Action lines',
+    languageChangeButton: '🌐 Change language',
+    languageChangeTitle: 'Change the language',
+    languageDialogueLabel: 'Dialogue in',
+    languageActionLabel: 'Action lines in',
+    languageScopeLabel: 'Do it for',
+    languageScopeScene: (number) => `Just scene ${number}`,
+    languageScopeEpisode: 'This whole episode',
+    languageScopeAll: 'The whole screenplay',
+    languageChangeNote: "Same story, same lines — the AI just says it naturally in the language you pick. Each scene is saved as a new version, so ↶ Undo brings the old one back.",
+    languageChangeStartButton: 'Change it',
+    languageChangeConfirm: (scope, dialogue, action) => `${scope}: dialogue in ${dialogue}, action lines in ${action}. Every written scene there gets rewritten (each one can be undone on its own). Go ahead?`,
+    languageChangeRunning: (done, total) => `Changing the language… ${done} / ${total} scenes`,
+    languageChangeDone: (count) => (count === 0 ? 'Nothing to change — it was already in those languages.' : `Done! ${count} scene${count === 1 ? '' : 's'} rewritten. Not happy with one? ↶ Undo on that scene.`),
+    languageChangeDoneWithFailures: (count, failed) => `${count} scene${count === 1 ? '' : 's'} rewritten, but ${failed} didn't go through — try those again.`,
+    languageChangeWhileEditingNote: 'Save or cancel your edit first, then change the language.',
     breakdownLocationEnPlaceholder: 'Location (in English)',
     breakdownNotesEnPlaceholder: 'Notes (in English)',
     breakdownLabelPlaceholder: 'Name',
@@ -1355,6 +1372,23 @@ const LABELS = {
     ageLabel: 'ବୟସ',
     genderMaleLabel: 'ପୁରୁଷ',
     genderFemaleLabel: 'ମହିଳା',
+    languageNames: { or: 'ଓଡ଼ିଆ', hi: 'ହିନ୍ଦୀ', en: 'ଇଂରାଜୀ' },
+    actionLanguageLabel: 'ଆକ୍ସନ୍ ଲାଇନ୍',
+    languageChangeButton: '🌐 ଭାଷା ବଦଳା',
+    languageChangeTitle: 'ଭାଷା ବଦଳା',
+    languageDialogueLabel: 'ଡାଇଲଗ୍ କେଉଁ ଭାଷାରେ',
+    languageActionLabel: 'ଆକ୍ସନ୍ ଲାଇନ୍ କେଉଁ ଭାଷାରେ',
+    languageScopeLabel: 'କେଉଁଠି କରିବି',
+    languageScopeScene: (number) => `ଖାଲି ସିନ୍ ${number}`,
+    languageScopeEpisode: 'ଏଇ ପୁରା ଏପିସୋଡ୍',
+    languageScopeAll: 'ପୁରା ସ୍କ୍ରିନପ୍ଲେ',
+    languageChangeNote: 'ସେଇ ଗପ, ସେଇ ଲାଇନ୍ — AI ଖାଲି ତୁ ବାଛିଥିବା ଭାଷାରେ ସହଜରେ କହିବ। ପ୍ରତି ସିନ୍ ନୂଆ ଭର୍ସନ୍ ଭାବେ ସେଭ୍ ହେବ, ତେଣୁ ↶ ପଛକୁ ଫେର ଦବେଇଲେ ପୁରୁଣାଟା ଫେରିବ।',
+    languageChangeStartButton: 'ବଦଳେଇଦେ',
+    languageChangeConfirm: (scope, dialogue, action) => `${scope}: ଡାଇଲଗ୍ ${dialogue}ରେ, ଆକ୍ସନ୍ ଲାଇନ୍ ${action}ରେ। ସେଠି ଲେଖା ସବୁ ସିନ୍ ପୁଣି ଲେଖାହେବ (ପ୍ରତିଟା ଅଲଗା ଅଲଗା ପଛକୁ ଫେରେଇ ହେବ)। କରିବି?`,
+    languageChangeRunning: (done, total) => `ଭାଷା ବଦଳୁଛି… ${done} / ${total} ସିନ୍`,
+    languageChangeDone: (count) => (count === 0 ? 'ବଦଳେଇବାକୁ କିଛି ନାହିଁ — ଆଗରୁ ସେଇ ଭାଷାରେ ଅଛି।' : `ହେଇଗଲା ଭାଇ! ${count}ଟା ସିନ୍ ପୁଣି ଲେଖାହେଲା। କୌଣସିଟା ପସନ୍ଦ ନୁହେଁ? ସେଇ ସିନ୍‌ରେ ↶ ପଛକୁ ଫେର ଦବା।`),
+    languageChangeDoneWithFailures: (count, failed) => `${count}ଟା ସିନ୍ ପୁଣି ଲେଖାହେଲା, କିନ୍ତୁ ${failed}ଟା ହେଲାନି — ସେଗୁଡ଼ା ଆଉ ଥରେ କର।`,
+    languageChangeWhileEditingNote: 'ଆଗେ ତୋ ଏଡିଟ୍ ସେଭ୍ କର ବା ବାତିଲ୍ କର, ତା\'ପରେ ଭାଷା ବଦଳା।',
     breakdownLocationEnPlaceholder: 'ଲୋକେସନ୍ (ଇଂରାଜୀରେ ଲେଖ)',
     breakdownNotesEnPlaceholder: 'ନୋଟ୍ (ଇଂରାଜୀରେ ଲେଖ)',
     breakdownLabelPlaceholder: 'ନାମ',
@@ -3402,6 +3436,121 @@ function VoiceWriterButton({ t, sceneListId, episodeIndex, sceneIndex, sceneNumb
   )
 }
 
+// "🌐 Change language": rewrites the written scene(s) — dialogue and/or
+// action lines — into Odia, Hindi or English. Runs on the server in the
+// background; this polls the progress, then reloads the scenes.
+function LanguageChanger({ t, sceneListId, episodeIndex, sceneIndex, sceneNumber, isSeries, draft, blockedNote, onDone }) {
+  const [form, setForm] = useState(null) // { dialogue, action, scope }
+  const [job, setJob] = useState(null) // { id, done, total, changed, failed, status }
+  const [error, setError] = useState(null)
+  const [result, setResult] = useState(null)
+  const pollRef = useRef(null)
+
+  useEffect(() => () => clearTimeout(pollRef.current), [])
+
+  function open() {
+    const dialogue = draft?.dialogueLanguage ?? 'or'
+    setForm({ dialogue, action: draft?.actionLanguage ?? dialogue, scope: 'scene' })
+    setError(null)
+    setResult(null)
+  }
+
+  function poll(id) {
+    pollRef.current = setTimeout(async () => {
+      try {
+        const response = await fetch(`${BACKEND_URL}/api/language-jobs/${id}`)
+        const data = await response.json()
+        if (!response.ok) throw new Error(data.error)
+        setJob(data)
+        if (data.status === 'running') {
+          poll(id)
+        } else {
+          setJob(null)
+          setResult(data)
+          onDone()
+        }
+      } catch {
+        setJob(null)
+        setError(t.genericError)
+        onDone()
+      }
+    }, 2500)
+  }
+
+  async function start() {
+    const scopeLabel = form.scope === 'scene' ? t.languageScopeScene(sceneNumber) : form.scope === 'episode' ? t.languageScopeEpisode : t.languageScopeAll
+    if (form.scope !== 'scene' && !window.confirm(t.languageChangeConfirm(scopeLabel, t.languageNames[form.dialogue], t.languageNames[form.action]))) return
+    setError(null)
+    try {
+      const response = await fetch(`${BACKEND_URL}/api/scene-lists/${sceneListId}/convert-language`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ scope: form.scope, episodeIndex, sceneIndex, dialogueLanguage: form.dialogue, actionLanguage: form.action }),
+      })
+      const data = await response.json()
+      if (!response.ok) {
+        setError(data.error || t.genericError)
+        return
+      }
+      setForm(null)
+      setJob({ id: data.jobId, done: 0, total: data.total, status: 'running' })
+      poll(data.jobId)
+    } catch {
+      setError(t.genericError)
+    }
+  }
+
+  const languageOptions = ['or', 'hi', 'en'].map((code) => <option key={code} value={code}>{t.languageNames[code]}</option>)
+  return (
+    <div className="language-changer">
+      {job ? (
+        <div className="language-changer-progress">
+          <p>{t.languageChangeRunning(job.done, job.total)}</p>
+          <div className="script-check-progress" aria-hidden="true">
+            <span style={{ width: `${job.total ? Math.max(5, Math.round((job.done / job.total) * 100)) : 5}%` }} />
+          </div>
+        </div>
+      ) : form ? (
+        <div className="language-changer-form">
+          <p className="script-panel-title">{t.languageChangeTitle}</p>
+          <label>
+            {t.languageDialogueLabel}
+            <select value={form.dialogue} onChange={(e) => setForm({ ...form, dialogue: e.target.value })}>{languageOptions}</select>
+          </label>
+          <label>
+            {t.languageActionLabel}
+            <select value={form.action} onChange={(e) => setForm({ ...form, action: e.target.value })}>{languageOptions}</select>
+          </label>
+          <label>
+            {t.languageScopeLabel}
+            <select value={form.scope} onChange={(e) => setForm({ ...form, scope: e.target.value })}>
+              <option value="scene">{t.languageScopeScene(sceneNumber)}</option>
+              {isSeries && <option value="episode">{t.languageScopeEpisode}</option>}
+              <option value="all">{t.languageScopeAll}</option>
+            </select>
+          </label>
+          <p className="script-tools-editing-note">{t.languageChangeNote}</p>
+          <div className="script-scene-form-actions">
+            <button type="button" className="choose-button" onClick={start} disabled={Boolean(blockedNote)}>{t.languageChangeStartButton}</button>
+            <button type="button" className="cancel-button" onClick={() => setForm(null)}>{t.cancel}</button>
+          </div>
+        </div>
+      ) : (
+        <button type="button" className="cancel-button language-changer-open" onClick={open} disabled={Boolean(blockedNote)} title={blockedNote ?? undefined}>
+          {t.languageChangeButton}
+        </button>
+      )}
+      {blockedNote && !job && <p className="script-tools-editing-note">{blockedNote}</p>}
+      {error && <p className="error-text">{error}</p>}
+      {result && (
+        <p className="script-tools-editing-note">
+          {result.failed > 0 ? t.languageChangeDoneWithFailures(result.changed, result.failed) : t.languageChangeDone(result.changed)}
+        </p>
+      )}
+    </div>
+  )
+}
+
 function MovieScreenplayWorkspace({
   sceneList, episodes, t, language, screenplay, scriptTheme, onChangeScriptTheme, onSceneSaved, onReloadScenes, onSceneListChanged,
 }) {
@@ -3925,6 +4074,7 @@ function MovieScreenplayWorkspace({
                 {scene?.turn && <span>{t.sceneTurnLabel}: {scene.turn[language] ?? scene.turn.en}</span>}
                 {draft?.charactersPresent?.length > 0 && <span>{t.screenplayCharactersLabel}: {draft.charactersPresent.join(', ')}</span>}
                 {draft?.dialogueLanguage && <span>{draft.dialogueLanguage === 'or' ? t.dialogueLanguageOdia : draft.dialogueLanguage === 'hi' ? t.dialogueLanguageHindi : t.dialogueLanguageEnglish}</span>}
+                {draft?.actionLanguage && draft.actionLanguage !== draft.dialogueLanguage && <span>{t.actionLanguageLabel}: {t.languageNames[draft.actionLanguage]}</span>}
               </div>
               <div className="script-tools-actions">
                 {!screenplay ? (
@@ -3965,6 +4115,17 @@ function MovieScreenplayWorkspace({
                     <ScreenplayBlock
                       episodeIndex={group.episodeIndex} sceneIndex={sceneIndex} t={t} language={language} screenplay={screenplay} toolsOnly
                       editingNote={editing?.key === selectedKey ? t.scriptRequestChangesWhileEditingNote : null}
+                    />
+                    <LanguageChanger
+                      t={t}
+                      sceneListId={sceneList.id}
+                      episodeIndex={group.episodeIndex}
+                      sceneIndex={sceneIndex}
+                      sceneNumber={numberOf(scene, sceneIndex)}
+                      isSeries={groups.length > 1}
+                      draft={draft}
+                      blockedNote={editing ? t.languageChangeWhileEditingNote : isAiWriting || isChecking || isChangingScenes ? t.voiceBlockedWhileBusy : null}
+                      onDone={() => onReloadScenes?.()}
                     />
                   </>
                 )}

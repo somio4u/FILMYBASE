@@ -65,7 +65,7 @@ export async function ensureDesignTaskSchema(db) {
 
 const DECISION_PREFIX = /^(DECISION|CONFLICT)\b/;
 
-function isDecisionIssue(issue) {
+export function isDecisionIssue(issue) {
   return DECISION_PREFIX.test(issue.message) || issue.category === "ambiguous_match" || issue.category === "agent_update";
 }
 
@@ -302,7 +302,7 @@ export async function listDesignerTasks(db, projectId) {
 export async function loadSubmissions(db, taskId) {
   const subs = (
     await db.query(
-      `SELECT id, version_no, state, note, created_by_name, created_at, submitted_at
+      `SELECT id, version_no, state, note, created_by_name, created_at, submitted_at, review_note, reviewed_by_name, reviewed_at
        FROM production_design_submissions WHERE task_id = $1 ORDER BY version_no`,
       [taskId]
     )
@@ -325,6 +325,9 @@ export async function loadSubmissions(db, taskId) {
     createdByName: s.created_by_name,
     createdAt: s.created_at,
     submittedAt: s.submitted_at,
+    reviewNote: s.review_note ?? null,
+    reviewedByName: s.reviewed_by_name ?? null,
+    reviewedAt: s.reviewed_at ?? null,
     files: files
       .filter((f) => f.submission_id === s.id)
       .map((f) => ({

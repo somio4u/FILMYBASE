@@ -110,7 +110,7 @@ test("Drive connect redirects to Google with drive.file only and a state; callba
 
   const fakeRes = { redirect: (u) => (fakeRes.url = u) };
   await media.handleDriveCallback({ query: { state: "drive.forged", code: "x" } }, fakeRes);
-  assert.equal(fakeRes.url, "http://front/?googleDriveError=1");
+  assert.equal(fakeRes.url, "http://front/?googleDriveError=1&reason=expired");
   const tokens = (await db.query("SELECT count(*)::int n FROM production_drive_tokens")).rows[0].n;
   assert.equal(tokens, 1); // forged callback changed nothing
 });

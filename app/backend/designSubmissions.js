@@ -49,6 +49,9 @@ export async function ensureSubmissionSchema(db) {
       submitted_at TIMESTAMPTZ,
       UNIQUE (task_id, version_no)
     )`,
+    `ALTER TABLE production_design_submissions ADD COLUMN IF NOT EXISTS review_note TEXT`,
+    `ALTER TABLE production_design_submissions ADD COLUMN IF NOT EXISTS reviewed_by_name TEXT`,
+    `ALTER TABLE production_design_submissions ADD COLUMN IF NOT EXISTS reviewed_at TIMESTAMPTZ`,
     // At most one draft per task, enforced by the database.
     `CREATE UNIQUE INDEX IF NOT EXISTS production_design_submissions_one_draft
        ON production_design_submissions (task_id) WHERE state = 'draft'`,

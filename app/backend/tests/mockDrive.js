@@ -7,7 +7,7 @@ import crypto from "node:crypto";
 export function startMockDrive({ token = "test-token" } = {}) {
   const files = new Map(); // id -> { name, parents, data: Buffer, isFolder }
   const sessions = new Map(); // id -> { name, parents, size, chunks: Buffer[], received }
-  const state = { down: false, failChunkOnce: 0, uploads: 0, foldersCreated: 0, calls: [] };
+  const state = { down: false, failChunkOnce: 0, uploads: 0, foldersCreated: 0, calls: [], forceError: null, tokenFails: false, revoked: [], tokenCalls: [] };
   let n = 0;
   let base = "";
 
@@ -23,12 +23,33 @@ export function startMockDrive({ token = "test-token" } = {}) {
     req.on("end", () => {
       const body = Buffer.concat(chunks);
       if (state.down) return send(503, { error: { message: "mock outage" } });
+
+      // ---- imitation of Google's sign-in endpoints (no bearer token needed) ----
+      if (req.method === "POST" && url.pathname === "/token") {
+        const form = new URLSearchParams(body.toString());
+        state.tokenCalls.push(form.get("grant_type"));
+        if (state.tokenFails) return send(400, { error: "invalid_grant", error_description: "Token has been expired or revoked." });
+        if (form.get("grant_type") === "authorization_code") {
+          if (form.get("code") !== "good-code") return send(400, { error: "invalid_grant", error_description: "Bad code." });
+          return send(200, { access_token: token, expires_in: 3600, refresh_token: "refresh-1" });
+        }
+        return send(200, { access_token: token, expires_in: 3600 });
+      }
+      if (req.method === "POST" && url.pathname === "/revoke") {
+        state.revoked.push(url.searchParams.get("token"));
+        return send(200, {});
+      }
       // Real Drive: the resumable-session address is pre-authorised (no token needed).
       const isSession = url.pathname.startsWith("/upload/session/");
       if (!isSession && req.headers.authorization !== `Bearer ${token}`) return send(401, { error: { message: "bad token" } });
 
+      if (state.forceError) return send(state.forceError.status, state.forceError.body);
+      if (req.method === "GET" && url.pathname === "/drive/v3/about") return send(200, { user: { displayName: "Test Person", emailAddress: "test@example.com" } });
+
       if (req.method === "POST" && url.pathname === "/drive/v3/files") {
         const meta = JSON.parse(body.toString());
+        // like Google: a parent that does not exist is a 404
+        if ((meta.parents ?? []).some((parent) => !files.get(parent)?.isFolder)) return send(404, { error: { code: 404, message: `File not found: ${meta.parents[0]}.`, errors: [{ reason: "notFound" }] } });
         const id = `folder${++n}`;
         files.set(id, { name: meta.name, parents: meta.parents, isFolder: true });
         state.foldersCreated++;
@@ -36,6 +57,7 @@ export function startMockDrive({ token = "test-token" } = {}) {
       }
       if (req.method === "POST" && url.pathname === "/upload/drive/v3/files") {
         const meta = JSON.parse(body.toString());
+        if ((meta.parents ?? []).some((parent) => !files.get(parent)?.isFolder)) return send(404, { error: { code: 404, message: `File not found: ${meta.parents[0]}.`, errors: [{ reason: "notFound" }] } });
         const id = `file${++n}`;
         sessions.set(id, { name: meta.name, parents: meta.parents, size: Number(req.headers["x-upload-content-length"]), data: Buffer.alloc(0) });
         return send(200, "{}", { Location: `${base}/upload/session/${id}` });
@@ -79,7 +101,7 @@ export function startMockDrive({ token = "test-token" } = {}) {
     server.listen(0, "127.0.0.1", () => {
       base = `http://127.0.0.1:${server.address().port}`;
       resolve({
-        apiBase: `${base}/drive/v3`, uploadBase: `${base}/upload/drive/v3`, files, state, token,
+        apiBase: `${base}/drive/v3`, uploadBase: `${base}/upload/drive/v3`, tokenUrl: `${base}/token`, revokeUrl: `${base}/revoke`, files, state, token,
         close: () => new Promise((r) => server.close(r)),
       });
     })

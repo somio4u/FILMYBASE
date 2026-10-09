@@ -9,6 +9,7 @@
 import crypto from "node:crypto";
 import fs from "node:fs";
 import fsPromises from "node:fs/promises";
+import os from "node:os";
 import path from "node:path";
 import { Readable } from "node:stream";
 
@@ -94,6 +95,25 @@ function safeName(text) {
   return String(text ?? "file").normalize("NFC").replace(/[^\p{L}\p{M}\p{N}._-]+/gu, "_").replace(/^_+|_+$/g, "").slice(0, 80) || "file";
 }
 
+// Turns any storage error into a code + plain-English sentence a person can act on.
+export function explainStorageError(error) {
+  const text = String(error?.googleMessage ?? error?.message ?? "");
+  const reason = error?.reason ?? "";
+  if (error?.code === "DRIVE_NOT_CONNECTED") return { code: "not_connected", message: "Google Drive is not connected yet. Press Connect Google Drive." };
+  if (error?.status === 401) return { code: "reconnect_needed", message: "Google rejected the saved sign-in. Press Connect Google Drive again." };
+  if (error?.status === 403 && (/accessNotConfigured|SERVICE_DISABLED/i.test(reason) || /has not been used in project|is disabled|API has not been enabled/i.test(text))) {
+    return { code: "api_not_enabled", message: "The Google Drive API is not switched on for your Google Cloud project. Enable it in Google Cloud Console (APIs & Services > Library > Google Drive API), wait a minute, then test again." };
+  }
+  if (error?.status === 403 && /storageQuotaExceeded|quotaExceeded/i.test(reason + text)) return { code: "drive_full", message: "Your Google Drive storage is full." };
+  if (error?.status === 403 && /rateLimit|userRateLimit/i.test(reason)) return { code: "rate_limited", message: "Google is asking us to slow down. Try again in a minute." };
+  if (error?.status === 403) return { code: "permission", message: "Google refused permission for this action. Press Connect Google Drive again and accept every permission it asks for." };
+  if (error?.status === 404) return { code: "folder_missing", message: "The Google Drive folder could not be found (it may have been deleted, or GOOGLE_DRIVE_ROOT_FOLDER_ID is wrong)." };
+  if (error?.status === 429) return { code: "rate_limited", message: "Google is asking us to slow down. Try again in a minute." };
+  if (error?.status >= 500) return { code: "google_down", message: "Google Drive is having trouble right now. Try again in a few minutes." };
+  if (/fetch failed|ECONN|ENOTFOUND|ETIMEDOUT|network/i.test(text)) return { code: "network", message: "The server could not reach Google. Try again in a minute." };
+  return { code: "unknown", message: text || "Something went wrong talking to Google Drive." };
+}
+
 // ---------------------------------------------------------------------------
 // Backend: local folder
 // ---------------------------------------------------------------------------
@@ -121,6 +141,22 @@ export function createLocalBackend({ root }) {
     },
     async remove(key) {
       await fsPromises.unlink(resolveSafe(key)).catch(() => {});
+    },
+    // Writes, reads back and deletes a small file, to prove the folder works.
+    async selfTest() {
+      const src = path.join(os.tmpdir(), `filmybase-local-test-${crypto.randomUUID()}.txt`);
+      const body = `FilmyBase storage test ${new Date().toISOString()}`;
+      try {
+        await fsPromises.writeFile(src, body);
+        const { key } = await this.put({ folderParts: ["_connection-test"], fileName: "connection-test.txt", filePath: src });
+        const back = await fsPromises.readFile(resolveSafe(key), "utf8");
+        await this.remove(key);
+        return back === body ? { ok: true, steps: ["write", "read", "cleanup"] } : { ok: false, code: "mismatch", message: "The file read back did not match what was written." };
+      } catch (error) {
+        return { ok: false, ...explainStorageError(error) };
+      } finally {
+        await fsPromises.unlink(src).catch(() => {});
+      }
     },
   };
 }
@@ -160,9 +196,12 @@ export function createDriveBackend({
 
   async function driveError(response, what) {
     let detail = "";
-    try { detail = (await response.json())?.error?.message ?? ""; } catch { /* body not JSON */ }
+    let body = null;
+    try { body = await response.json(); detail = body?.error?.message ?? ""; } catch { /* body not JSON */ }
     const error = new Error(`Google Drive ${what} failed (${response.status})${detail ? `: ${detail}` : ""}`);
     error.status = response.status;
+    error.googleMessage = detail;
+    error.reason = body?.error?.errors?.[0]?.reason ?? body?.error?.details?.[0]?.reason ?? "";
     error.retryable = response.status >= 500 || response.status === 429;
     return error;
   }
@@ -273,8 +312,18 @@ export function createDriveBackend({
   return {
     name: "gdrive",
     async put({ folderParts, fileName, filePath, mime, size, md5 }) {
-      const folderId = await ensureFolders(folderParts);
-      const result = await uploadResumable({ folderId, fileName, mime, filePath, size });
+      let folderId = await ensureFolders(folderParts);
+      let result;
+      try {
+        result = await uploadResumable({ folderId, fileName, mime, filePath, size });
+      } catch (error) {
+        // A remembered folder that no longer exists (deleted, or another Google
+        // account was connected): forget what we remembered and start fresh once.
+        if (error.status !== 404) throw error;
+        await db.query("DELETE FROM production_drive_folders");
+        folderId = await ensureFolders(folderParts);
+        result = await uploadResumable({ folderId, fileName, mime, filePath, size });
+      }
       if (result.md5Checksum && md5 && result.md5Checksum !== md5) {
         await authedFetch(`${apiBase}/files/${result.id}`, { method: "DELETE" }).catch(() => {});
         throw new Error("Google Drive stored a different file than was sent (checksum mismatch).");
@@ -294,6 +343,41 @@ export function createDriveBackend({
     },
     async remove(key) {
       await authedFetch(`${apiBase}/files/${encodeURIComponent(key)}`, { method: "DELETE" }).catch(() => {});
+    },
+    // Whose Drive this is (null if Google will not say).
+    async about() {
+      try {
+        const response = await authedFetch(`${apiBase}/about?fields=user(displayName,emailAddress)`);
+        if (!response.ok) return null;
+        return (await response.json()).user ?? null;
+      } catch {
+        return null;
+      }
+    },
+    // Uploads a tiny file, reads it back and deletes it: proves sign-in, the
+    // Drive API switch, permission and storage all work. Never throws.
+    async selfTest() {
+      const src = path.join(os.tmpdir(), `filmybase-drive-test-${crypto.randomUUID()}.txt`);
+      const body = `FilmyBase Drive test ${new Date().toISOString()}`;
+      const steps = [];
+      try {
+        await fsPromises.writeFile(src, body);
+        const folderId = await ensureFolders(["_connection-test"]);
+        steps.push("folder");
+        const result = await uploadResumable({ folderId, fileName: "connection-test.txt", mime: "text/plain", filePath: src, size: Buffer.byteLength(body) });
+        steps.push("upload");
+        const response = await authedFetch(`${apiBase}/files/${encodeURIComponent(result.id)}?alt=media`);
+        if (!response.ok) throw await driveError(response, "reading the test file back");
+        if ((await response.text()) !== body) return { ok: false, steps, code: "mismatch", message: "Google stored a different file than was sent." };
+        steps.push("download");
+        const removed = await authedFetch(`${apiBase}/files/${encodeURIComponent(result.id)}`, { method: "DELETE" });
+        if (removed.ok || removed.status === 404) steps.push("cleanup");
+        return { ok: true, steps };
+      } catch (error) {
+        return { ok: false, steps, ...explainStorageError(error) };
+      } finally {
+        await fsPromises.unlink(src).catch(() => {});
+      }
     },
   };
 }

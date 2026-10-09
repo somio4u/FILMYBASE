@@ -141,7 +141,7 @@ export function PipelineBar({ pipeline, api, projectId, onSaved }) {
     <section className="pipe-bar" aria-label="Production progress">
       <div className="pipe-chips">
         <span className="pipe-chip">Scenes {status.scenes}</span>
-        {chip('Storyboard', status.shots.storyboardApproved, status.shots.total)}
+        {chip('Shots approved', status.shots.shotsApproved, status.shots.total)}
         {chip('Characters', status.references.characters.approved, status.references.characters.total)}
         {chip('Props', status.references.props.approved, status.references.props.total)}
         {chip('Places', status.references.environments.approved, status.references.environments.total)}
@@ -181,10 +181,11 @@ export function PipelineBar({ pipeline, api, projectId, onSaved }) {
 }
 
 // ---------------------------------------------------------------------------
-// Steps 2-3: shots and text storyboard
+// Steps 2-3: shot division (its own stage) and the text storyboard (its own stage)
 // ---------------------------------------------------------------------------
 
-function ShotEditor({ shot, api, projectId, onChanged, setMessage, locked }) {
+// view 'division': camera details + add / split / merge / delete. view 'storyboard': the written picture text.
+function ShotEditor({ shot, api, projectId, onChanged, setMessage, view = 'division' }) {
   const [edit, setEdit] = useState(null)
   async function act(promise, okText) {
     const r = await promise
@@ -195,31 +196,38 @@ function ShotEditor({ shot, api, projectId, onChanged, setMessage, locked }) {
   }
   async function save(e) {
     e.preventDefault()
-    const r = await act(call(`${api}/${projectId}/shots/${shot.id}`, 'PATCH', {
-      expectedRevision: shot.revision,
-      edits: { framing: edit.framing, cameraAngle: edit.cameraAngle, cameraMove: edit.cameraMove, description: edit.description, durationSec: Number(edit.durationSec), storyboardText: edit.storyboardText },
-    }))
+    const edits = view === 'division'
+      ? { framing: edit.framing, cameraAngle: edit.cameraAngle, cameraMove: edit.cameraMove, description: edit.description, durationSec: Number(edit.durationSec) }
+      : { storyboardText: edit.storyboardText }
+    const r = await act(call(`${api}/${projectId}/shots/${shot.id}`, 'PATCH', { expectedRevision: shot.revision, edits }))
     if (r.ok) setEdit(null)
   }
   const people = shot.assets.map((a) => a.name).join(', ')
+  const locked = false
   return (
     <li className="pipe-shot">
       <div className="pipe-shot-head">
         <strong>{shot.number}</strong> <span className="dossier-code">{shot.code}</span>
         <span className="pipe-shot-camera">{[shot.framing, shot.cameraAngle, shot.cameraMove].filter(Boolean).join(' · ') || 'no camera set'} · {shot.durationSec}s</span>
-        {shot.storyboardStatus === 'approved' && <span className="dossier-badge edited">Storyboard approved</span>}
+        {view === 'division' && shot.shotStatus === 'approved' && <span className="dossier-badge edited">Approved</span>}
+        {view === 'storyboard' && shot.storyboardStatus === 'approved' && <span className="dossier-badge edited">Storyboard approved</span>}
         {shot.source === 'ai' && <span className="dossier-badge">AI cut</span>}
       </div>
       {edit ? (
         <form onSubmit={save}>
-          <div className="dossier-controls-row">
-            <label className="dossier-field">Framing<input value={edit.framing ?? ''} onChange={(e) => setEdit({ ...edit, framing: e.target.value })} /></label>
-            <label className="dossier-field">Angle<input value={edit.cameraAngle ?? ''} onChange={(e) => setEdit({ ...edit, cameraAngle: e.target.value })} /></label>
-            <label className="dossier-field">Movement<input value={edit.cameraMove ?? ''} onChange={(e) => setEdit({ ...edit, cameraMove: e.target.value })} /></label>
-            <label className="dossier-field">Seconds<input type="number" min="1" max="30" step="0.5" value={edit.durationSec} onChange={(e) => setEdit({ ...edit, durationSec: e.target.value })} /></label>
-          </div>
-          <label className="dossier-field">What the camera sees<textarea rows={3} value={edit.description} onChange={(e) => setEdit({ ...edit, description: e.target.value })} /></label>
-          <label className="dossier-field">Storyboard text<textarea rows={4} value={edit.storyboardText} onChange={(e) => setEdit({ ...edit, storyboardText: e.target.value })} /></label>
+          {view === 'division' ? (
+            <>
+              <div className="dossier-controls-row">
+                <label className="dossier-field">Framing<input value={edit.framing ?? ''} onChange={(e) => setEdit({ ...edit, framing: e.target.value })} /></label>
+                <label className="dossier-field">Angle<input value={edit.cameraAngle ?? ''} onChange={(e) => setEdit({ ...edit, cameraAngle: e.target.value })} /></label>
+                <label className="dossier-field">Movement<input value={edit.cameraMove ?? ''} onChange={(e) => setEdit({ ...edit, cameraMove: e.target.value })} /></label>
+                <label className="dossier-field">Seconds<input type="number" min="1" max="30" step="0.5" value={edit.durationSec} onChange={(e) => setEdit({ ...edit, durationSec: e.target.value })} /></label>
+              </div>
+              <label className="dossier-field">What the camera sees<textarea rows={3} value={edit.description} onChange={(e) => setEdit({ ...edit, description: e.target.value })} /></label>
+            </>
+          ) : (
+            <label className="dossier-field">Storyboard text<textarea rows={5} value={edit.storyboardText} onChange={(e) => setEdit({ ...edit, storyboardText: e.target.value })} /></label>
+          )}
           <div className="dossier-save-row">
             <button type="submit" className="dossier-small-button">Save shot</button>
             <button type="button" className="dossier-small-button" onClick={() => setEdit(null)}>Cancel</button>
@@ -228,17 +236,23 @@ function ShotEditor({ shot, api, projectId, onChanged, setMessage, locked }) {
       ) : (
         <>
           <p>{shot.description}</p>
-          {shot.storyboardText && <p className="pipe-storyboard"><em>Storyboard:</em> {shot.storyboardText}</p>}
+          {view === 'storyboard' && (shot.storyboardText ? <p className="pipe-storyboard"><em>Storyboard:</em> {shot.storyboardText}</p> : <p className="dossier-fine-print">No storyboard text yet.</p>)}
           {people && <p className="dossier-fine-print">In this shot: {people}</p>}
           {shot.dialogue.length > 0 && (
             <ul className="pipe-lines">{shot.dialogue.map((d) => <li key={d.id}><span className="dossier-code">{d.code}</span> <strong>{d.speaker}</strong>: {d.text}</li>)}</ul>
           )}
           <div className="pipe-card-buttons">
-            <button type="button" className="dossier-small-button" onClick={() => setEdit({ framing: shot.framing, cameraAngle: shot.cameraAngle, cameraMove: shot.cameraMove, description: shot.description, durationSec: shot.durationSec, storyboardText: shot.storyboardText })}>Edit</button>
-            <button type="button" className="dossier-small-button" disabled={locked} onClick={() => act(call(`${api}/${projectId}/scenes/${shot.sceneId}/shots`, 'POST', { afterShotId: shot.id, description: 'New shot' }))}>Add a shot after</button>
-            <button type="button" className="dossier-small-button" disabled={locked} onClick={() => act(call(`${api}/${projectId}/shots/${shot.id}/split`, 'POST', {}))}>Split</button>
-            <button type="button" className="dossier-small-button" disabled={locked} onClick={() => act(call(`${api}/${projectId}/shots/${shot.id}/merge-next`, 'POST', {}))}>Merge with next</button>
-            <button type="button" className="dossier-small-button" disabled={locked} onClick={() => { if (window.confirm(`Delete shot ${shot.number}?`)) act(call(`${api}/${projectId}/shots/${shot.id}`, 'DELETE')) }}>Delete</button>
+            <button type="button" className="dossier-small-button" onClick={() => setEdit(view === 'division'
+              ? { framing: shot.framing, cameraAngle: shot.cameraAngle, cameraMove: shot.cameraMove, description: shot.description, durationSec: shot.durationSec }
+              : { storyboardText: shot.storyboardText })}>Edit</button>
+            {view === 'division' && (
+              <>
+                <button type="button" className="dossier-small-button" disabled={locked} onClick={() => act(call(`${api}/${projectId}/scenes/${shot.sceneId}/shots`, 'POST', { afterShotId: shot.id, description: 'New shot' }))}>Add a shot after</button>
+                <button type="button" className="dossier-small-button" onClick={() => act(call(`${api}/${projectId}/shots/${shot.id}/split`, 'POST', {}))}>Split</button>
+                <button type="button" className="dossier-small-button" onClick={() => act(call(`${api}/${projectId}/shots/${shot.id}/merge-next`, 'POST', {}))}>Merge with next</button>
+                <button type="button" className="dossier-small-button" onClick={() => { if (window.confirm(`Remove shot ${shot.number}?`)) act(call(`${api}/${projectId}/shots/${shot.id}`, 'DELETE')) }}>Remove</button>
+              </>
+            )}
           </div>
         </>
       )}
@@ -246,60 +260,188 @@ function ShotEditor({ shot, api, projectId, onChanged, setMessage, locked }) {
   )
 }
 
-export function ShotsPanel({ projectId, api, sceneId, onSceneChange, onChanged, pipeline, section = 'shots' }) {
-  const scenes = useScenes(api, projectId)
+// Runs one request per scene, one after another, and reports progress.
+async function runScenes(sceneIds, label, setProgress, makeRequest) {
+  const results = { done: 0, failed: [] }
+  for (let i = 0; i < sceneIds.length; i++) {
+    setProgress(`${label} scene ${i + 1} of ${sceneIds.length}…`)
+    const r = await makeRequest(sceneIds[i])
+    if (r.ok) results.done++
+    else results.failed.push({ sceneId: sceneIds[i], error: r.data.error || 'failed', status: r.status })
+  }
+  setProgress(null)
+  return results
+}
+
+function useAllShots(api, projectId) {
   const [shots, setShots] = useState([])
-  const [message, setMessage] = useState(null)
-  const [busy, setBusy] = useState(false)
-  const [mode, setMode] = useState('auto')
-
   const load = useCallback(async () => {
-    if (!sceneId) { setShots([]); return }
-    const r = await call(`${api}/${projectId}/shots?sceneId=${sceneId}`)
+    const r = await call(`${api}/${projectId}/shots`)
     if (r.ok) setShots(r.data.shots)
-  }, [api, projectId, sceneId])
+  }, [api, projectId])
   useEffect(() => { load() }, [load])
-  const changed = () => { load(); if (onChanged) onChanged() }
+  return { shots, reloadAll: load }
+}
 
-  async function run(label, promise) {
-    setBusy(true)
-    setMessage({ tone: 'ok', text: `${label}…` })
-    const r = await promise
-    setBusy(false)
-    if (!r.ok) setMessage({ tone: 'bad', text: r.data.error || 'That did not work.' })
-    else setMessage({ tone: 'ok', text: r.data.written !== undefined ? `Wrote ${r.data.written} storyboard texts (${r.data.mode === 'ai' ? 'by the AI' : 'from the shot details'}).` : r.data.count !== undefined ? `Cut into ${r.data.count} shots (${{ script: 'from the shot notes in the script', ai: 'by the AI', rules: 'with the simple rule-based cut' }[r.data.mode]}).` : 'Done.' })
+export function ShotDivisionPanel({ projectId, api, sceneId, onSceneChange, onChanged, pipeline }) {
+  const scenes = useScenes(api, projectId)
+  const { shots: allShots, reloadAll } = useAllShots(api, projectId)
+  const [selected, setSelected] = useState([])
+  const [mode, setMode] = useState('ai')
+  const [replace, setReplace] = useState(false)
+  const [progress, setProgress] = useState(null)
+  const [message, setMessage] = useState(null)
+  const aiOn = pipeline?.providers?.textAvailable
+
+  const shotsOf = (id) => allShots.filter((s) => s.sceneId === id)
+  const statusOf = (id) => {
+    const list = shotsOf(id)
+    if (list.length === 0) return 'none'
+    return list.every((s) => s.shotStatus === 'approved') ? 'approved' : 'draft'
+  }
+  const changed = () => { reloadAll(); if (onChanged) onChanged() }
+  const busy = progress !== null
+
+  async function autoDivide(ids) {
+    const todo = ids.filter((id) => replace || shotsOf(id).length === 0)
+    const skipped = ids.length - todo.length
+    if (todo.length === 0) { setMessage({ tone: 'ok', text: 'Nothing to do: every chosen scene already has shots. Tick “Cut again even if the scene already has shots” to redo them.' }); return }
+    if (replace && !window.confirm(`Cut ${todo.length} scene${todo.length > 1 ? 's' : ''} again? Their current shots will be replaced and need approving again.`)) return
+    setMessage(null)
+    const result = await runScenes(todo, mode === 'ai' ? 'AI is cutting' : 'Cutting', setProgress, (id) => call(`${api}/${projectId}/scenes/${id}/divide`, 'POST', { mode, replace: replace && shotsOf(id).length > 0 }))
+    await reloadAll()
+    if (onChanged) onChanged()
+    const names = (id) => scenes.find((s) => s.id === id)?.code ?? id
+    setMessage({
+      tone: result.failed.length ? 'bad' : 'ok',
+      text: `Cut ${result.done} scene${result.done === 1 ? '' : 's'}${skipped ? `, left ${skipped} that already had shots` : ''}.${result.failed.length ? ` Could not cut: ${result.failed.map((f) => `${names(f.sceneId)} (${f.error})`).join('; ')}` : ' Now check them, edit if needed, and approve.'}`,
+    })
+  }
+
+  async function approveMany(ids, approved) {
+    const todo = ids.filter((id) => shotsOf(id).length > 0)
+    const result = await runScenes(todo, approved ? 'Approving' : 'Un-approving', setProgress, (id) => call(`${api}/${projectId}/scenes/${id}/shots/approve`, 'POST', { approved }))
+    await reloadAll()
+    if (onChanged) onChanged()
+    setMessage({ tone: result.failed.length ? 'bad' : 'ok', text: `${approved ? 'Approved' : 'Un-approved'} ${result.done} scene${result.done === 1 ? '' : 's'}.` })
+  }
+
+  const toggle = (id) => setSelected((cur) => (cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id]))
+  const sceneShots = sceneId ? shotsOf(sceneId) : []
+  const openScene = scenes.find((s) => s.id === sceneId)
+
+  if (scenes.length === 0) return <p className="dossier-note">No scenes yet. Open the Production Dossier → Scenes and press “Analyze the screenplay” first.</p>
+  return (
+    <div className="pipe-panel">
+      <div className="pipe-toolbar">
+        <label className="dossier-field pipe-inline">Cut with
+          <select value={mode} onChange={(e) => setMode(e.target.value)} disabled={busy}>
+            <option value="ai" disabled={!aiOn}>The AI{aiOn ? '' : ' (not available)'}</option>
+            <option value="script">The shot notes written in the script</option>
+            <option value="auto">Best available (script notes, then AI)</option>
+            <option value="rules">A simple cut (no AI)</option>
+          </select>
+        </label>
+        <label className="pipe-inline"><input type="checkbox" checked={replace} disabled={busy} onChange={(e) => setReplace(e.target.checked)} /> Cut again even if the scene already has shots</label>
+      </div>
+      <div className="pipe-toolbar">
+        <button type="button" className="dossier-small-button" disabled={busy || selected.length === 0} onClick={() => autoDivide(scenes.filter((s) => selected.includes(s.id)).map((s) => s.id))}>Auto-divide selected scenes ({selected.length})</button>
+        <button type="button" className="dossier-small-button" disabled={busy} onClick={() => autoDivide(scenes.map((s) => s.id))}>Auto-divide ALL scenes</button>
+        <button type="button" className="dossier-small-button" disabled={busy || selected.length === 0} onClick={() => approveMany(selected, true)}>Approve selected</button>
+        <button type="button" className="dossier-small-button" disabled={busy} onClick={() => approveMany(scenes.map((s) => s.id), true)}>Approve all</button>
+        <button type="button" className="dossier-small-button" disabled={busy} onClick={() => setSelected(selected.length === scenes.length ? [] : scenes.map((s) => s.id))}>{selected.length === scenes.length ? 'Clear ticks' : 'Tick all'}</button>
+      </div>
+      {progress && <p className="dossier-message" role="status">{progress}</p>}
+      <Notice message={message} />
+      <ul className="pipe-items" aria-label="Scenes">
+        {scenes.map((s) => {
+          const st = statusOf(s.id)
+          return (
+            <li key={s.id} className={`pipe-item pipe-scene-row${sceneId === s.id ? ' open' : ''}`}>
+              <label className="pipe-inline"><input type="checkbox" checked={selected.includes(s.id)} disabled={busy} onChange={() => toggle(s.id)} aria-label={`Select ${s.code}`} /></label>
+              <button type="button" className="pipe-scene-name" onClick={() => onSceneChange(sceneId === s.id ? null : s.id)}>
+                <span className="dossier-code">{s.code}</span> Scene {s.number} · {s.heading}
+              </button>
+              <span className="dossier-fine-print">{shotsOf(s.id).length} shots</span>
+              {st === 'approved' && <span className="dossier-badge edited">Approved</span>}
+              {st === 'draft' && <span className="dossier-badge stale">Needs approval</span>}
+              {st === 'none' && <span className="dossier-fine-print">not cut yet</span>}
+            </li>
+          )
+        })}
+      </ul>
+      {openScene && (
+        <section className="pipe-group">
+          <div className="pipe-group-head">
+            <h3>{openScene.code} · Scene {openScene.number} <span className="dossier-fine-print">{openScene.heading}</span></h3>
+            <div className="pipe-card-buttons">
+              <button type="button" className="dossier-small-button" disabled={busy} onClick={() => autoDivide([openScene.id])}>{sceneShots.length ? 'Cut this scene again' : 'Cut this scene'}</button>
+              <button type="button" className="dossier-small-button" disabled={busy || sceneShots.length === 0} onClick={() => approveMany([openScene.id], statusOf(openScene.id) !== 'approved')}>{statusOf(openScene.id) === 'approved' ? 'Un-approve' : 'Approve this scene'}</button>
+              <button type="button" className="dossier-small-button" disabled={busy} onClick={async () => { const r = await call(`${api}/${projectId}/scenes/${openScene.id}/shots`, 'POST', { description: 'New shot' }); if (!r.ok) setMessage({ tone: 'bad', text: r.data.error }); changed() }}>Add a shot at the end</button>
+            </div>
+          </div>
+          <p className="dossier-fine-print">Edit, add, split, merge or remove shots until the scene is cut the way you want, then approve it. Any change after approving asks for approval again. Pictures can only be made for approved scenes.</p>
+          {sceneShots.length === 0 ? <p className="dossier-empty">No shots yet for this scene.</p> : (
+            <ol className="pipe-shots">{sceneShots.map((s) => <ShotEditor key={`${s.id}-${s.revision}`} shot={s} api={api} projectId={projectId} onChanged={changed} setMessage={setMessage} view="division" />)}</ol>
+          )}
+        </section>
+      )}
+    </div>
+  )
+}
+
+export function StoryboardPanel({ projectId, api, sceneId, onSceneChange, onChanged, pipeline }) {
+  const scenes = useScenes(api, projectId)
+  const { shots: allShots, reloadAll } = useAllShots(api, projectId)
+  const [progress, setProgress] = useState(null)
+  const [message, setMessage] = useState(null)
+  const shotsOf = (id) => allShots.filter((s) => s.sceneId === id)
+  const withShots = scenes.filter((s) => shotsOf(s.id).length > 0)
+  const changed = () => { reloadAll(); if (onChanged) onChanged() }
+  const busy = progress !== null
+  const sceneShots = sceneId ? shotsOf(sceneId) : []
+  const approved = sceneShots.length > 0 && sceneShots.every((s) => s.storyboardStatus === 'approved')
+  const hasText = sceneShots.length > 0 && sceneShots.every((s) => s.storyboardText)
+  const aiOn = pipeline?.providers?.textAvailable
+
+  async function writeAll() {
+    const result = await runScenes(withShots.map((s) => s.id), 'Writing', setProgress, (id) => call(`${api}/${projectId}/scenes/${id}/storyboard`, 'POST', {}))
+    await reloadAll()
+    if (onChanged) onChanged()
+    setMessage({ tone: result.failed.length ? 'bad' : 'ok', text: `Wrote storyboard text for ${result.done} scene${result.done === 1 ? '' : 's'} (only shots without text; yours are kept).${result.failed.length ? ` ${result.failed.length} failed: ${result.failed[0].error}` : ''}` })
+  }
+  async function writeOne(overwrite) {
+    setProgress('Writing…')
+    const r = await call(`${api}/${projectId}/scenes/${sceneId}/storyboard`, 'POST', { overwrite })
+    setProgress(null)
+    setMessage(r.ok ? { tone: 'ok', text: `Wrote ${r.data.written} storyboard texts (${r.data.mode === 'ai' ? 'by the AI' : 'from the shot details'}).` } : { tone: 'bad', text: r.data.error })
+    changed()
+  }
+  async function approveOne() {
+    const r = await call(`${api}/${projectId}/scenes/${sceneId}/storyboard/approve`, 'POST', { approved: !approved })
+    if (!r.ok) setMessage({ tone: 'bad', text: r.data.error })
     changed()
   }
 
-  const approved = shots.length > 0 && shots.every((s) => s.storyboardStatus === 'approved')
-  const hasText = shots.length > 0 && shots.every((s) => s.storyboardText)
-  const aiOn = pipeline?.providers?.textAvailable
-
   return (
     <div className="pipe-panel">
-      <SceneSelect scenes={scenes} sceneId={sceneId} onChange={onSceneChange} />
+      <p className="dossier-fine-print">The text storyboard describes what each shot's picture shows — no images. It comes after the shot pictures: it is used to refine them and as the written record.{aiOn ? '' : ' The AI is not available right now, so texts are built from the shot details.'}</p>
+      <div className="pipe-toolbar">
+        <button type="button" className="dossier-small-button" disabled={busy || withShots.length === 0} onClick={writeAll}>Write storyboard text for ALL scenes</button>
+      </div>
+      {progress && <p className="dossier-message" role="status">{progress}</p>}
+      <SceneSelect scenes={withShots.length ? withShots : scenes} sceneId={sceneId} onChange={onSceneChange} />
       <Notice message={message} />
+      {withShots.length === 0 && <p className="dossier-empty">No scene has shots yet. Use the Shot division stage first.</p>}
       {sceneId && (
         <>
           <div className="pipe-toolbar">
-            <label className="dossier-field pipe-inline">Cut with
-              <select value={mode} onChange={(e) => setMode(e.target.value)}>
-                <option value="auto">Best available (script notes, then AI)</option>
-                <option value="script">The shot notes written in the script</option>
-                <option value="ai" disabled={!aiOn}>The AI{aiOn ? '' : ' (not available)'}</option>
-                <option value="rules">A simple cut (no AI)</option>
-              </select>
-            </label>
-            {section === 'shots' && <button type="button" className="dossier-small-button" disabled={busy} onClick={() => {
-              if (shots.length > 0 && !window.confirm('This replaces the current shots of this scene. Continue?')) return
-              run('Cutting the scene', call(`${api}/${projectId}/scenes/${sceneId}/divide`, 'POST', { mode, replace: shots.length > 0 }))
-            }}>{shots.length > 0 ? 'Cut again' : 'Cut into shots'}</button>}
-            {section === 'text' && <button type="button" className="dossier-small-button" disabled={busy || shots.length === 0} onClick={() => run('Writing the storyboard', call(`${api}/${projectId}/scenes/${sceneId}/storyboard`, 'POST', { overwrite: hasText && window.confirm('Rewrite the storyboard text of every shot (your edits will be replaced)?') }))}>Write storyboard text</button>}
-            {section === 'text' && <button type="button" className="dossier-small-button" disabled={busy || !hasText} onClick={() => run('Saving', call(`${api}/${projectId}/scenes/${sceneId}/storyboard/approve`, 'POST', { approved: !approved }))}>{approved ? 'Un-approve storyboard' : 'Approve storyboard'}</button>}
+            <button type="button" className="dossier-small-button" disabled={busy || sceneShots.length === 0} onClick={() => writeOne(false)}>Write storyboard text</button>
+            <button type="button" className="dossier-small-button" disabled={busy || !hasText} onClick={() => { if (window.confirm('Rewrite the storyboard text of every shot in this scene (your edits will be replaced)?')) writeOne(true) }}>Rewrite all text</button>
+            <button type="button" className="dossier-small-button" disabled={busy || !hasText} onClick={approveOne}>{approved ? 'Un-approve storyboard' : 'Approve storyboard'}</button>
           </div>
-          <p className="dossier-fine-print">{section === 'shots' ? 'Each shot is one camera view. Edit, add, split or merge them until the scene is cut the way you want.' : 'The text storyboard has no pictures. Approve it before making pictures for this scene.'}</p>
-          {shots.length === 0 ? <p className="dossier-empty">No shots yet. Use the “Shot division” tab first.</p> : (
-            <ol className="pipe-shots">{shots.map((s) => <ShotEditor key={`${s.id}-${s.revision}`} shot={s} api={api} projectId={projectId} onChanged={changed} setMessage={setMessage} />)}</ol>
+          {sceneShots.length === 0 ? <p className="dossier-empty">This scene has no shots yet.</p> : (
+            <ol className="pipe-shots">{sceneShots.map((s) => <ShotEditor key={`${s.id}-${s.revision}`} shot={s} api={api} projectId={projectId} onChanged={changed} setMessage={setMessage} view="storyboard" />)}</ol>
           )}
         </>
       )}
@@ -418,7 +560,7 @@ export function FramesPanel({ projectId, api, backendUrl, sceneId, onSceneChange
     <div className="pipe-panel">
       <SceneSelect scenes={scenes} sceneId={sceneId} onChange={onSceneChange} />
       <Notice message={message} />
-      {sceneId && shots.length === 0 && <p className="dossier-empty">This scene has no shots yet. Use the “Shots & storyboard” tab first.</p>}
+      {sceneId && shots.length === 0 && <p className="dossier-empty">This scene has no shots yet. Use the Shot division stage first.</p>}
       {sceneId && shots.length > 0 && (
         <>
           <div className="pipe-toolbar">
@@ -430,7 +572,7 @@ export function FramesPanel({ projectId, api, backendUrl, sceneId, onSceneChange
               const mine = gens.filter((g) => g.shotId === s.id && g.kind === 'keyframe')
               const needed = s.assets.filter((a) => ['character', 'location', 'prop'].includes(a.kind))
               const missing = needed.filter((a) => !approvedRef(a.id))
-              const blocked = s.storyboardStatus !== 'approved' ? 'Approve the text storyboard first' : (!allowMissing && missing.length > 0 ? `Needs approved references: ${missing.map((m) => m.name).join(', ')}` : null)
+              const blocked = s.shotStatus !== 'approved' ? 'Approve the shot division of this scene first' : (!allowMissing && missing.length > 0 ? `Needs approved references: ${missing.map((m) => m.name).join(', ')}` : null)
               return (
                 <li key={s.id} className="pipe-shot">
                   <div className="pipe-shot-head"><strong>{s.number}</strong> <span className="dossier-code">{s.code}</span> <span className="pipe-shot-camera">{[s.framing, s.cameraAngle, s.cameraMove].filter(Boolean).join(' · ')}</span></div>

@@ -1,7 +1,7 @@
 // All the web routes for pipeline steps 2-8 (admin only): shots, text storyboard,
 // settings and money limit, AI generation, review, and export.
 
-import { addShot, approveStoryboard, deleteShot, divideScene, generateStoryboard, listShots, mergeShotWithNext, splitShot, updateShot } from "./shots.js";
+import { addShot, approveShots, approveStoryboard, deleteShot, divideScene, generateStoryboard, listShots, mergeShotWithNext, splitShot, updateShot } from "./shots.js";
 import { getSettings, saveSettings, spendSummary, VOICES } from "./pipelineSettings.js";
 import { createGenerationService, KINDS } from "./generations.js";
 import { createAssembler } from "./assemble.js";
@@ -83,6 +83,13 @@ export function registerPipelineRoutes(app, db, requireRole, { store, providers 
   }));
   app.post("/api/production/:projectId/shots/:shotId/merge-next", admin, wrap(async (req, res) => {
     res.json({ shot: await mergeShotWithNext(db, need(id(req.params.projectId), "project"), need(id(req.params.shotId), "shot")) });
+  }));
+
+  app.post("/api/production/:projectId/scenes/:sceneId/shots/approve", admin, wrap(async (req, res) => {
+    const projectId = need(id(req.params.projectId), "project");
+    const sceneId = need(id(req.params.sceneId), "scene");
+    const result = await approveShots(db, projectId, sceneId, { approved: req.body?.approved !== false });
+    res.json({ ...result, shots: await listShots(db, projectId, { sceneId }) });
   }));
 
   // ---- step 3: text storyboard ----

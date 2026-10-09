@@ -7,7 +7,7 @@ import pg from "pg";
 import { seedTestProject } from "../production.js";
 import { analyzeScreenplay, listScenes } from "../screenplayAnalysis.js";
 import { ensureAllProductionSchemas } from "../productionSchema.js";
-import { readShotNote, divideScene, listShots, updateShot, addShot, deleteShot, splitShot, mergeShotWithNext, generateStoryboard, approveStoryboard, validateAiShots, shotsFromScriptNotes } from "../shots.js";
+import { readShotNote, divideScene, listShots, updateShot, addShot, deleteShot, splitShot, mergeShotWithNext, generateStoryboard, approveStoryboard, approveShots, validateAiShots, shotsFromScriptNotes } from "../shots.js";
 
 const db = new pg.Pool({ database: process.env.TEST_DB || "filmmaking_app_test", user: process.env.PGUSER || "root", host: process.env.PGHOST || "/var/run/postgresql" });
 
@@ -227,4 +227,34 @@ test("text storyboard: written for every shot (template when no AI), AI text use
   assert.equal(after[0].storyboardStatus, "approved");
   await approveStoryboard(db, pid, sid, { approved: false });
   assert.ok((await listShots(db, pid, { sceneId: sid })).every((s) => s.storyboardStatus === "draft"));
+});
+
+test("shot approval: needs shots; any change to the cut re-opens it; storyboard text edits do not", async () => {
+  const pid = await project();
+  const sid = await sceneId(pid, 5);
+  await assert.rejects(approveShots(db, pid, sid), /no shots to approve/);
+  await assert.rejects(approveShots(db, pid, 999999), /not found/);
+  await divideScene(db, pid, sid, { mode: "script" });
+  assert.ok((await listShots(db, pid, { sceneId: sid })).every((s) => s.shotStatus === "draft"));
+  assert.equal((await approveShots(db, pid, sid)).approved, true);
+  const approved = () => listShots(db, pid, { sceneId: sid });
+  assert.ok((await approved()).every((s) => s.shotStatus === "approved"));
+  let shots = await approved();
+  await updateShot(db, pid, shots[0].id, { edits: { storyboardText: "Just words." } });
+  assert.ok((await approved()).every((s) => s.shotStatus === "approved"));
+  await updateShot(db, pid, shots[0].id, { edits: { framing: "Wide" } });
+  assert.ok((await approved()).every((s) => s.shotStatus === "draft"));
+  for (const change of [
+    () => addShot(db, pid, sid, { description: "x" }),
+    async () => splitShot(db, pid, (await approved())[0].id),
+    async () => mergeShotWithNext(db, pid, (await approved())[0].id),
+    async () => deleteShot(db, pid, (await approved())[0].id),
+  ]) {
+    await approveShots(db, pid, sid);
+    assert.ok((await approved()).every((s) => s.shotStatus === "approved"));
+    await change();
+    assert.ok((await approved()).every((s) => s.shotStatus === "draft"));
+  }
+  shots = await approved();
+  assert.ok(shots.length > 0);
 });

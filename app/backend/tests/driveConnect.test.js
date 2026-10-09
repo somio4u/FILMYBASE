@@ -93,6 +93,7 @@ test("connection test: success proves upload, read-back and cleanup, and leaves 
   assert.equal(r.ok, true, JSON.stringify(r));
   assert.deepEqual(r.steps, ["folder", "upload", "download", "cleanup"]);
   assert.equal([...mock.files.values()].filter((f) => !f.isFolder).length, before);
+  assert.ok(![...mock.files.values()].some((f) => f.name === "_connection-test"), "the test folder is removed too, nothing is left in Drive");
 });
 
 test("connection test: every common Google failure becomes a plain-English message with a code", async () => {
@@ -188,7 +189,7 @@ test("a remembered folder that Google no longer has is forgotten and re-made onc
   fs.writeFileSync(f, Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47]), Buffer.alloc(500, 3)]));
   // Poison the folder memory: these folder ids do not exist at "Google".
   await db.query("DELETE FROM production_drive_folders");
-  await db.query("INSERT INTO production_drive_folders (path_key, folder_id) VALUES ($1, 'gone-folder'), ($2, 'gone-child')", [`${pid}-Stale`, `${pid}-Stale/designs`]);
+  await db.query("INSERT INTO production_drive_folders (path_key, folder_id) VALUES ($1, 'gone-folder'), ($2, 'gone-child')", [`p${pid}`, `p${pid}/08 Designer uploads`]);
   const foldersBefore = mock.state.foldersCreated;
   const row = await media.store.putMedia({ projectId: pid, role: "design", filePath: f, originalName: "stale.png", label: "T" });
   assert.equal(row.status, "stored", row.last_error);

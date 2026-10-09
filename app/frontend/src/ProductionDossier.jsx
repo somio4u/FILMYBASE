@@ -8,6 +8,7 @@ import './ProductionDossier.css'
 import TaskBrief from './TaskBrief.jsx'
 import TaskComments from './TaskComments.jsx'
 import SubmissionPanel from './SubmissionPanel.jsx'
+import DriveCard from './DriveCard.jsx'
 
 const KIND_TABS = [
   { key: 'character', label: 'Characters' },
@@ -52,7 +53,6 @@ export default function ProductionDossier({ projectId, backendUrl, onProjectCrea
   const [overview, setOverview] = useState(null)
   const [assets, setAssets] = useState([])
   const [issues, setIssues] = useState([])
-  const [storage, setStorage] = useState(null)
   const [tasks, setTasks] = useState([])
   const [selectedTaskId, setSelectedTaskId] = useState(null)
   const [tab, setTab] = useState('character')
@@ -66,17 +66,15 @@ export default function ProductionDossier({ projectId, backendUrl, onProjectCrea
   const reload = useCallback(async () => {
     if (!projectId) return
     try {
-      const [o, a, i, s, tk] = await Promise.all([
+      const [o, a, i, tk] = await Promise.all([
         fetch(`${api}/${projectId}/overview`).then((r) => (r.ok ? r.json() : Promise.reject(r))),
         fetch(`${api}/${projectId}/assets`).then((r) => (r.ok ? r.json() : Promise.reject(r))),
         fetch(`${api}/${projectId}/issues`).then((r) => (r.ok ? r.json() : Promise.reject(r))),
-        fetch(`${api}/storage/status`).then((r) => (r.ok ? r.json() : null)).catch(() => null),
         fetch(`${api}/${projectId}/tasks`).then((r) => (r.ok ? r.json() : { tasks: [] })).catch(() => ({ tasks: [] })),
       ])
       setOverview(o)
       setAssets(a.assets)
       setIssues(i.issues)
-      setStorage(s)
       setTasks(tk.tasks)
       setLoadError(null)
     } catch {
@@ -152,7 +150,7 @@ export default function ProductionDossier({ projectId, backendUrl, onProjectCrea
         </div>
       </header>
 
-      <StoragePanel storage={storage} backendUrl={backendUrl} />
+      <DriveCard projectId={projectId} backendUrl={backendUrl} />
 
       {message && <p className="dossier-message" role="status">{message}</p>}
       {loadError && <p className="dossier-error" role="alert">{loadError}</p>}
@@ -226,35 +224,6 @@ export default function ProductionDossier({ projectId, backendUrl, onProjectCrea
         </div>
       )}
     </div>
-  )
-}
-
-function StoragePanel({ storage, backendUrl }) {
-  if (!storage) return null
-  const pending = storage.files?.pending_upload ?? 0
-  const failed = storage.files?.failed ?? 0
-  const stored = storage.files?.stored ?? 0
-  return (
-    <section className="dossier-storage" aria-label="File storage">
-      <strong>Files are stored in:</strong>{' '}
-      {storage.backend === 'gdrive' ? (
-        <>
-          Google Drive —{' '}
-          {storage.driveConnected ? (
-            <span className="dossier-ok">connected</span>
-          ) : (
-            <>
-              <span className="dossier-bad">not connected</span>{' '}
-              <a className="dossier-link" href={`${backendUrl}/api/production/drive/connect`}>Connect Google Drive</a>
-            </>
-          )}
-        </>
-      ) : (
-        'this server’s local folder'
-      )}
-      <span className="dossier-fine-print"> · {stored} stored{pending ? ` · ${pending} waiting to upload` : ''}{failed ? ` · ${failed} failed` : ''}</span>
-      {storage.warning && <p className="dossier-error">{storage.warning}</p>}
-    </section>
   )
 }
 

@@ -4,7 +4,7 @@
 import http from "node:http";
 import crypto from "node:crypto";
 
-export function startMockDrive({ token = "test-token" } = {}) {
+export function startMockDrive({ token = "test-token", port = 0 } = {}) {
   const files = new Map(); // id -> { name, parents, data: Buffer, isFolder }
   const sessions = new Map(); // id -> { name, parents, size, chunks: Buffer[], received }
   const state = { down: false, failChunkOnce: 0, uploads: 0, foldersCreated: 0, calls: [], forceError: null, tokenFails: false, revoked: [], tokenCalls: [] };
@@ -24,7 +24,21 @@ export function startMockDrive({ token = "test-token" } = {}) {
       const body = Buffer.concat(chunks);
       if (state.down) return send(503, { error: { message: "mock outage" } });
 
-      // ---- imitation of Google's sign-in endpoints (no bearer token needed) ----
+      // ---- imitation of Google's sign-in page and endpoints (no bearer token needed) ----
+      if (req.method === "GET" && url.pathname === "/auth") {
+        // the "login screen": sends the person straight back with a good code
+        const back = new URL(url.searchParams.get("redirect_uri"));
+        if (state.denyLogin) back.searchParams.set("error", "access_denied");
+        else back.searchParams.set("code", "good-code");
+        back.searchParams.set("state", url.searchParams.get("state"));
+        res.writeHead(302, { Location: back.toString() });
+        return res.end();
+      }
+      if (req.method === "GET" && url.pathname === "/__tree") {
+        const tree = [...files.entries()].map(([id, f]) => ({ id, path: pathOf(id), folder: Boolean(f.isFolder) }));
+        return send(200, tree);
+      }
+      if (req.method === "POST" && url.pathname === "/__reset") { files.clear(); state.denyLogin = false; return send(200, {}); }
       if (req.method === "POST" && url.pathname === "/token") {
         const form = new URLSearchParams(body.toString());
         state.tokenCalls.push(form.get("grant_type"));
@@ -86,6 +100,7 @@ export function startMockDrive({ token = "test-token" } = {}) {
         const f = files.get(decodeURIComponent(file[1]));
         if (!f) return send(404, { error: { message: "not found" } });
         if (req.method === "DELETE") { files.delete(decodeURIComponent(file[1])); return send(204); }
+        if (req.method === "PATCH") { Object.assign(f, JSON.parse(body.toString())); state.renames = (state.renames ?? 0) + 1; return send(200, { id: decodeURIComponent(file[1]) }); }
         if (url.searchParams.get("alt") === "media") {
           const m = /^bytes=(\d+)-(\d+)$/.exec(req.headers.range ?? "");
           const slice = m ? f.data.subarray(Number(m[1]), Number(m[2]) + 1) : f.data;
@@ -97,11 +112,18 @@ export function startMockDrive({ token = "test-token" } = {}) {
     });
   });
 
+  // "Idea of an Idea / 08 Designer uploads / CHAR001 Rahul / file.png"
+  function pathOf(id) {
+    const parts = [];
+    for (let cur = files.get(id); cur; cur = files.get(cur.parents?.[0])) parts.unshift(cur.name);
+    return parts.join(" / ");
+  }
+
   return new Promise((resolve) =>
-    server.listen(0, "127.0.0.1", () => {
+    server.listen(port, "127.0.0.1", () => {
       base = `http://127.0.0.1:${server.address().port}`;
       resolve({
-        apiBase: `${base}/drive/v3`, uploadBase: `${base}/upload/drive/v3`, tokenUrl: `${base}/token`, revokeUrl: `${base}/revoke`, files, state, token,
+        port: server.address().port, apiBase: `${base}/drive/v3`, uploadBase: `${base}/upload/drive/v3`, tokenUrl: `${base}/token`, revokeUrl: `${base}/revoke`, files, state, token, pathOf,
         close: () => new Promise((r) => server.close(r)),
       });
     })

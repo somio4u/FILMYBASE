@@ -5,7 +5,7 @@
 
 import crypto from "node:crypto";
 import path from "node:path";
-import { createDriveBackend, createLocalBackend, createMediaStore, ensureMediaSchema, backendNameFromEnv } from "./mediaStore.js";
+import { createDriveBackend, createLocalBackend, createMediaStore, ensureMediaSchema, backendNameFromEnv, explainStorageError } from "./mediaStore.js";
 
 const GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token";
 const GOOGLE_REVOKE_URL = "https://oauth2.googleapis.com/revoke";
@@ -19,8 +19,16 @@ const NONCE_TTL_MS = 10 * 60 * 1000;
 const DOWNLOAD_ONLY = new Set(["text/html", "application/json", "text/plain", "application/zip", "application/pdf"]);
 
 export function setupProductionMedia({ app, db, requireRole, backendDir, frontendUrl, redirectUri, env = process.env, driveOverrides = {}, googleOverrides = {} }) {
-  const tokenUrl = googleOverrides.tokenUrl ?? GOOGLE_TOKEN_URL;
-  const revokeUrl = googleOverrides.revokeUrl ?? GOOGLE_REVOKE_URL;
+  // The GOOGLE_*/DRIVE_* address settings exist only so tests can point the app
+  // at a local imitation of Google. Unset (the normal case), real Google is used.
+  const tokenUrl = googleOverrides.tokenUrl ?? env.GOOGLE_TOKEN_URL ?? GOOGLE_TOKEN_URL;
+  const revokeUrl = googleOverrides.revokeUrl ?? env.GOOGLE_REVOKE_URL ?? GOOGLE_REVOKE_URL;
+  const authUrl = googleOverrides.authUrl ?? env.GOOGLE_AUTH_URL ?? "https://accounts.google.com/o/oauth2/v2/auth";
+  driveOverrides = {
+    ...(env.DRIVE_API_BASE ? { apiBase: env.DRIVE_API_BASE } : {}),
+    ...(env.DRIVE_UPLOAD_BASE ? { uploadBase: env.DRIVE_UPLOAD_BASE } : {}),
+    ...driveOverrides,
+  };
   const nonces = new Map(); // nonce -> expiry (one backend process)
   let accountCache = null; // { at, value } — who the connected Drive belongs to
 
@@ -72,7 +80,7 @@ export function setupProductionMedia({ app, db, requireRole, backendDir, fronten
       prompt: "consent",
       state: `${OAUTH_STATE_PREFIX}${nonce}`,
     });
-    res.redirect(`https://accounts.google.com/o/oauth2/v2/auth?${params}`);
+    res.redirect(`${authUrl}?${params}`);
   });
 
   // Called from the existing /api/auth/google/callback when state starts
@@ -167,6 +175,29 @@ export function setupProductionMedia({ app, db, requireRole, backendDir, fronten
       return;
     }
     res.json({ backend: backendName, ...(await backend.selfTest()) });
+  });
+
+  // The project's folder in storage: its name, the numbered layout, and (for
+  // Drive) a link that opens it. Read-only: creates nothing.
+  app.get("/api/production/:projectId/storage/folder", requireRole("admin"), async (req, res) => {
+    const id = Number(req.params.projectId);
+    if (!Number.isInteger(id) || id <= 0) return res.status(400).json({ error: "Not a valid project." });
+    const info = await store.projectFolderInfo(id);
+    if (!info) return res.status(404).json({ error: "Project not found." });
+    res.json(info);
+  });
+
+  // Creates the project folder and every numbered sub-folder right now (so you
+  // can see the tidy structure in Drive straight after connecting). Safe to repeat.
+  app.post("/api/production/:projectId/storage/prepare", requireRole("admin"), async (req, res) => {
+    const id = Number(req.params.projectId);
+    if (!Number.isInteger(id) || id <= 0) return res.status(400).json({ error: "Not a valid project." });
+    if (!(await store.projectFolderInfo(id))) return res.status(404).json({ error: "Project not found." });
+    try {
+      res.json({ ok: true, ...(await store.prepareProject(id)) });
+    } catch (error) {
+      res.status(502).json({ ok: false, ...explainStorageError(error) });
+    }
   });
 
   // Forgets the Drive sign-in (and asks Google to cancel it). Files already in

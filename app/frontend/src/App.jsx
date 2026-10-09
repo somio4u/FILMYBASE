@@ -8411,6 +8411,17 @@ function App() {
     }
 
     const params = new URLSearchParams(window.location.search)
+    // Back from Google's login page after "Connect with Google" in the
+    // Production Dossier: remember the result, then reopen that dossier.
+    if (params.has('googleDriveConnected') || params.has('googleDriveError')) {
+      try {
+        sessionStorage.setItem('filmybase:driveReturn', params.has('googleDriveConnected') ? 'connected' : `error:${params.get('reason') || 'unknown'}`)
+      } catch { /* private mode: the dossier simply will not show a message */ }
+      window.history.replaceState({}, '', window.location.pathname)
+      setAppMode('ai')
+      const returnProjectId = localStorage.getItem(CURRENT_AI_MOVIE_PROJECT_STORAGE_KEY)
+      if (returnProjectId) loadAiMovieProject(returnProjectId).then(() => setAiMovieView('dossier'))
+    }
     if (params.has('googleContactsConnected')) {
       setGoogleConnected(true)
       setGoogleContactsNotice('connected')

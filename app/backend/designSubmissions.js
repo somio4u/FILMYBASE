@@ -91,7 +91,7 @@ function slug(text) {
 async function lockTask(client, projectId, taskId) {
   return (
     await client.query(
-      `SELECT t.*, a.code AS asset_code FROM production_design_tasks t
+      `SELECT t.*, a.code AS asset_code, a.name AS asset_name FROM production_design_tasks t
        JOIN production_assets a ON a.id = t.asset_id
        WHERE t.id = $1 AND t.project_id = $2 FOR UPDATE OF t`,
       [taskId, projectId]
@@ -143,7 +143,7 @@ export async function addSubmissionFile(db, store, { projectId, taskId, filePath
     // each other into two drafts. (Dedupe: same bytes -> same media row.)
     const label = `${task.asset_code}_v${draft.version_no}${view ? `_${slug(view)}` : ""}`;
     const media = await store.putMedia({
-      projectId, role: "design", filePath, originalName, label, createdBy: actor.userId ?? null,
+      projectId, role: "design", filePath, originalName, label, subfolder: `${task.asset_code} ${task.asset_name}`, createdBy: actor.userId ?? null,
     });
     const already = (await client.query("SELECT id FROM production_submission_files WHERE submission_id = $1 AND media_id = $2", [draft.id, media.id])).rows[0];
     if (already) {

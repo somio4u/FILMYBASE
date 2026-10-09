@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useContext, createContext, Fragment } from 'react'
 import { createPortal } from 'react-dom'
 import './App.css'
+import { AI_ACTIVITY_EVENT } from './AiBackground.jsx'
 
 // Lets MicInput/MicTextarea reach the shared dictation language + t
 // anywhere in the tree without threading those two props through every
@@ -72,7 +73,20 @@ const CURRENT_AI_MOVIE_PROJECT_STORAGE_KEY = 'filmmaking-app:currentAiMovieProje
 // without having to add `credentials: 'include'` to dozens of call sites
 // individually.
 const nativeFetch = window.fetch.bind(window)
-window.fetch = (url, options = {}) => nativeFetch(url, { ...options, credentials: 'include' })
+// Any save / generate / rewrite request (not the background polling GETs)
+// also tells the animated AI background the AI is working, so it speeds up
+// and glows until the answer comes back.
+window.fetch = (url, options = {}) => {
+  const method = (options.method || 'GET').toUpperCase()
+  const signalsWork = method !== 'GET' && String(url).startsWith(BACKEND_URL)
+  if (signalsWork) window.dispatchEvent(new CustomEvent(AI_ACTIVITY_EVENT, { detail: { delta: 1 } }))
+  const request = nativeFetch(url, { ...options, credentials: 'include' })
+  if (signalsWork) {
+    const done = () => window.dispatchEvent(new CustomEvent(AI_ACTIVITY_EVENT, { detail: { delta: -1 } }))
+    request.then(done, done)
+  }
+  return request
+}
 
 const LABELS = {
   en: {

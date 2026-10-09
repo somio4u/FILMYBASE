@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useContext, createContext, Fragment } from 'react'
 import { createPortal } from 'react-dom'
 import './App.css'
-import { AI_ACTIVITY_EVENT } from './AiBackground.jsx'
+import { AI_ACTIVITY_EVENT, AI_WARP_EVENT } from './AiBackground.jsx'
 
 // Lets MicInput/MicTextarea reach the shared dictation language + t
 // anywhere in the tree without threading those two props through every
@@ -283,6 +283,8 @@ const LABELS = {
     appModeQuestion: 'What are we making today — a movie or an AI movie?',
     appModeMovieOption: 'Movie',
     appModeAiMovieOption: 'AI Movie',
+    appModeMovieHint: 'Write it, plan it, shoot it — your film, start to finish',
+    appModeAiMovieHint: 'Make the whole film with AI — story to screen',
     aiMovieProductionLabel: 'Production',
     aiMovieAnalyzeIntro: "Paste anything — a concept, story, synopsis, bit sheet, or screenplay — and I'll tell you what stage it's at.",
     aiMovieAnalyzePlaceholder: 'Paste anything here…',
@@ -1035,6 +1037,8 @@ const LABELS = {
     appModeQuestion: "ଆଜି କ'ଣ ବନେଇବା ଭାଇ — ମୁଭି ନା AI ମୁଭି?",
     appModeMovieOption: 'ମୁଭି',
     appModeAiMovieOption: 'AI ମୁଭି',
+    appModeMovieHint: 'ଲେଖ, ପ୍ଲାନ୍ କର, ସୁଟ୍ କର — ତୋ ଫିଲ୍ମ, ଆରମ୍ଭରୁ ଶେଷ ଯାଏ',
+    appModeAiMovieHint: 'AI ସାଙ୍ଗରେ ପୁରା ଫିଲ୍ମ ବନା — ଗପରୁ ସ୍କ୍ରିନ୍ ଯାଏ',
     aiMovieProductionLabel: 'ପ୍ରଡକ୍ସନ୍',
     aiMovieAnalyzeIntro: 'ଯାହା ବି ପେଷ୍ଟ କର — କନସେପ୍ଟ, ଗପ, ସିନୋପସିସ୍, ବିଟ୍ ସିଟ୍ ବା ସ୍କ୍ରିନପ୍ଲେ — ମୁଁ କହିଦେବି ସେଇଟା କେଉଁ ଷ୍ଟେଜ୍‌ରେ ଅଛି।',
     aiMovieAnalyzePlaceholder: 'ଯାହା ବି ଏଠି ପେଷ୍ଟ କର…',
@@ -5570,6 +5574,7 @@ function App() {
   // instruction. Not persisted on purpose: a page reload resets this to
   // null, so the picker is always reachable again.
   const [appMode, setAppMode] = useState(null)
+  const [modeChoice, setModeChoice] = useState(null) // the mode card mid-animation
 
   // AI Movie pipeline's first piece: paste anything, one agent identifies
   // which stage of development it represents. Nothing past that is wired
@@ -10226,18 +10231,45 @@ function App() {
   }
 
   if (appMode === null && !isProductionOnly) {
+    // Picking a mode is a little cinematic moment: the chosen card glows and
+    // glides to the centre, the other fades, the AI background warps toward
+    // the viewer, then the chosen part of the app fades in.
+    const chooseMode = (mode) => {
+      if (modeChoice) return
+      const reduceMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
+      const open = () => (mode === 'ai' ? handleChooseAiMovieMode() : setAppMode('movie'))
+      if (reduceMotion) {
+        open()
+        return
+      }
+      setModeChoice(mode)
+      window.dispatchEvent(new CustomEvent(AI_WARP_EVENT))
+      setTimeout(() => {
+        open()
+        setModeChoice(null)
+      }, 1500)
+    }
+    const modes = [
+      { key: 'movie', icon: '🎬', label: t.appModeMovieOption, hint: t.appModeMovieHint },
+      { key: 'ai', icon: '✨', label: t.appModeAiMovieOption, hint: t.appModeAiMovieHint },
+    ]
     return (
-      <div className="login-screen">
-        <div className="format-picker">
-          <h4 className="format-picker-title">{t.appModeQuestion}</h4>
-          <div className="format-picker-row">
-            <button type="button" className="choose-button" onClick={() => setAppMode('movie')}>
-              {t.appModeMovieOption}
+      <div className={`mode-stage${modeChoice ? ` is-choosing is-choosing-${modeChoice}` : ''}`}>
+        <h1 className="mode-stage-title">{t.appModeQuestion}</h1>
+        <div className="mode-stage-cards">
+          {modes.map((mode) => (
+            <button
+              key={mode.key}
+              type="button"
+              className={`mode-card mode-card-${mode.key}${modeChoice === mode.key ? ' is-chosen' : ''}${modeChoice && modeChoice !== mode.key ? ' is-dismissed' : ''}`}
+              onClick={() => chooseMode(mode.key)}
+              disabled={Boolean(modeChoice)}
+            >
+              <span className="mode-card-icon" aria-hidden="true">{mode.icon}</span>
+              <span className="mode-card-label">{mode.label}</span>
+              <span className="mode-card-hint">{mode.hint}</span>
             </button>
-            <button type="button" className="choose-button" onClick={handleChooseAiMovieMode}>
-              {t.appModeAiMovieOption}
-            </button>
-          </div>
+          ))}
         </div>
       </div>
     )

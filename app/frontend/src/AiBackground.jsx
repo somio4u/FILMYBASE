@@ -10,6 +10,11 @@ import { useEffect, useRef } from 'react'
 // hidden; a single still frame for people who ask for reduced motion.
 
 export const AI_ACTIVITY_EVENT = 'filmybase:ai-activity'
+// A one-off "fly into the tunnel" moment (e.g. picking Movie / AI Movie):
+// the rings rush outward toward the viewer, the core flashes, then it settles.
+export const AI_WARP_EVENT = 'filmybase:ai-warp'
+const WARP_IN = 1.3
+const WARP_OUT = 0.8
 
 const GLYPHS = ['square', 'square', 'square', 'bar', 'zero', 'one']
 
@@ -90,6 +95,7 @@ export default function AiBackground() {
     let last = performance.now()
     let busyRequests = 0
     let busy = 0 // eased 0 → 1 while the AI is working
+    let warpStartedAt = null
 
     function resize() {
       const ratio = Math.min(window.devicePixelRatio || 1, 1.5)
@@ -105,7 +111,15 @@ export default function AiBackground() {
       const dt = Math.min(0.1, (now - last) / 1000)
       last = now
       busy += ((busyRequests > 0 ? 1 : 0) - busy) * Math.min(1, dt * 2.5)
-      const speed = 1 + busy * 3
+      let warp = 0
+      if (warpStartedAt !== null) {
+        const t = (now - warpStartedAt) / 1000
+        if (t < WARP_IN) warp = Math.pow(t / WARP_IN, 3)
+        else if (t < WARP_IN + WARP_OUT) warp = 1 - (1 - Math.pow(1 - (t - WARP_IN) / WARP_OUT, 3))
+        else warpStartedAt = null
+      }
+      const speed = 1 + busy * 3 + warp * 7
+      const zoom = 1 + warp * 2.2
       const cx = width / 2
       const cy = height / 2
 
@@ -127,15 +141,15 @@ export default function AiBackground() {
         ctx.lineWidth = 1
         for (const arc of ring.arcs) {
           ctx.beginPath()
-          ctx.arc(cx, cy, ring.radius + arc.offset, ring.angle + arc.start, ring.angle + arc.start + arc.length)
+          ctx.arc(cx, cy, (ring.radius + arc.offset) * zoom, ring.angle + arc.start, ring.angle + arc.start + arc.length)
           ctx.stroke()
         }
         for (const glyph of ring.glyphs) {
           if (!glyph.present) continue
           const flicker = 0.55 + 0.45 * Math.sin(seconds * (1.3 + busy * 2.5) + glyph.twinkle)
-          ctx.globalAlpha = Math.min(1, glyph.base * flicker * (0.62 + busy * 0.38))
+          ctx.globalAlpha = Math.min(1, glyph.base * flicker * (0.62 + busy * 0.38 + warp * 0.5))
           const angle = ring.angle + glyph.angle
-          const r = ring.radius + glyph.drift
+          const r = (ring.radius + glyph.drift) * zoom
           const sprite = ring.sprites[glyph.kind]
           ctx.drawImage(sprite.canvas, cx + Math.cos(angle) * r - sprite.offset, cy + Math.sin(angle) * r - sprite.offset)
         }
@@ -155,6 +169,17 @@ export default function AiBackground() {
       ctx.arc(cx, cy, coreRadius * (1.4 + busy * 0.4), 0, Math.PI * 2)
       ctx.fill()
 
+      // The warp's flash: the core lights up as we "arrive".
+      if (warp > 0.6) {
+        const flash = ctx.createRadialGradient(cx, cy, 0, cx, cy, Math.hypot(width, height) / 2)
+        const strength = (warp - 0.6) / 0.4
+        flash.addColorStop(0, `rgba(190, 240, 255, ${0.55 * strength})`)
+        flash.addColorStop(0.35, `rgba(60, 170, 255, ${0.25 * strength})`)
+        flash.addColorStop(1, 'rgba(0, 0, 0, 0)')
+        ctx.fillStyle = flash
+        ctx.fillRect(0, 0, width, height)
+      }
+
       if (!reduceMotion) frame = requestAnimationFrame(draw)
     }
 
@@ -168,6 +193,10 @@ export default function AiBackground() {
       frame = null
     }
     const onVisibility = () => (document.hidden ? stop() : start())
+    const onWarp = () => {
+      warpStartedAt = performance.now()
+      start()
+    }
     const onActivity = (event) => {
       busyRequests = Math.max(0, busyRequests + (event.detail?.delta ?? 0))
       if (reduceMotion) draw(performance.now())
@@ -179,11 +208,13 @@ export default function AiBackground() {
     window.addEventListener('resize', resize)
     document.addEventListener('visibilitychange', onVisibility)
     window.addEventListener(AI_ACTIVITY_EVENT, onActivity)
+    window.addEventListener(AI_WARP_EVENT, onWarp)
     return () => {
       stop()
       window.removeEventListener('resize', resize)
       document.removeEventListener('visibilitychange', onVisibility)
       window.removeEventListener(AI_ACTIVITY_EVENT, onActivity)
+      window.removeEventListener(AI_WARP_EVENT, onWarp)
     }
   }, [])
 

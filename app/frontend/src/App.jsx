@@ -2497,8 +2497,14 @@ function FloatingAgentWidget({ currentUser, t, onRunCompleted, onOpenProject }) 
     } catch {
       // ignore — fall through to default
     }
-    return { x: 16, y: 90 }
+    // On a phone he starts at the bottom-left, out of the way of the page.
+    return window.innerWidth < 600 ? { x: 8, y: window.innerHeight - 190 } : { x: 16, y: 90 }
   })
+  // Kept on screen even when the window/phone is smaller than where he was put.
+  const aduWidth = window.innerWidth < 600 ? 72 : 96
+  const aduHeight = window.innerWidth < 600 ? 92 : 116
+  const aduX = Math.min(Math.max(4, position.x), window.innerWidth - aduWidth - 4)
+  const aduY = Math.min(Math.max(4, position.y), window.innerHeight - aduHeight - 4)
   const [isOpen, setIsOpen] = useState(false)
   const [isDragging, setIsDragging] = useState(false)
   const dragOffset = useRef({ x: 0, y: 0 })
@@ -2667,7 +2673,7 @@ function FloatingAgentWidget({ currentUser, t, onRunCompleted, onOpenProject }) 
     setIsDragging(true)
     hasDraggedRef.current = false
     dragStart.current = { x: e.clientX, y: e.clientY }
-    dragOffset.current = { x: e.clientX - position.x, y: e.clientY - position.y }
+    dragOffset.current = { x: e.clientX - aduX, y: e.clientY - aduY }
   }
 
   useEffect(() => {
@@ -2807,7 +2813,7 @@ function FloatingAgentWidget({ currentUser, t, onRunCompleted, onOpenProject }) 
       <button
         type="button"
         className={`floating-agent-button floating-agent-pose-${poseState} adu-${aduPhase}`}
-        style={{ left: position.x, top: position.y }}
+        style={{ left: aduX, top: aduY }}
         onPointerDown={handlePointerDown}
         onClick={handleButtonClick}
         title={t.floatingAgentTitle}
@@ -2832,7 +2838,7 @@ function FloatingAgentWidget({ currentUser, t, onRunCompleted, onOpenProject }) 
       {aduBubble && (
         <div
           className="adu-bubble"
-          style={{ left: Math.min(position.x, window.innerWidth - 240), top: position.y + (position.y < window.innerHeight / 2 ? 118 : -64) }}
+          style={{ left: Math.max(8, Math.min(aduX, window.innerWidth - 240)), top: aduY + (aduY < window.innerHeight / 2 ? aduHeight + 2 : -64) }}
         >
           {aduBubble === 'hello' ? t.aduHello : t.aduBye}
         </div>
@@ -2842,11 +2848,11 @@ function FloatingAgentWidget({ currentUser, t, onRunCompleted, onOpenProject }) 
         // Opens below the button when it's in the top half of the screen,
         // above it otherwise, and never runs off the screen edges.
         const width = Math.min(400, window.innerWidth - 32)
-        const left = Math.min(Math.max(16, position.x), window.innerWidth - width - 16)
-        const below = position.y < window.innerHeight / 2
+        const left = Math.min(Math.max(16, aduX), window.innerWidth - width - 16)
+        const below = aduY < window.innerHeight / 2
         const panelStyle = below
-          ? { left, width, top: position.y + 112, maxHeight: Math.max(260, window.innerHeight - position.y - 128) }
-          : { left, width, bottom: window.innerHeight - position.y + 12, maxHeight: Math.max(260, position.y - 28) }
+          ? { left, width, top: aduY + aduHeight, maxHeight: Math.max(260, window.innerHeight - aduY - aduHeight - 16) }
+          : { left, width, bottom: window.innerHeight - aduY + 12, maxHeight: Math.max(260, aduY - 28) }
         const notes = (status?.reviewNotes ?? []).map(parseAutoPipelineNote)
         const bestScoreFor = (stage) => {
           const scores = notes.filter((n) => n.stage === stage && n.score !== null).map((n) => n.score)
@@ -3205,6 +3211,7 @@ const VOICE_MAX_SECONDS = 180
 
 const VOICE_ORB_POSITION_STORAGE_KEY = 'filmybase.voiceOrbPosition'
 const VOICE_ORB_SIZE = 76
+const VOICE_ORB_SIZE_PHONE = 60
 
 // The floating, draggable "speak here" orb on the screenplay screen (like
 // the pen buddy). Not editing: what you say is written into the selected
@@ -3224,13 +3231,15 @@ function VoiceWriterButton({ t, sceneListId, episodeIndex, sceneIndex, sceneNumb
     } catch {
       // per-viewer convenience only
     }
-    return { x: window.innerWidth - VOICE_ORB_SIZE - 32, y: window.innerHeight - VOICE_ORB_SIZE - 150 }
+    const size = window.innerWidth < 600 ? VOICE_ORB_SIZE_PHONE : VOICE_ORB_SIZE
+    return { x: window.innerWidth - size - (window.innerWidth < 600 ? 16 : 32), y: window.innerHeight - size - (window.innerWidth < 600 ? 120 : 150) }
   })
   const dragRef = useRef(null)
   const draggedRef = useRef(false)
   // Kept on screen even if the window got smaller since it was placed.
-  const left = Math.min(Math.max(8, position.x), window.innerWidth - VOICE_ORB_SIZE - 8)
-  const top = Math.min(Math.max(8, position.y), window.innerHeight - VOICE_ORB_SIZE - 8)
+  const orbSize = window.innerWidth < 600 ? VOICE_ORB_SIZE_PHONE : VOICE_ORB_SIZE
+  const left = Math.min(Math.max(8, position.x), window.innerWidth - orbSize - 8)
+  const top = Math.min(Math.max(8, position.y), window.innerHeight - orbSize - 8)
 
   function handlePointerDown(e) {
     draggedRef.current = false
@@ -3384,15 +3393,15 @@ function VoiceWriterButton({ t, sceneListId, episodeIndex, sceneIndex, sceneNumb
   const isEditing = Boolean(editDraft)
   const bubbleBelow = top < window.innerHeight / 2
   const bubbleStyle = {
-    right: Math.max(8, window.innerWidth - left - VOICE_ORB_SIZE),
-    ...(bubbleBelow ? { top: top + VOICE_ORB_SIZE + 12 } : { bottom: window.innerHeight - top + 12 }),
+    right: Math.max(8, window.innerWidth - left - orbSize),
+    ...(bubbleBelow ? { top: top + orbSize + 12 } : { bottom: window.innerHeight - top + 12 }),
   }
   const target = isEditing ? t.voiceTargetCursor(sceneNumber) : t.voiceTargetScene(sceneNumber)
   // On <body>, so no panel's effects can pull it out of its floating spot.
   return createPortal(
     <>
       {(phase !== 'idle' || message || blocked || isEditing) && (
-        <div className={`voice-writer-bubble${message?.kind === 'error' ? ' is-error' : ''}`} style={bubbleStyle}>
+        <div className={`voice-writer-bubble${message?.kind === 'error' ? ' is-error' : ''}${phase === 'idle' && !message && !blocked && isEditing ? ' is-hint' : ''}`} style={bubbleStyle}>
           {phase === 'listening' && <p>{liveText || t.voiceListeningHint}</p>}
           {phase === 'writing' && <p>{t.voiceWritingLabel}</p>}
           {phase === 'idle' && message && (

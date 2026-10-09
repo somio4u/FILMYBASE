@@ -7468,3 +7468,60 @@ button:not(:disabled):active {
   margin: 0;
   font-size: 13px;
 }
+
+/* ===== Phones (also the Android app, which shows this same site) ===== */
+@media (max-width: 600px) {
+  /* Adu: a bit smaller, still with headroom. */
+  .floating-agent-button {
+    width: 72px;
+    height: 92px;
+    padding-top: 20px;
+  }
+
+  /* The voice orb: smaller, and its standing "speak here" hint is hidden
+     while editing so it doesn't cover the script (the orb's halo still
+     pulses to show it's ready). */
+  .voice-writer-button {
+    width: 60px;
+    height: 60px;
+  }
+
+  .voice-writer-orb {
+    width: 50px;
+    height: 50px;
+  }
+
+  .voice-writer-mic {
+    font-size: 20px;
+  }
+
+  .voice-writer-caption {
+    font-size: 10px;
+  }
+
+  .voice-writer-bubble.is-hint {
+    display: none;
+  }
+
+  /* Big stage tabs: a touch smaller so the menu doesn't need much scrolling. */
+  .agent-substages .stage-progress-item {
+    min-height: 50px;
+    font-size: 16px;
+  }
+
+  .episode-title-bar {
+    padding: 10px;
+    border-radius: 22px;
+  }
+
+  .episode-title-bar .ai-movie-screenplay-nav-button {
+    width: 40px;
+    height: 40px;
+  }
+
+  .episode-title-kicker {
+    letter-spacing: 0.16em;
+    font-size: 11px;
+    white-space: nowrap;
+  }
+}

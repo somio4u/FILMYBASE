@@ -107,3 +107,20 @@ width/height/duration, role, created_by. Provider URLs are never stored.
   "tested with fixture only" until you try it.
 - Drive API limits (per-user rate limits, 750 GB/day upload) are far above a
   film's needs, but very large videos should upload in the background.
+
+---
+
+## Decision (2026-10-09): app runs on Render, files go to the user's Google Drive
+Built: `mediaStore.js` + `productionMedia.js` (see tests in `app/backend/tests/`).
+
+**One-time setup you must do (cannot be done from the sandbox):**
+1. Google Cloud Console → the project that holds your existing `GOOGLE_CLIENT_ID` → enable the **Google Drive API**.
+2. OAuth consent screen → add scope `.../auth/drive.file`.
+3. **If the consent screen is in "Testing" status, Google expires the sign-in after 7 days** and Drive will show as disconnected. Set it to "In production" (it can stay unverified for personal use) to avoid that.
+4. The existing redirect address (`<BACKEND_URL>/api/auth/google/callback`) is reused — nothing new to register.
+5. While logged in as admin, open `<backend>/api/production/drive/connect` once and approve. (A Connect button comes with the dossier screen.)
+6. Variables (names only): `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` (already set); `MEDIA_BACKEND` (optional — defaults to `gdrive` on Render, `local` elsewhere); `GOOGLE_DRIVE_ROOT_FOLDER_ID` (optional, to place everything inside one Drive folder you made).
+
+**Behaviour:** files go to Drive as `<project id>-<title>/<designs|storyboard|keyframes|video-takes|audio|exports>/<label>_<hash8>.<ext>`; uploaded in 8 MB resumable chunks; checksum compared with Drive's; same content in a project stored once; if Drive is down the file waits in a temporary spool and is retried every 2 minutes (8 tries, then marked failed). **The spool is on Render's wiped disk — a server restart while Drive is down loses the waiting file.** The browser only ever gets files through the app's own `/api/production/media/:id` (login required, HTML/JSON/text/PDF/ZIP forced to download).
+
+**Tested:** against a local MOCK of Drive and a real local Postgres — chunking, resume after a server error, dedupe, range reads, outage → pending → later upload, type/size/magic-byte checks, route headers/401/416, forged sign-in state rejected. **Not tested:** real Google Drive (needs your consent) and the real Render deployment.

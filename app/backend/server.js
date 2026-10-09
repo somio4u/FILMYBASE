@@ -21,6 +21,7 @@ import crypto from "crypto";
 import { AsyncLocalStorage } from "async_hooks";
 import { marked } from "marked";
 import { ensureProductionSchema, registerProductionRoutes } from "./production.js";
+import { setupProductionMedia } from "./productionMedia.js";
 import { BIBLE_PASS_SCORE, designStoryBible, generateBrainJson, reviseBibleWithNote, storyBibleToMarkdown } from "./storyBrain.js";
 import cookieParser from "cookie-parser";
 import { createClient } from "@supabase/supabase-js";
@@ -16820,6 +16821,11 @@ app.post("/api/crew/from-contact", requireRole("admin", "production_manager"), a
 const GOOGLE_REDIRECT_URI = `${BACKEND_URL}/api/auth/google/callback`;
 const GOOGLE_CONTACTS_SCOPE = "https://www.googleapis.com/auth/contacts.readonly";
 
+// Production media storage (Google Drive on Render, local folder elsewhere).
+const productionMedia = setupProductionMedia({
+  app, db, requireRole, backendDir: import.meta.dirname, frontendUrl: FRONTEND_URL, redirectUri: GOOGLE_REDIRECT_URI,
+});
+
 app.get("/api/auth/google", (req, res) => {
   if (!process.env.GOOGLE_CLIENT_ID) {
     res.status(500).send("GOOGLE_CLIENT_ID is not set in the backend .env file yet.");
@@ -16840,6 +16846,11 @@ app.get("/api/auth/google", (req, res) => {
 });
 
 app.get("/api/auth/google/callback", async (req, res) => {
+  // The production Drive sign-in shares this registered redirect address.
+  if (String(req.query.state ?? "").startsWith("drive.")) {
+    await productionMedia.handleDriveCallback(req, res);
+    return;
+  }
   const { code, error } = req.query;
 
   if (error || !code) {
@@ -18922,6 +18933,7 @@ registerProductionRoutes(app, db, requireRole);
 // starts, rather than blocking startup entirely.
 ensureAiMovieSchema()
   .then(() => ensureProductionSchema(db))
+  .then(() => productionMedia.ensureSchema())
   .catch((error) => console.error("Production schema setup failed:", error.message))
   .finally(() => {
   app.listen(PORT, () => {

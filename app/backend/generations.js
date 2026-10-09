@@ -83,21 +83,25 @@ export function describeDetails(details, max = 1500) {
 
 const NO_TEXT = "No text, letters, captions, logos or watermarks anywhere in the picture.";
 
+const SHEET_LAYOUT = "Make ONE single image laid out as a clean professional model sheet on a plain light-grey background, with every view clearly separated and labelled only by position (no written text).";
+
+// One sheet per item holding every view a later shot picture could need, so
+// each shot can be drawn from it and the item always looks the same.
 export function assetPrompt(asset, style) {
   const details = describeDetails(effectiveDetails(asset));
   const look = style ? ` Overall look of the film: ${style}.` : "";
   if (asset.kind === "character") {
-    return `Character reference picture of "${asset.name}" for a film. ${details}.${look} Show the character full-body, standing facing the camera in a relaxed pose, in their usual clothes, on a plain light-grey studio background with soft even light and a neutral expression. Realistic proportions and consistent facial features. ${NO_TEXT}`;
+    return `Character model sheet for "${asset.name}" for a film. ${details}.${look} ${SHEET_LAYOUT} Include: a frontal close-up of the face; a side profile of the face; a three-quarter view; a full-body long shot from the front, one from the side and one from the back; and a row of facial expressions (neutral, happy, angry, sad, afraid, surprised). Same person, same face, same clothes, hair, build and age in every view. Realistic proportions. ${NO_TEXT}`;
   }
   if (asset.kind === "location") {
-    return `Wide establishing reference picture of the place "${asset.name}" for a film. ${details}.${look} Show the whole space clearly with its key features and typical light. No people in the picture. ${NO_TEXT}`;
+    return `Environment model sheet for the place "${asset.name}" for a film. ${details}.${look} ${SHEET_LAYOUT} Include: a wide establishing view of the whole space; views from two or three other camera positions; a close view of the most important detail or furniture; and the same space in its typical lighting (and a second lighting mood if the details mention one). Same architecture, layout, colours and objects in every view. No people. ${NO_TEXT}`;
   }
-  return `Reference picture of the object "${asset.name}" for a film. ${details}.${look} Show the object alone, clearly and in detail, on a plain light-grey studio background with soft even light. ${NO_TEXT}`;
+  return `Prop model sheet for the object "${asset.name}" for a film. ${details}.${look} ${SHEET_LAYOUT} Include: a front view, a side view, a back view, a top view, a three-quarter hero view, a close-up of its most important detail or texture, and a small view of it being held or placed in a normal setting to show its size. Same object, material, colour and wear in every view. ${NO_TEXT}`;
 }
 
 export function keyframePrompt(shot, style, refNames) {
   const camera = [shot.framing, shot.cameraAngle, shot.cameraMove && shot.cameraMove !== "Static" ? `(camera: ${shot.cameraMove})` : null].filter(Boolean).join(", ");
-  const refs = refNames.length ? ` Use the attached reference pictures to keep the exact same look for: ${refNames.join(", ")}.` : "";
+  const refs = refNames.length ? ` The attached pictures are model sheets (several views of each item). Use them to keep the exact same face, clothes, object design and place layout for: ${refNames.join(", ")}. Draw ONLY the single requested frame, never a sheet, and do not copy the sheet layout.` : "";
   return `A single film frame (keyframe). Camera: ${camera || "natural framing"}. ${shot.storyboardText || shot.description}${style ? ` Overall look of the film: ${style}.` : ""}${refs} Cinematic, natural film lighting, photographic detail. ${NO_TEXT}`;
 }
 
@@ -219,7 +223,7 @@ export function createGenerationService({ db, store, providers, env = process.en
       const settings = await getSettings(db, projectId);
       const kind = kindForAsset(asset.kind);
       const prompt = `${assetPrompt(asset, settings.stylePrompt)}${note ? ` Extra direction: ${String(note).slice(0, 500)}` : ""}`;
-      const aspect = kind === "character" ? "3:4" : kind === "environment" ? settings.aspectRatio : "1:1";
+      const aspect = "16:9"; // model sheets are wide so every view fits
       const version = await nextVersion("asset_id = $1", [assetId]);
       return start({
         projectId, kind, assetId, prompt, params: { aspectRatio: aspect }, estimate: estimateCost(kind), actorUserId,

@@ -157,7 +157,7 @@ test("reference picture: stored in the project's character folder, costed, and s
   assert.equal(spend.spentUsd, 0.04);
   assert.equal(spend.byKind.character.count, 1);
   const sent = mock.state.requests.find((r) => r.path.endsWith(":generateContent"));
-  assert.equal(sent.body.generationConfig.imageConfig.aspectRatio, "3:4");
+  assert.equal(sent.body.generationConfig.imageConfig.aspectRatio, "16:9");
   // a second try is version 2
   const g2 = await finish(await gens.generateReference(projectId, rahul.id, { note: "older, with a beard" }));
   assert.equal(g2.version, 2);
@@ -174,8 +174,11 @@ test("props and places get their own kinds, shapes and folders", async () => {
   assert.equal(b.kind, "environment");
   assert.equal((await mediaRow(a.mediaId)).role, "prop");
   assert.equal((await mediaRow(b.mediaId)).role, "environment");
-  assert.match(a.prompt, /on a plain light-grey studio background/);
-  assert.match(b.prompt, /No people in the picture/);
+  assert.match(a.prompt, /Prop model sheet/);
+  assert.match(a.prompt, /front view, a side view, a back view, a top view/);
+  assert.match(b.prompt, /Environment model sheet/);
+  assert.match(b.prompt, /wide establishing view/);
+  assert.match(b.prompt, /No people/);
 });
 
 test("review: only one result per item is approved; approving another switches; reject and reset work; a failed result cannot be approved", async () => {
@@ -268,7 +271,7 @@ test("keyframe: drawn from the approved references (sent as pictures), styled, s
   assert.equal(g.kind, "keyframe");
   assert.match(g.prompt, /cold blue dawn/);
   assert.match(g.prompt, /Over-the-shoulder/);
-  assert.match(g.prompt, /reference pictures to keep the exact same look for/);
+  assert.match(g.prompt, /model sheets \(several views of each item\)/);
   const sent = mock.state.requests.find((r) => r.path.endsWith(":generateContent"));
   assert.equal(sent.body.contents[0].parts.filter((p) => p.inlineData).length, Math.min(4, needed.length));
   assert.equal((await mediaRow(g.mediaId)).role, "keyframe");
@@ -397,6 +400,8 @@ test("prompts: item details are turned into readable text; internal fields are l
   const text = describeDetails({ description: "Tall, thin", sceneRefs: ["Scene 1"], missing: ["age"], costumes: ["white shirt", "maroon tie"], extra: { a: "x" }, empty: "" });
   assert.equal(text, "description: Tall, thin. costumes: white shirt; maroon tie");
   const p = assetPrompt({ name: "Rahul", kind: "character", agent_details: { description: "Tall" }, human_edits: {} }, "");
-  assert.match(p, /Character reference picture of "Rahul"/);
+  assert.match(p, /Character model sheet for "Rahul"/);
+  for (const view of ["frontal close-up", "side profile", "full-body long shot", "facial expressions"]) assert.ok(p.includes(view), view);
+  assert.match(p, /ONE single image/);
   assert.match(p, /No text, letters/);
 });

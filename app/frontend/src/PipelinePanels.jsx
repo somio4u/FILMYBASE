@@ -337,7 +337,7 @@ function ArtItem({ asset, gens, backendUrl, api, projectId, onChanged, makeKind,
         {approved ? <span className="dossier-badge edited">Reference approved</span> : <span className="dossier-fine-print">no approved picture yet</span>}
         <button type="button" className="dossier-small-button" disabled={busy || running} onClick={make}>{mine.length ? 'Make another' : 'Make picture'}</button>
       </div>
-      {mine.length > 0 && <div className="pipe-grid">{mine.map((g) => <GenCard key={g.id} g={g} backendUrl={backendUrl} api={api} projectId={projectId} onChanged={onChanged} />)}</div>}
+      {mine.length > 0 && <div className="pipe-grid pipe-grid-wide">{mine.map((g) => <GenCard key={g.id} g={g} backendUrl={backendUrl} api={api} projectId={projectId} onChanged={onChanged} />)}</div>}
     </li>
   )
 }
@@ -360,7 +360,7 @@ export function ArtPanel({ projectId, api, backendUrl, assets, pipeline, onChang
 
   return (
     <div className="pipe-panel">
-      <p className="dossier-fine-print">Make a reference picture for each item and approve one per item — these approved pictures are what every shot picture is drawn from. Order: characters first, then props, then environments.</p>
+      <p className="dossier-fine-print">Each item gets ONE model sheet image (characters: face close-up, profile, 3/4, full-body front/side/back and expressions; props: all angles and details; environments: wide view, other angles, details and lighting). Approve one sheet per item — these approved pictures are what every shot picture is drawn from. Order: characters first, then props, then environments.</p>
       <Notice message={message} />
       {ART_GROUPS.filter((g) => !only || g.kind === only).map((group) => {
         const list = assets.filter((a) => a.kind === group.kind)

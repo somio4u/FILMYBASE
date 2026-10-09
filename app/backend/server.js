@@ -8313,6 +8313,144 @@ app.post("/api/pitch-deck/:id/request-changes", requireRole("admin"), async (req
   }
 });
 
+// Admin "change format / length" after the story is already written.
+// Two cases:
+//  - Same shape (film stays film, or a series keeps its type and episode
+//    count): only the minutes change. The deck's format is patched in place
+//    and every scene list in this deck's chain gets the new target minutes.
+//    Nothing is rewritten — the admin then chooses which stage (structure,
+//    bit sheet, scene list) to re-plan with the normal "ask AI to change it".
+//  - New shape (film <-> series/vertical, or a different episode count):
+//    the original stays untouched and a NEW project is made with the same
+//    idea, story pages and characters in the new format. For a series the
+//    episode breakdown is written fresh (the same batch writer a new pitch
+//    deck uses); structure onwards is built again in the new project.
+function cleanFormatInput(raw) {
+  const type = ["film", "series", "vertical"].includes(raw?.type) ? raw.type : null;
+  if (!type) return null;
+  if (type === "film") {
+    const runtimeMinutes = Math.round(Number(raw.runtimeMinutes));
+    return runtimeMinutes >= 5 && runtimeMinutes <= 400 ? { type, runtimeMinutes } : null;
+  }
+  const episodeCount = Math.round(Number(raw.episodeCount));
+  const episodeMinutes = Math.round(Number(raw.episodeMinutes) * 10) / 10;
+  if (!(episodeCount >= 1 && episodeCount <= 200 && episodeMinutes >= 0.5 && episodeMinutes <= 120)) return null;
+  return { type, episodeCount, episodeMinutes };
+}
+
+function isSameFormatShape(oldFormat, newFormat) {
+  const oldType = oldFormat?.type ?? "film";
+  if (oldType !== newFormat.type) return false;
+  return newFormat.type === "film" || Number(oldFormat.episodeCount) === newFormat.episodeCount;
+}
+
+app.post("/api/pitch-deck/:id/format", requireRole("admin"), async (req, res) => {
+  const format = cleanFormatInput(req.body?.format);
+  if (!format) {
+    res.status(400).json({ error: "Please give a valid format and length." });
+    return;
+  }
+
+  try {
+    const deckResult = await db.query("SELECT id, concept_id, content, status FROM pitch_decks WHERE id = $1", [req.params.id]);
+    if (deckResult.rows.length === 0) {
+      res.status(404).json({ error: "Pitch deck not found" });
+      return;
+    }
+    const deckRow = deckResult.rows[0];
+    const deck = deckRow.content;
+
+    if (isSameFormatShape(deck.format, format)) {
+      await db.query("UPDATE pitch_decks SET content = jsonb_set(content, '{format}', $1::jsonb) WHERE id = $2", [
+        JSON.stringify(format),
+        deckRow.id,
+      ]);
+      const sceneLists = await db.query(
+        `SELECT sl.id, sl.content FROM scene_lists sl
+           JOIN bit_sheets bs ON bs.id = sl.bit_sheet_id
+           JOIN three_act_structures tas ON tas.id = bs.three_act_structure_id
+          WHERE tas.pitch_deck_id = $1`,
+        [deckRow.id]
+      );
+      for (const row of sceneLists.rows) {
+        const content =
+          format.type === "film"
+            ? { ...row.content, targetMinutes: format.runtimeMinutes }
+            : {
+                ...row.content,
+                episodeScenes: (row.content.episodeScenes ?? []).map((episode) => ({ ...episode, targetMinutes: format.episodeMinutes })),
+              };
+        await db.query("UPDATE scene_lists SET content = $1 WHERE id = $2", [JSON.stringify(content), row.id]);
+      }
+      res.json({ mode: "updated", format });
+      return;
+    }
+
+    // New shape: a separate copy project.
+    const conceptResult = await db.query("SELECT concept_text, storylines, title, owner_user_id FROM concepts WHERE id = $1", [
+      deckRow.concept_id,
+    ]);
+    const conceptRow = conceptResult.rows[0];
+    const isSeries = format.type !== "film";
+
+    let episodes = null;
+    if (isSeries) {
+      const storyline = {
+        title: deck.title,
+        logline: deck.logline,
+        summary: deck.premise,
+        storyText: (deck.storyPages ?? []).map((page) => page?.en ?? "").join("\n\n"),
+      };
+      const isVerticalDrama = format.type === "vertical";
+      episodes = [];
+      for (let start = 0; start < format.episodeCount; start += PITCH_DECK_EPISODE_BATCH_SIZE) {
+        const batchCount = Math.min(PITCH_DECK_EPISODE_BATCH_SIZE, format.episodeCount - start);
+        const priorSummary = episodes.length ? episodes.map((ep, i) => `${i + 1}. ${ep.title.en}: ${ep.synopsis.en}`).join("\n") : null;
+        const batch = await generatePitchDeckEpisodeBatch(storyline, format, isVerticalDrama, start, batchCount, format.episodeCount, priorSummary, null);
+        episodes = episodes.concat(batch.slice(0, batchCount));
+      }
+    }
+
+    const suffix = { film: "Film", series: "Series", vertical: "Vertical" }[format.type];
+    const baseTitle = conceptRow?.title || deck.title?.en || "Untitled";
+    const newContent = { ...deck, format, episodes };
+
+    const client = await db.connect();
+    let newConceptId;
+    try {
+      await client.query("BEGIN");
+      const newConcept = await client.query(
+        "INSERT INTO concepts (concept_text, storylines, title, owner_user_id) VALUES ($1, $2, $3, $4) RETURNING id",
+        [conceptRow?.concept_text ?? "", JSON.stringify(conceptRow?.storylines ?? []), `${baseTitle} — ${suffix}`, conceptRow?.owner_user_id ?? null]
+      );
+      newConceptId = newConcept.rows[0].id;
+      // A film copy has nothing new to review; a series copy has a freshly
+      // written episode breakdown the admin should look over first.
+      const newDeck = await client.query(
+        "INSERT INTO pitch_decks (concept_id, content, status) VALUES ($1, $2, $3) RETURNING id",
+        [newConceptId, JSON.stringify(newContent), isSeries ? "pending" : "approved"]
+      );
+      await client.query(
+        `INSERT INTO character_sheets (pitch_deck_id, content, status)
+           SELECT $1, content, status FROM character_sheets WHERE pitch_deck_id = $2
+            ORDER BY created_at DESC LIMIT 1`,
+        [newDeck.rows[0].id, deckRow.id]
+      );
+      await client.query("COMMIT");
+    } catch (error) {
+      await client.query("ROLLBACK");
+      throw error;
+    } finally {
+      client.release();
+    }
+
+    res.json({ mode: "copied", conceptId: newConceptId, format });
+  } catch (error) {
+    console.error("Format change failed:", error.message);
+    res.status(502).json({ error: error.message });
+  }
+});
+
 app.get("/api/pitch-deck/:id/export", requireLogin, async (req, res) => {
   const lang = ["or", "hi"].includes(req.query.lang) ? req.query.lang : "en";
 

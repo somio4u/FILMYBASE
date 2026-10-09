@@ -517,6 +517,29 @@ const LABELS = {
     formatFilm: 'FEATURE FILM',
     formatSeries: (count, minutes) => `WEB SERIES · ${count} EPISODES × ${minutes} MIN EACH`,
     formatVertical: (count, minutes) => `VERTICAL DRAMA · ${count} EPISODES × ${minutes} MIN EACH`,
+    formatFilmMinutes: (minutes) => `${minutes} MIN`,
+    formatChangeButton: '✎ Change format / length',
+    formatEditorHeading: 'Change format or length',
+    formatEditorIntro: "Just the length? I'll update it right here. Switching film ↔ series (or a different number of episodes)? I'll make a separate copy so this one stays safe.",
+    formatTypeFilm: '🎬 Film',
+    formatTypeSeries: '📺 Web series',
+    formatTypeVertical: '📱 Vertical drama',
+    formatRuntimeLabel: 'Film length (minutes)',
+    formatEpisodeCountLabel: 'Number of episodes',
+    formatEpisodeMinutesLabel: 'Minutes per episode',
+    formatSaveButton: 'Save',
+    formatMakeCopyButton: 'Make a new copy',
+    formatSaving: 'Saving…',
+    formatCopying: 'Making the copy — writing the new episode list, hang on bro…',
+    formatInvalid: "Those numbers don't look right — check the length and episodes.",
+    formatCopyConfirm: (title) => `This makes a NEW project "${title}" with the same idea, story and characters. Structure → screenplay get built again for the new format. This project stays exactly as it is. Go ahead?`,
+    formatCopyDone: 'Done! You are now in the new copy.',
+    formatUpdatedNote: 'Length updated. Nothing is rewritten yet — pick where the AI should re-plan from to fit the new length:',
+    formatReplanStructure: 'Re-plan from Structure',
+    formatReplanBitSheet: 'Re-plan from Bit sheet',
+    formatReplanSceneList: 'Re-plan from Scene list',
+    formatReplanLater: "I'll do it later",
+    formatReplanConfirm: "Heads up: everything after this stage gets rebuilt — including the screenplay written so far for this project. Go ahead?",
     episodeBreakdown: 'Episode by episode',
     episodeLabel: 'Episode',
     hookLabel: 'Hook',
@@ -1286,6 +1309,29 @@ const LABELS = {
     formatFilm: 'ଫିଚର୍ ଫିଲ୍ମ',
     formatSeries: (count, minutes) => `ୱେବ୍ ସିରିଜ୍ · ${count} ଏପିସୋଡ୍ × ${minutes} ମିନିଟ୍ ଲେଖାଏଁ`,
     formatVertical: (count, minutes) => `ଭର୍ଟିକାଲ୍ ଡ୍ରାମା · ${count} ଏପିସୋଡ୍ × ${minutes} ମିନିଟ୍ ଲେଖାଏଁ`,
+    formatFilmMinutes: (minutes) => `${minutes} ମିନିଟ୍`,
+    formatChangeButton: '✎ ଫର୍ମାଟ୍ / ଲମ୍ବ ବଦଳା',
+    formatEditorHeading: 'ଫର୍ମାଟ୍ କି ଲମ୍ବ ବଦଳା',
+    formatEditorIntro: 'ଖାଲି ଲମ୍ବ ବଦଳାଉଛୁ? ମୁଁ ଏଇଠି ଅପଡେଟ୍ କରିଦେବି। ଫିଲ୍ମ ↔ ସିରିଜ୍ (କି ଏପିସୋଡ୍ ସଂଖ୍ୟା) ବଦଳାଉଛୁ? ମୁଁ ଅଲଗା କପି ବନେଇବି, ଏଇଟା ଯେମିତି ଅଛି ସେମିତି ରହିବ।',
+    formatTypeFilm: '🎬 ଫିଲ୍ମ',
+    formatTypeSeries: '📺 ୱେବ୍ ସିରିଜ୍',
+    formatTypeVertical: '📱 ଭର୍ଟିକାଲ୍ ଡ୍ରାମା',
+    formatRuntimeLabel: 'ଫିଲ୍ମ କେତେ ମିନିଟ୍',
+    formatEpisodeCountLabel: 'କେତୋଟି ଏପିସୋଡ୍',
+    formatEpisodeMinutesLabel: 'ଏପିସୋଡ୍ ପିଛା ମିନିଟ୍',
+    formatSaveButton: 'ସେଭ୍ କର',
+    formatMakeCopyButton: 'ନୂଆ କପି ବନା',
+    formatSaving: 'ସେଭ୍ ହେଉଛି…',
+    formatCopying: 'କପି ବନଉଛି — ନୂଆ ଏପିସୋଡ୍ ଲିଷ୍ଟ ଲେଖୁଛି, ଟିକେ ରହ ଭାଇ…',
+    formatInvalid: 'ନମ୍ବର ଠିକ୍ ଲାଗୁନି — ଲମ୍ବ ଆଉ ଏପିସୋଡ୍ ଟିକେ ଦେଖ।',
+    formatCopyConfirm: (title) => `ଏଇଟା ନୂଆ ପ୍ରୋଜେକ୍ଟ "${title}" ବନେଇବ — ସେଇ ଆଇଡିଆ, ଗପ ଆଉ ଚରିତ୍ର ସହ। ଢାଞ୍ଚାରୁ ସ୍କ୍ରିନପ୍ଲେ ଯାଏଁ ନୂଆ ଫର୍ମାଟ୍ ପାଇଁ ପୁଣି ବନିବ। ଏଇ ପ୍ରୋଜେକ୍ଟ ଯେମିତି ଅଛି ସେମିତି ରହିବ। କରିବି?`,
+    formatCopyDone: 'ହେଇଗଲା! ତୁ ଏବେ ନୂଆ କପିରେ ଅଛୁ।',
+    formatUpdatedNote: 'ଲମ୍ବ ଅପଡେଟ୍ ହେଇଗଲା। ଏଯାଏଁ କିଛି ପୁଣି ଲେଖା ହେଇନି — ନୂଆ ଲମ୍ବରେ ଫିଟ୍ କରିବାକୁ AI କେଉଁଠୁ ପୁଣି ପ୍ଲାନ୍ କରିବ ବାଛ:',
+    formatReplanStructure: 'ଢାଞ୍ଚାରୁ ପୁଣି ପ୍ଲାନ୍ କର',
+    formatReplanBitSheet: 'ବିଟ୍ ସିଟ୍‌ରୁ ପୁଣି ପ୍ଲାନ୍ କର',
+    formatReplanSceneList: 'ସିନ୍ ଲିଷ୍ଟରୁ ପୁଣି ପ୍ଲାନ୍ କର',
+    formatReplanLater: 'ପରେ କରିବି',
+    formatReplanConfirm: 'ଧ୍ୟାନ ଦେ: ଏଇ ଷ୍ଟେଜ୍ ପରର ସବୁକିଛି ପୁଣି ବନିବ — ଏ ପ୍ରୋଜେକ୍ଟରେ ଏଯାଏଁ ଲେଖା ସ୍କ୍ରିନପ୍ଲେ ବି। କରିବି?',
     episodeBreakdown: 'ଏପିସୋଡ୍ ଅନୁସାରେ',
     episodeLabel: 'ଏପିସୋଡ୍',
     hookLabel: 'ହୁକ୍',
@@ -1636,7 +1682,7 @@ function formatBadgeText(format, t) {
   if (format?.type === 'vertical') {
     return t.formatVertical(format.episodeCount, format.episodeMinutes)
   }
-  return t.formatFilm
+  return format?.runtimeMinutes ? `${t.formatFilm} · ${t.formatFilmMinutes(format.runtimeMinutes)}` : t.formatFilm
 }
 
 const ICONS = {
@@ -4150,6 +4196,138 @@ function CameraCaptureModal({ t, onCapture, onClose, multiple = false }) {
 // choice instead of downloading immediately — every export in the app used
 // to be a bare link straight to one format; this replaces that with one
 // consistent choice point wherever a download is offered.
+// Admin-only panel under the format badge: change the length in place, or
+// switch film <-> series (which makes a separate copy project instead).
+// After a length-only change it offers "Re-plan from …" buttons so the
+// admin chooses which stage the AI rebuilds to fit the new length.
+function FormatEditor({ t, format, projectTitle, stages, onSave, onReplan }) {
+  const [isOpen, setIsOpen] = useState(false)
+  const [draft, setDraft] = useState(null)
+  const [isSaving, setIsSaving] = useState(false)
+  const [error, setError] = useState(null)
+  const [justUpdated, setJustUpdated] = useState(false)
+
+  function open() {
+    setDraft({
+      type: format?.type ?? 'film',
+      runtimeMinutes: format?.runtimeMinutes ?? 120,
+      episodeCount: format?.episodeCount ?? 8,
+      episodeMinutes: format?.episodeMinutes ?? (format?.type === 'vertical' ? 2 : 25),
+    })
+    setError(null)
+    setJustUpdated(false)
+    setIsOpen(true)
+  }
+
+  const oldType = format?.type ?? 'film'
+  const makesCopy = draft && (draft.type !== oldType || (draft.type !== 'film' && Number(draft.episodeCount) !== Number(format?.episodeCount)))
+  const suffix = draft && { film: 'Film', series: 'Series', vertical: 'Vertical' }[draft.type]
+
+  async function save() {
+    const next = draft.type === 'film'
+      ? { type: 'film', runtimeMinutes: Number(draft.runtimeMinutes) }
+      : { type: draft.type, episodeCount: Number(draft.episodeCount), episodeMinutes: Number(draft.episodeMinutes) }
+    const valid = next.type === 'film'
+      ? next.runtimeMinutes >= 5 && next.runtimeMinutes <= 400
+      : next.episodeCount >= 1 && next.episodeCount <= 200 && next.episodeMinutes >= 0.5 && next.episodeMinutes <= 120
+    if (!valid) {
+      setError(t.formatInvalid)
+      return
+    }
+    if (makesCopy && !window.confirm(t.formatCopyConfirm(`${projectTitle} — ${suffix}`))) return
+    setIsSaving(true)
+    setError(null)
+    const result = await onSave(next)
+    setIsSaving(false)
+    if (result?.error) {
+      setError(result.error)
+      return
+    }
+    setIsOpen(false)
+    if (result?.mode === 'updated' && stages.some((stage) => stage.available)) setJustUpdated(true)
+  }
+
+  function replan(stage) {
+    if (!window.confirm(t.formatReplanConfirm)) return
+    setJustUpdated(false)
+    onReplan(stage)
+  }
+
+  return (
+    <div className="format-editor">
+      {!isOpen && (
+        <button type="button" className="format-change-button" onClick={open}>{t.formatChangeButton}</button>
+      )}
+
+      {isOpen && draft && (
+        <div className="format-editor-panel">
+          <h4>{t.formatEditorHeading}</h4>
+          <p className="format-editor-intro">{t.formatEditorIntro}</p>
+          <div className="format-type-row">
+            {['film', 'series', 'vertical'].map((type) => (
+              <button
+                key={type}
+                type="button"
+                className={`format-type-button${draft.type === type ? ' is-selected' : ''}`}
+                onClick={() => setDraft({ ...draft, type, episodeMinutes: type === 'vertical' && draft.type !== 'vertical' ? 2 : draft.episodeMinutes })}
+                disabled={isSaving}
+              >
+                {{ film: t.formatTypeFilm, series: t.formatTypeSeries, vertical: t.formatTypeVertical }[type]}
+              </button>
+            ))}
+          </div>
+          {draft.type === 'film' ? (
+            <label className="format-number-field">
+              {t.formatRuntimeLabel}
+              <input type="number" min="5" max="400" value={draft.runtimeMinutes} disabled={isSaving}
+                onChange={(e) => setDraft({ ...draft, runtimeMinutes: e.target.value })} />
+            </label>
+          ) : (
+            <div className="format-number-row">
+              <label className="format-number-field">
+                {t.formatEpisodeCountLabel}
+                <input type="number" min="1" max="200" value={draft.episodeCount} disabled={isSaving}
+                  onChange={(e) => setDraft({ ...draft, episodeCount: e.target.value })} />
+              </label>
+              <label className="format-number-field">
+                {t.formatEpisodeMinutesLabel}
+                <input type="number" min="0.5" max="120" step="0.5" value={draft.episodeMinutes} disabled={isSaving}
+                  onChange={(e) => setDraft({ ...draft, episodeMinutes: e.target.value })} />
+              </label>
+            </div>
+          )}
+          {error && <p className="error-message">{error}</p>}
+          {isSaving && makesCopy && <p className="format-editor-intro">{t.formatCopying}</p>}
+          <div className="approval-buttons">
+            <button type="button" className="approve-button" onClick={save} disabled={isSaving}>
+              {isSaving ? t.formatSaving : makesCopy ? t.formatMakeCopyButton : t.formatSaveButton}
+            </button>
+            <button type="button" className="cancel-button" onClick={() => setIsOpen(false)} disabled={isSaving}>
+              {t.cancel}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {justUpdated && (
+        <div className="format-editor-panel">
+          <p className="format-editor-intro">{t.formatUpdatedNote}</p>
+          <div className="approval-buttons">
+            {stages.filter((stage) => stage.available).map((stage) => (
+              <button key={stage.key} type="button" className="approve-button" onClick={() => replan(stage.key)}>
+                {stage.label}
+              </button>
+            ))}
+            <button type="button" className="cancel-button" onClick={() => setJustUpdated(false)}>
+              {t.formatReplanLater}
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 function DownloadChoiceButton({ t, label, pdfUrl, excelUrl, className = 'breakdown-pdf-link', title, pdfLabel, excelLabel }) {
   const [isOpen, setIsOpen] = useState(false)
   const containerRef = useRef(null)
@@ -8597,6 +8775,62 @@ function App() {
     setIsSubmittingSceneListFeedback(false)
   }
 
+  // Admin: change the format / length after writing. Returns the server's
+  // answer so the FormatEditor knows whether to offer "Re-plan from …".
+  async function handleChangeFormat(format) {
+    try {
+      const response = await fetch(`${BACKEND_URL}/api/pitch-deck/${pitchDeck.id}/format`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ format }),
+      })
+      const data = await response.json()
+      if (!response.ok) return { error: data.error || t.genericError }
+
+      if (data.mode === 'copied') {
+        await loadProjectList()
+        await loadProject(data.conceptId)
+        setToastMessage(t.formatCopyDone)
+        return data
+      }
+
+      setPitchDeck((previous) => ({ ...previous, format: data.format }))
+      setSceneList((previous) => {
+        if (!previous) return previous
+        if (data.format.type === 'film') return { ...previous, targetMinutes: data.format.runtimeMinutes }
+        return {
+          ...previous,
+          episodeScenes: (previous.episodeScenes ?? []).map((episode) => ({ ...episode, targetMinutes: data.format.episodeMinutes })),
+        }
+      })
+      return data
+    } catch {
+      return { error: t.genericError }
+    }
+  }
+
+  // The feedback the AI gets when the admin re-plans a stage for a new length.
+  function replanFeedbackForFormat(format) {
+    const length = format?.type === 'film'
+      ? `The film's target runtime is now ${format.runtimeMinutes} minutes.`
+      : `Each of the ${format?.episodeCount} episodes is now ${format?.episodeMinutes} minutes long.`
+    return `${length} Re-plan this to fit the new length: keep the same story, characters, key moments and ending, and add or trim material (scenes, beats, subplots) so it genuinely fills — but does not overrun — the new runtime.`
+  }
+
+  function handleReplanForFormat(stage) {
+    const feedback = replanFeedbackForFormat(pitchDeck.format)
+    if (stage === 'structure') {
+      setMovieFocusedStage('bitsheet')
+      handleSubmitStructureFeedbackClick(feedback)
+    } else if (stage === 'bitsheet') {
+      setMovieFocusedStage('bitsheet')
+      handleSubmitBitSheetFeedbackClick(feedback)
+    } else if (stage === 'scenelist') {
+      setMovieFocusedStage('screenplay')
+      handleSubmitSceneListFeedbackClick(feedback)
+    }
+  }
+
   async function handleGenerateBreakdownClick() {
     if (!conceptId) {
       setErrorMessage(t.genericError)
@@ -12410,6 +12644,20 @@ function App() {
       {movieShows('synopsis') && pitchDeck && (
         <div className="pitch-deck" id="stage-synopsis">
           <span className="format-badge">{formatBadgeText(pitchDeck.format, t)}</span>
+          {currentUser?.role === 'admin' && (
+            <FormatEditor
+              t={t}
+              format={pitchDeck.format}
+              projectTitle={projectTitle || pitchDeck.title.en}
+              stages={[
+                { key: 'structure', label: t.formatReplanStructure, available: !!threeActStructure },
+                { key: 'bitsheet', label: t.formatReplanBitSheet, available: !!bitSheet },
+                { key: 'scenelist', label: t.formatReplanSceneList, available: !!sceneList },
+              ]}
+              onSave={handleChangeFormat}
+              onReplan={handleReplanForFormat}
+            />
+          )}
           <h2>{pitchDeck.title[language]}</h2>
           <p className="pitch-deck-logline"><em>{pitchDeck.logline[language]}</em></p>
 

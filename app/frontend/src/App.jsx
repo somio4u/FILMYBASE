@@ -407,6 +407,10 @@ const LABELS = {
     screenplayDownloadFilm: '⬇ Download screenplay',
     downloadFormatWord: 'Word',
     scriptRequestChangesWhileEditingNote: 'To ask the AI for changes, first Submit or Cancel your edit below the scene.',
+    sceneUndoButton: '↶ Undo',
+    sceneRedoButton: '↷ Redo',
+    sceneUndoHint: 'Go back to the previous version of this scene',
+    sceneRedoHint: 'Bring back the version you just undid',
     sceneManageTitle: 'Add or remove scenes',
     sceneAddBeforeButton: '＋ Add scene before',
     sceneAddAfterButton: '＋ Add scene after',
@@ -1154,6 +1158,10 @@ const LABELS = {
     screenplayDownloadFilm: '⬇ ଚିତ୍ରନାଟ୍ୟ ଡାଉନଲୋଡ୍',
     downloadFormatWord: 'Word',
     scriptRequestChangesWhileEditingNote: 'AI ରୁ ପରିବର୍ତ୍ତନ ମାଗିବା ପାଇଁ, ଆଗେ ଦୃଶ୍ୟ ତଳେ ଥିବା Submit ବା Cancel ଦବାନ୍ତୁ।',
+    sceneUndoButton: '↶ ପଛକୁ (Undo)',
+    sceneRedoButton: '↷ ଆଗକୁ (Redo)',
+    sceneUndoHint: 'ଏହି ଦୃଶ୍ୟର ଆଗ ସଂସ୍କରଣକୁ ଫେରନ୍ତୁ',
+    sceneRedoHint: 'ଏଇମାତ୍ର ପଛକୁ କରିଥିବା ସଂସ୍କରଣ ଫେରାନ୍ତୁ',
     sceneManageTitle: 'ଦୃଶ୍ୟ ଯୋଡ଼ନ୍ତୁ ବା ହଟାନ୍ତୁ',
     sceneAddBeforeButton: '＋ ଆଗରେ ଦୃଶ୍ୟ ଯୋଡ଼ନ୍ତୁ',
     sceneAddAfterButton: '＋ ପରେ ଦୃଶ୍ୟ ଯୋଡ଼ନ୍ତୁ',
@@ -1767,6 +1775,15 @@ function BitSheetView({ bitSheet, episodes, t, language }) {
       <BitRows bits={bitSheet.bits} t={t} language={language} />
     </div>
   )
+}
+
+// A route that saves a new version of a scene doesn't report the scene's
+// undo/redo step counts, so they're carried forward here: one more step to
+// undo, and no redo (a new change clears it). Undo/Redo themselves return
+// the real counts.
+function withSceneHistoryCounts(previous, next) {
+  if (next?.undoSteps !== undefined) return next
+  return { ...next, undoSteps: previous ? (previous.undoSteps ?? 0) + 1 : 0, redoSteps: 0 }
 }
 
 function screenplayKey(episodeIndex, sceneIndex) {
@@ -3064,6 +3081,27 @@ function MovieScreenplayWorkspace({
     }
   }
 
+  async function stepSceneHistory(direction) {
+    setIsChangingScenes(true)
+    setSceneChangeError(null)
+    try {
+      const response = await fetch(`${BACKEND_URL}/api/screenplay/scene/${direction}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sceneListId: sceneList.id, episodeIndex: group.episodeIndex, sceneIndex }),
+      })
+      const data = await response.json()
+      if (!response.ok) setSceneChangeError(data.error || t.genericError)
+      else {
+        setEditFixes(null)
+        onSceneSaved?.(selectedKey, data)
+      }
+    } catch {
+      setSceneChangeError(t.genericError)
+    }
+    setIsChangingScenes(false)
+  }
+
   async function deleteSelectedScene() {
     if (!window.confirm(t.sceneDeleteConfirm(numberOf(scene, sceneIndex)))) return
     setIsChangingScenes(true)
@@ -3391,6 +3429,22 @@ function MovieScreenplayWorkspace({
                         {t.scriptEditStartButton}
                       </button>
                     )}
+                    <div className="script-history-buttons">
+                      <button
+                        type="button" className="cancel-button" onClick={() => stepSceneHistory('undo')}
+                        disabled={!(draft.undoSteps > 0) || Boolean(editing) || isAiWriting || isChecking || isChangingScenes}
+                        title={t.sceneUndoHint}
+                      >
+                        {t.sceneUndoButton}{draft.undoSteps > 0 ? ` (${draft.undoSteps})` : ''}
+                      </button>
+                      <button
+                        type="button" className="cancel-button" onClick={() => stepSceneHistory('redo')}
+                        disabled={!(draft.redoSteps > 0) || Boolean(editing) || isAiWriting || isChecking || isChangingScenes}
+                        title={t.sceneRedoHint}
+                      >
+                        {t.sceneRedoButton}{draft.redoSteps > 0 ? ` (${draft.redoSteps})` : ''}
+                      </button>
+                    </div>
                     {editFixes?.key === selectedKey && (
                       <div className="script-edit-fixes">
                         <p className="script-panel-title">{t.scriptEditFixesTitle}</p>
@@ -9819,7 +9873,7 @@ function App() {
         return
       }
 
-      setScreenplayScenesByKey((prev) => ({ ...prev, [key]: data }))
+      setScreenplayScenesByKey((prev) => ({ ...prev, [key]: withSceneHistoryCounts(prev[key], data) }))
     } catch {
       setErrorMessage(t.genericError)
     }
@@ -9853,7 +9907,7 @@ function App() {
         return
       }
 
-      setScreenplayScenesByKey((prev) => ({ ...prev, [key]: data }))
+      setScreenplayScenesByKey((prev) => ({ ...prev, [key]: withSceneHistoryCounts(prev[key], data) }))
       setScreenplayFeedbackFormKey(null)
       setScreenplayFeedbackTextByKey((prev) => ({ ...prev, [key]: '' }))
     } catch {
@@ -12483,7 +12537,7 @@ function App() {
             language={language}
             scriptTheme={scriptTheme}
             onChangeScriptTheme={changeScriptTheme}
-            onSceneSaved={(key, scene) => setScreenplayScenesByKey((prev) => ({ ...prev, [key]: scene }))}
+            onSceneSaved={(key, scene) => setScreenplayScenesByKey((prev) => ({ ...prev, [key]: withSceneHistoryCounts(prev[key], scene) }))}
             onReloadScenes={() => loadScreenplayScenes(sceneList.id)}
             onSceneListChanged={applySceneListChange}
             screenplay={

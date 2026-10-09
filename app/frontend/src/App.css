@@ -6145,3 +6145,14 @@ button:not(:disabled):active {
   top: auto;
   bottom: calc(100% + 6px);
 }
+
+/* Undo / Redo for the selected scene */
+.script-history-buttons {
+  display: flex;
+  gap: 6px;
+}
+
+.script-history-buttons .cancel-button {
+  flex: 1;
+  margin: 0;
+}

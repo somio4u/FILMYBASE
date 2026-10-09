@@ -138,6 +138,33 @@ async function ensureAiMovieSchema() {
     // Which "Production only" login uploaded a production project (null for
     // everything the admin made) — that login sees only its own projects.
     `ALTER TABLE concepts ADD COLUMN IF NOT EXISTS owner_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL`,
+    // Screenplay undo/redo: every change to a scene is already a new row in
+    // screenplay_scenes, so Undo moves the newest version here and Redo moves
+    // it back. Any other new version of that scene clears its redo steps
+    // (the trigger below), except while a Redo itself is putting one back.
+    `CREATE TABLE IF NOT EXISTS screenplay_scene_redo (
+      id INTEGER PRIMARY KEY,
+      scene_list_id INTEGER NOT NULL REFERENCES scene_lists(id) ON DELETE CASCADE,
+      episode_index INTEGER,
+      scene_index INTEGER NOT NULL,
+      content JSONB NOT NULL,
+      status TEXT NOT NULL DEFAULT 'pending',
+      feedback TEXT,
+      created_at TIMESTAMPTZ NOT NULL,
+      undone_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    )`,
+    `CREATE OR REPLACE FUNCTION clear_screenplay_scene_redo() RETURNS trigger AS $$
+     BEGIN
+       IF current_setting('filmybase.restoring_redo', true) IS DISTINCT FROM 'on' THEN
+         DELETE FROM screenplay_scene_redo
+         WHERE scene_list_id = NEW.scene_list_id
+           AND episode_index IS NOT DISTINCT FROM NEW.episode_index
+           AND scene_index = NEW.scene_index;
+       END IF;
+       RETURN NEW;
+     END $$ LANGUAGE plpgsql`,
+    `DROP TRIGGER IF EXISTS screenplay_scenes_clear_redo ON screenplay_scenes`,
+    `CREATE TRIGGER screenplay_scenes_clear_redo AFTER INSERT ON screenplay_scenes FOR EACH ROW EXECUTE FUNCTION clear_screenplay_scene_redo()`,
     `CREATE TABLE IF NOT EXISTS ai_movie_reference_files (
       id SERIAL PRIMARY KEY,
       project_id INTEGER NOT NULL REFERENCES ai_movie_projects(id) ON DELETE CASCADE,
@@ -10790,11 +10817,13 @@ function withSceneArray(content, episodeIndex, scenes) {
 // Moves every stored scene at position >= fromIndex (in this film or
 // episode) by `delta`: all screenplay versions and the shoot schedule.
 async function shiftScenePositions(client, sceneListId, episodeIndex, fromIndex, delta) {
-  await client.query(
-    `UPDATE screenplay_scenes SET scene_index = scene_index + $4
-     WHERE scene_list_id = $1 AND episode_index IS NOT DISTINCT FROM $2 AND scene_index >= $3`,
-    [sceneListId, episodeIndex, fromIndex, delta]
-  );
+  for (const table of ["screenplay_scenes", "screenplay_scene_redo"]) {
+    await client.query(
+      `UPDATE ${table} SET scene_index = scene_index + $4
+       WHERE scene_list_id = $1 AND episode_index IS NOT DISTINCT FROM $2 AND scene_index >= $3`,
+      [sceneListId, episodeIndex, fromIndex, delta]
+    );
+  }
   const schedules = await client.query("SELECT id, content FROM shoot_schedules WHERE scene_list_id = $1", [sceneListId]);
   for (const row of schedules.rows) {
     if (!Array.isArray(row.content?.scheduleDays)) continue;
@@ -10917,10 +10946,12 @@ app.delete("/api/scene-lists/:id/scenes", requireRole("admin"), async (req, res)
       return;
     }
 
-    await client.query(
-      "DELETE FROM screenplay_scenes WHERE scene_list_id = $1 AND episode_index IS NOT DISTINCT FROM $2 AND scene_index = $3",
-      [sceneListId, episodeIndex, sceneIndex]
-    );
+    for (const table of ["screenplay_scenes", "screenplay_scene_redo"]) {
+      await client.query(
+        `DELETE FROM ${table} WHERE scene_list_id = $1 AND episode_index IS NOT DISTINCT FROM $2 AND scene_index = $3`,
+        [sceneListId, episodeIndex, sceneIndex]
+      );
+    }
     // The deleted scene leaves the shoot schedule before the later scenes move up.
     const schedules = await client.query("SELECT id, content FROM shoot_schedules WHERE scene_list_id = $1", [sceneListId]);
     for (const row of schedules.rows) {
@@ -10960,26 +10991,99 @@ app.get("/api/scene-lists/:id/breakdown-freshness", requireLogin, async (req, re
   res.json({ breakdownAt, scriptAt, stale: Boolean(breakdownAt && scriptAt && new Date(scriptAt) > new Date(breakdownAt)) });
 });
 
+const SCREENPLAY_SCENE_WITH_HISTORY_SQL = `
+  SELECT DISTINCT ON (s.episode_index, s.scene_index) s.id, s.episode_index, s.scene_index, s.content, s.status, s.feedback, s.created_at,
+    (SELECT count(*) FROM screenplay_scenes o
+      WHERE o.scene_list_id = s.scene_list_id AND o.episode_index IS NOT DISTINCT FROM s.episode_index AND o.scene_index = s.scene_index)::int - 1 AS undo_steps,
+    (SELECT count(*) FROM screenplay_scene_redo r
+      WHERE r.scene_list_id = s.scene_list_id AND r.episode_index IS NOT DISTINCT FROM s.episode_index AND r.scene_index = s.scene_index)::int AS redo_steps
+  FROM screenplay_scenes s`;
+
+const screenplaySceneJson = (row) => ({
+  id: row.id,
+  episodeIndex: row.episode_index,
+  sceneIndex: row.scene_index,
+  status: row.status,
+  feedback: row.feedback,
+  undoSteps: row.undo_steps,
+  redoSteps: row.redo_steps,
+  ...row.content,
+});
+
 app.get("/api/screenplay/scenes", requireLogin, async (req, res) => {
   const result = await db.query(
-    `SELECT DISTINCT ON (episode_index, scene_index) id, episode_index, scene_index, content, status, feedback, created_at
-     FROM screenplay_scenes
-     WHERE scene_list_id = $1
-     ORDER BY episode_index, scene_index, created_at DESC`,
+    `${SCREENPLAY_SCENE_WITH_HISTORY_SQL}
+     WHERE s.scene_list_id = $1
+     ORDER BY s.episode_index, s.scene_index, s.created_at DESC, s.id DESC`,
     [req.query.sceneListId]
   );
-
-  res.json(
-    result.rows.map((row) => ({
-      id: row.id,
-      episodeIndex: row.episode_index,
-      sceneIndex: row.scene_index,
-      status: row.status,
-      feedback: row.feedback,
-      ...row.content,
-    }))
-  );
+  res.json(result.rows.map(screenplaySceneJson));
 });
+
+// Undo / Redo for one scene of the screenplay. Undo moves the scene's newest
+// version aside (into screenplay_scene_redo) so the one before it shows
+// again — as far back as the first written version; Redo puts the most
+// recently undone version back. A new edit clears the redo steps.
+async function stepScreenplaySceneHistory(req, res, direction) {
+  const sceneListId = Number(req.body.sceneListId);
+  const episodeIndex = req.body.episodeIndex === null || req.body.episodeIndex === undefined ? null : Number(req.body.episodeIndex);
+  const sceneIndex = Number(req.body.sceneIndex);
+  const key = [sceneListId, episodeIndex, sceneIndex];
+  const sameScene = "scene_list_id = $1 AND episode_index IS NOT DISTINCT FROM $2 AND scene_index = $3";
+
+  const client = await db.connect();
+  try {
+    await client.query("BEGIN");
+    const locked = await lockSceneListForSceneEdit(client, sceneListId, episodeIndex);
+    if (locked.error) {
+      await client.query("ROLLBACK");
+      res.status(locked.status).json({ error: locked.error });
+      return;
+    }
+    if (direction === "undo") {
+      const versions = (await client.query(`SELECT * FROM screenplay_scenes WHERE ${sameScene} ORDER BY created_at DESC, id DESC LIMIT 2`, key)).rows;
+      if (versions.length < 2) {
+        await client.query("ROLLBACK");
+        res.status(400).json({ error: "There's nothing earlier to go back to for this scene." });
+        return;
+      }
+      const newest = versions[0];
+      await client.query(
+        `INSERT INTO screenplay_scene_redo (id, scene_list_id, episode_index, scene_index, content, status, feedback, created_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+        [newest.id, newest.scene_list_id, newest.episode_index, newest.scene_index, newest.content, newest.status, newest.feedback, newest.created_at]
+      );
+      await client.query("DELETE FROM screenplay_scenes WHERE id = $1", [newest.id]);
+    } else {
+      const undone = (await client.query(`SELECT * FROM screenplay_scene_redo WHERE ${sameScene} ORDER BY undone_at DESC, id DESC LIMIT 1`, key)).rows[0];
+      if (!undone) {
+        await client.query("ROLLBACK");
+        res.status(400).json({ error: "There's nothing to redo for this scene." });
+        return;
+      }
+      // Putting a version back must not wipe the other redo steps.
+      await client.query("SET LOCAL filmybase.restoring_redo = 'on'");
+      await client.query(
+        `INSERT INTO screenplay_scenes (id, scene_list_id, episode_index, scene_index, content, status, feedback, created_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+        [undone.id, undone.scene_list_id, undone.episode_index, undone.scene_index, undone.content, undone.status, undone.feedback, undone.created_at]
+      );
+      await client.query("DELETE FROM screenplay_scene_redo WHERE id = $1", [undone.id]);
+    }
+    const current = (await client.query(`${SCREENPLAY_SCENE_WITH_HISTORY_SQL} WHERE s.${sameScene.replace(/ AND /g, " AND s.")} ORDER BY s.episode_index, s.scene_index, s.created_at DESC, s.id DESC`, key)).rows[0];
+    await client.query("COMMIT");
+    res.json(screenplaySceneJson(current));
+  } catch (error) {
+    await client.query("ROLLBACK").catch(() => {});
+    console.error(`Screenplay ${direction} failed:`, error.message);
+    res.status(500).json({ error: error.message });
+  } finally {
+    client.release();
+  }
+}
+
+app.post("/api/screenplay/scene/undo", requireRole("admin"), (req, res) => stepScreenplaySceneHistory(req, res, "undo"));
+app.post("/api/screenplay/scene/redo", requireRole("admin"), (req, res) => stepScreenplaySceneHistory(req, res, "redo"));
 
 app.post("/api/screenplay/scene/:id/request-changes", requireRole("admin"), async (req, res) => {
   const { feedback } = req.body;

@@ -292,3 +292,34 @@ CREATE TABLE ai_movie_reference_files (
 -- Which "Production only" login uploaded a production project (NULL for
 -- projects the admin made). Added after the users table exists.
 ALTER TABLE concepts ADD COLUMN IF NOT EXISTS owner_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL;
+
+-- Screenplay undo/redo. Every change to a scene is a new screenplay_scenes
+-- row; Undo moves the newest one here and Redo moves it back. Any other new
+-- version of the scene clears its redo rows (trigger below), except while a
+-- Redo is restoring one (it sets filmybase.restoring_redo = 'on').
+CREATE TABLE IF NOT EXISTS screenplay_scene_redo (
+  id INTEGER PRIMARY KEY,
+  scene_list_id INTEGER NOT NULL REFERENCES scene_lists(id) ON DELETE CASCADE,
+  episode_index INTEGER,
+  scene_index INTEGER NOT NULL,
+  content JSONB NOT NULL,
+  status TEXT NOT NULL DEFAULT 'pending',
+  feedback TEXT,
+  created_at TIMESTAMPTZ NOT NULL,
+  undone_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE OR REPLACE FUNCTION clear_screenplay_scene_redo() RETURNS trigger AS $$
+BEGIN
+  IF current_setting('filmybase.restoring_redo', true) IS DISTINCT FROM 'on' THEN
+    DELETE FROM screenplay_scene_redo
+    WHERE scene_list_id = NEW.scene_list_id
+      AND episode_index IS NOT DISTINCT FROM NEW.episode_index
+      AND scene_index = NEW.scene_index;
+  END IF;
+  RETURN NEW;
+END $$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS screenplay_scenes_clear_redo ON screenplay_scenes;
+CREATE TRIGGER screenplay_scenes_clear_redo AFTER INSERT ON screenplay_scenes
+  FOR EACH ROW EXECUTE FUNCTION clear_screenplay_scene_redo();

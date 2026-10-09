@@ -8,6 +8,15 @@ itself as work finishes — if it doesn't, ask it to.
 
 ---
 
+## Production Workflow (agent data → dossier → designer → approved asset) — IN PROGRESS
+Brief: the uploaded "Claude Code Production Workflow Brief". Phases 0-5; only Phase 0-1 planned now.
+
+- [x] **Phase 0 — inspect and map.** Found the silent agent (asset extraction → `ai_movie_projects.assets`) and wrote `PRODUCTION_WORKFLOW_MAPPING.md` (shape, gaps, change list).
+- [x] **Silent agent told the production requirements (user asked).** It now also captures aliases, scene references, states, missing details, costumes and other assets (letters/signs/vehicles/songs) — all optional extras, nothing old removed — and now also refreshes every 5th approved screenplay beat, not only at the end. Syntax-checked only; real output quality needs a live Gemini key.
+- [ ] **Phase 1 — adapter, Production Dossier, designer tasks, uploads, approval, export.** Not started. Next: database tables + the adapter.
+
+---
+
 ## App Deployed Online — No Longer Just Local ✅ DONE
 User asked to "make it online" so the app can be reached from a browser
 instead of only running on one laptop. Checked and confirmed, rather than

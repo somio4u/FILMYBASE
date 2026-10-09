@@ -23,6 +23,8 @@ import { marked } from "marked";
 import { registerProductionRoutes, syncProductionQuietly } from "./production.js";
 import { ensureAllProductionSchemas } from "./productionSchema.js";
 import { registerScreenplayRoutes } from "./screenplayAnalysis.js";
+import { registerPipelineRoutes } from "./pipelineRoutes.js";
+import { createProviders } from "./providers.js";
 import { setupProductionMedia } from "./productionMedia.js";
 import { registerDesignTaskRoutes } from "./designTasks.js";
 import { registerSubmissionRoutes, designerGatekeeper, DESIGNER_ROLE } from "./designSubmissions.js";
@@ -18941,6 +18943,30 @@ process.on("uncaughtException", (err) => console.error("Uncaught exception:", er
 registerProductionRoutes(app, db, requireRole);
 registerDesignTaskRoutes(app, db, requireRole);
 registerScreenplayRoutes(app, db, requireRole);
+// Pipeline steps 2-8: shots, storyboard, AI pictures/voices/video, export.
+registerPipelineRoutes(app, db, requireRole, {
+  store: productionMedia.store,
+  providers: createProviders({
+    env: process.env,
+    vertex: googleServiceAccount ? { project: googleServiceAccount.project_id, location: process.env.GOOGLE_CLOUD_LOCATION || "us-central1" } : null,
+    getVertexToken: googleServiceAccount
+      ? async () => {
+          const { GoogleAuth } = await import("google-auth-library");
+          const client = await new GoogleAuth({ credentials: googleServiceAccount, scopes: ["https://www.googleapis.com/auth/cloud-platform"] }).getClient();
+          return (await client.getAccessToken()).token;
+        }
+      : null,
+    // Plain-text AI helper used to cut scenes into shots and write storyboard text.
+    textJson: async (prompt) => {
+      const response = await generateContentWithRetry({
+        model: AI_MOVIE_DIALOGUE_MODEL_NAME,
+        contents: prompt,
+        config: { responseMimeType: "application/json", maxOutputTokens: 16384, temperature: 0.4 },
+      });
+      return JSON.parse(response.text);
+    },
+  }),
+});
 registerSubmissionRoutes(app, db, requireRole, { store: productionMedia.store, serveMedia: productionMedia.serveMedia });
 
 // Schema self-heal runs before the server starts accepting traffic — worst

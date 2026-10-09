@@ -81,9 +81,9 @@ export function normalizeForMatch(text) {
 }
 const STOP = new Set(["the", "a", "an", "of", "and", "in", "on", "at", "to", "for", "with"]);
 const tokens = (text) => normalizeForMatch(text).split(" ").filter((t) => t && !STOP.has(t));
-const contains = (haystack, phrase) => ` ${haystack} `.includes(` ${phrase} `);
+export const contains = (haystack, phrase) => ` ${haystack} `.includes(` ${phrase} `);
 
-function phrasesOf(asset) {
+export function phrasesOf(asset) {
   const out = new Set();
   for (const name of [asset.name, ...(asset.aliases ?? [])]) {
     const phrase = normalizeForMatch(name).replace(/^the /, "");

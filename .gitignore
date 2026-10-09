@@ -6,3 +6,6 @@ db-backup/
 .DS_Store
 *.log
 app/frontend/dist/
+
+app/backend/media/
+app/backend/media-spool/

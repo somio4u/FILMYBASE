@@ -20,6 +20,9 @@ import AdmZip from "adm-zip";
 import crypto from "crypto";
 import { AsyncLocalStorage } from "async_hooks";
 import { marked } from "marked";
+import { ensureProductionSchema, registerProductionRoutes, syncProductionQuietly } from "./production.js";
+import { setupProductionMedia } from "./productionMedia.js";
+import { ensureDesignTaskSchema, registerDesignTaskRoutes } from "./designTasks.js";
 import { BIBLE_PASS_SCORE, designStoryBible, generateBrainJson, reviseBibleWithNote, storyBibleToMarkdown } from "./storyBrain.js";
 import cookieParser from "cookie-parser";
 import { createClient } from "@supabase/supabase-js";
@@ -3444,8 +3447,19 @@ const AI_MOVIE_ASSET_EXTRACTION_SYSTEM_PROMPT = `You are working on an AI Movie 
 - "characters": every named character who appears, with a vivid visual description (appearance, build, age, distinguishing features, typical wardrobe) detailed enough that an image generator could draw them consistently every time.
 - "properties": physical objects/props that matter to the story, each with a vivid visual description.
 - "environments": distinct locations/settings the story takes place in, each with a vivid visual description (architecture, era, mood, lighting, color palette).
-Since this is never physically shot, describe everything as vividly and imaginatively as the story calls for — never limit any description by real-world budget or production feasibility.`;
+Since this is never physically shot, describe everything as vividly and imaginatively as the story calls for — never limit any description by real-world budget or production feasibility.
 
+This list is handed to a human designer, so for every entry ALSO fill in these production details (they are read by the Production Dossier — keep them short and only state what the story or reference material actually supports; leave a list empty rather than inventing):
+- "aliases": other names or nicknames this same thing is called in the story (so it is never counted twice).
+- "sceneRefs": where it appears — scene or beat references exactly as the material numbers them (e.g. "Beat 4", "Scene 2.3"); empty if the material does not number them.
+- "states": the different conditions it appears in over the story (a prop: sealed / opened / torn; a character: wounded, wet, disguised; a location: day / night / ruined). One entry per condition, never a new entry for the same thing.
+- "missing": what the designer will still need that the story does NOT say (e.g. "age", "exact colour of the cloak", "back view"). Start an entry with "DECISION:" when the material leaves a real choice open (e.g. "DECISION: motorbike or hatchback not chosen"), and with "CONFLICT:" when the material contradicts itself (e.g. "CONFLICT: Scene 3 says the coat is red, Scene 9 says blue").
+For characters only, also fill "costumes": each distinct outfit as { "name", "description" }.
+Also fill "otherAssets" with anything else that needs designing or exact wording: letters, signs and phone screens (put the exact text in the description), vehicles, creatures, crowds, visual effects, songs. Each has a "kind".`;
+
+// Everything beyond name + visualDescription is optional on purpose: the
+// existing screens only read those two, and the production side
+// (Production Dossier adapter) treats any absent field as "not supplied".
 const AI_MOVIE_ASSET_ENTRY_SCHEMA = {
   type: Type.OBJECT,
   properties: {
@@ -3453,8 +3467,33 @@ const AI_MOVIE_ASSET_ENTRY_SCHEMA = {
     // AI Movie is English/Hindi only, never Odia -- unlike the Movie/shooting
     // side, which still uses the shared en/or/hi BILINGUAL_TEXT_SCHEMA.
     visualDescription: AI_MOVIE_BILINGUAL_TEXT_SCHEMA,
+    aliases: { type: Type.ARRAY, items: { type: Type.STRING } },
+    sceneRefs: { type: Type.ARRAY, items: { type: Type.STRING } },
+    states: { type: Type.ARRAY, items: { type: Type.STRING } },
+    missing: { type: Type.ARRAY, items: { type: Type.STRING } },
   },
   required: ["name", "visualDescription"],
+};
+
+const AI_MOVIE_CHARACTER_ENTRY_SCHEMA = {
+  ...AI_MOVIE_ASSET_ENTRY_SCHEMA,
+  properties: {
+    ...AI_MOVIE_ASSET_ENTRY_SCHEMA.properties,
+    costumes: {
+      type: Type.ARRAY,
+      items: {
+        type: Type.OBJECT,
+        properties: { name: { type: Type.STRING }, description: { type: Type.STRING } },
+        required: ["name", "description"],
+      },
+    },
+  },
+};
+
+const AI_MOVIE_OTHER_ASSET_ENTRY_SCHEMA = {
+  ...AI_MOVIE_ASSET_ENTRY_SCHEMA,
+  properties: { ...AI_MOVIE_ASSET_ENTRY_SCHEMA.properties, kind: { type: Type.STRING } },
+  required: ["name", "visualDescription", "kind"],
 };
 
 async function generateAiMovieAssetExtraction(fullText, referenceMaterialText) {
@@ -3468,13 +3507,14 @@ async function generateAiMovieAssetExtraction(fullText, referenceMaterialText) {
     config: {
       systemInstruction: AI_MOVIE_ASSET_EXTRACTION_SYSTEM_PROMPT,
       responseMimeType: "application/json",
-      maxOutputTokens: 8192,
+      maxOutputTokens: 16384,
       responseSchema: {
         type: Type.OBJECT,
         properties: {
-          characters: { type: Type.ARRAY, items: AI_MOVIE_ASSET_ENTRY_SCHEMA },
+          characters: { type: Type.ARRAY, items: AI_MOVIE_CHARACTER_ENTRY_SCHEMA },
           properties: { type: Type.ARRAY, items: AI_MOVIE_ASSET_ENTRY_SCHEMA },
           environments: { type: Type.ARRAY, items: AI_MOVIE_ASSET_ENTRY_SCHEMA },
+          otherAssets: { type: Type.ARRAY, items: AI_MOVIE_OTHER_ASSET_ENTRY_SCHEMA },
         },
         required: ["characters", "properties", "environments"],
       },
@@ -3649,6 +3689,7 @@ app.post("/api/ai-movie/backfill", requireRole("admin"), async (req, res) => {
         "UPDATE ai_movie_projects SET backfill = $1, assets = $2, stage_status = $3, title = COALESCE(title, $4), updated_at = now() WHERE id = $5",
         [JSON.stringify(backfill), JSON.stringify(assets), JSON.stringify(stageStatus), title, projectId]
       );
+      syncProductionQuietly(db, projectId);
     }
 
     res.json({ backfill, assets, stageStatus });
@@ -3716,6 +3757,7 @@ app.post("/api/ai-movie/generate-from-reference", requireRole("admin"), async (r
       "UPDATE ai_movie_projects SET pasted_text = $1, detected_stage = 'story', backfill = $2, assets = $3, stage_status = $4, title = COALESCE(title, $5), updated_at = now() WHERE id = $6",
       [pastedText, JSON.stringify(backfill), JSON.stringify(assets), JSON.stringify(stageStatus), story.title.en, projectId]
     );
+    syncProductionQuietly(db, projectId);
 
     res.json({ pastedText, stage: "story", backfill, assets, stageStatus });
   } catch (error) {
@@ -5213,6 +5255,34 @@ app.post("/api/ai-movie/stages/:stage/generate", requireRole("admin"), async (re
   }
 });
 
+// Silent asset refresh used while the screenplay is still in progress.
+// Fire-and-forget; one run per project at a time (a second request while one
+// is running is simply skipped -- the next trigger will catch up, since each
+// run reads everything written so far). Never throws.
+const AI_MOVIE_MID_SCREENPLAY_REFRESH_EVERY = 5;
+const aiMovieAssetRefreshesRunning = new Set();
+
+async function refreshAiMovieAssetsInBackground(projectId) {
+  const key = String(projectId);
+  if (aiMovieAssetRefreshesRunning.has(key)) return;
+  aiMovieAssetRefreshesRunning.add(key);
+  try {
+    const latest = (await db.query("SELECT pasted_text, backfill FROM ai_movie_projects WHERE id = $1", [projectId])).rows[0];
+    if (!latest) return;
+    const referenceMaterialText = await getAiMovieReferenceMaterialText(projectId);
+    const assets = await generateAiMovieAssetExtraction(
+      flattenAiMovieContentForExtraction(latest.pasted_text, latest.backfill),
+      referenceMaterialText
+    );
+    await db.query("UPDATE ai_movie_projects SET assets = $1, updated_at = now() WHERE id = $2", [JSON.stringify(assets), projectId]);
+    syncProductionQuietly(db, projectId);
+  } catch (error) {
+    console.error("Silent asset refresh during screenplay failed (screenplay work unaffected):", error.message);
+  } finally {
+    aiMovieAssetRefreshesRunning.delete(key);
+  }
+}
+
 // Approves one beat's scenes and, unless the whole screenplay is now done,
 // tops the generation buffer back up by one -- fire-and-forget, same
 // non-blocking pattern as the initial kickoff.
@@ -5260,11 +5330,16 @@ app.post("/api/ai-movie/stages/screenplay/beats/:index/approve", requireRole("ad
         referenceMaterialText
       );
       await db.query("UPDATE ai_movie_projects SET assets = $1, updated_at = now() WHERE id = $2", [JSON.stringify(assets), projectId]);
+    syncProductionQuietly(db, projectId);
     } catch (error) {
       console.error("Silent asset refresh failed after full screenplay approval (approval itself still succeeded):", error.message);
     }
   } else {
     fillAiMovieScreenplayBuffer(projectId);
+    // Keep the silent agent grabbing production details WHILE the screenplay
+    // is still being written, not only at the end: every 5th approved beat.
+    const approvedCount = screenplayBeats.filter((b) => b.status === "approved").length;
+    if (approvedCount % AI_MOVIE_MID_SCREENPLAY_REFRESH_EVERY === 0) refreshAiMovieAssetsInBackground(projectId);
   }
 
   res.json({ beatIndex, allApproved });
@@ -6354,6 +6429,7 @@ app.post("/api/ai-movie/stages/:stage/approve", requireRole("admin"), async (req
       referenceMaterialText
     );
     await db.query("UPDATE ai_movie_projects SET assets = $1, updated_at = now() WHERE id = $2", [JSON.stringify(assets), projectId]);
+    syncProductionQuietly(db, projectId);
   } catch (error) {
     console.error("Silent asset refresh failed after approval (approval itself still succeeded):", error.message);
   }
@@ -16751,6 +16827,11 @@ app.post("/api/crew/from-contact", requireRole("admin", "production_manager"), a
 const GOOGLE_REDIRECT_URI = `${BACKEND_URL}/api/auth/google/callback`;
 const GOOGLE_CONTACTS_SCOPE = "https://www.googleapis.com/auth/contacts.readonly";
 
+// Production media storage (Google Drive on Render, local folder elsewhere).
+const productionMedia = setupProductionMedia({
+  app, db, requireRole, backendDir: import.meta.dirname, frontendUrl: FRONTEND_URL, redirectUri: GOOGLE_REDIRECT_URI,
+});
+
 app.get("/api/auth/google", (req, res) => {
   if (!process.env.GOOGLE_CLIENT_ID) {
     res.status(500).send("GOOGLE_CLIENT_ID is not set in the backend .env file yet.");
@@ -16771,6 +16852,11 @@ app.get("/api/auth/google", (req, res) => {
 });
 
 app.get("/api/auth/google/callback", async (req, res) => {
+  // The production Drive sign-in shares this registered redirect address.
+  if (String(req.query.state ?? "").startsWith("drive.")) {
+    await productionMedia.handleDriveCallback(req, res);
+    return;
+  }
   const { code, error } = req.query;
 
   if (error || !code) {
@@ -18845,10 +18931,19 @@ app.use((err, req, res, next) => {
 process.on("unhandledRejection", (err) => console.error("Unhandled rejection:", err));
 process.on("uncaughtException", (err) => console.error("Uncaught exception:", err));
 
+// Production workflow routes (agent data -> Production Dossier). See production.js.
+registerProductionRoutes(app, db, requireRole);
+registerDesignTaskRoutes(app, db, requireRole);
+
 // Schema self-heal runs before the server starts accepting traffic — worst
 // case (the database is briefly unreachable) it logs and the server still
 // starts, rather than blocking startup entirely.
-ensureAiMovieSchema().finally(() => {
+ensureAiMovieSchema()
+  .then(() => ensureProductionSchema(db))
+  .then(() => ensureDesignTaskSchema(db))
+  .then(() => productionMedia.ensureSchema())
+  .catch((error) => console.error("Production schema setup failed:", error.message))
+  .finally(() => {
   app.listen(PORT, () => {
     console.log(`Backend server running at http://localhost:${PORT}`);
   });

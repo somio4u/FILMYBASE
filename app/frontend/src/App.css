@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&family=Courier+Prime:ital,wght@0,400;0,700;1,400&family=Noto+Sans+Devanagari:wght@400;600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&family=Syne:wght@700;800&family=Courier+Prime:ital,wght@0,400;0,700;1,400&family=Noto+Sans+Devanagari:wght@400;600&display=swap');
 
 :root {
   /* "Onion screen": every surface is see-through so the animated AI
@@ -7032,4 +7032,166 @@ button:not(:disabled):active {
   .format-type-button.is-selected {
     animation: none;
   }
+}
+
+/* ===== Screenplay: episode title on a glass bar, and the glass slide between episodes. */
+.ai-movie-screenplay-current-card {
+  position: relative;
+}
+
+.episode-title-bar {
+  position: relative;
+  padding: 14px 16px;
+  margin-bottom: 18px;
+  border-radius: 26px;
+  background:
+    linear-gradient(115deg, rgba(255, 255, 255, 0.10), rgba(255, 255, 255, 0.02) 38%, rgba(255, 255, 255, 0) 60%, rgba(255, 255, 255, 0.06)),
+    linear-gradient(180deg, rgba(40, 60, 110, 0.38), rgba(12, 18, 44, 0.55));
+  border: 1px solid rgba(160, 200, 255, 0.28);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.22), inset 0 -1px 0 rgba(0, 0, 0, 0.3), 0 0 36px rgba(70, 130, 255, 0.18), 0 16px 34px rgba(0, 0, 0, 0.35);
+  backdrop-filter: blur(18px) saturate(1.3);
+  -webkit-backdrop-filter: blur(18px) saturate(1.3);
+  overflow: hidden;
+}
+
+/* A slow light glint moving across the glass. */
+.episode-title-bar::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 40%;
+  left: -50%;
+  background: linear-gradient(100deg, transparent, rgba(255, 255, 255, 0.12), transparent);
+  transform: skewX(-18deg);
+  animation: episode-glint 6s ease-in-out infinite;
+  pointer-events: none;
+}
+
+@keyframes episode-glint {
+  0%, 55% { left: -50%; }
+  100% { left: 120%; }
+}
+
+.episode-title {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  text-align: center;
+}
+
+.episode-title-kicker {
+  font-family: var(--font-heading);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.32em;
+  text-transform: uppercase;
+  color: #8fd8ff;
+  text-shadow: 0 0 12px rgba(90, 200, 255, 0.7);
+}
+
+.episode-title-kicker span {
+  color: rgba(180, 200, 255, 0.55);
+}
+
+.episode-title-name {
+  font-family: 'Syne', 'Space Grotesk', 'Noto Sans Oriya', sans-serif;
+  font-size: clamp(26px, 3.4vw, 40px);
+  font-weight: 800;
+  line-height: 1.1;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  background: linear-gradient(100deg, #ffffff 0%, #bfe9ff 35%, #8fb6ff 60%, #c49bff 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  filter: drop-shadow(0 0 14px rgba(110, 170, 255, 0.45));
+  overflow-wrap: anywhere;
+}
+
+.episode-title-next { animation: episode-title-in-next 0.7s var(--ease-spring) both; }
+.episode-title-prev { animation: episode-title-in-prev 0.7s var(--ease-spring) both; }
+
+@keyframes episode-title-in-next {
+  from { opacity: 0; transform: translateX(60px); filter: blur(8px); }
+  to { opacity: 1; transform: none; filter: none; }
+}
+
+@keyframes episode-title-in-prev {
+  from { opacity: 0; transform: translateX(-60px); filter: blur(8px); }
+  to { opacity: 1; transform: none; filter: none; }
+}
+
+.episode-title-bar .ai-movie-screenplay-nav-button {
+  position: relative;
+  z-index: 1;
+  width: 46px;
+  height: 46px;
+  font-size: 22px;
+  border: 1px solid rgba(160, 200, 255, 0.35);
+  background: rgba(255, 255, 255, 0.06);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.2), 0 0 14px rgba(70, 130, 255, 0.2);
+}
+
+/* The glass slide: a frosted pane with a bright leading edge sweeps over
+   the card while the new episode comes in. */
+.glass-sweep-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  overflow: hidden;
+  border-radius: inherit;
+  pointer-events: none;
+}
+
+.glass-sweep {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 70%;
+  border-radius: 28px;
+  background: linear-gradient(100deg, rgba(255, 255, 255, 0.0), rgba(190, 225, 255, 0.16) 30%, rgba(255, 255, 255, 0.28) 48%, rgba(160, 140, 255, 0.14) 70%, rgba(255, 255, 255, 0));
+  border-left: 1px solid rgba(255, 255, 255, 0.5);
+  border-right: 1px solid rgba(255, 255, 255, 0.25);
+  box-shadow: 0 0 40px rgba(110, 180, 255, 0.35);
+  backdrop-filter: blur(10px) saturate(1.4);
+  -webkit-backdrop-filter: blur(10px) saturate(1.4);
+  opacity: 0;
+}
+
+.glass-sweep-next { animation: glass-sweep-next 0.9s cubic-bezier(0.65, 0, 0.35, 1) both; }
+.glass-sweep-prev { animation: glass-sweep-prev 0.9s cubic-bezier(0.65, 0, 0.35, 1) both; }
+
+@keyframes glass-sweep-next {
+  0% { left: 100%; opacity: 0; }
+  15% { opacity: 1; }
+  85% { opacity: 1; }
+  100% { left: -75%; opacity: 0; }
+}
+
+@keyframes glass-sweep-prev {
+  0% { left: -75%; opacity: 0; }
+  15% { opacity: 1; }
+  85% { opacity: 1; }
+  100% { left: 100%; opacity: 0; }
+}
+
+/* "Check full script" now sits at the end of the last episode, above the downloads. */
+.script-page-column > .script-check {
+  margin: 22px 0 6px;
+  padding: 16px 18px;
+  border-radius: var(--neo-radius);
+  border: 1px solid var(--neo-edge);
+  background: var(--neo-tray);
+  text-align: center;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .episode-title-bar::after,
+  .episode-title-next,
+  .episode-title-prev,
+  .glass-sweep { animation: none; }
 }

@@ -631,6 +631,7 @@ const LABELS = {
     generateSceneList: 'Make the scene one-liners',
     generatingSceneList: 'Hang on, making the scene list…',
     sceneListHeading: 'Scene-by-scene one-liners',
+    screenplayStageHeading: 'Screenplay',
     sceneLabel: 'Scene',
     intExtLabel: 'INT/EXT',
     locationLabel: 'Location',
@@ -1425,6 +1426,7 @@ const LABELS = {
     generateSceneList: 'ସିନ୍ ଲିଷ୍ଟ ବନେଇଦେ',
     generatingSceneList: 'ଟିକେ ରହ, ସିନ୍ ଲିଷ୍ଟ ବନଉଛି…',
     sceneListHeading: 'ସିନ୍ ସିନ୍ କରି ଗୋଟେ ଲାଇନରେ',
+    screenplayStageHeading: 'ସ୍କ୍ରିନପ୍ଲେ',
     sceneLabel: 'ସିନ୍',
     intExtLabel: 'INT/EXT',
     locationLabel: 'ଲୋକେସନ୍',
@@ -3642,50 +3644,21 @@ function MovieScreenplayWorkspace({
     <div className="movie-screenplay">
       {breakdownStale && <p className="feedback-note movie-breakdown-stale-note">{t.movieBreakdownStaleNote}</p>}
 
-      {allDrafts.length > 0 && (
-        <div className={`script-check${isChecking ? ' is-running' : ''}`}>
-          <div className="script-check-row">
-            <button type="button" className="choose-button" onClick={startCheck} disabled={isChecking}>
-              {isChecking ? t.movieScriptCheckRunningLabel(check.doneScenes, check.totalScenes) : t.aiMovieScriptCheckButton}
-            </button>
-            {!isChecking && check?.status === 'done' && (
-              <button type="button" className="cancel-button" onClick={() => setShowReport((v) => !v)}>
-                {showReport ? t.aiMovieScriptCheckHideReport : t.movieScriptCheckShowReport(reportFixCount, report.length)}
-              </button>
-            )}
-          </div>
-          {isChecking && (
-            <div className="script-check-progress" aria-hidden="true">
-              <span style={{ width: `${check.totalScenes ? Math.round((check.doneScenes / check.totalScenes) * 100) : 5}%` }} />
-            </div>
-          )}
-          <p className="script-check-note">{isChecking ? t.aiMovieScriptCheckRunningNote : t.movieScriptCheckNote}</p>
-          {checkError && <p className="feedback-note">{checkError}</p>}
-          {showReport && !isChecking && (
-            <div className="script-check-report">
-              {report.map((entry, i) => (
-                <div key={i} className="script-check-report-beat">
-                  <p className="script-check-report-title">{sceneLabelFor(entry)}</p>
-                  {entry.error ? (
-                    <p className="feedback-note">{t.aiMovieScriptCheckBeatFailed}</p>
-                  ) : entry.fixes?.length ? (
-                    <ul>{entry.fixes.map((fix, j) => <li key={j}>{fix}</li>)}</ul>
-                  ) : (
-                    <p className="script-check-note">{entry.changed ? t.movieScriptCheckChangedNote(entry.changed) : t.scriptEditNoFixesNote}</p>
-                  )}
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
-
       <div className="ai-movie-screenplay-current-card">
+        {/* Changing episode: a pane of glass sweeps across the card. */}
+        {groups.length > 1 && turn !== 'open' && (
+          <div className="glass-sweep-layer" aria-hidden="true">
+            <div key={`sweep-${groupIndex}`} className={`glass-sweep glass-sweep-${turn}`} />
+          </div>
+        )}
         {groups.length > 1 && (
-          <div className="ai-movie-screenplay-nav">
+          <div className="ai-movie-screenplay-nav episode-title-bar">
             <button type="button" className="ai-movie-screenplay-nav-button" aria-label="Previous episode" disabled={groupIndex === 0}
               onClick={() => { setTurn('prev'); setGroupIndex((i) => Math.max(0, i - 1)) }}>‹</button>
-            <p className="bit-heading ai-movie-screenplay-nav-title">{t.episodeLabel} {groupIndex + 1} / {groups.length}{group.title ? `: ${group.title}` : ''}</p>
+            <div key={`title-${groupIndex}`} className={`episode-title episode-title-${turn}`}>
+              <span className="episode-title-kicker">{t.episodeLabel} {groupIndex + 1} <span>/ {groups.length}</span></span>
+              {group.title && <span className="episode-title-name">{group.title}</span>}
+            </div>
             <button type="button" className="ai-movie-screenplay-nav-button" aria-label="Next episode" disabled={groupIndex === groups.length - 1}
               onClick={() => { setTurn('next'); setGroupIndex((i) => Math.min(groups.length - 1, i + 1)) }}>›</button>
           </div>
@@ -3748,6 +3721,44 @@ function MovieScreenplayWorkspace({
                   })}
                 </div>
               </div>
+                {/* The whole-script check sits at the very end: after the last episode. */}
+                {allDrafts.length > 0 && groupIndex === groups.length - 1 && (
+                  <div className={`script-check${isChecking ? ' is-running' : ''}`}>
+                    <div className="script-check-row">
+                      <button type="button" className="choose-button" onClick={startCheck} disabled={isChecking}>
+                        {isChecking ? t.movieScriptCheckRunningLabel(check.doneScenes, check.totalScenes) : t.aiMovieScriptCheckButton}
+                      </button>
+                      {!isChecking && check?.status === 'done' && (
+                        <button type="button" className="cancel-button" onClick={() => setShowReport((v) => !v)}>
+                          {showReport ? t.aiMovieScriptCheckHideReport : t.movieScriptCheckShowReport(reportFixCount, report.length)}
+                        </button>
+                      )}
+                    </div>
+                    {isChecking && (
+                      <div className="script-check-progress" aria-hidden="true">
+                        <span style={{ width: `${check.totalScenes ? Math.round((check.doneScenes / check.totalScenes) * 100) : 5}%` }} />
+                      </div>
+                    )}
+                    <p className="script-check-note">{isChecking ? t.aiMovieScriptCheckRunningNote : t.movieScriptCheckNote}</p>
+                    {checkError && <p className="feedback-note">{checkError}</p>}
+                    {showReport && !isChecking && (
+                      <div className="script-check-report">
+                        {report.map((entry, i) => (
+                          <div key={i} className="script-check-report-beat">
+                            <p className="script-check-report-title">{sceneLabelFor(entry)}</p>
+                            {entry.error ? (
+                              <p className="feedback-note">{t.aiMovieScriptCheckBeatFailed}</p>
+                            ) : entry.fixes?.length ? (
+                              <ul>{entry.fixes.map((fix, j) => <li key={j}>{fix}</li>)}</ul>
+                            ) : (
+                              <p className="script-check-note">{entry.changed ? t.movieScriptCheckChangedNote(entry.changed) : t.scriptEditNoFixesNote}</p>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
               {screenplay && (() => {
                 const base = `${BACKEND_URL}/api/scene-lists/${sceneList.id}/screenplay-pdf`
                 const episodeUrl = group.episodeIndex === null ? `${base}?` : `${base}?episode=${group.episodeIndex}&`
@@ -13193,7 +13204,7 @@ function App() {
 
       {movieShows('screenplay') && sceneList && projectType === 'story' && (
         <div className="three-act-structure" id="stage-screenplay">
-          <h2>{t.sceneListHeading}</h2>
+          <h2>{sceneList.status === 'approved' ? t.screenplayStageHeading : t.sceneListHeading}</h2>
 
           <MovieScreenplayWorkspace
             sceneList={sceneList}

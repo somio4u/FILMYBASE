@@ -5,6 +5,9 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import './ProductionDossier.css'
+import TaskBrief from './TaskBrief.jsx'
+import TaskComments from './TaskComments.jsx'
+import SubmissionPanel from './SubmissionPanel.jsx'
 
 const KIND_TABS = [
   { key: 'character', label: 'Characters' },
@@ -564,26 +567,17 @@ function TasksView({ tasks, selectedTaskId, onSelect, projectId, api, onChanged,
   )
 }
 
-function BriefSection({ tone, title, subtitle, children, empty }) {
-  return (
-    <section className={`dossier-brief-section brief-${tone}`}>
-      <h4>{title}</h4>
-      <p className="dossier-fine-print">{subtitle}</p>
-      {children ?? <p className="dossier-fine-print">{empty}</p>}
-    </section>
-  )
-}
-
 function TaskDetail({ taskId, listRevision, projectId, api, onChanged }) {
   const [task, setTask] = useState(null)
+  const [designers, setDesigners] = useState([])
   const [error, setError] = useState(null)
   const [busy, setBusy] = useState(false)
-  const [assignee, setAssignee] = useState('')
+  const [assigneeUserId, setAssigneeUserId] = useState('')
+  const [assigneeName, setAssigneeName] = useState('')
   const [priority, setPriority] = useState('normal')
   const [dueDate, setDueDate] = useState('')
-  const [comment, setComment] = useState('')
-  const [commentKind, setCommentKind] = useState('comment')
   const [saved, setSaved] = useState(false)
+  const taskApi = `${api}/${projectId}/tasks/${taskId}`
 
   const load = useCallback(async () => {
     try {
@@ -591,7 +585,8 @@ function TaskDetail({ taskId, listRevision, projectId, api, onChanged }) {
       if (!response.ok) throw new Error('load failed')
       const data = await response.json()
       setTask(data)
-      setAssignee(data.assignee ?? '')
+      setAssigneeUserId(data.assigneeUserId ? String(data.assigneeUserId) : '')
+      setAssigneeName(data.assigneeUserId ? '' : data.assignee ?? '')
       setPriority(data.priority)
       setDueDate(data.dueDate ?? '')
       setError(null)
@@ -602,6 +597,9 @@ function TaskDetail({ taskId, listRevision, projectId, api, onChanged }) {
 
   // Reload whenever the list says this task's revision moved on.
   useEffect(() => { load() }, [load, listRevision])
+  useEffect(() => {
+    fetch(`${api}/designers`).then((r) => (r.ok ? r.json() : { designers: [] })).then((d) => setDesigners(d.designers)).catch(() => {})
+  }, [api])
 
   // Runs a write, shows the server's message on failure, then reloads.
   async function run(path, method, body, successNote) {
@@ -609,7 +607,7 @@ function TaskDetail({ taskId, listRevision, projectId, api, onChanged }) {
     setError(null)
     setSaved(false)
     try {
-      const response = await fetch(`${api}/${projectId}/tasks/${taskId}${path}`, {
+      const response = await fetch(`${taskApi}${path}`, {
         method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
       })
       const data = await response.json()
@@ -629,6 +627,7 @@ function TaskDetail({ taskId, listRevision, projectId, api, onChanged }) {
   if (!task) return <p className="dossier-fine-print" role={error ? 'alert' : undefined}>{error ?? 'Loading…'}</p>
   const brief = task.brief
   const editable = ['open', 'claimed', 'changes_requested'].includes(task.state)
+  const reload = async () => { await load(); await onChanged() }
 
   return (
     <article className="dossier-task">
@@ -637,6 +636,7 @@ function TaskDetail({ taskId, listRevision, projectId, api, onChanged }) {
       </h3>
       <p className="dossier-fine-print">
         {brief.asset.code} · {brief.asset.kind} · {TASK_STATE_TEXT[task.state] ?? task.state}
+        {task.assignee ? ` · ${task.assignee}${task.assigneeUserId ? ' (has a login)' : ' (no login)'}` : ''}
         {brief.sceneUsage.length > 0 ? ` · used in ${brief.sceneUsage.join(', ')}` : ''}
       </p>
 
@@ -649,45 +649,25 @@ function TaskDetail({ taskId, listRevision, projectId, api, onChanged }) {
         </p>
       )}
 
-      <BriefSection tone="keep" title="MUST KEEP" subtitle="Facts from the screenplay and decisions a person confirmed. Do not change these.">
-        {brief.mustKeep.length > 0 && (
-          <ul>
-            {brief.mustKeep.map((m, i) => (
-              <li key={i}><strong>{m.label}:</strong> {m.text} <span className="dossier-fine-print">({m.source})</span></li>
-            ))}
-          </ul>
-        )}
-      </BriefSection>
-
-      <BriefSection tone="explore" title="DESIGNER MAY EXPLORE" subtitle="The screenplay leaves these open. Decide them in your design." empty="Nothing left open.">
-        {brief.mayExplore.length > 0 && <ul>{brief.mayExplore.map((m) => <li key={m.issueId}>{m.text}</li>)}</ul>}
-      </BriefSection>
-
-      <BriefSection tone="decision" title="NEEDS DECISION" subtitle="Open choices or contradictions. Ask before designing around these." empty="No open decisions.">
-        {brief.needsDecision.length > 0 && <ul>{brief.needsDecision.map((m) => <li key={m.issueId}>{m.text}</li>)}</ul>}
-      </BriefSection>
-
-      <section className="dossier-section">
-        <h4>What to deliver</h4>
-        <ul>{brief.deliverables.map((d, i) => <li key={i}>{d}</li>)}</ul>
-        <p className="dossier-fine-print">
-          Files: {brief.format.fileTypes.join(' / ')}, at least {brief.format.minimumLongSidePixels}px on the long side. Background: {brief.format.background}. {brief.format.note}
-        </p>
-      </section>
-
-      <section className="dossier-section">
-        <h4>Accepted when</h4>
-        <ul>{brief.acceptance.map((a, i) => <li key={i}>{a}</li>)}</ul>
-      </section>
+      <TaskBrief brief={brief} />
 
       {editable && (
         <section className="dossier-section dossier-task-controls">
           <h4>Assignment</h4>
           <div className="dossier-controls-row">
             <label className="dossier-field">
-              Assigned to
-              <input value={assignee} onChange={(e) => setAssignee(e.target.value)} maxLength={100} placeholder="Designer’s name" />
+              Designer login
+              <select value={assigneeUserId} onChange={(e) => setAssigneeUserId(e.target.value)}>
+                <option value="">(no login)</option>
+                {designers.map((d) => <option key={d.id} value={d.id}>{d.name} ({d.username})</option>)}
+              </select>
             </label>
+            {!assigneeUserId && (
+              <label className="dossier-field">
+                Or a name without a login
+                <input value={assigneeName} onChange={(e) => setAssigneeName(e.target.value)} maxLength={100} placeholder="Designer’s name" />
+              </label>
+            )}
             <label className="dossier-field">
               Priority
               <select value={priority} onChange={(e) => setPriority(e.target.value)}>
@@ -699,12 +679,18 @@ function TaskDetail({ taskId, listRevision, projectId, api, onChanged }) {
               <input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
             </label>
           </div>
+          <p className="dossier-fine-print">Only a designer login can see this task and upload files. A name alone is just a label.</p>
           <div className="dossier-save-row">
             <button
               type="button"
               className="choose-button"
               disabled={busy}
-              onClick={() => run('', 'PATCH', { expectedRevision: task.revision, assignee: assignee.trim() || null, priority, dueDate: dueDate || null }, 'Saved.')}
+              onClick={() => run('', 'PATCH', {
+                expectedRevision: task.revision,
+                ...(assigneeUserId ? { assigneeUserId: Number(assigneeUserId) } : { assignee: assigneeName.trim() || null }),
+                priority,
+                dueDate: dueDate || null,
+              }, 'Saved.')}
             >
               Save assignment
             </button>
@@ -722,54 +708,9 @@ function TaskDetail({ taskId, listRevision, projectId, api, onChanged }) {
       )}
       {error && <p className="dossier-bad" role="alert">{error}</p>}
 
-      <section className="dossier-section">
-        <h4>Comments and questions</h4>
-        {task.comments.length === 0 && <p className="dossier-fine-print">No comments yet.</p>}
-        <ul className="dossier-comments">
-          {task.comments.map((c) => (
-            <li key={c.id}>
-              <span className="dossier-fine-print">{c.author_name || 'Someone'}{c.kind === 'clarification' ? ' · question' : ''} · {new Date(c.created_at).toLocaleString()}</span>
-              <p>{c.body}</p>
-            </li>
-          ))}
-        </ul>
-        <label className="dossier-field">
-          Add a comment
-          <textarea value={comment} onChange={(e) => setComment(e.target.value)} rows={2} maxLength={4000} />
-        </label>
-        <div className="dossier-save-row">
-          <select value={commentKind} onChange={(e) => setCommentKind(e.target.value)} aria-label="Comment type">
-            <option value="comment">Comment</option>
-            <option value="clarification">Question for the director</option>
-          </select>
-          <button
-            type="button"
-            className="dossier-small-button"
-            disabled={busy || !comment.trim()}
-            onClick={async () => {
-              const ok = await (async () => {
-                setBusy(true)
-                setError(null)
-                try {
-                  const response = await fetch(`${api}/${projectId}/tasks/${taskId}/comments`, {
-                    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ body: comment, kind: commentKind }),
-                  })
-                  if (!response.ok) setError((await response.json()).error || 'Could not add the comment.')
-                  return response.ok
-                } catch {
-                  setError('Could not reach the server.')
-                  return false
-                } finally {
-                  setBusy(false)
-                }
-              })()
-              if (ok) { setComment(''); await load(); await onChanged() }
-            }}
-          >
-            Add
-          </button>
-        </div>
-      </section>
+      <SubmissionPanel task={task} apiBase={taskApi} mediaUrl={(id) => `${api}/media/${id}`} onChanged={reload} />
+
+      <TaskComments comments={task.comments} commentsUrl={`${taskApi}/comments`} onChanged={reload} />
     </article>
   )
 }

@@ -124,3 +124,14 @@ Built: `mediaStore.js` + `productionMedia.js` (see tests in `app/backend/tests/`
 **Behaviour:** files go to Drive as `<project id>-<title>/<designs|storyboard|keyframes|video-takes|audio|exports>/<label>_<hash8>.<ext>`; uploaded in 8 MB resumable chunks; checksum compared with Drive's; same content in a project stored once; if Drive is down the file waits in a temporary spool and is retried every 2 minutes (8 tries, then marked failed). **The spool is on Render's wiped disk — a server restart while Drive is down loses the waiting file.** The browser only ever gets files through the app's own `/api/production/media/:id` (login required, HTML/JSON/text/PDF/ZIP forced to download).
 
 **Tested:** against a local MOCK of Drive and a real local Postgres — chunking, resume after a server error, dedupe, range reads, outage → pending → later upload, type/size/magic-byte checks, route headers/401/416, forged sign-in state rejected. **Not tested:** real Google Drive (needs your consent) and the real Render deployment.
+
+---
+
+## Designer logins and uploads (step 5)
+- **Create a designer login:** Team & logins → role **"Designer (design tasks only)"** (no project needed). Any number of designers.
+- **Give a task to a designer:** open the task in the Dossier → Designer tasks → "Designer login" → Save assignment. (A plain typed name is only a label and gives no access.)
+- **What a designer can do:** log in and see ONLY their own tasks. For each: read the brief, upload images / PDFs, label which view each file shows, mark a file as clean image / review sheet / reference, remove files from the draft, add a note, submit, ask questions in comments.
+- **What a designer cannot do:** everything else. The server refuses every address outside `/api/designer/…` for that login (403), another designer's task and files look like they do not exist (404), and files are only viewable through the app (never a Drive link).
+- **Versions:** uploads collect in a draft. Submit freezes it as "Version N" (nothing can be added, removed or relabelled after). A later round is Version N+1. Submit needs at least one clean image and every file safely saved to storage.
+- **Limits:** PNG, JPG, WebP, GIF or PDF, 100 MB each, 60 files per version. The reviewer (admin) can do everything a designer can on any task (one person plays every role while testing).
+- **Not yet:** the reviewer's Approve / Request changes buttons (step 6) — until then a submitted version just waits.

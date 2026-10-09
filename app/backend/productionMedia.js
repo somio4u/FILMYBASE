@@ -123,12 +123,9 @@ export function setupProductionMedia({ app, db, requireRole, backendDir, fronten
 
   // --- Streaming media to the browser ---------------------------------------
 
-  app.get("/api/production/media/:id", requireRole("admin"), async (req, res) => {
-    const id = Number(req.params.id);
-    if (!Number.isInteger(id) || id <= 0) {
-      res.status(400).json({ error: "Not a valid file." });
-      return;
-    }
+  // Streams one stored file. The CALLER must already have checked that this
+  // person may see this file.
+  async function serveMedia(req, res, id) {
     let range = null;
     const header = req.headers.range;
     if (header) {
@@ -176,6 +173,15 @@ export function setupProductionMedia({ app, db, requireRole, backendDir, fronten
     res.setHeader("Content-Disposition", `${disposition}; filename*=UTF-8''${encodeURIComponent(row.stored_name)}`);
     stream.on("error", () => res.destroy());
     stream.pipe(res);
+  }
+
+  app.get("/api/production/media/:id", requireRole("admin"), async (req, res) => {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id) || id <= 0) {
+      res.status(400).json({ error: "Not a valid file." });
+      return;
+    }
+    await serveMedia(req, res, id);
   });
 
   // --- Background retry of uploads that failed earlier -----------------------
@@ -184,5 +190,5 @@ export function setupProductionMedia({ app, db, requireRole, backendDir, fronten
   const timer = setInterval(flush, 2 * 60 * 1000);
   timer.unref?.();
 
-  return { store, backendName, handleDriveCallback, getDriveAccessToken, flush, ensureSchema: () => ensureMediaSchema(db) };
+  return { store, backendName, serveMedia, handleDriveCallback, getDriveAccessToken, flush, ensureSchema: () => ensureMediaSchema(db) };
 }

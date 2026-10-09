@@ -84,4 +84,24 @@
 
 /* The Dossier needs more room than the standard 720px page. */
 .concept-page.concept-page-wide { max-width: 1180px; }
-.dossier-body { grid-template-columns: minmax(200px, 280px) 1fr; }
+@media (min-width: 761px) { .dossier-body { grid-template-columns: minmax(200px, 280px) 1fr; } }
+
+/* Designer uploads and submissions */
+.designer-workspace { position: relative; z-index: 1; padding-bottom: 80px; }
+.submission-panel h5 { margin: 14px 0 6px; font-size: 0.95rem; }
+.submission-drop { display: flex; flex-direction: column; gap: 6px; padding: 14px; border: 1px dashed var(--border-strong); border-radius: 12px; background: var(--bg-surface); cursor: pointer; font-size: 0.9rem; color: var(--text-secondary); margin: 8px 0; }
+.submission-drop input { color: var(--text-primary); }
+.submission-progress { list-style: none; padding: 0; margin: 6px 0; font-size: 0.85rem; color: var(--text-secondary); }
+.submission-version { margin-top: 12px; padding: 12px 14px; border-radius: 12px; border: 1px solid var(--border-subtle); background: var(--bg-surface); }
+.submission-files { list-style: none; margin: 8px 0; padding: 0 !important; display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 10px; }
+.submission-files li { display: flex; gap: 10px; align-items: flex-start; padding: 8px; border-radius: 10px; background: var(--bg-surface-raised); margin: 0 !important; }
+.submission-thumb { width: 72px; height: 72px; object-fit: cover; border-radius: 8px; flex: none; background: var(--bg-input); }
+.submission-thumb-file { display: flex; align-items: center; justify-content: center; color: var(--accent); text-decoration: none; border: 1px solid var(--border-subtle); }
+.submission-file-actions { display: flex; gap: 8px; margin-top: 6px; flex-wrap: wrap; }
+.submission-file-actions select { background: var(--bg-input); color: var(--text-primary); border: 1px solid var(--border-subtle); border-radius: 8px; padding: 4px 6px; font: inherit; font-size: 0.8rem; max-width: 150px; }
+.submission-history details { margin: 6px 0; }
+.submission-history summary { cursor: pointer; }
+@media (max-width: 760px) {
+  .designer-workspace { padding: 16px 16px 80px; }
+  .submission-files { grid-template-columns: 1fr; }
+}

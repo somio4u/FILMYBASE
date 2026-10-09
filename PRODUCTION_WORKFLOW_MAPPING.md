@@ -124,3 +124,42 @@ Built: `mediaStore.js` + `productionMedia.js` (see tests in `app/backend/tests/`
 **Behaviour:** files go to Drive as `<project id>-<title>/<designs|storyboard|keyframes|video-takes|audio|exports>/<label>_<hash8>.<ext>`; uploaded in 8 MB resumable chunks; checksum compared with Drive's; same content in a project stored once; if Drive is down the file waits in a temporary spool and is retried every 2 minutes (8 tries, then marked failed). **The spool is on Render's wiped disk — a server restart while Drive is down loses the waiting file.** The browser only ever gets files through the app's own `/api/production/media/:id` (login required, HTML/JSON/text/PDF/ZIP forced to download).
 
 **Tested:** against a local MOCK of Drive and a real local Postgres — chunking, resume after a server error, dedupe, range reads, outage → pending → later upload, type/size/magic-byte checks, route headers/401/416, forged sign-in state rejected. **Not tested:** real Google Drive (needs your consent) and the real Render deployment.
+
+---
+
+## Designer logins and uploads (step 5)
+- **Create a designer login:** Team & logins → role **"Designer (design tasks only)"** (no project needed). Any number of designers.
+- **Give a task to a designer:** open the task in the Dossier → Designer tasks → "Designer login" → Save assignment. (A plain typed name is only a label and gives no access.)
+- **What a designer can do:** log in and see ONLY their own tasks. For each: read the brief, upload images / PDFs, label which view each file shows, mark a file as clean image / review sheet / reference, remove files from the draft, add a note, submit, ask questions in comments.
+- **What a designer cannot do:** everything else. The server refuses every address outside `/api/designer/…` for that login (403), another designer's task and files look like they do not exist (404), and files are only viewable through the app (never a Drive link).
+- **Versions:** uploads collect in a draft. Submit freezes it as "Version N" (nothing can be added, removed or relabelled after). A later round is Version N+1. Submit needs at least one clean image and every file safely saved to storage.
+- **Limits:** PNG, JPG, WebP, GIF or PDF, 100 MB each, 60 files per version. The reviewer (admin) can do everything a designer can on any task (one person plays every role while testing).
+- **Not yet:** the reviewer's Approve / Request changes buttons (step 6) — until then a submitted version just waits.
+
+
+---
+
+## Google Drive from inside the app (updated)
+**Connect:** open AI Movie → a project → Production Dossier → the card **"Where your files are stored"** → **Connect with Google**. Google's own sign-in page opens (you type your email and password only there — the app never sees them), you press Allow, and you land back in the Dossier. The app then creates the project's folder in Drive straight away.
+
+**What the card shows:** the connected account (name and email), **Test connection** (saves a tiny file, reads it back, removes it and its folder; if something is wrong it says what, e.g. "The Google Drive API is not switched on…"), **Use a different Google account**, **Disconnect** (also asks Google to cancel the sign-in; files already in Drive are not touched), and **Open in Google Drive** for the project folder.
+
+**How Drive is arranged** (in the *root of My Drive*):
+```
+<Project title>/                 e.g. "Idea of an Idea"
+  01 Characters/   <CODE Name>/   e.g. "CHAR001 Rahul Mohapatra"/ files named CHAR001_..._<hash>.png
+  02 Props/        <CODE Name>/
+  03 Environments/ <CODE Name>/
+  04 Shot images/
+  05 Audio/
+  06 Video/
+  07 Exports/
+  08 Designer uploads/ <CODE Name>/
+```
+- The folder is named exactly after the project title (letters of any language kept; characters Drive cannot hold are replaced). Two projects with the same title: the second becomes "Title (7)".
+- **Renaming the project renames its Drive folder**; files stay inside it, nothing is duplicated. (Local disk keeps the name it started with.)
+- If the folder is deleted in Drive or another Google account is connected, the app forgets what it remembered and re-creates the folders on the next save, instead of failing.
+
+**One-time setup is still needed on the server** (cannot be done from here): enable the Google Drive API for your Google Cloud project; add the `drive.file` permission to the consent screen; set the consent screen to "In production" (otherwise Google disconnects after 7 days — the card then says "reconnect"); make sure `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` are set; and the redirect address (shown in the card if setup is missing) is already registered for Contacts.
+
+**Tested** against a local imitation of Google (sign-in page, tokens, revoke, Drive, folders): 79 automated tests plus the whole flow in a real browser (connect → folder created → test → open link → disconnect). **Not tested against real Google** — that needs your Google account.

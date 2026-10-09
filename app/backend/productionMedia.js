@@ -5,7 +5,10 @@
 
 import crypto from "node:crypto";
 import path from "node:path";
-import { createDriveBackend, createLocalBackend, createMediaStore, ensureMediaSchema, backendNameFromEnv } from "./mediaStore.js";
+import { createDriveBackend, createLocalBackend, createMediaStore, ensureMediaSchema, backendNameFromEnv, explainStorageError } from "./mediaStore.js";
+
+const GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token";
+const GOOGLE_REVOKE_URL = "https://oauth2.googleapis.com/revoke";
 
 const DRIVE_SCOPE = "https://www.googleapis.com/auth/drive.file"; // only files this app creates
 const OAUTH_STATE_PREFIX = "drive.";
@@ -15,14 +18,25 @@ const NONCE_TTL_MS = 10 * 60 * 1000;
 // origin. They are only ever sent as downloads.
 const DOWNLOAD_ONLY = new Set(["text/html", "application/json", "text/plain", "application/zip", "application/pdf"]);
 
-export function setupProductionMedia({ app, db, requireRole, backendDir, frontendUrl, redirectUri, env = process.env, driveOverrides = {} }) {
+export function setupProductionMedia({ app, db, requireRole, backendDir, frontendUrl, redirectUri, env = process.env, driveOverrides = {}, googleOverrides = {} }) {
+  // The GOOGLE_*/DRIVE_* address settings exist only so tests can point the app
+  // at a local imitation of Google. Unset (the normal case), real Google is used.
+  const tokenUrl = googleOverrides.tokenUrl ?? env.GOOGLE_TOKEN_URL ?? GOOGLE_TOKEN_URL;
+  const revokeUrl = googleOverrides.revokeUrl ?? env.GOOGLE_REVOKE_URL ?? GOOGLE_REVOKE_URL;
+  const authUrl = googleOverrides.authUrl ?? env.GOOGLE_AUTH_URL ?? "https://accounts.google.com/o/oauth2/v2/auth";
+  driveOverrides = {
+    ...(env.DRIVE_API_BASE ? { apiBase: env.DRIVE_API_BASE } : {}),
+    ...(env.DRIVE_UPLOAD_BASE ? { uploadBase: env.DRIVE_UPLOAD_BASE } : {}),
+    ...driveOverrides,
+  };
   const nonces = new Map(); // nonce -> expiry (one backend process)
+  let accountCache = null; // { at, value } — who the connected Drive belongs to
 
   async function getDriveAccessToken() {
     const row = (await db.query("SELECT * FROM production_drive_tokens ORDER BY id DESC LIMIT 1")).rows[0];
     if (!row) return null;
     if (row.access_token && Date.now() < Number(row.expiry_date) - 60000) return row.access_token;
-    const response = await fetch("https://oauth2.googleapis.com/token", {
+    const response = await fetch(tokenUrl, {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
       body: new URLSearchParams({
@@ -32,8 +46,8 @@ export function setupProductionMedia({ app, db, requireRole, backendDir, fronten
         grant_type: "refresh_token",
       }),
     });
-    const tokens = await response.json();
-    if (!tokens.access_token) return null; // revoked/expired: treated as "not connected"
+    const tokens = await response.json().catch(() => ({}));
+    if (!tokens.access_token) return null; // revoked/expired (e.g. invalid_grant): shows as "reconnect needed"
     await db.query("UPDATE production_drive_tokens SET access_token = $1, expiry_date = $2, updated_at = now() WHERE id = $3", [
       tokens.access_token, Date.now() + (tokens.expires_in ?? 3600) * 1000, row.id,
     ]);
@@ -66,7 +80,7 @@ export function setupProductionMedia({ app, db, requireRole, backendDir, fronten
       prompt: "consent",
       state: `${OAUTH_STATE_PREFIX}${nonce}`,
     });
-    res.redirect(`https://accounts.google.com/o/oauth2/v2/auth?${params}`);
+    res.redirect(`${authUrl}?${params}`);
   });
 
   // Called from the existing /api/auth/google/callback when state starts
@@ -75,12 +89,16 @@ export function setupProductionMedia({ app, db, requireRole, backendDir, fronten
     const nonce = String(req.query.state ?? "").slice(OAUTH_STATE_PREFIX.length);
     const expiry = nonces.get(nonce);
     nonces.delete(nonce);
-    if (!expiry || expiry < Date.now() || req.query.error || !req.query.code) {
-      res.redirect(`${frontendUrl}/?googleDriveError=1`);
+    if (req.query.error) {
+      res.redirect(`${frontendUrl}/?googleDriveError=1&reason=denied`);
+      return;
+    }
+    if (!expiry || expiry < Date.now() || !req.query.code) {
+      res.redirect(`${frontendUrl}/?googleDriveError=1&reason=expired`);
       return;
     }
     try {
-      const response = await fetch("https://oauth2.googleapis.com/token", {
+      const response = await fetch(tokenUrl, {
         method: "POST",
         headers: { "Content-Type": "application/x-www-form-urlencoded" },
         body: new URLSearchParams({
@@ -92,43 +110,121 @@ export function setupProductionMedia({ app, db, requireRole, backendDir, fronten
         }),
       });
       const tokens = await response.json();
-      if (!tokens.access_token) throw new Error(tokens.error_description || "Google did not return an access token.");
+      if (!tokens.access_token) {
+        console.error("Google Drive connect failed:", tokens.error_description || tokens.error || "no access token");
+        res.redirect(`${frontendUrl}/?googleDriveError=1&reason=token`);
+        return;
+      }
       const previous = (await db.query("SELECT refresh_token FROM production_drive_tokens ORDER BY id DESC LIMIT 1")).rows[0];
       const refresh = tokens.refresh_token || previous?.refresh_token;
-      if (!refresh) throw new Error("Google did not return a refresh token.");
+      if (!refresh) {
+        res.redirect(`${frontendUrl}/?googleDriveError=1&reason=no_refresh`);
+        return;
+      }
       await db.query("DELETE FROM production_drive_tokens");
       await db.query("INSERT INTO production_drive_tokens (access_token, refresh_token, expiry_date) VALUES ($1,$2,$3)", [
         tokens.access_token, refresh, Date.now() + (tokens.expires_in ?? 3600) * 1000,
       ]);
+      accountCache = null;
       res.redirect(`${frontendUrl}/?googleDriveConnected=1`);
     } catch (error) {
       console.error("Google Drive connect failed:", error.message);
-      res.redirect(`${frontendUrl}/?googleDriveError=1`);
+      res.redirect(`${frontendUrl}/?googleDriveError=1&reason=token`);
     }
   }
 
-  // --- Status ---------------------------------------------------------------
+  // --- Status, connection test, disconnect ------------------------------------
 
   app.get("/api/production/storage/status", requireRole("admin"), async (req, res) => {
-    const connected = backendName === "gdrive" ? (await db.query("SELECT 1 FROM production_drive_tokens LIMIT 1")).rowCount > 0 : null;
     const counts = (await db.query("SELECT status, count(*)::int AS n FROM production_media_files GROUP BY status")).rows;
-    res.json({
+    const status = {
       backend: backendName,
-      driveConnected: connected,
+      configured: backendName !== "gdrive" || Boolean(env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET),
+      driveConnected: null,
+      reconnectNeeded: false,
+      account: null,
+      rootFolderSet: Boolean(env.GOOGLE_DRIVE_ROOT_FOLDER_ID),
       files: Object.fromEntries(counts.map((c) => [c.status, c.n])),
       // Honest warning for the one setup that loses data.
       warning: backendName === "local" && env.RENDER ? "Local storage on Render is erased on every deploy." : null,
-    });
+      // What to enter at Google if the sign-in page complains (no secrets here).
+      setup: { redirectUri, permission: DRIVE_SCOPE },
+    };
+    if (backendName === "gdrive") {
+      const hasTokens = (await db.query("SELECT 1 FROM production_drive_tokens LIMIT 1")).rowCount > 0;
+      if (!hasTokens) {
+        status.driveConnected = false;
+      } else if (!(await getDriveAccessToken())) {
+        // Saved sign-in no longer works (revoked, expired after 7 days in Google's "Testing" mode, ...).
+        status.driveConnected = false;
+        status.reconnectNeeded = true;
+      } else {
+        status.driveConnected = true;
+        if (!accountCache || Date.now() - accountCache.at > 5 * 60 * 1000) accountCache = { at: Date.now(), value: await backend.about() };
+        status.account = accountCache.value;
+      }
+    }
+    res.json(status);
+  });
+
+  // Proves the storage really works end to end (small file in, same file out,
+  // then deleted) and explains any failure in plain English.
+  app.post("/api/production/storage/test", requireRole("admin"), async (req, res) => {
+    if (backendName === "gdrive" && !(env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET)) {
+      res.json({ ok: false, code: "not_configured", message: "The server has no Google sign-in credentials yet (GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET)." });
+      return;
+    }
+    res.json({ backend: backendName, ...(await backend.selfTest()) });
+  });
+
+  // The project's folder in storage: its name, the numbered layout, and (for
+  // Drive) a link that opens it. Read-only: creates nothing.
+  app.get("/api/production/:projectId/storage/folder", requireRole("admin"), async (req, res) => {
+    const id = Number(req.params.projectId);
+    if (!Number.isInteger(id) || id <= 0) return res.status(400).json({ error: "Not a valid project." });
+    const info = await store.projectFolderInfo(id);
+    if (!info) return res.status(404).json({ error: "Project not found." });
+    res.json(info);
+  });
+
+  // Creates the project folder and every numbered sub-folder right now (so you
+  // can see the tidy structure in Drive straight after connecting). Safe to repeat.
+  app.post("/api/production/:projectId/storage/prepare", requireRole("admin"), async (req, res) => {
+    const id = Number(req.params.projectId);
+    if (!Number.isInteger(id) || id <= 0) return res.status(400).json({ error: "Not a valid project." });
+    if (!(await store.projectFolderInfo(id))) return res.status(404).json({ error: "Project not found." });
+    try {
+      res.json({ ok: true, ...(await store.prepareProject(id)) });
+    } catch (error) {
+      res.status(502).json({ ok: false, ...explainStorageError(error) });
+    }
+  });
+
+  // Forgets the Drive sign-in (and asks Google to cancel it). Files already in
+  // Drive stay there; they stop being readable by the app until the SAME
+  // Google account is connected again.
+  app.post("/api/production/drive/disconnect", requireRole("admin"), async (req, res) => {
+    const row = (await db.query("SELECT refresh_token FROM production_drive_tokens ORDER BY id DESC LIMIT 1")).rows[0];
+    let revoked = null;
+    if (row) {
+      try {
+        const response = await fetch(`${revokeUrl}?token=${encodeURIComponent(row.refresh_token)}`, { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" } });
+        revoked = response.ok;
+      } catch {
+        revoked = false; // Google unreachable: we still forget it on our side
+      }
+    }
+    await db.query("DELETE FROM production_drive_tokens");
+    await db.query("DELETE FROM production_drive_folders");
+    accountCache = null;
+    res.json({ ok: true, wasConnected: Boolean(row), revokedAtGoogle: revoked });
   });
 
   // --- Streaming media to the browser ---------------------------------------
 
-  app.get("/api/production/media/:id", requireRole("admin"), async (req, res) => {
-    const id = Number(req.params.id);
-    if (!Number.isInteger(id) || id <= 0) {
-      res.status(400).json({ error: "Not a valid file." });
-      return;
-    }
+  // Streams one stored file. The CALLER must already have checked that this
+  // person may see this file.
+  async function serveMedia(req, res, id) {
     let range = null;
     const header = req.headers.range;
     if (header) {
@@ -176,6 +272,15 @@ export function setupProductionMedia({ app, db, requireRole, backendDir, fronten
     res.setHeader("Content-Disposition", `${disposition}; filename*=UTF-8''${encodeURIComponent(row.stored_name)}`);
     stream.on("error", () => res.destroy());
     stream.pipe(res);
+  }
+
+  app.get("/api/production/media/:id", requireRole("admin"), async (req, res) => {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id) || id <= 0) {
+      res.status(400).json({ error: "Not a valid file." });
+      return;
+    }
+    await serveMedia(req, res, id);
   });
 
   // --- Background retry of uploads that failed earlier -----------------------
@@ -184,5 +289,5 @@ export function setupProductionMedia({ app, db, requireRole, backendDir, fronten
   const timer = setInterval(flush, 2 * 60 * 1000);
   timer.unref?.();
 
-  return { store, backendName, handleDriveCallback, getDriveAccessToken, flush, ensureSchema: () => ensureMediaSchema(db) };
+  return { store, backendName, serveMedia, handleDriveCallback, getDriveAccessToken, flush, ensureSchema: () => ensureMediaSchema(db) };
 }

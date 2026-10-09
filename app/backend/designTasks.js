@@ -38,6 +38,9 @@ export async function ensureDesignTaskSchema(db) {
       updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
       UNIQUE (project_id, code)
     )`,
+    // Which login (if any) the task is assigned to. A designer login can only
+    // ever see tasks where this is their own user id.
+    `ALTER TABLE production_design_tasks ADD COLUMN IF NOT EXISTS assignee_user_id INTEGER`,
     // At most one live task per asset (finished or cancelled ones don't count).
     `CREATE UNIQUE INDEX IF NOT EXISTS production_design_tasks_one_active
        ON production_design_tasks (project_id, asset_id)
@@ -62,7 +65,7 @@ export async function ensureDesignTaskSchema(db) {
 
 const DECISION_PREFIX = /^(DECISION|CONFLICT)\b/;
 
-function isDecisionIssue(issue) {
+export function isDecisionIssue(issue) {
   return DECISION_PREFIX.test(issue.message) || issue.category === "ambiguous_match" || issue.category === "agent_update";
 }
 
@@ -174,6 +177,21 @@ function cleanPriority(value) {
   if (!PRIORITIES.includes(value)) throw httpError(400, "Priority must be low, normal or high.");
   return value;
 }
+// Works out who a task is being given to. Returns undefined (no change),
+// or { name, userId }. A login must be a designer or admin user; a plain name
+// has no login, so it carries no access.
+async function resolveAssignee(client, assignee, assigneeUserId) {
+  if (assigneeUserId !== undefined) {
+    if (assigneeUserId === null) return { name: null, userId: null };
+    if (!Number.isInteger(assigneeUserId)) throw httpError(400, "assigneeUserId must be a user id.");
+    const user = (await client.query("SELECT id, name, role FROM users WHERE id = $1", [assigneeUserId])).rows[0];
+    if (!user || !["designer", "admin"].includes(user.role)) throw httpError(400, "That login is not a designer.");
+    return { name: user.name, userId: user.id };
+  }
+  const name = cleanAssignee(assignee);
+  return name === undefined ? undefined : { name, userId: null };
+}
+
 function cleanDueDate(value) {
   if (value === undefined) return undefined;
   if (value === null || value === "") return null;
@@ -188,9 +206,9 @@ function cleanAssignee(value) {
 }
 
 // assetIds: array of asset ids, or null for "every asset that has no live task".
-export async function createDesignerTasks(db, projectId, { assetIds = null, priority, assignee, dueDate, actorUserId = null } = {}) {
+export async function createDesignerTasks(db, projectId, { assetIds = null, priority, assignee, assigneeUserId, dueDate, actorUserId = null } = {}) {
   const prio = cleanPriority(priority) ?? "normal";
-  const who = cleanAssignee(assignee) ?? null;
+  cleanAssignee(assignee); // validate early
   const due = cleanDueDate(dueDate) ?? null;
   if (assetIds !== null && (!Array.isArray(assetIds) || assetIds.length === 0 || assetIds.length > 500 || assetIds.some((id) => !Number.isInteger(id)))) {
     throw httpError(400, "assetIds must be a list of asset ids.");
@@ -198,6 +216,8 @@ export async function createDesignerTasks(db, projectId, { assetIds = null, prio
   const client = await db.connect();
   try {
     await client.query("BEGIN");
+    const given = (await resolveAssignee(client, assignee, assigneeUserId)) ?? { name: null, userId: null };
+    const who = given.name;
     // Serialises task creation per project (also guards the code counter).
     const project = (await client.query("SELECT id FROM ai_movie_projects WHERE id = $1 FOR UPDATE", [projectId])).rows[0];
     if (!project) {
@@ -227,9 +247,9 @@ export async function createDesignerTasks(db, projectId, { assetIds = null, prio
       const code = `TASK${String(counter).padStart(3, "0")}`;
       const row = (
         await client.query(
-          `INSERT INTO production_design_tasks (project_id, asset_id, code, assignee, state, priority, due_date, brief, brief_asset_revision, brief_imported_revision, created_by)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING id, code`,
-          [projectId, assetId, code, who, who ? "claimed" : "open", prio, due, JSON.stringify(brief), asset.revision, asset.imported_revision, actorUserId]
+          `INSERT INTO production_design_tasks (project_id, asset_id, code, assignee, assignee_user_id, state, priority, due_date, brief, brief_asset_revision, brief_imported_revision, created_by)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING id, code`,
+          [projectId, assetId, code, who, given.userId, who ? "claimed" : "open", prio, due, JSON.stringify(brief), asset.revision, asset.imported_revision, actorUserId]
         )
       ).rows[0];
       await audit(client, projectId, actorUserId, "task_created", row.id, { code, assetId, assetCode: asset.code });
@@ -251,6 +271,7 @@ function serializeTask(row) {
     code: row.code,
     state: row.state,
     assignee: row.assignee,
+    assigneeUserId: row.assignee_user_id ?? null,
     priority: row.priority,
     dueDate: row.due_date ? String(row.due_date.toISOString?.().slice(0, 10) ?? row.due_date) : null,
     revision: row.revision,
@@ -276,13 +297,53 @@ export async function listDesignerTasks(db, projectId) {
   return rows.map(serializeTask);
 }
 
+// A task's submissions (newest last) with their files. Media state is
+// included so the screen can say "still saving to storage".
+export async function loadSubmissions(db, taskId) {
+  const subs = (
+    await db.query(
+      `SELECT id, version_no, state, note, created_by_name, created_at, submitted_at, review_note, reviewed_by_name, reviewed_at
+       FROM production_design_submissions WHERE task_id = $1 ORDER BY version_no`,
+      [taskId]
+    )
+  ).rows;
+  if (subs.length === 0) return [];
+  const files = (
+    await db.query(
+      `SELECT f.id, f.submission_id, f.media_id, f.file_role, f.view_name, f.sort_order,
+              m.mime, m.bytes, m.original_name, m.status AS media_status
+       FROM production_submission_files f JOIN production_media_files m ON m.id = f.media_id
+       WHERE f.submission_id = ANY($1) ORDER BY f.sort_order, f.id`,
+      [subs.map((x) => x.id)]
+    )
+  ).rows;
+  return subs.map((s) => ({
+    id: s.id,
+    versionNo: s.version_no,
+    state: s.state,
+    note: s.note,
+    createdByName: s.created_by_name,
+    createdAt: s.created_at,
+    submittedAt: s.submitted_at,
+    reviewNote: s.review_note ?? null,
+    reviewedByName: s.reviewed_by_name ?? null,
+    reviewedAt: s.reviewed_at ?? null,
+    files: files
+      .filter((f) => f.submission_id === s.id)
+      .map((f) => ({
+        id: f.id, mediaId: f.media_id, fileRole: f.file_role, viewName: f.view_name,
+        mime: f.mime, bytes: Number(f.bytes), originalName: f.original_name, mediaStatus: f.media_status,
+      })),
+  }));
+}
+
 export async function getDesignerTask(db, projectId, taskId) {
   const row = (await db.query(`${TASK_SELECT} WHERE t.project_id = $1 AND t.id = $2`, [projectId, taskId])).rows[0];
   if (!row) return null;
   const comments = (
     await db.query("SELECT id, author_name, kind, body, created_at FROM production_task_comments WHERE task_id = $1 ORDER BY id", [taskId])
   ).rows;
-  return { ...serializeTask(row), brief: row.brief, comments };
+  return { ...serializeTask(row), brief: row.brief, comments, submissions: await loadSubmissions(db, taskId) };
 }
 
 // Locks the task row, checks the revision the person was looking at, and
@@ -316,14 +377,16 @@ async function withTask(db, projectId, taskId, expectedRevision, { allowedStates
   }
 }
 
-export async function updateDesignerTask(db, projectId, taskId, { expectedRevision, assignee, priority, dueDate, actorUserId = null }) {
+export async function updateDesignerTask(db, projectId, taskId, { expectedRevision, assignee, assigneeUserId, priority, dueDate, actorUserId = null }) {
   const changes = { assignee: cleanAssignee(assignee), priority: cleanPriority(priority), dueDate: cleanDueDate(dueDate) };
-  if (Object.values(changes).every((v) => v === undefined)) throw httpError(400, "Nothing to change.");
+  if (Object.values(changes).every((v) => v === undefined) && assigneeUserId === undefined) throw httpError(400, "Nothing to change.");
   return withTask(db, projectId, taskId, expectedRevision, {
     allowedStates: EDITABLE_STATES,
     async change(client, task) {
+      const who = await resolveAssignee(client, assignee, assigneeUserId);
       const next = {
-        assignee: changes.assignee === undefined ? task.assignee : changes.assignee,
+        assignee: who === undefined ? task.assignee : who.name,
+        assigneeUserId: who === undefined ? task.assignee_user_id : who.userId,
         priority: changes.priority ?? task.priority,
         due: changes.dueDate === undefined ? task.due_date : changes.dueDate,
       };
@@ -331,8 +394,8 @@ export async function updateDesignerTask(db, projectId, taskId, { expectedRevisi
       const state = task.state === "open" && next.assignee ? "claimed" : task.state === "claimed" && !next.assignee ? "open" : task.state;
       const updated = (
         await client.query(
-          "UPDATE production_design_tasks SET assignee=$1, priority=$2, due_date=$3, state=$4, revision=revision+1, updated_at=now() WHERE id=$5 RETURNING revision, state",
-          [next.assignee, next.priority, next.due, state, taskId]
+          "UPDATE production_design_tasks SET assignee=$1, assignee_user_id=$2, priority=$3, due_date=$4, state=$5, revision=revision+1, updated_at=now() WHERE id=$6 RETURNING revision, state",
+          [next.assignee, next.assigneeUserId, next.priority, next.due, state, taskId]
         )
       ).rows[0];
       await audit(client, projectId, actorUserId, "task_updated", taskId, { assignee: next.assignee, priority: next.priority, dueDate: changes.dueDate });
@@ -424,7 +487,7 @@ export function registerDesignTaskRoutes(app, db, requireRole) {
     const p = ids(req, res);
     if (!p) return;
     const result = await createDesignerTasks(db, p.projectId, {
-      assetIds: req.body?.assetIds ?? null, priority: req.body?.priority, assignee: req.body?.assignee, dueDate: req.body?.dueDate, actorUserId: req.user?.id,
+      assetIds: req.body?.assetIds ?? null, priority: req.body?.priority, assignee: req.body?.assignee, assigneeUserId: req.body?.assigneeUserId, dueDate: req.body?.dueDate, actorUserId: req.user?.id,
     });
     respond(res, result);
   }));
@@ -447,7 +510,7 @@ export function registerDesignTaskRoutes(app, db, requireRole) {
     const p = ids(req, res, true);
     if (!p) return;
     respond(res, await updateDesignerTask(db, p.projectId, p.taskId, {
-      expectedRevision: req.body?.expectedRevision, assignee: req.body?.assignee, priority: req.body?.priority, dueDate: req.body?.dueDate, actorUserId: req.user?.id,
+      expectedRevision: req.body?.expectedRevision, assignee: req.body?.assignee, assigneeUserId: req.body?.assigneeUserId, priority: req.body?.priority, dueDate: req.body?.dueDate, actorUserId: req.user?.id,
     }));
   }));
 

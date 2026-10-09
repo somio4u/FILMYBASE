@@ -67,9 +67,8 @@ test("Drive: a file is stored with the right bytes, in project/role folders, row
   assert.equal(row.backend, "gdrive");
   assert.match(row.stored_name, /^CHAR001_v1_[0-9a-f]{8}\.png$/);
   assert.ok(mock.files.get(row.storage_key).data.equals(bytes));
-  // folders: "<id>-Akhada" then "designs"
-  const folderNames = [...mock.files.values()].filter((f) => f.isFolder).map((f) => f.name);
-  assert.ok(folderNames.includes(`${pid}-Akhada`) && folderNames.includes("designs"));
+  // folders: the project's own name, then the numbered folder
+  assert.equal(mock.pathOf(row.storage_key).startsWith("Akhada / 08 Designer uploads / "), true, mock.pathOf(row.storage_key));
   assert.equal(row.spool_path, null);
 });
 

@@ -9,6 +9,7 @@
 import crypto from "node:crypto";
 import fs from "node:fs";
 import fsPromises from "node:fs/promises";
+import os from "node:os";
 import path from "node:path";
 import { Readable } from "node:stream";
 
@@ -40,6 +41,13 @@ export async function ensureMediaSchema(db) {
       created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
       UNIQUE (project_id, sha256)
     )`,
+    `ALTER TABLE production_media_files ADD COLUMN IF NOT EXISTS subfolder TEXT`,
+    // The folder name each project has in storage (kept stable; renamed on purpose).
+    `CREATE TABLE IF NOT EXISTS production_project_folders (
+      project_id INTEGER PRIMARY KEY REFERENCES ai_movie_projects(id) ON DELETE CASCADE,
+      folder_name TEXT NOT NULL,
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    )`,
     // Drive folder ids already created, so a folder is never made twice.
     `CREATE TABLE IF NOT EXISTS production_drive_folders (
       path_key TEXT PRIMARY KEY,
@@ -70,9 +78,30 @@ const EXT_MIME = {
   ".zip": "application/zip", ".json": "application/json", ".txt": "text/plain", ".html": "text/html", ".pdf": "application/pdf",
 };
 
+// The fixed, numbered order every project folder is arranged in.
+export const PROJECT_FOLDER_LAYOUT = [
+  "01 Characters", "02 Props", "03 Environments", "04 Shot images", "05 Audio", "06 Video", "07 Exports", "08 Designer uploads",
+];
+// Which numbered folder each kind of file goes into.
 const ROLE_FOLDERS = {
-  design: "designs", storyboard: "storyboard", keyframe: "keyframes", video_take: "video-takes", audio: "audio", export: "exports",
+  character: "01 Characters", prop: "02 Props", environment: "03 Environments", location: "03 Environments",
+  keyframe: "04 Shot images", storyboard: "04 Shot images", audio: "05 Audio", video_take: "06 Video",
+  export: "07 Exports", design: "08 Designer uploads",
 };
+
+// A name safe to use as a Drive / disk folder name: keeps letters of every
+// language (Hindi, Odia...), brackets and spaces; removes characters that
+// folders cannot hold.
+export function safeFolderName(text, fallback = "Untitled") {
+  const cleaned = String(text ?? "")
+    .normalize("NFC")
+    .replace(/[\u0000-\u001f\u007f/\\:*?"<>|]+/g, "-")
+    .replace(/\s+/g, " ")
+    .replace(/^[\s.-]+|[\s.-]+$/g, "")
+    .slice(0, 100)
+    .trim();
+  return cleaned || fallback;
+}
 
 // Checks the first bytes really look like what the extension claims, for the
 // formats we can recognise cheaply. Returns true when it can't tell.
@@ -94,6 +123,25 @@ function safeName(text) {
   return String(text ?? "file").normalize("NFC").replace(/[^\p{L}\p{M}\p{N}._-]+/gu, "_").replace(/^_+|_+$/g, "").slice(0, 80) || "file";
 }
 
+// Turns any storage error into a code + plain-English sentence a person can act on.
+export function explainStorageError(error) {
+  const text = String(error?.googleMessage ?? error?.message ?? "");
+  const reason = error?.reason ?? "";
+  if (error?.code === "DRIVE_NOT_CONNECTED") return { code: "not_connected", message: "Google Drive is not connected yet. Press Connect Google Drive." };
+  if (error?.status === 401) return { code: "reconnect_needed", message: "Google rejected the saved sign-in. Press Connect Google Drive again." };
+  if (error?.status === 403 && (/accessNotConfigured|SERVICE_DISABLED/i.test(reason) || /has not been used in project|is disabled|API has not been enabled/i.test(text))) {
+    return { code: "api_not_enabled", message: "The Google Drive API is not switched on for your Google Cloud project. Enable it in Google Cloud Console (APIs & Services > Library > Google Drive API), wait a minute, then test again." };
+  }
+  if (error?.status === 403 && /storageQuotaExceeded|quotaExceeded/i.test(reason + text)) return { code: "drive_full", message: "Your Google Drive storage is full." };
+  if (error?.status === 403 && /rateLimit|userRateLimit/i.test(reason)) return { code: "rate_limited", message: "Google is asking us to slow down. Try again in a minute." };
+  if (error?.status === 403) return { code: "permission", message: "Google refused permission for this action. Press Connect Google Drive again and accept every permission it asks for." };
+  if (error?.status === 404) return { code: "folder_missing", message: "The Google Drive folder could not be found (it may have been deleted, or GOOGLE_DRIVE_ROOT_FOLDER_ID is wrong)." };
+  if (error?.status === 429) return { code: "rate_limited", message: "Google is asking us to slow down. Try again in a minute." };
+  if (error?.status >= 500) return { code: "google_down", message: "Google Drive is having trouble right now. Try again in a few minutes." };
+  if (/fetch failed|ECONN|ENOTFOUND|ETIMEDOUT|network/i.test(text)) return { code: "network", message: "The server could not reach Google. Try again in a minute." };
+  return { code: "unknown", message: text || "Something went wrong talking to Google Drive." };
+}
+
 // ---------------------------------------------------------------------------
 // Backend: local folder
 // ---------------------------------------------------------------------------
@@ -106,8 +154,14 @@ export function createLocalBackend({ root }) {
   };
   return {
     name: "local",
+    // Local disk keeps the folder name it was created with (no renaming).
+    async ensureProjectTree({ projectName, layout }) {
+      for (const sub of layout) await fsPromises.mkdir(resolveSafe(path.posix.join(projectName, sub)), { recursive: true });
+      return { created: true };
+    },
+    folderLink() { return null; },
     async put({ folderParts, fileName, filePath }) {
-      const key = path.posix.join(...folderParts, fileName);
+      const key = path.posix.join(...folderParts.map((part) => part.name ?? part), fileName);
       const dest = resolveSafe(key);
       await fsPromises.mkdir(path.dirname(dest), { recursive: true });
       await fsPromises.copyFile(filePath, dest);
@@ -121,6 +175,23 @@ export function createLocalBackend({ root }) {
     },
     async remove(key) {
       await fsPromises.unlink(resolveSafe(key)).catch(() => {});
+    },
+    // Writes, reads back and deletes a small file, to prove the folder works.
+    async selfTest() {
+      const src = path.join(os.tmpdir(), `filmybase-local-test-${crypto.randomUUID()}.txt`);
+      const body = `FilmyBase storage test ${new Date().toISOString()}`;
+      try {
+        await fsPromises.writeFile(src, body);
+        const { key } = await this.put({ folderParts: ["_connection-test"], fileName: "connection-test.txt", filePath: src });
+        const back = await fsPromises.readFile(resolveSafe(key), "utf8");
+        await this.remove(key);
+        await fsPromises.rmdir(path.dirname(resolveSafe(key))).catch(() => {});
+        return back === body ? { ok: true, steps: ["write", "read", "cleanup"] } : { ok: false, code: "mismatch", message: "The file read back did not match what was written." };
+      } catch (error) {
+        return { ok: false, ...explainStorageError(error) };
+      } finally {
+        await fsPromises.unlink(src).catch(() => {});
+      }
     },
   };
 }
@@ -160,9 +231,12 @@ export function createDriveBackend({
 
   async function driveError(response, what) {
     let detail = "";
-    try { detail = (await response.json())?.error?.message ?? ""; } catch { /* body not JSON */ }
+    let body = null;
+    try { body = await response.json(); detail = body?.error?.message ?? ""; } catch { /* body not JSON */ }
     const error = new Error(`Google Drive ${what} failed (${response.status})${detail ? `: ${detail}` : ""}`);
     error.status = response.status;
+    error.googleMessage = detail;
+    error.reason = body?.error?.errors?.[0]?.reason ?? body?.error?.details?.[0]?.reason ?? "";
     error.retryable = response.status >= 500 || response.status === 429;
     return error;
   }
@@ -178,11 +252,15 @@ export function createDriveBackend({
   }
 
   // Creates (once) the chain of folders, remembering each id in the database.
+  // A part is a plain name, or { key, name }: the key is what we remember it
+  // by (so a folder can be renamed without losing track of it), the name is
+  // what it is called in Drive.
   async function ensureFolders(parts) {
     let parent = rootFolderId;
     let pathKey = "";
-    for (const part of parts) {
-      pathKey = pathKey ? `${pathKey}/${part}` : part;
+    for (const raw of parts) {
+      const { key, name: part } = typeof raw === "string" ? { key: raw, name: raw } : raw;
+      pathKey = pathKey ? `${pathKey}/${key}` : key;
       const known = await db.query("SELECT folder_id FROM production_drive_folders WHERE path_key = $1", [pathKey]);
       if (known.rowCount > 0) {
         parent = known.rows[0].folder_id;
@@ -273,8 +351,18 @@ export function createDriveBackend({
   return {
     name: "gdrive",
     async put({ folderParts, fileName, filePath, mime, size, md5 }) {
-      const folderId = await ensureFolders(folderParts);
-      const result = await uploadResumable({ folderId, fileName, mime, filePath, size });
+      let folderId = await ensureFolders(folderParts);
+      let result;
+      try {
+        result = await uploadResumable({ folderId, fileName, mime, filePath, size });
+      } catch (error) {
+        // A remembered folder that no longer exists (deleted, or another Google
+        // account was connected): forget what we remembered and start fresh once.
+        if (error.status !== 404) throw error;
+        await db.query("DELETE FROM production_drive_folders");
+        folderId = await ensureFolders(folderParts);
+        result = await uploadResumable({ folderId, fileName, mime, filePath, size });
+      }
       if (result.md5Checksum && md5 && result.md5Checksum !== md5) {
         await authedFetch(`${apiBase}/files/${result.id}`, { method: "DELETE" }).catch(() => {});
         throw new Error("Google Drive stored a different file than was sent (checksum mismatch).");
@@ -294,6 +382,75 @@ export function createDriveBackend({
     },
     async remove(key) {
       await authedFetch(`${apiBase}/files/${encodeURIComponent(key)}`, { method: "DELETE" }).catch(() => {});
+    },
+    // Creates the project folder and every numbered sub-folder up front, so
+    // the tidy structure is visible in Drive straight away.
+    async ensureProjectTree({ projectKey, projectName, layout }) {
+      const root = { key: projectKey, name: projectName };
+      await ensureFolders([root]);
+      for (const sub of layout) await ensureFolders([root, sub]);
+      return { created: true };
+    },
+    // Renames the project folder in Drive (its contents stay where they are).
+    async renameProjectFolder({ projectKey, name }) {
+      const row = (await db.query("SELECT folder_id FROM production_drive_folders WHERE path_key = $1", [projectKey])).rows[0];
+      if (!row) return { renamed: false };
+      const response = await authedFetch(`${apiBase}/files/${encodeURIComponent(row.folder_id)}?fields=id`, {
+        method: "PATCH", headers: { "Content-Type": "application/json; charset=UTF-8" }, body: JSON.stringify({ name }),
+      });
+      if (response.status === 404) {
+        await db.query("DELETE FROM production_drive_folders");
+        return { renamed: false };
+      }
+      if (!response.ok) throw await driveError(response, "renaming a folder");
+      return { renamed: true };
+    },
+    // Where the project folder can be opened in Drive (null until it exists).
+    async folderLink(projectKey) {
+      const row = (await db.query("SELECT folder_id FROM production_drive_folders WHERE path_key = $1", [projectKey])).rows[0];
+      return row ? `https://drive.google.com/drive/folders/${row.folder_id}` : null;
+    },
+    // Whose Drive this is (null if Google will not say).
+    async about() {
+      try {
+        const response = await authedFetch(`${apiBase}/about?fields=user(displayName,emailAddress)`);
+        if (!response.ok) return null;
+        return (await response.json()).user ?? null;
+      } catch {
+        return null;
+      }
+    },
+    // Uploads a tiny file, reads it back and deletes it: proves sign-in, the
+    // Drive API switch, permission and storage all work. Never throws.
+    async selfTest() {
+      const src = path.join(os.tmpdir(), `filmybase-drive-test-${crypto.randomUUID()}.txt`);
+      const body = `FilmyBase Drive test ${new Date().toISOString()}`;
+      const steps = [];
+      try {
+        await fsPromises.writeFile(src, body);
+        const folderId = await ensureFolders(["_connection-test"]);
+        steps.push("folder");
+        const result = await uploadResumable({ folderId, fileName: "connection-test.txt", mime: "text/plain", filePath: src, size: Buffer.byteLength(body) });
+        steps.push("upload");
+        const response = await authedFetch(`${apiBase}/files/${encodeURIComponent(result.id)}?alt=media`);
+        if (!response.ok) throw await driveError(response, "reading the test file back");
+        if ((await response.text()) !== body) return { ok: false, steps, code: "mismatch", message: "Google stored a different file than was sent." };
+        steps.push("download");
+        const removed = await authedFetch(`${apiBase}/files/${encodeURIComponent(result.id)}`, { method: "DELETE" });
+        if (removed.ok || removed.status === 404) {
+          // Leave nothing behind: remove the test folder too (and forget it).
+          const gone = await authedFetch(`${apiBase}/files/${encodeURIComponent(folderId)}`, { method: "DELETE" });
+          if (gone.ok || gone.status === 404) {
+            await db.query("DELETE FROM production_drive_folders WHERE path_key = $1", ["_connection-test"]);
+            steps.push("cleanup");
+          }
+        }
+        return { ok: true, steps };
+      } catch (error) {
+        return { ok: false, steps, ...explainStorageError(error) };
+      } finally {
+        await fsPromises.unlink(src).catch(() => {});
+      }
     },
   };
 }
@@ -322,14 +479,50 @@ export function createMediaStore({ db, backend, spoolDir, maxBytes = 2 * 1024 * 
     return { sha256: sha.digest("hex"), md5: md5.digest("hex"), head };
   }
 
-  async function projectFolderName(projectId) {
-    const row = (await db.query("SELECT title FROM ai_movie_projects WHERE id = $1", [projectId])).rows[0];
-    return `${projectId}-${safeName(row?.title ?? "project")}`;
+  // The name this project's folder should have right now: the project title,
+  // or "Title (7)" when another project already uses that exact name.
+  async function desiredFolderName(projectId, title) {
+    const base = safeFolderName(title, `Project ${projectId}`);
+    const clash = await db.query(
+      "SELECT 1 FROM production_project_folders WHERE project_id <> $1 AND lower(folder_name) = lower($2) LIMIT 1", [projectId, base]
+    );
+    return clash.rowCount > 0 ? `${base} (${projectId})` : base;
+  }
+
+  // Makes sure the project has a recorded folder name, and renames the folder
+  // in storage when the project was renamed. Returns the name to use.
+  async function syncProjectFolder(projectId) {
+    const project = (await db.query("SELECT title FROM ai_movie_projects WHERE id = $1", [projectId])).rows[0];
+    const desired = await desiredFolderName(projectId, project?.title);
+    const recorded = (await db.query("SELECT folder_name FROM production_project_folders WHERE project_id = $1", [projectId])).rows[0];
+    if (!recorded) {
+      await db.query("INSERT INTO production_project_folders (project_id, folder_name) VALUES ($1,$2) ON CONFLICT DO NOTHING", [projectId, desired]);
+      return (await db.query("SELECT folder_name FROM production_project_folders WHERE project_id = $1", [projectId])).rows[0].folder_name;
+    }
+    if (recorded.folder_name === desired || !backend.renameProjectFolder) return recorded.folder_name;
+    try {
+      const result = await backend.renameProjectFolder({ projectKey: `p${projectId}`, name: desired });
+      if (result.renamed === false) {
+        // Nothing to rename yet (folder not created): just remember the new name.
+      }
+      await db.query("UPDATE production_project_folders SET folder_name = $1, updated_at = now() WHERE project_id = $2", [desired, projectId]);
+      return desired;
+    } catch {
+      return recorded.folder_name; // could not rename right now; keep the old name, try again next time
+    }
+  }
+
+  async function foldersFor(row) {
+    const name = await syncProjectFolder(row.project_id);
+    const project = backend.name === "gdrive" ? { key: `p${row.project_id}`, name } : { key: name, name };
+    const parts = [project, ROLE_FOLDERS[row.role] ?? "99 Other"];
+    if (row.subfolder) parts.push(row.subfolder);
+    return parts;
   }
 
   // Sends one stored-by-spool row to the backend. Throws on failure.
   async function sendToBackend(row) {
-    const folderParts = [await projectFolderName(row.project_id), ROLE_FOLDERS[row.role] ?? "other"];
+    const folderParts = await foldersFor(row);
     const md5 = (await hashFile(row.spool_path)).md5;
     const { key } = await backend.put({
       folderParts, fileName: row.stored_name, filePath: row.spool_path, mime: row.mime, size: Number(row.bytes), md5,
@@ -348,7 +541,7 @@ export function createMediaStore({ db, backend, spoolDir, maxBytes = 2 * 1024 * 
     // are both written to a temp file first, so big videos never sit in
     // memory). Returns the media row. Same content in the same project is
     // stored once.
-    async putMedia({ projectId, role, filePath, originalName, label = "file", createdBy = null, dimensions = {} }) {
+    async putMedia({ projectId, role, filePath, originalName, label = "file", subfolder = null, createdBy = null, dimensions = {} }) {
       const ext = path.extname(originalName ?? "").toLowerCase();
       const mime = EXT_MIME[ext];
       if (!mime) throw Object.assign(new Error(`Files of type "${ext || "unknown"}" are not allowed.`), { status: 400 });
@@ -368,10 +561,10 @@ export function createMediaStore({ db, backend, spoolDir, maxBytes = 2 * 1024 * 
       let inserted;
       try {
         inserted = await db.query(
-          `INSERT INTO production_media_files (project_id, role, backend, stored_name, original_name, mime, bytes, sha256, status, spool_path, created_by, width, height, duration_ms)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'pending_upload',$9,$10,$11,$12,$13) RETURNING *`,
+          `INSERT INTO production_media_files (project_id, role, backend, stored_name, original_name, mime, bytes, sha256, status, spool_path, created_by, width, height, duration_ms, subfolder)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'pending_upload',$9,$10,$11,$12,$13,$14) RETURNING *`,
           [projectId, role, backend.name, storedName, originalName ?? null, mime, size, sha256, spoolPath, createdBy,
-            dimensions.width ?? null, dimensions.height ?? null, dimensions.durationMs ?? null]
+            dimensions.width ?? null, dimensions.height ?? null, dimensions.durationMs ?? null, subfolder ? safeFolderName(subfolder) : null]
         );
       } catch (error) {
         if (error.code === "23505") { // a concurrent identical upload won
@@ -409,6 +602,28 @@ export function createMediaStore({ db, backend, spoolDir, maxBytes = 2 * 1024 * 
         }
       }
       return { tried: rows.length, stored };
+    },
+
+    // Creates the project's folder (named after the project) and all the
+    // numbered sub-folders in storage, right now. Safe to repeat.
+    async prepareProject(projectId) {
+      const name = await syncProjectFolder(projectId);
+      if (backend.ensureProjectTree) {
+        await backend.ensureProjectTree({ projectKey: `p${projectId}`, projectName: name, layout: PROJECT_FOLDER_LAYOUT });
+      }
+      return this.projectFolderInfo(projectId);
+    },
+
+    async projectFolderInfo(projectId) {
+      const project = (await db.query("SELECT title FROM ai_movie_projects WHERE id = $1", [projectId])).rows[0];
+      if (!project) return null;
+      const name = await syncProjectFolder(projectId);
+      return {
+        folderName: name,
+        link: backend.folderLink ? await backend.folderLink(`p${projectId}`) : null,
+        layout: PROJECT_FOLDER_LAYOUT,
+        backend: backend.name,
+      };
     },
 
     // For serving to the browser. Caller checks login / project first.

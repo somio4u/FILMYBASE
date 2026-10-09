@@ -20,9 +20,11 @@ import AdmZip from "adm-zip";
 import crypto from "crypto";
 import { AsyncLocalStorage } from "async_hooks";
 import { marked } from "marked";
-import { ensureProductionSchema, registerProductionRoutes, syncProductionQuietly } from "./production.js";
+import { registerProductionRoutes, syncProductionQuietly } from "./production.js";
+import { ensureAllProductionSchemas } from "./productionSchema.js";
 import { setupProductionMedia } from "./productionMedia.js";
-import { ensureDesignTaskSchema, registerDesignTaskRoutes } from "./designTasks.js";
+import { registerDesignTaskRoutes } from "./designTasks.js";
+import { registerSubmissionRoutes, designerGatekeeper, DESIGNER_ROLE } from "./designSubmissions.js";
 import { BIBLE_PASS_SCORE, designStoryBible, generateBrainJson, reviseBibleWithNote, storyBibleToMarkdown } from "./storyBrain.js";
 import cookieParser from "cookie-parser";
 import { createClient } from "@supabase/supabase-js";
@@ -1489,6 +1491,9 @@ app.use(async (req, res, next) => {
   next();
 });
 
+// A "designer" login may use only its own design-task routes (see designSubmissions.js).
+app.use(designerGatekeeper);
+
 app.post("/api/auth/login", async (req, res) => {
   const { username, password } = req.body;
 
@@ -1529,7 +1534,7 @@ app.get("/api/auth/me", async (req, res) => {
 app.post("/api/auth/users", requireRole("admin"), async (req, res) => {
   const { name, username, password, role, conceptId } = req.body;
 
-  if (!name || !username || !password || !["director", "production_manager", "admin", PRODUCTION_ONLY_ROLE].includes(role)) {
+  if (!name || !username || !password || !["director", "production_manager", "admin", PRODUCTION_ONLY_ROLE, DESIGNER_ROLE].includes(role)) {
     res.status(400).json({ error: "Name, username, password, and a valid role are required." });
     return;
   }
@@ -1537,7 +1542,7 @@ app.post("/api/auth/users", requireRole("admin"), async (req, res) => {
   // with no assignment would otherwise see every project in the system.
   // A "Production only" login isn't assigned a project — it sees only the
   // screenplays it uploads itself.
-  if (role !== "admin" && role !== PRODUCTION_ONLY_ROLE && !conceptId) {
+  if (role !== "admin" && role !== PRODUCTION_ONLY_ROLE && role !== DESIGNER_ROLE && !conceptId) {
     res.status(400).json({ error: "Director and Production Manager accounts must be assigned to a project." });
     return;
   }
@@ -1546,7 +1551,7 @@ app.post("/api/auth/users", requireRole("admin"), async (req, res) => {
   try {
     const result = await db.query(
       "INSERT INTO users (name, username, password_hash, password_salt, role, concept_id) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id, name, username, role, concept_id",
-      [name, username.toLowerCase(), hash, salt, role, role === "admin" || role === PRODUCTION_ONLY_ROLE ? null : conceptId]
+      [name, username.toLowerCase(), hash, salt, role, role === "admin" || role === PRODUCTION_ONLY_ROLE || role === DESIGNER_ROLE ? null : conceptId]
     );
     res.json(result.rows[0]);
   } catch (error) {
@@ -18934,15 +18939,14 @@ process.on("uncaughtException", (err) => console.error("Uncaught exception:", er
 // Production workflow routes (agent data -> Production Dossier). See production.js.
 registerProductionRoutes(app, db, requireRole);
 registerDesignTaskRoutes(app, db, requireRole);
+registerSubmissionRoutes(app, db, requireRole, { store: productionMedia.store, serveMedia: productionMedia.serveMedia });
 
 // Schema self-heal runs before the server starts accepting traffic — worst
 // case (the database is briefly unreachable) it logs and the server still
 // starts, rather than blocking startup entirely.
 ensureAiMovieSchema()
-  .then(() => ensureProductionSchema(db))
-  .then(() => ensureDesignTaskSchema(db))
-  .then(() => productionMedia.ensureSchema())
-  .catch((error) => console.error("Production schema setup failed:", error.message))
+  .then(() => ensureAllProductionSchemas(db))
+  .catch((error) => console.error("Schema setup failed:", error.message))
   .finally(() => {
   app.listen(PORT, () => {
     console.log(`Backend server running at http://localhost:${PORT}`);

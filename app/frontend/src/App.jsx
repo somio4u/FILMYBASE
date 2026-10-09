@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom'
 import './App.css'
 import { AI_ACTIVITY_EVENT, AI_WARP_EVENT } from './AiBackground.jsx'
 import ProductionDossier from './ProductionDossier.jsx'
+import DesignerWorkspace from './DesignerWorkspace.jsx'
 
 // Lets MicInput/MicTextarea reach the shared dictation language + t
 // anywhere in the tree without threading those two props through every
@@ -8339,7 +8340,7 @@ function App() {
       setUserManagementError(t.newUserMissingFields(missing.join(', ')))
       return
     }
-    if (newUserRole !== 'admin' && newUserRole !== 'production' && !newUserConceptId) {
+    if (newUserRole !== 'admin' && newUserRole !== 'production' && newUserRole !== 'designer' && !newUserConceptId) {
       setUserManagementError(t.newUserNeedsProject)
       return
     }
@@ -8386,7 +8387,7 @@ function App() {
   // Everything that loads real project data waits until we know who's
   // logged in — these fetches would 401 otherwise.
   useEffect(() => {
-    if (!currentUser) return
+    if (!currentUser || currentUser.role === 'designer') return
 
     loadProjectList()
 
@@ -8410,6 +8411,17 @@ function App() {
     }
 
     const params = new URLSearchParams(window.location.search)
+    // Back from Google's login page after "Connect with Google" in the
+    // Production Dossier: remember the result, then reopen that dossier.
+    if (params.has('googleDriveConnected') || params.has('googleDriveError')) {
+      try {
+        sessionStorage.setItem('filmybase:driveReturn', params.has('googleDriveConnected') ? 'connected' : `error:${params.get('reason') || 'unknown'}`)
+      } catch { /* private mode: the dossier simply will not show a message */ }
+      window.history.replaceState({}, '', window.location.pathname)
+      setAppMode('ai')
+      const returnProjectId = localStorage.getItem(CURRENT_AI_MOVIE_PROJECT_STORAGE_KEY)
+      if (returnProjectId) loadAiMovieProject(returnProjectId).then(() => setAiMovieView('dossier'))
+    }
     if (params.has('googleContactsConnected')) {
       setGoogleConnected(true)
       setGoogleContactsNotice('connected')
@@ -11167,6 +11179,11 @@ function App() {
     )
   }
 
+  // A "designer" login sees only its own design tasks: nothing else in the app.
+  if (currentUser.role === 'designer') {
+    return <DesignerWorkspace currentUser={currentUser} backendUrl={BACKEND_URL} onLogout={handleLogoutClick} />
+  }
+
   if (appMode === null && !isProductionOnly) {
     // Picking a mode is a little cinematic moment: the chosen card glows and
     // glides to the centre, the other fades, the AI background warps toward
@@ -12533,9 +12550,10 @@ function App() {
                     <option value="production_manager">{t.roleProductionManager}</option>
                     <option value="director">{t.roleDirector}</option>
                     <option value="production">{t.roleProductionOnly}</option>
+                    <option value="designer">Designer (design tasks only)</option>
                     <option value="admin">{t.roleAdmin}</option>
                   </select>
-                  {newUserRole !== 'admin' && newUserRole !== 'production' && (
+                  {newUserRole !== 'admin' && newUserRole !== 'production' && newUserRole !== 'designer' && (
                     <select value={newUserConceptId} onChange={(e) => setNewUserConceptId(e.target.value)}>
                       <option value="">{t.assignProjectPlaceholder}</option>
                       {projectHistory.map((p) => (

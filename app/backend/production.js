@@ -14,6 +14,8 @@
 //  - the agent has no ids, so we match by name + aliases and keep our own ids
 
 import crypto from "node:crypto";
+import fs from "node:fs";
+import path from "node:path";
 
 // ---------------------------------------------------------------------------
 // Schema (idempotent; run on every server start, like ensureAiMovieSchema)
@@ -74,6 +76,7 @@ export async function ensureProductionSchema(db) {
       resolved_at TIMESTAMPTZ,
       created_at TIMESTAMPTZ NOT NULL DEFAULT now()
     )`,
+    `ALTER TABLE production_issues ADD COLUMN IF NOT EXISTS resolution_note TEXT`,
     `CREATE INDEX IF NOT EXISTS production_issues_project_idx ON production_issues (project_id, status)`,
     `CREATE TABLE IF NOT EXISTS production_audit_events (
       id SERIAL PRIMARY KEY,
@@ -204,14 +207,13 @@ export function normalizeAgentAssets(assets) {
 }
 
 // What the designer will still need. Agent-supplied "missing" items plus a
-// few we can tell from the record itself. Reference images are always
-// missing at import time (nothing has been designed yet).
+// few we can tell from the record itself. ("Not designed yet" is a status
+// shown on the asset, not a missing-information issue.)
 export function computeMissing(entry) {
   const missing = [...entry.agentMissing];
   if (!entry.description.en && !entry.description.hi) missing.push("visual description");
   if (entry.kind === "character" && entry.costumes.length === 0) missing.push("costume details");
   if (entry.sceneRefs.length === 0) missing.push("which scenes it appears in");
-  missing.push("approved design / reference images");
   return [...new Set(missing)];
 }
 
@@ -239,7 +241,7 @@ export function effectiveDetails(asset) {
 async function addIssue(client, { projectId, assetId = null, importId = null, category, severity = "info", message }) {
   const existing = await client.query(
     `SELECT 1 FROM production_issues
-     WHERE project_id = $1 AND COALESCE(asset_id, 0) = $2 AND category = $3 AND message = $4 AND status = 'open'`,
+     WHERE project_id = $1 AND COALESCE(asset_id, 0) = $2 AND category = $3 AND message = $4 AND status IN ('open','dismissed')`,
     [projectId, assetId ?? 0, category, message]
   );
   if (existing.rowCount > 0) return false;
@@ -403,25 +405,7 @@ export async function ingestAgentOutput(db, projectId, { actorUserId = null } = 
       }
       touchedIds.add(asset.id);
 
-      // Missing-information issues: add the ones that apply, close the ones
-      // that no longer do.
-      const effective = { ...entry, ...effectiveEntryOverrides(asset) };
-      const stillMissing = computeMissing(effective);
-      const open = (
-        await client.query(
-          "SELECT id, message FROM production_issues WHERE asset_id = $1 AND category = 'missing_info' AND status = 'open'",
-          [asset.id]
-        )
-      ).rows;
-      for (const issue of open) {
-        if (!stillMissing.includes(issue.message)) {
-          await client.query("UPDATE production_issues SET status = 'resolved', resolved_at = now() WHERE id = $1", [issue.id]);
-        }
-      }
-      for (const message of stillMissing) {
-        const added = await addIssue(client, { projectId, assetId: asset.id, importId, category: "missing_info", message });
-        if (added) stats.needsReview++;
-      }
+      stats.needsReview += await syncMissingIssues(client, { projectId, assetId: asset.id, importId, entry: { ...entry, ...effectiveEntryOverrides(asset) } });
     }
 
     // Assets we already had that this output no longer lists: keep them (the
@@ -435,10 +419,10 @@ export async function ingestAgentOutput(db, projectId, { actorUserId = null } = 
     const totals = (
       await client.query(
         `SELECT
-           count(*) FILTER (WHERE kind = 'character') AS characters,
-           count(*) FILTER (WHERE kind = 'prop') AS properties,
-           count(*) FILTER (WHERE kind = 'location') AS locations,
-           count(*) FILTER (WHERE kind = 'other') AS other
+           (count(*) FILTER (WHERE kind = 'character'))::int AS characters,
+           (count(*) FILTER (WHERE kind = 'prop'))::int AS properties,
+           (count(*) FILTER (WHERE kind = 'location'))::int AS locations,
+           (count(*) FILTER (WHERE kind = 'other'))::int AS other
          FROM production_assets WHERE project_id = $1`,
         [projectId]
       )
@@ -456,6 +440,25 @@ export async function ingestAgentOutput(db, projectId, { actorUserId = null } = 
   } finally {
     client.release();
   }
+}
+
+// Missing-information issues: add the ones that apply, close the ones that no
+// longer do. Returns how many new ones were added.
+async function syncMissingIssues(client, { projectId, assetId, importId = null, entry }) {
+  const stillMissing = computeMissing(entry);
+  const open = (
+    await client.query("SELECT id, message FROM production_issues WHERE asset_id = $1 AND category = 'missing_info' AND status = 'open'", [assetId])
+  ).rows;
+  for (const issue of open) {
+    if (!stillMissing.includes(issue.message)) {
+      await client.query("UPDATE production_issues SET status = 'resolved', resolved_at = now() WHERE id = $1", [issue.id]);
+    }
+  }
+  let added = 0;
+  for (const message of stillMissing) {
+    if (await addIssue(client, { projectId, assetId, importId, category: "missing_info", message })) added++;
+  }
+  return added;
 }
 
 function byKeyValues(map) {
@@ -571,6 +574,47 @@ export function registerProductionRoutes(app, db, requireRole) {
     res.json(result);
   });
 
+  // Edit an asset. Human edits are kept on top of the agent's version; send
+  // null for a field to go back to the agent's version. 409 = changed meanwhile.
+  app.patch("/api/production/:projectId/assets/:assetId", requireRole("admin"), async (req, res) => {
+    const projectId = parseProjectId(req, res);
+    if (!projectId) return;
+    const assetId = Number(req.params.assetId);
+    if (!Number.isInteger(assetId) || assetId <= 0) {
+      res.status(400).json({ error: "Not a valid asset." });
+      return;
+    }
+    try {
+      const result = await updateProductionAsset(db, projectId, assetId, {
+        expectedRevision: req.body?.expectedRevision, edits: req.body?.edits, actorUserId: req.user?.id,
+      });
+      if (result.outcome === "not_found") return res.status(404).json({ error: "Asset not found." });
+      if (result.outcome === "conflict") {
+        return res.status(409).json({ error: "This asset was changed by someone else (or a new import). Reload and try again.", currentRevision: result.currentRevision });
+      }
+      res.json(result);
+    } catch (error) {
+      if (error.status === 400) return res.status(400).json({ error: error.message });
+      throw error;
+    }
+  });
+
+  app.post("/api/production/:projectId/issues/:issueId/dismiss", requireRole("admin"), async (req, res) => {
+    const projectId = parseProjectId(req, res);
+    if (!projectId) return;
+    const issueId = Number(req.params.issueId);
+    if (!Number.isInteger(issueId) || issueId <= 0) return res.status(400).json({ error: "Not a valid issue." });
+    const result = await dismissProductionIssue(db, projectId, issueId, { note: req.body?.note ?? "", actorUserId: req.user?.id });
+    if (result.outcome === "not_found") return res.status(404).json({ error: "Issue not found or already closed." });
+    res.json(result);
+  });
+
+  // Creates (once) the "[TEST] Idea of an Idea" project and loads the dossier
+  // from a hand-written stand-in for the silent agent's output.
+  app.post("/api/production/dev/seed-test-project", requireRole("admin"), async (req, res) => {
+    res.json(await seedTestProject(db, { actorUserId: req.user?.id }));
+  });
+
   app.get("/api/production/:projectId/overview", requireRole("admin"), async (req, res) => {
     const projectId = parseProjectId(req, res);
     if (!projectId) return;
@@ -589,4 +633,141 @@ export function registerProductionRoutes(app, db, requireRole) {
     if (!projectId) return;
     res.json({ issues: await listProductionIssues(db, projectId, req.query.status === "resolved" ? "resolved" : "open") });
   });
+}
+
+// ---------------------------------------------------------------------------
+// Editing the dossier (human edits sit on top of what the agent said)
+// ---------------------------------------------------------------------------
+
+const EDITABLE_FIELDS = ["description", "states", "sceneRefs", "costumes", "notes"];
+
+// Checks one edit payload and returns clean values. Throws a 400-style error.
+export function validateAssetEdits(edits) {
+  const bad = (message) => Object.assign(new Error(message), { status: 400 });
+  if (!edits || typeof edits !== "object" || Array.isArray(edits)) throw bad("Nothing to change.");
+  const clean = {};
+  for (const [key, value] of Object.entries(edits)) {
+    if (!EDITABLE_FIELDS.includes(key)) throw bad(`"${key}" cannot be edited.`);
+    if (value === null) { clean[key] = null; continue; } // null = go back to the agent's version
+    if (key === "description") {
+      if (typeof value !== "object" || Array.isArray(value)) throw bad("Description must have en and hi text.");
+      const en = typeof value.en === "string" ? value.en.trim() : "";
+      const hi = typeof value.hi === "string" ? value.hi.trim() : "";
+      if (en.length > 4000 || hi.length > 4000) throw bad("Description is too long.");
+      clean.description = { en, hi };
+    } else if (key === "notes") {
+      if (typeof value !== "string" || value.length > 4000) throw bad("Notes must be text under 4000 characters.");
+      clean.notes = value.trim();
+    } else if (key === "costumes") {
+      if (!Array.isArray(value) || value.length > 50) throw bad("Costumes must be a list.");
+      clean.costumes = value.map((c) => {
+        if (!c || typeof c.name !== "string" || !c.name.trim() || c.name.length > 200) throw bad("Each costume needs a name.");
+        return { name: c.name.trim(), description: typeof c.description === "string" ? c.description.trim().slice(0, 2000) : "" };
+      });
+    } else {
+      if (!Array.isArray(value) || value.length > 100 || value.some((v) => typeof v !== "string" || v.length > 300)) throw bad(`${key} must be a list of short texts.`);
+      clean[key] = [...new Set(value.map((v) => v.trim()).filter(Boolean))];
+    }
+  }
+  return clean;
+}
+
+// expectedRevision must match what the person was looking at, otherwise
+// someone (or a new import) changed it first and they must look again.
+export async function updateProductionAsset(db, projectId, assetId, { expectedRevision, edits, actorUserId = null }) {
+  const clean = validateAssetEdits(edits);
+  if (!Number.isInteger(expectedRevision)) throw Object.assign(new Error("expectedRevision is required."), { status: 400 });
+  const client = await db.connect();
+  try {
+    await client.query("BEGIN");
+    const row = (await client.query("SELECT * FROM production_assets WHERE id = $1 AND project_id = $2 FOR UPDATE", [assetId, projectId])).rows[0];
+    if (!row) {
+      await client.query("ROLLBACK");
+      return { outcome: "not_found" };
+    }
+    if (row.revision !== expectedRevision) {
+      await client.query("ROLLBACK");
+      return { outcome: "conflict", currentRevision: row.revision };
+    }
+    const humanEdits = { ...(row.human_edits ?? {}) };
+    for (const [key, value] of Object.entries(clean)) {
+      if (value === null) delete humanEdits[key];
+      else humanEdits[key] = value;
+    }
+    const updated = (
+      await client.query(
+        "UPDATE production_assets SET human_edits = $1, revision = revision + 1, updated_at = now() WHERE id = $2 RETURNING *",
+        [JSON.stringify(humanEdits), assetId]
+      )
+    ).rows[0];
+    const entry = {
+      kind: updated.kind,
+      ...effectiveDetails(updated),
+      description: effectiveDetails(updated).description ?? { en: "", hi: "" },
+      costumes: effectiveDetails(updated).costumes ?? [],
+      sceneRefs: effectiveDetails(updated).sceneRefs ?? [],
+      agentMissing: updated.agent_details?.agentMissing ?? [],
+    };
+    await syncMissingIssues(client, { projectId, assetId, entry });
+    await audit(client, projectId, actorUserId, "asset_edited", "asset", assetId, {
+      fields: Object.keys(clean),
+      before: Object.fromEntries(Object.keys(clean).map((k) => [k, row.human_edits?.[k] ?? row.agent_details?.[k] ?? null])),
+    });
+    await client.query("COMMIT");
+    return { outcome: "updated", revision: updated.revision };
+  } catch (error) {
+    await client.query("ROLLBACK").catch(() => {});
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+// "I have dealt with this / it does not matter": stays closed even when a
+// later import mentions the same thing again.
+export async function dismissProductionIssue(db, projectId, issueId, { note = "", actorUserId = null } = {}) {
+  const result = await db.query(
+    `UPDATE production_issues SET status = 'dismissed', resolved_at = now(), resolution_note = $1
+     WHERE id = $2 AND project_id = $3 AND status = 'open' RETURNING id, asset_id`,
+    [String(note).slice(0, 1000), issueId, projectId]
+  );
+  if (result.rowCount === 0) return { outcome: "not_found" };
+  await db.query(
+    "INSERT INTO production_audit_events (project_id, actor_user_id, action, entity, entity_id, detail) VALUES ($1,$2,'issue_dismissed','issue',$3,$4)",
+    [projectId, actorUserId, issueId, JSON.stringify({ note: String(note).slice(0, 1000) })]
+  );
+  return { outcome: "dismissed" };
+}
+
+// ---------------------------------------------------------------------------
+// Test project: the "Idea of an Idea" screenplay + a HAND-WRITTEN stand-in for
+// the silent agent's output (see fixtures/idea-of-an-idea.assets.js).
+// ---------------------------------------------------------------------------
+
+export async function seedTestProject(db, { actorUserId = null, fixturesDir = path.join(import.meta.dirname, "fixtures") } = {}) {
+  const { IDEA_OF_AN_IDEA_TITLE, IDEA_OF_AN_IDEA_ASSETS } = await import(path.join(fixturesDir, "idea-of-an-idea.assets.js"));
+  const screenplay = fs.readFileSync(path.join(fixturesDir, "idea-of-an-idea.md"), "utf8");
+  const existing = await db.query("SELECT id FROM ai_movie_projects WHERE title = $1 ORDER BY id LIMIT 1", [IDEA_OF_AN_IDEA_TITLE]);
+  let projectId = existing.rows[0]?.id;
+  let created = false;
+  if (!projectId) {
+    const inserted = await db.query(
+      "INSERT INTO ai_movie_projects (title, pasted_text, detected_stage, assets, created_by) VALUES ($1,$2,'screenplay',$3,$4) RETURNING id",
+      [IDEA_OF_AN_IDEA_TITLE, screenplay, JSON.stringify(IDEA_OF_AN_IDEA_ASSETS), actorUserId]
+    );
+    projectId = inserted.rows[0].id;
+    created = true;
+  }
+  const result = await ingestAgentOutput(db, projectId, { actorUserId });
+  return { projectId, created, import: result };
+}
+
+// Called after the silent agent saves new output. Never throws: the agent's
+// own work must not fail because of the production side.
+export async function syncProductionQuietly(db, projectId) {
+  try {
+    await ingestAgentOutput(db, projectId);
+  } catch (error) {
+    console.error("Production dossier sync failed (agent output itself is saved):", error.message);
+  }
 }

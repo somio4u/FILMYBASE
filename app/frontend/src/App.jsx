@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useContext, createContext, Fragment } from
 import { createPortal } from 'react-dom'
 import './App.css'
 import { AI_ACTIVITY_EVENT, AI_WARP_EVENT } from './AiBackground.jsx'
+import ProductionDossier from './ProductionDossier.jsx'
 
 // Lets MicInput/MicTextarea reach the shared dictation language + t
 // anywhere in the tree without threading those two props through every
@@ -6463,7 +6464,8 @@ function App() {
   // you go. null = not saved yet (a fresh, un-analyzed paste).
   const [aiMovieProjectId, setAiMovieProjectId] = useState(null)
   const [aiMovieProjectTitle, setAiMovieProjectTitle] = useState(null)
-  const [aiMovieView, setAiMovieView] = useState('editor') // 'editor' | 'allProjects'
+  const [aiMovieView, setAiMovieView] = useState('editor') // 'editor' | 'allProjects' | 'reference' | 'dossier'
+  const [isSeedingDossierTestProject, setIsSeedingDossierTestProject] = useState(false)
   const [aiMovieProjectList, setAiMovieProjectList] = useState([])
   const [isLoadingAiMovieProjects, setIsLoadingAiMovieProjects] = useState(false)
   const [isSeedingAkhadaProject, setIsSeedingAkhadaProject] = useState(false)
@@ -7231,6 +7233,27 @@ function App() {
       // clickable to try again rather than a whole error banner.
     }
     setIsSeedingAkhadaProject(false)
+  }
+
+  // Creates (once) the "[TEST] Idea of an Idea" project for trying the
+  // Production Dossier, then opens its dossier.
+  async function handleSeedDossierTestProjectClick() {
+    setIsSeedingDossierTestProject(true)
+    try {
+      const response = await fetch(`${BACKEND_URL}/api/production/dev/seed-test-project`, { method: 'POST' })
+      const data = await response.json()
+      if (response.ok) {
+        await loadAiMovieProject(data.projectId)
+        setAiMovieView('dossier')
+      }
+    } catch {
+      // Same non-fatal pattern as the Akhada button: just stays clickable.
+    }
+    setIsSeedingDossierTestProject(false)
+  }
+
+  function handleAiMovieDossierViewClick() {
+    setAiMovieView((prev) => (prev === 'dossier' ? 'editor' : 'dossier'))
   }
 
   function handleAiMovieAllProjectsClick() {
@@ -11285,6 +11308,15 @@ function App() {
                   {t.aiMovieReferenceHeading}
                 </button>
               )}
+              {aiMovieProjectId && (
+                <button
+                  className={aiMovieView === 'dossier' ? 'agent-header active' : 'agent-header'}
+                  onClick={() => { handleAiMovieDossierViewClick(); setIsSidebarOpen(false) }}
+                >
+                  <span className="agent-expand-icon">▸</span>
+                  Production Dossier
+                </button>
+              )}
               <button className="agent-header active">
                 <span className="agent-expand-icon expanded">▸</span>
                 {t.storyAgentLabel}
@@ -11345,6 +11377,14 @@ function App() {
                 disabled={isSeedingAkhadaProject}
               >
                 {isSeedingAkhadaProject ? t.aiMovieSeedingAkhadaLabel : t.aiMovieSeedAkhadaButton}
+              </button>
+              <button
+                type="button"
+                className="choose-button ai-movie-generate-from-reference-button"
+                onClick={handleSeedDossierTestProjectClick}
+                disabled={isSeedingDossierTestProject}
+              >
+                {isSeedingDossierTestProject ? 'Creating test project…' : 'Test project: Idea of an Idea (to try the Production Dossier)'}
               </button>
               <div className="master-list-grid">
                 {aiMovieProjectList.map((project) => (
@@ -12321,6 +12361,12 @@ function App() {
                   )}
                 </div>
               )}
+            </div>
+          )}
+
+          {aiMovieView === 'dossier' && (
+            <div className="concept-page">
+              <ProductionDossier projectId={aiMovieProjectId} backendUrl={BACKEND_URL} />
             </div>
           )}
 

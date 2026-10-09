@@ -20,7 +20,7 @@ import AdmZip from "adm-zip";
 import crypto from "crypto";
 import { AsyncLocalStorage } from "async_hooks";
 import { marked } from "marked";
-import { ensureProductionSchema, registerProductionRoutes } from "./production.js";
+import { ensureProductionSchema, registerProductionRoutes, syncProductionQuietly } from "./production.js";
 import { setupProductionMedia } from "./productionMedia.js";
 import { BIBLE_PASS_SCORE, designStoryBible, generateBrainJson, reviseBibleWithNote, storyBibleToMarkdown } from "./storyBrain.js";
 import cookieParser from "cookie-parser";
@@ -3452,7 +3452,7 @@ This list is handed to a human designer, so for every entry ALSO fill in these p
 - "aliases": other names or nicknames this same thing is called in the story (so it is never counted twice).
 - "sceneRefs": where it appears — scene or beat references exactly as the material numbers them (e.g. "Beat 4", "Scene 2.3"); empty if the material does not number them.
 - "states": the different conditions it appears in over the story (a prop: sealed / opened / torn; a character: wounded, wet, disguised; a location: day / night / ruined). One entry per condition, never a new entry for the same thing.
-- "missing": what the designer will still need that the story does NOT say (e.g. "age", "exact colour of the cloak", "back view").
+- "missing": what the designer will still need that the story does NOT say (e.g. "age", "exact colour of the cloak", "back view"). Start an entry with "DECISION:" when the material leaves a real choice open (e.g. "DECISION: motorbike or hatchback not chosen"), and with "CONFLICT:" when the material contradicts itself (e.g. "CONFLICT: Scene 3 says the coat is red, Scene 9 says blue").
 For characters only, also fill "costumes": each distinct outfit as { "name", "description" }.
 Also fill "otherAssets" with anything else that needs designing or exact wording: letters, signs and phone screens (put the exact text in the description), vehicles, creatures, crowds, visual effects, songs. Each has a "kind".`;
 
@@ -3688,6 +3688,7 @@ app.post("/api/ai-movie/backfill", requireRole("admin"), async (req, res) => {
         "UPDATE ai_movie_projects SET backfill = $1, assets = $2, stage_status = $3, title = COALESCE(title, $4), updated_at = now() WHERE id = $5",
         [JSON.stringify(backfill), JSON.stringify(assets), JSON.stringify(stageStatus), title, projectId]
       );
+      syncProductionQuietly(db, projectId);
     }
 
     res.json({ backfill, assets, stageStatus });
@@ -3755,6 +3756,7 @@ app.post("/api/ai-movie/generate-from-reference", requireRole("admin"), async (r
       "UPDATE ai_movie_projects SET pasted_text = $1, detected_stage = 'story', backfill = $2, assets = $3, stage_status = $4, title = COALESCE(title, $5), updated_at = now() WHERE id = $6",
       [pastedText, JSON.stringify(backfill), JSON.stringify(assets), JSON.stringify(stageStatus), story.title.en, projectId]
     );
+    syncProductionQuietly(db, projectId);
 
     res.json({ pastedText, stage: "story", backfill, assets, stageStatus });
   } catch (error) {
@@ -5272,6 +5274,7 @@ async function refreshAiMovieAssetsInBackground(projectId) {
       referenceMaterialText
     );
     await db.query("UPDATE ai_movie_projects SET assets = $1, updated_at = now() WHERE id = $2", [JSON.stringify(assets), projectId]);
+    syncProductionQuietly(db, projectId);
   } catch (error) {
     console.error("Silent asset refresh during screenplay failed (screenplay work unaffected):", error.message);
   } finally {
@@ -5326,6 +5329,7 @@ app.post("/api/ai-movie/stages/screenplay/beats/:index/approve", requireRole("ad
         referenceMaterialText
       );
       await db.query("UPDATE ai_movie_projects SET assets = $1, updated_at = now() WHERE id = $2", [JSON.stringify(assets), projectId]);
+    syncProductionQuietly(db, projectId);
     } catch (error) {
       console.error("Silent asset refresh failed after full screenplay approval (approval itself still succeeded):", error.message);
     }
@@ -6424,6 +6428,7 @@ app.post("/api/ai-movie/stages/:stage/approve", requireRole("admin"), async (req
       referenceMaterialText
     );
     await db.query("UPDATE ai_movie_projects SET assets = $1, updated_at = now() WHERE id = $2", [JSON.stringify(assets), projectId]);
+    syncProductionQuietly(db, projectId);
   } catch (error) {
     console.error("Silent asset refresh failed after approval (approval itself still succeeded):", error.message);
   }

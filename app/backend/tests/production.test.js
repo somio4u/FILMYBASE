@@ -6,7 +6,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import pg from "pg";
-import { ensureProductionSchema, ingestAgentOutput, listProductionAssets, listProductionIssues, getProductionOverview, nameKey } from "../production.js";
+import { ensureProductionSchema, ingestAgentOutput, listProductionAssets, listProductionIssues, getProductionOverview, nameKey, updateProductionAsset, dismissProductionIssue, seedTestProject, validateAssetEdits } from "../production.js";
 
 const db = new pg.Pool({ database: process.env.TEST_DB || "filmmaking_app_test", user: process.env.PGUSER || "root", host: process.env.PGHOST || "/var/run/postgresql" });
 
@@ -143,4 +143,103 @@ test("unknown project is not_found and one project never sees another's assets",
 test("Hindi names are matched as themselves; nameKey keeps Unicode letters", () => {
   assert.equal(nameKey("  रुद्र! "), "रुद्र");
   assert.equal(nameKey("The  Monk."), "the monk");
+});
+
+// --- Dossier edits, issues, and the test project --------------------------
+
+test("test project: seeds the Idea of an Idea screenplay + hand-written asset list, and is idempotent", async () => {
+  await db.query("DELETE FROM ai_movie_projects WHERE title LIKE '[TEST] Idea of an Idea%'");
+  const first = await seedTestProject(db);
+  assert.equal(first.created, true);
+  assert.equal(first.import.outcome, "imported");
+  const project = (await db.query("SELECT pasted_text, assets FROM ai_movie_projects WHERE id = $1", [first.projectId])).rows[0];
+  assert.match(project.pasted_text, /SCENE 10 — DREAM/);
+  assert.match(project.pasted_text, /अधूरे ख्याल/);
+
+  const assets = await listProductionAssets(db, first.projectId);
+  const byKind = (k) => assets.filter((a) => a.kind === k).length;
+  assert.equal(byKind("character"), 8);
+  assert.equal(byKind("prop"), 16);
+  assert.equal(byKind("location"), 11);
+  assert.equal(byKind("other"), 5);
+  const rahul = assets.find((a) => a.name === "Rahul Mohapatra");
+  assert.equal(rahul.code, "CHAR001");
+  assert.equal(rahul.details.costumes.length, 3);
+  const figure = assets.find((a) => a.name === "The Black Figure");
+  assert.ok(figure.aliases.includes("The Ideas"));
+  const issues = await listProductionIssues(db, first.projectId);
+  assert.ok(issues.some((i) => /CONFLICT: Scene 9/.test(i.message)), "screenplay contradiction is surfaced");
+  assert.ok(issues.some((i) => /DECISION: the silhouette is based on Spider-Man/.test(i.message)));
+
+  const again = await seedTestProject(db);
+  assert.equal(again.created, false);
+  assert.equal(again.projectId, first.projectId);
+  assert.equal(again.import.outcome, "duplicate");
+  assert.equal((await listProductionAssets(db, first.projectId)).length, 40);
+});
+
+test("editing: human text wins, revision goes up, null goes back to the agent, history is audited", async () => {
+  const pid = await freshProject(FIXTURE);
+  await ingestAgentOutput(db, pid);
+  const samir = (await listProductionAssets(db, pid, "character")).find((a) => a.name === "Samir");
+  const r1 = await updateProductionAsset(db, pid, samir.id, { expectedRevision: samir.revision, edits: { description: { en: "Edited by a person", hi: "संपादित" }, notes: "check with director" } });
+  assert.equal(r1.outcome, "updated");
+  assert.equal(r1.revision, samir.revision + 1);
+  let a = (await listProductionAssets(db, pid, "character")).find((x) => x.id === samir.id);
+  assert.equal(a.details.description.en, "Edited by a person");
+  assert.equal(a.importedOriginal.description.en, "Young engineer"); // original import kept
+  assert.equal(a.hasHumanEdits, true);
+
+  const r2 = await updateProductionAsset(db, pid, samir.id, { expectedRevision: r1.revision, edits: { description: null } });
+  assert.equal(r2.outcome, "updated");
+  a = (await listProductionAssets(db, pid, "character")).find((x) => x.id === samir.id);
+  assert.equal(a.details.description.en, "Young engineer");
+  const audits = (await db.query("SELECT action FROM production_audit_events WHERE project_id = $1 AND action = 'asset_edited'", [pid])).rows;
+  assert.equal(audits.length, 2);
+});
+
+test("editing: a stale revision is a safe conflict, and two simultaneous edits let exactly one win", async () => {
+  const pid = await freshProject(FIXTURE);
+  await ingestAgentOutput(db, pid);
+  const env = (await listProductionAssets(db, pid, "prop"))[0];
+  const results = await Promise.all([
+    updateProductionAsset(db, pid, env.id, { expectedRevision: env.revision, edits: { notes: "first" } }),
+    updateProductionAsset(db, pid, env.id, { expectedRevision: env.revision, edits: { notes: "second" } }),
+  ]);
+  assert.deepEqual(results.map((r) => r.outcome).sort(), ["conflict", "updated"]);
+  const stale = await updateProductionAsset(db, pid, env.id, { expectedRevision: env.revision, edits: { notes: "late" } });
+  assert.equal(stale.outcome, "conflict");
+  assert.equal(stale.currentRevision, env.revision + 1);
+});
+
+test("editing: adding scene links closes that missing-info issue; bad input and other projects' assets are refused", async () => {
+  const pid = await freshProject({ characters: [{ name: "Solo", visualDescription: { en: "x", hi: "" } }], properties: [], environments: [] });
+  await ingestAgentOutput(db, pid);
+  const solo = (await listProductionAssets(db, pid))[0];
+  assert.ok(solo.openIssues.some((i) => i.message === "which scenes it appears in"));
+  await updateProductionAsset(db, pid, solo.id, { expectedRevision: solo.revision, edits: { sceneRefs: ["Scene 1"] } });
+  const after = (await listProductionAssets(db, pid))[0];
+  assert.ok(!after.openIssues.some((i) => i.message === "which scenes it appears in"));
+
+  await assert.rejects(updateProductionAsset(db, pid, solo.id, { expectedRevision: after.revision, edits: { name: "hacked" } }), /cannot be edited/);
+  await assert.rejects(updateProductionAsset(db, pid, solo.id, { expectedRevision: after.revision, edits: { states: "not a list" } }), /list/);
+  await assert.rejects(updateProductionAsset(db, pid, solo.id, { edits: { notes: "x" } }), /expectedRevision/);
+  const other = await freshProject(FIXTURE);
+  assert.equal((await updateProductionAsset(db, other, solo.id, { expectedRevision: 1, edits: { notes: "x" } })).outcome, "not_found");
+  assert.throws(() => validateAssetEdits({ description: { en: "x".repeat(5000), hi: "" } }), /too long/);
+});
+
+test("a dismissed issue stays closed when a later import mentions it again", async () => {
+  const pid = await freshProject(FIXTURE);
+  await ingestAgentOutput(db, pid);
+  const issue = (await listProductionIssues(db, pid)).find((i) => i.category === "missing_info");
+  assert.equal((await dismissProductionIssue(db, pid, issue.id, { note: "not needed" })).outcome, "dismissed");
+  assert.equal((await dismissProductionIssue(db, pid, issue.id)).outcome, "not_found"); // already closed
+  const changed = structuredClone(FIXTURE);
+  changed.characters[1].visualDescription.en = "Changed so a new import happens";
+  await db.query("UPDATE ai_movie_projects SET assets = $1 WHERE id = $2", [JSON.stringify(changed), pid]);
+  await ingestAgentOutput(db, pid);
+  assert.ok(!(await listProductionIssues(db, pid)).some((i) => i.message === issue.message && i.asset_id === issue.asset_id));
+  const other = await freshProject(FIXTURE);
+  assert.equal((await dismissProductionIssue(db, other, issue.id)).outcome, "not_found"); // other project
 });

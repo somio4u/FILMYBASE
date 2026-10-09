@@ -657,6 +657,8 @@ const LABELS = {
     dialogueLanguageOdia: 'Dialogue: Odia',
     dialogueLanguageHindi: 'Dialogue: Hindi',
     floatingAgentTitle: 'Auto Screenplay Agent',
+    aduHello: "Hey bro! Adu's here 👋 Tap me to start an auto screenplay.",
+    aduBye: 'Bye bro! Type "activate adu" to call me back.',
     floatingAgentConceptPlaceholder: "What's your story, bro? e.g. \"A daughter-in-law and her mother-in-law are forced to run the household together after the son goes abroad for work.\"",
     floatingAgentStartButton: "Let's go",
     floatingAgentStarting: 'Getting going…',
@@ -1456,6 +1458,8 @@ const LABELS = {
     dialogueLanguageOdia: 'ଡାଇଲଗ୍: ଓଡ଼ିଆ',
     dialogueLanguageHindi: 'ଡାଇଲଗ୍: ହିନ୍ଦୀ',
     floatingAgentTitle: 'ଅଟୋ ସ୍କ୍ରିନପ୍ଲେ ଏଜେଣ୍ଟ',
+    aduHello: 'ହେ ଭାଇ! ଅଡୁ ଆସିଗଲା 👋 ଅଟୋ ସ୍କ୍ରିନପ୍ଲେ ପାଇଁ ମୋତେ ଟିପ।',
+    aduBye: 'ବାଏ ଭାଇ! ପୁଣି ଡାକିବାକୁ "activate adu" ଲେଖ।',
     floatingAgentConceptPlaceholder: 'ଭାଇ, ତୋ ଗପଟା କ\'ଣ? ଯେମିତି: "ପୁଅ ବିଦେଶରେ କାମ କରିବାକୁ ଗଲା ପରେ ବୋହୂ ଆଉ ଶାଶୁଙ୍କୁ ମିଶି ଘର ଚଳେଇବାକୁ ପଡ଼ୁଛି।"',
     floatingAgentStartButton: 'ଚାଲ ଆରମ୍ଭ କରିବା',
     floatingAgentStarting: 'ଆରମ୍ଭ ହଉଛି…',
@@ -2275,6 +2279,49 @@ const FLOATING_AGENT_FRAME_SETS = {
   failed: [1, 2, 3, 4].map((n) => `/agent/working/${n}.png`),
 }
 
+// Adu (the auto screenplay agent buddy) stays hidden until the admin types
+// "activate adu" in any writing box; "deactivate adu" sends him away. The
+// choice is remembered in this browser.
+const ADU_ACTIVE_STORAGE_KEY = 'filmybase.aduActive'
+const ADU_EVENT = 'filmybase:adu'
+const ADU_COMMAND = /\b(de)?activate\s+adu\b/i
+// Little tricks he does at random while idle (each is a CSS animation).
+const ADU_TRICKS = ['hop', 'flip', 'spin', 'wiggle', 'dance', 'stretch', 'peek', 'tilt', 'float', 'slide', 'heartbeat', 'look']
+
+function readAduActive() {
+  try {
+    return localStorage.getItem(ADU_ACTIVE_STORAGE_KEY) === '1'
+  } catch {
+    return false
+  }
+}
+
+// Watches every input / textarea on the page for the magic words. When
+// found, it switches Adu on/off and takes the words back out of the box
+// (through the browser's own value setter + an input event, so React's
+// state gets the cleaned text too).
+function useAduCommand() {
+  useEffect(() => {
+    function onInput(event) {
+      const el = event.target
+      if (!(el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement)) return
+      const match = el.value.match(ADU_COMMAND)
+      if (!match) return
+      const active = !match[1]
+      try { localStorage.setItem(ADU_ACTIVE_STORAGE_KEY, active ? '1' : '0') } catch { /* fine */ }
+      window.dispatchEvent(new CustomEvent(ADU_EVENT, { detail: { active } }))
+      setTimeout(() => {
+        const cleaned = el.value.replace(ADU_COMMAND, '').replace(/[ \t]{2,}/g, ' ').trim()
+        const proto = el instanceof HTMLTextAreaElement ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype
+        Object.getOwnPropertyDescriptor(proto, 'value').set.call(el, cleaned)
+        el.dispatchEvent(new Event('input', { bubbles: true }))
+      }, 0)
+    }
+    document.addEventListener('input', onInput, true)
+    return () => document.removeEventListener('input', onInput, true)
+  }, [])
+}
+
 function floatingAgentFramesFor(runStatus) {
   return FLOATING_AGENT_FRAME_SETS[runStatus] ?? FLOATING_AGENT_FRAME_SETS.idle
 }
@@ -2382,6 +2429,33 @@ function autoPipelineProgressPercent(stage) {
 // manually. Position is a per-viewer convenience (localStorage only); the
 // run itself lives server-side so a page refresh doesn't lose progress.
 function FloatingAgentWidget({ currentUser, t, onRunCompleted, onOpenProject }) {
+  useAduCommand()
+  // hidden | arriving | shown | leaving
+  const [aduPhase, setAduPhase] = useState(() => (readAduActive() ? 'shown' : 'hidden'))
+  const [aduBubble, setAduBubble] = useState(null)
+  const [trick, setTrick] = useState(null)
+  useEffect(() => {
+    let timer = null
+    function onAdu(event) {
+      clearTimeout(timer)
+      if (event.detail?.active) {
+        setAduPhase('arriving')
+        setAduBubble('hello')
+        timer = setTimeout(() => setAduPhase('shown'), 1400)
+      } else {
+        setAduPhase((phase) => (phase === 'hidden' ? 'hidden' : 'leaving'))
+        setAduBubble('bye')
+        timer = setTimeout(() => { setAduPhase('hidden'); setAduBubble(null) }, 1600)
+      }
+    }
+    window.addEventListener(ADU_EVENT, onAdu)
+    return () => { window.removeEventListener(ADU_EVENT, onAdu); clearTimeout(timer) }
+  }, [])
+  useEffect(() => {
+    if (aduBubble !== 'hello') return undefined
+    const timer = setTimeout(() => setAduBubble(null), 5000)
+    return () => clearTimeout(timer)
+  }, [aduBubble])
   const [position, setPosition] = useState(() => {
     try {
       const saved = localStorage.getItem(FLOATING_AGENT_POSITION_STORAGE_KEY)
@@ -2485,6 +2559,23 @@ function FloatingAgentWidget({ currentUser, t, onRunCompleted, onOpenProject }) 
     const interval = setInterval(() => setFrameIndex((i) => (i + 1) % frameCount), speed)
     return () => clearInterval(interval)
   }, [poseState])
+
+  // While on screen and not busy working, Adu does a random trick every 4–8 seconds.
+  useEffect(() => {
+    if (aduPhase !== 'shown' || poseState === 'working' || isDragging) return undefined
+    let timer = null
+    const schedule = () => {
+      timer = setTimeout(() => {
+        setTrick((previous) => {
+          const choices = ADU_TRICKS.filter((name) => name !== previous)
+          return choices[Math.floor(Math.random() * choices.length)]
+        })
+        schedule()
+      }, 4000 + Math.random() * 4000)
+    }
+    schedule()
+    return () => clearTimeout(timer)
+  }, [aduPhase, poseState, isDragging])
 
   // A visible, always-moving elapsed-time counter — independent of the
   // 4s status poll — so the panel never looks frozen even during a long
@@ -2675,20 +2766,43 @@ function FloatingAgentWidget({ currentUser, t, onRunCompleted, onOpenProject }) 
     }
   }
 
-  if (currentUser?.role !== 'admin') return null
+  if (currentUser?.role !== 'admin' || aduPhase === 'hidden') return null
 
   return (
     <>
       <button
         type="button"
-        className={`floating-agent-button floating-agent-pose-${poseState}`}
+        className={`floating-agent-button floating-agent-pose-${poseState} adu-${aduPhase}`}
         style={{ left: position.x, top: position.y }}
         onPointerDown={handlePointerDown}
         onClick={handleButtonClick}
         title={t.floatingAgentTitle}
       >
-        <img src={currentFrames[frameIndex] ?? currentFrames[0]} alt="" className="floating-agent-image" draggable="false" />
+        <span
+          key={trick ?? 'none'}
+          className={`adu-body${trick && aduPhase === 'shown' && poseState !== 'working' ? ` adu-trick-${trick}` : ''}`}
+          onAnimationEnd={(e) => { if (e.target === e.currentTarget) setTrick(null) }}
+        >
+          <img src={currentFrames[frameIndex] ?? currentFrames[0]} alt="" className="floating-agent-image" draggable="false" />
+        </span>
+        {(aduPhase === 'arriving' || poseState === 'done') && (
+          <span className="adu-sparkles" aria-hidden="true">
+            {Array.from({ length: 8 }, (_, i) => <i key={i} style={{ '--i': i }} />)}
+          </span>
+        )}
+        {poseState === 'working' && (
+          <span className="adu-orbit" aria-hidden="true"><i /><i /><i /></span>
+        )}
+        <span className="adu-shadow" aria-hidden="true" />
       </button>
+      {aduBubble && (
+        <div
+          className="adu-bubble"
+          style={{ left: Math.min(position.x, window.innerWidth - 240), top: position.y + (position.y < window.innerHeight / 2 ? 118 : -64) }}
+        >
+          {aduBubble === 'hello' ? t.aduHello : t.aduBye}
+        </div>
+      )}
 
       {isOpen && (() => {
         // Opens below the button when it's in the top half of the screen,
@@ -2697,7 +2811,7 @@ function FloatingAgentWidget({ currentUser, t, onRunCompleted, onOpenProject }) 
         const left = Math.min(Math.max(16, position.x), window.innerWidth - width - 16)
         const below = position.y < window.innerHeight / 2
         const panelStyle = below
-          ? { left, width, top: position.y + 84, maxHeight: Math.max(260, window.innerHeight - position.y - 100) }
+          ? { left, width, top: position.y + 112, maxHeight: Math.max(260, window.innerHeight - position.y - 128) }
           : { left, width, bottom: window.innerHeight - position.y + 12, maxHeight: Math.max(260, position.y - 28) }
         const notes = (status?.reviewNotes ?? []).map(parseAutoPipelineNote)
         const bestScoreFor = (stage) => {

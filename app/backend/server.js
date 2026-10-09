@@ -22,6 +22,7 @@ import { AsyncLocalStorage } from "async_hooks";
 import { marked } from "marked";
 import { ensureProductionSchema, registerProductionRoutes, syncProductionQuietly } from "./production.js";
 import { setupProductionMedia } from "./productionMedia.js";
+import { ensureDesignTaskSchema, registerDesignTaskRoutes } from "./designTasks.js";
 import { BIBLE_PASS_SCORE, designStoryBible, generateBrainJson, reviseBibleWithNote, storyBibleToMarkdown } from "./storyBrain.js";
 import cookieParser from "cookie-parser";
 import { createClient } from "@supabase/supabase-js";
@@ -18932,12 +18933,14 @@ process.on("uncaughtException", (err) => console.error("Uncaught exception:", er
 
 // Production workflow routes (agent data -> Production Dossier). See production.js.
 registerProductionRoutes(app, db, requireRole);
+registerDesignTaskRoutes(app, db, requireRole);
 
 // Schema self-heal runs before the server starts accepting traffic — worst
 // case (the database is briefly unreachable) it logs and the server still
 // starts, rather than blocking startup entirely.
 ensureAiMovieSchema()
   .then(() => ensureProductionSchema(db))
+  .then(() => ensureDesignTaskSchema(db))
   .then(() => productionMedia.ensureSchema())
   .catch((error) => console.error("Production schema setup failed:", error.message))
   .finally(() => {

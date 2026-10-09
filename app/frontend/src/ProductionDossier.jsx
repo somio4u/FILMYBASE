@@ -11,6 +11,7 @@ const KIND_TABS = [
   { key: 'prop', label: 'Properties' },
   { key: 'location', label: 'Locations' },
   { key: 'other', label: 'Other assets' },
+  { key: 'tasks', label: 'Designer tasks' },
   { key: 'issues', label: 'Issues' },
 ]
 
@@ -49,6 +50,8 @@ export default function ProductionDossier({ projectId, backendUrl, onProjectCrea
   const [assets, setAssets] = useState([])
   const [issues, setIssues] = useState([])
   const [storage, setStorage] = useState(null)
+  const [tasks, setTasks] = useState([])
+  const [selectedTaskId, setSelectedTaskId] = useState(null)
   const [tab, setTab] = useState('character')
   const [selectedId, setSelectedId] = useState(null)
   const [loadError, setLoadError] = useState(null)
@@ -60,16 +63,18 @@ export default function ProductionDossier({ projectId, backendUrl, onProjectCrea
   const reload = useCallback(async () => {
     if (!projectId) return
     try {
-      const [o, a, i, s] = await Promise.all([
+      const [o, a, i, s, tk] = await Promise.all([
         fetch(`${api}/${projectId}/overview`).then((r) => (r.ok ? r.json() : Promise.reject(r))),
         fetch(`${api}/${projectId}/assets`).then((r) => (r.ok ? r.json() : Promise.reject(r))),
         fetch(`${api}/${projectId}/issues`).then((r) => (r.ok ? r.json() : Promise.reject(r))),
         fetch(`${api}/storage/status`).then((r) => (r.ok ? r.json() : null)).catch(() => null),
+        fetch(`${api}/${projectId}/tasks`).then((r) => (r.ok ? r.json() : { tasks: [] })).catch(() => ({ tasks: [] })),
       ])
       setOverview(o)
       setAssets(a.assets)
       setIssues(i.issues)
       setStorage(s)
+      setTasks(tk.tasks)
       setLoadError(null)
     } catch {
       setLoadError('Could not load the dossier. Check your connection and try again.')
@@ -78,6 +83,7 @@ export default function ProductionDossier({ projectId, backendUrl, onProjectCrea
 
   useEffect(() => {
     setSelectedId(null)
+    setSelectedTaskId(null)
     setMessage(null)
     reload()
   }, [reload])
@@ -150,13 +156,13 @@ export default function ProductionDossier({ projectId, backendUrl, onProjectCrea
 
       <nav className="dossier-tabs" aria-label="Dossier sections">
         {KIND_TABS.map(({ key, label }) => {
-          const n = key === 'issues' ? issues.length : counts[key] ?? 0
+          const n = key === 'issues' ? issues.length : key === 'tasks' ? tasks.filter((t) => t.state !== 'cancelled').length : counts[key] ?? 0
           return (
             <button
               key={key}
               type="button"
               className={tab === key ? 'dossier-tab active' : 'dossier-tab'}
-              onClick={() => { setTab(key); setSelectedId(null) }}
+              onClick={() => { setTab(key); setSelectedId(null); setSelectedTaskId(null) }}
             >
               {label} <span className="dossier-tab-count">{n}</span>
             </button>
@@ -164,7 +170,17 @@ export default function ProductionDossier({ projectId, backendUrl, onProjectCrea
         })}
       </nav>
 
-      {tab === 'issues' ? (
+      {tab === 'tasks' ? (
+        <TasksView
+          tasks={tasks}
+          selectedTaskId={selectedTaskId}
+          onSelect={setSelectedTaskId}
+          projectId={projectId}
+          api={api}
+          onChanged={reload}
+          hasAssets={assets.length > 0}
+        />
+      ) : tab === 'issues' ? (
         <IssueList issues={issues} projectId={projectId} api={api} onChanged={reload} onOpenAsset={(assetId) => {
           const asset = assets.find((a) => a.id === assetId)
           if (asset) { setTab(asset.kind); setSelectedId(asset.id) }
@@ -190,7 +206,16 @@ export default function ProductionDossier({ projectId, backendUrl, onProjectCrea
           </ul>
           <div className="dossier-detail">
             {selected ? (
-              <AssetDetail key={`${selected.id}-${selected.revision}`} asset={selected} projectId={projectId} api={api} onSaved={reload} onIssueDismissed={reload} />
+              <AssetDetail
+                key={`${selected.id}-${selected.revision}`}
+                asset={selected}
+                projectId={projectId}
+                api={api}
+                onSaved={reload}
+                onIssueDismissed={reload}
+                task={tasks.find((t) => t.asset.id === selected.id && ['open', 'claimed', 'submitted', 'changes_requested'].includes(t.state)) ?? null}
+                onOpenTask={(taskId) => { setTab('tasks'); setSelectedTaskId(taskId) }}
+              />
             ) : (
               <p className="dossier-empty">Pick an item to see its details.</p>
             )}
@@ -273,7 +298,7 @@ function IssueList({ issues, projectId, api, onChanged, onOpenAsset }) {
   )
 }
 
-function AssetDetail({ asset, projectId, api, onSaved, onIssueDismissed }) {
+function AssetDetail({ asset, projectId, api, onSaved, onIssueDismissed, task, onOpenTask }) {
   const d = asset.details
   const [descEn, setDescEn] = useState(d.description?.en ?? '')
   const [descHi, setDescHi] = useState(d.description?.hi ?? '')
@@ -380,6 +405,18 @@ function AssetDetail({ asset, projectId, api, onSaved, onIssueDismissed }) {
         </label>
       </section>
 
+      <section className="dossier-section">
+        <h4>Designer task</h4>
+        {task ? (
+          <p>
+            <button type="button" className="dossier-link-button" onClick={() => onOpenTask(task.id)}>{task.code}</button>
+            {' '}is {TASK_STATE_TEXT[task.state] ?? task.state}{task.assignee ? ` (${task.assignee})` : ''}.
+          </p>
+        ) : (
+          <CreateTaskButton assetId={asset.id} projectId={projectId} api={api} onCreated={(taskId) => { onSaved(); onOpenTask(taskId) }} />
+        )}
+      </section>
+
       <div className="dossier-save-row">
         <button type="button" className="choose-button" onClick={save} disabled={isSaving}>
           {isSaving ? 'Saving…' : 'Save changes'}
@@ -423,5 +460,316 @@ function OpenIssuesForAsset({ assetId, issuesApi, onDismiss }) {
         </li>
       ))}
     </ul>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Designer tasks
+// ---------------------------------------------------------------------------
+
+const TASK_STATE_TEXT = {
+  open: 'open (nobody assigned)',
+  claimed: 'assigned',
+  submitted: 'submitted for review',
+  changes_requested: 'waiting for changes',
+  approved: 'approved',
+  cancelled: 'cancelled',
+}
+
+const PRIORITY_TEXT = { low: 'Low', normal: 'Normal', high: 'High' }
+
+function CreateTaskButton({ assetId, projectId, api, onCreated }) {
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState(null)
+  async function create() {
+    setBusy(true)
+    setError(null)
+    try {
+      const response = await fetch(`${api}/${projectId}/tasks`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ assetIds: [assetId] }),
+      })
+      const data = await response.json()
+      if (!response.ok) setError(data.error || 'Could not create the task.')
+      else if (data.created.length === 0) setError('This item already has a task.')
+      else onCreated(data.created[0].taskId)
+    } catch {
+      setError('Could not reach the server.')
+    }
+    setBusy(false)
+  }
+  return (
+    <div>
+      <button type="button" className="dossier-small-button" onClick={create} disabled={busy}>
+        {busy ? 'Creating…' : 'Create designer task'}
+      </button>
+      {error && <span className="dossier-bad" role="alert"> {error}</span>}
+    </div>
+  )
+}
+
+function TasksView({ tasks, selectedTaskId, onSelect, projectId, api, onChanged, hasAssets }) {
+  const [busy, setBusy] = useState(false)
+  const [notice, setNotice] = useState(null)
+  const selected = tasks.find((t) => t.id === selectedTaskId) ?? null
+
+  async function createAll() {
+    setBusy(true)
+    setNotice(null)
+    try {
+      const response = await fetch(`${api}/${projectId}/tasks`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}),
+      })
+      const data = await response.json()
+      if (!response.ok) setNotice(data.error || 'Could not create tasks.')
+      else setNotice(data.created.length === 0 ? 'Every item already has a task.' : `Created ${data.created.length} task${data.created.length === 1 ? '' : 's'}.`)
+      await onChanged()
+    } catch {
+      setNotice('Could not reach the server.')
+    }
+    setBusy(false)
+  }
+
+  const visible = tasks.filter((t) => t.state !== 'cancelled')
+  return (
+    <div>
+      <div className="dossier-task-actions">
+        <button type="button" className="choose-button" onClick={createAll} disabled={busy || !hasAssets}>
+          {busy ? 'Creating…' : 'Create tasks for every item without one'}
+        </button>
+        {notice && <span role="status" className="dossier-fine-print">{notice}</span>}
+      </div>
+      <div className="dossier-body">
+        <ul className="dossier-list" aria-label="Designer tasks">
+          {visible.length === 0 && <li className="dossier-empty">No designer tasks yet. Create them from here, or from an item’s page.</li>}
+          {visible.map((task) => (
+            <li key={task.id}>
+              <button type="button" className={task.id === selectedTaskId ? 'dossier-row active' : 'dossier-row'} onClick={() => onSelect(task.id)}>
+                <span className="dossier-code">{task.code}</span>
+                <span className="dossier-row-name">{task.asset.name}</span>
+                {task.needsDecisionCount > 0 && <span className="dossier-badge decisions" title="Open decisions">{task.needsDecisionCount}</span>}
+                {task.briefStale && <span className="dossier-badge stale" title="Brief is out of date">!</span>}
+              </button>
+            </li>
+          ))}
+        </ul>
+        <div className="dossier-detail">
+          {selected ? (
+            <TaskDetail key={selected.id} taskId={selected.id} listRevision={selected.revision} projectId={projectId} api={api} onChanged={onChanged} />
+          ) : (
+            <p className="dossier-empty">Pick a task to see its brief.</p>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function BriefSection({ tone, title, subtitle, children, empty }) {
+  return (
+    <section className={`dossier-brief-section brief-${tone}`}>
+      <h4>{title}</h4>
+      <p className="dossier-fine-print">{subtitle}</p>
+      {children ?? <p className="dossier-fine-print">{empty}</p>}
+    </section>
+  )
+}
+
+function TaskDetail({ taskId, listRevision, projectId, api, onChanged }) {
+  const [task, setTask] = useState(null)
+  const [error, setError] = useState(null)
+  const [busy, setBusy] = useState(false)
+  const [assignee, setAssignee] = useState('')
+  const [priority, setPriority] = useState('normal')
+  const [dueDate, setDueDate] = useState('')
+  const [comment, setComment] = useState('')
+  const [commentKind, setCommentKind] = useState('comment')
+  const [saved, setSaved] = useState(false)
+
+  const load = useCallback(async () => {
+    try {
+      const response = await fetch(`${api}/${projectId}/tasks/${taskId}`)
+      if (!response.ok) throw new Error('load failed')
+      const data = await response.json()
+      setTask(data)
+      setAssignee(data.assignee ?? '')
+      setPriority(data.priority)
+      setDueDate(data.dueDate ?? '')
+      setError(null)
+    } catch {
+      setError('Could not load this task.')
+    }
+  }, [api, projectId, taskId])
+
+  // Reload whenever the list says this task's revision moved on.
+  useEffect(() => { load() }, [load, listRevision])
+
+  // Runs a write, shows the server's message on failure, then reloads.
+  async function run(path, method, body, successNote) {
+    setBusy(true)
+    setError(null)
+    setSaved(false)
+    try {
+      const response = await fetch(`${api}/${projectId}/tasks/${taskId}${path}`, {
+        method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+      })
+      const data = await response.json()
+      if (!response.ok) setError(data.error || 'That did not work.')
+      else if (successNote) setSaved(successNote)
+      await load()
+      await onChanged()
+      return response.ok
+    } catch {
+      setError('Could not reach the server.')
+      return false
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  if (!task) return <p className="dossier-fine-print" role={error ? 'alert' : undefined}>{error ?? 'Loading…'}</p>
+  const brief = task.brief
+  const editable = ['open', 'claimed', 'changes_requested'].includes(task.state)
+
+  return (
+    <article className="dossier-task">
+      <h3>
+        <span className="dossier-code">{task.code}</span> {brief.asset.name}
+      </h3>
+      <p className="dossier-fine-print">
+        {brief.asset.code} · {brief.asset.kind} · {TASK_STATE_TEXT[task.state] ?? task.state}
+        {brief.sceneUsage.length > 0 ? ` · used in ${brief.sceneUsage.join(', ')}` : ''}
+      </p>
+
+      {task.briefStale && editable && (
+        <p className="dossier-message" role="status">
+          The item changed after this brief was written.{' '}
+          <button type="button" className="dossier-small-button" disabled={busy} onClick={() => run('/refresh-brief', 'POST', { expectedRevision: task.revision }, 'Brief updated.')}>
+            Update the brief
+          </button>
+        </p>
+      )}
+
+      <BriefSection tone="keep" title="MUST KEEP" subtitle="Facts from the screenplay and decisions a person confirmed. Do not change these.">
+        {brief.mustKeep.length > 0 && (
+          <ul>
+            {brief.mustKeep.map((m, i) => (
+              <li key={i}><strong>{m.label}:</strong> {m.text} <span className="dossier-fine-print">({m.source})</span></li>
+            ))}
+          </ul>
+        )}
+      </BriefSection>
+
+      <BriefSection tone="explore" title="DESIGNER MAY EXPLORE" subtitle="The screenplay leaves these open. Decide them in your design." empty="Nothing left open.">
+        {brief.mayExplore.length > 0 && <ul>{brief.mayExplore.map((m) => <li key={m.issueId}>{m.text}</li>)}</ul>}
+      </BriefSection>
+
+      <BriefSection tone="decision" title="NEEDS DECISION" subtitle="Open choices or contradictions. Ask before designing around these." empty="No open decisions.">
+        {brief.needsDecision.length > 0 && <ul>{brief.needsDecision.map((m) => <li key={m.issueId}>{m.text}</li>)}</ul>}
+      </BriefSection>
+
+      <section className="dossier-section">
+        <h4>What to deliver</h4>
+        <ul>{brief.deliverables.map((d, i) => <li key={i}>{d}</li>)}</ul>
+        <p className="dossier-fine-print">
+          Files: {brief.format.fileTypes.join(' / ')}, at least {brief.format.minimumLongSidePixels}px on the long side. Background: {brief.format.background}. {brief.format.note}
+        </p>
+      </section>
+
+      <section className="dossier-section">
+        <h4>Accepted when</h4>
+        <ul>{brief.acceptance.map((a, i) => <li key={i}>{a}</li>)}</ul>
+      </section>
+
+      {editable && (
+        <section className="dossier-section dossier-task-controls">
+          <h4>Assignment</h4>
+          <div className="dossier-controls-row">
+            <label className="dossier-field">
+              Assigned to
+              <input value={assignee} onChange={(e) => setAssignee(e.target.value)} maxLength={100} placeholder="Designer’s name" />
+            </label>
+            <label className="dossier-field">
+              Priority
+              <select value={priority} onChange={(e) => setPriority(e.target.value)}>
+                {Object.entries(PRIORITY_TEXT).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+              </select>
+            </label>
+            <label className="dossier-field">
+              Due date
+              <input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
+            </label>
+          </div>
+          <div className="dossier-save-row">
+            <button
+              type="button"
+              className="choose-button"
+              disabled={busy}
+              onClick={() => run('', 'PATCH', { expectedRevision: task.revision, assignee: assignee.trim() || null, priority, dueDate: dueDate || null }, 'Saved.')}
+            >
+              Save assignment
+            </button>
+            <button
+              type="button"
+              className="dossier-small-button"
+              disabled={busy}
+              onClick={() => { if (window.confirm('Cancel this task? You can create a new one for the same item later.')) run('/cancel', 'POST', { expectedRevision: task.revision }) }}
+            >
+              Cancel task
+            </button>
+            {saved && <span className="dossier-ok" role="status">{saved}</span>}
+          </div>
+        </section>
+      )}
+      {error && <p className="dossier-bad" role="alert">{error}</p>}
+
+      <section className="dossier-section">
+        <h4>Comments and questions</h4>
+        {task.comments.length === 0 && <p className="dossier-fine-print">No comments yet.</p>}
+        <ul className="dossier-comments">
+          {task.comments.map((c) => (
+            <li key={c.id}>
+              <span className="dossier-fine-print">{c.author_name || 'Someone'}{c.kind === 'clarification' ? ' · question' : ''} · {new Date(c.created_at).toLocaleString()}</span>
+              <p>{c.body}</p>
+            </li>
+          ))}
+        </ul>
+        <label className="dossier-field">
+          Add a comment
+          <textarea value={comment} onChange={(e) => setComment(e.target.value)} rows={2} maxLength={4000} />
+        </label>
+        <div className="dossier-save-row">
+          <select value={commentKind} onChange={(e) => setCommentKind(e.target.value)} aria-label="Comment type">
+            <option value="comment">Comment</option>
+            <option value="clarification">Question for the director</option>
+          </select>
+          <button
+            type="button"
+            className="dossier-small-button"
+            disabled={busy || !comment.trim()}
+            onClick={async () => {
+              const ok = await (async () => {
+                setBusy(true)
+                setError(null)
+                try {
+                  const response = await fetch(`${api}/${projectId}/tasks/${taskId}/comments`, {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ body: comment, kind: commentKind }),
+                  })
+                  if (!response.ok) setError((await response.json()).error || 'Could not add the comment.')
+                  return response.ok
+                } catch {
+                  setError('Could not reach the server.')
+                  return false
+                } finally {
+                  setBusy(false)
+                }
+              })()
+              if (ok) { setComment(''); await load(); await onChanged() }
+            }}
+          >
+            Add
+          </button>
+        </div>
+      </section>
+    </article>
   )
 }

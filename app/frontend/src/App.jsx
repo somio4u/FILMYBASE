@@ -12365,7 +12365,7 @@ function App() {
           )}
 
           {aiMovieView === 'dossier' && (
-            <div className="concept-page">
+            <div className="concept-page concept-page-wide">
               <ProductionDossier projectId={aiMovieProjectId} backendUrl={BACKEND_URL} />
             </div>
           )}

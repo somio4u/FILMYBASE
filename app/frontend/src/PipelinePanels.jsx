@@ -246,7 +246,7 @@ function ShotEditor({ shot, api, projectId, onChanged, setMessage, locked }) {
   )
 }
 
-export function ShotsPanel({ projectId, api, sceneId, onSceneChange, onChanged, pipeline }) {
+export function ShotsPanel({ projectId, api, sceneId, onSceneChange, onChanged, pipeline, section = 'shots' }) {
   const scenes = useScenes(api, projectId)
   const [shots, setShots] = useState([])
   const [message, setMessage] = useState(null)
@@ -290,15 +290,15 @@ export function ShotsPanel({ projectId, api, sceneId, onSceneChange, onChanged, 
                 <option value="rules">A simple cut (no AI)</option>
               </select>
             </label>
-            <button type="button" className="dossier-small-button" disabled={busy} onClick={() => {
+            {section === 'shots' && <button type="button" className="dossier-small-button" disabled={busy} onClick={() => {
               if (shots.length > 0 && !window.confirm('This replaces the current shots of this scene. Continue?')) return
               run('Cutting the scene', call(`${api}/${projectId}/scenes/${sceneId}/divide`, 'POST', { mode, replace: shots.length > 0 }))
-            }}>{shots.length > 0 ? 'Cut again' : 'Cut into shots'}</button>
-            <button type="button" className="dossier-small-button" disabled={busy || shots.length === 0} onClick={() => run('Writing the storyboard', call(`${api}/${projectId}/scenes/${sceneId}/storyboard`, 'POST', { overwrite: hasText && window.confirm('Rewrite the storyboard text of every shot (your edits will be replaced)?') }))}>Write storyboard text</button>
-            <button type="button" className="dossier-small-button" disabled={busy || !hasText} onClick={() => run('Saving', call(`${api}/${projectId}/scenes/${sceneId}/storyboard/approve`, 'POST', { approved: !approved }))}>{approved ? 'Un-approve storyboard' : 'Approve storyboard'}</button>
+            }}>{shots.length > 0 ? 'Cut again' : 'Cut into shots'}</button>}
+            {section === 'text' && <button type="button" className="dossier-small-button" disabled={busy || shots.length === 0} onClick={() => run('Writing the storyboard', call(`${api}/${projectId}/scenes/${sceneId}/storyboard`, 'POST', { overwrite: hasText && window.confirm('Rewrite the storyboard text of every shot (your edits will be replaced)?') }))}>Write storyboard text</button>}
+            {section === 'text' && <button type="button" className="dossier-small-button" disabled={busy || !hasText} onClick={() => run('Saving', call(`${api}/${projectId}/scenes/${sceneId}/storyboard/approve`, 'POST', { approved: !approved }))}>{approved ? 'Un-approve storyboard' : 'Approve storyboard'}</button>}
           </div>
-          <p className="dossier-fine-print">The text storyboard has no pictures. Approve it before making pictures for this scene.</p>
-          {shots.length === 0 ? <p className="dossier-empty">No shots yet. Press “Cut into shots”.</p> : (
+          <p className="dossier-fine-print">{section === 'shots' ? 'Each shot is one camera view. Edit, add, split or merge them until the scene is cut the way you want.' : 'The text storyboard has no pictures. Approve it before making pictures for this scene.'}</p>
+          {shots.length === 0 ? <p className="dossier-empty">No shots yet. Use the “Shot division” tab first.</p> : (
             <ol className="pipe-shots">{shots.map((s) => <ShotEditor key={`${s.id}-${s.revision}`} shot={s} api={api} projectId={projectId} onChanged={changed} setMessage={setMessage} />)}</ol>
           )}
         </>
@@ -342,7 +342,7 @@ function ArtItem({ asset, gens, backendUrl, api, projectId, onChanged, makeKind,
   )
 }
 
-export function ArtPanel({ projectId, api, backendUrl, assets, pipeline, onChanged }) {
+export function ArtPanel({ projectId, api, backendUrl, assets, pipeline, onChanged, only = null }) {
   const [message, setMessage] = useState(null)
   const { gens, load } = useGenerations(api, projectId, '', onChanged)
   const changed = () => { load(); if (onChanged) onChanged() }
@@ -360,9 +360,9 @@ export function ArtPanel({ projectId, api, backendUrl, assets, pipeline, onChang
 
   return (
     <div className="pipe-panel">
-      <p className="dossier-fine-print">Make a reference picture for each character first, then props, then places. Approve one picture per item — these approved pictures are what every shot picture is drawn from.</p>
+      <p className="dossier-fine-print">Make a reference picture for each item and approve one per item — these approved pictures are what every shot picture is drawn from. Order: characters first, then props, then environments.</p>
       <Notice message={message} />
-      {ART_GROUPS.map((group) => {
+      {ART_GROUPS.filter((g) => !only || g.kind === only).map((group) => {
         const list = assets.filter((a) => a.kind === group.kind)
         if (list.length === 0) return null
         return (
@@ -377,7 +377,7 @@ export function ArtPanel({ projectId, api, backendUrl, assets, pipeline, onChang
           </section>
         )
       })}
-      {assets.length === 0 && <p className="dossier-empty">The dossier is empty. Import from the agent first.</p>}
+      {assets.filter((a) => !only || a.kind === only).length === 0 && <p className="dossier-empty">Nothing of this kind in the dossier yet. Import from the agent first (Production Dossier).</p>}
     </div>
   )
 }

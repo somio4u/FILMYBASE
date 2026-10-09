@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useContext, createContext, Fragment } from
 import { createPortal } from 'react-dom'
 import './App.css'
 import { AI_ACTIVITY_EVENT, AI_WARP_EVENT } from './AiBackground.jsx'
+import PipelineStage, { PIPELINE_STAGES } from './PipelineStage.jsx'
 import ProductionDossier from './ProductionDossier.jsx'
 import DesignerWorkspace from './DesignerWorkspace.jsx'
 
@@ -11334,6 +11335,16 @@ function App() {
                   Production Dossier
                 </button>
               )}
+              {aiMovieProjectId && Object.entries(PIPELINE_STAGES).map(([key, info]) => (
+                <button
+                  key={key}
+                  className={aiMovieView === key ? 'agent-header active' : 'agent-header'}
+                  onClick={() => { setAiMovieView((prev) => (prev === key ? 'editor' : key)); setIsSidebarOpen(false) }}
+                >
+                  <span className="agent-expand-icon">▸</span>
+                  {info.title}
+                </button>
+              ))}
               <button className="agent-header active">
                 <span className="agent-expand-icon expanded">▸</span>
                 {t.storyAgentLabel}
@@ -12384,6 +12395,12 @@ function App() {
           {aiMovieView === 'dossier' && (
             <div className="concept-page concept-page-wide">
               <ProductionDossier projectId={aiMovieProjectId} backendUrl={BACKEND_URL} />
+            </div>
+          )}
+
+          {Object.keys(PIPELINE_STAGES).includes(aiMovieView) && (
+            <div className="concept-page concept-page-wide">
+              <PipelineStage key={aiMovieView} stage={aiMovieView} projectId={aiMovieProjectId} backendUrl={BACKEND_URL} />
             </div>
           )}
 

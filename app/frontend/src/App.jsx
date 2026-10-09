@@ -554,6 +554,10 @@ const LABELS = {
     ageLabel: 'Age',
     genderMaleLabel: 'Male',
     genderFemaleLabel: 'Female',
+    breakdownLocationEnPlaceholder: 'Location (in English)',
+    breakdownNotesEnPlaceholder: 'Notes (in English)',
+    breakdownLabelPlaceholder: 'Name',
+    clapboardYearPlaceholder: 'YYYY',
     unspecifiedLabel: 'Not set',
     directorOverviewHeading: 'How production is going',
     directorOverviewCastLabel: 'Cast',
@@ -1349,6 +1353,10 @@ const LABELS = {
     ageLabel: 'ବୟସ',
     genderMaleLabel: 'ପୁରୁଷ',
     genderFemaleLabel: 'ମହିଳା',
+    breakdownLocationEnPlaceholder: 'ଲୋକେସନ୍ (ଇଂରାଜୀରେ ଲେଖ)',
+    breakdownNotesEnPlaceholder: 'ନୋଟ୍ (ଇଂରାଜୀରେ ଲେଖ)',
+    breakdownLabelPlaceholder: 'ନାମ',
+    clapboardYearPlaceholder: 'ବର୍ଷ',
     unspecifiedLabel: 'ଠିକ୍ ହେଇନି',
     directorOverviewHeading: 'ପ୍ରଡକ୍ସନ୍ କେମିତି ଚାଲିଛି',
     directorOverviewCastLabel: 'କାଷ୍ଟ',
@@ -1679,6 +1687,14 @@ const LABELS = {
     },
     sceneTurnLabel: 'ମୋଡ଼',
   },
+}
+
+// Gender values are stored in English ('Male' / 'Female' / 'Unspecified'); show them in the chosen language.
+function genderText(gender, t) {
+  if (gender === 'Male') return t.genderMaleLabel
+  if (gender === 'Female') return t.genderFemaleLabel
+  if (!gender || gender === 'Unspecified') return t.unspecifiedLabel
+  return gender
 }
 
 function formatBadgeText(format, t) {
@@ -4793,7 +4809,7 @@ function ClapboardFullScreen({ t, BACKEND_URL, conceptId, sceneListId, sceneOpti
                 className="clapboard-cell-input clapboard-date-input clapboard-date-year"
                 value={dateYear}
                 onChange={(e) => setDateYear(e.target.value.replace(/\D/g, '').slice(0, 4))}
-                placeholder="YYYY"
+                placeholder={t.clapboardYearPlaceholder}
               />
             </div>
             <div className="clapboard-daynight-cell">
@@ -5664,7 +5680,7 @@ function DirectorOverviewPanel({ sceneListId, t, BACKEND_URL }) {
                     .map((c) => (
                       <span key={c.label} className="director-overview-chip pending">
                         {c.label}
-                        {c.age ? ` (${c.age}${c.gender && c.gender !== 'Unspecified' ? `, ${c.gender}` : ''})` : ''}
+                        {c.age ? ` (${c.age}${c.gender && c.gender !== 'Unspecified' ? `, ${genderText(c.gender, t)}` : ''})` : ''}
                       </span>
                     ))}
                 </div>
@@ -9621,7 +9637,7 @@ function App() {
                     <>
                       <strong className={shootStatus ? `artist-name-${shootStatus}` : ''}>{item.label}</strong>{' '}
                       <span className="breakdown-item-meta">
-                        ({item.gender || t.unspecifiedLabel}, {item.age || t.unspecifiedLabel})
+                        ({genderText(item.gender, t)}, {item.age || t.unspecifiedLabel})
                       </span>
                       {formatEpisodeNumbers(item, t) && (
                         <span className="breakdown-item-episodes">{formatEpisodeNumbers(item, t)}</span>
@@ -9877,7 +9893,7 @@ function App() {
                   <>
                     <div className="breakdown-edit-field-pair">
                       <MicInput
-                        placeholder="Location (EN)"
+                        placeholder={t.breakdownLocationEnPlaceholder}
                         value={item.location.en}
                         onChange={(e) =>
                           handleBreakdownDraftFieldChange(index, (it) => ({
@@ -9932,7 +9948,7 @@ function App() {
                     </div>
                     <div className="breakdown-edit-field-pair">
                       <MicTextarea
-                        placeholder="Notes (EN)"
+                        placeholder={t.breakdownNotesEnPlaceholder}
                         value={item.notes.en}
                         onChange={(e) =>
                           handleBreakdownDraftFieldChange(index, (it) => ({
@@ -10008,7 +10024,7 @@ function App() {
                 ) : category === 'artistList' ? (
                   <>
                     <MicInput
-                      placeholder="Label"
+                      placeholder={t.breakdownLabelPlaceholder}
                       value={item.label}
                       onChange={(e) =>
                         handleBreakdownDraftFieldChange(index, (it) => ({ ...it, label: e.target.value }))
@@ -10035,7 +10051,7 @@ function App() {
                     </div>
                     <div className="breakdown-edit-field-pair">
                       <MicTextarea
-                        placeholder="Notes (EN)"
+                        placeholder={t.breakdownNotesEnPlaceholder}
                         value={item.notes.en}
                         onChange={(e) =>
                           handleBreakdownDraftFieldChange(index, (it) => ({
@@ -10069,7 +10085,7 @@ function App() {
                 ) : (
                   <>
                     <MicInput
-                      placeholder="Label"
+                      placeholder={t.breakdownLabelPlaceholder}
                       value={item.label}
                       onChange={(e) =>
                         handleBreakdownDraftFieldChange(index, (it) => ({ ...it, label: e.target.value }))
@@ -10077,7 +10093,7 @@ function App() {
                     />
                     <div className="breakdown-edit-field-pair">
                       <MicTextarea
-                        placeholder="Notes (EN)"
+                        placeholder={t.breakdownNotesEnPlaceholder}
                         value={item.notes.en}
                         onChange={(e) =>
                           handleBreakdownDraftFieldChange(index, (it) => ({

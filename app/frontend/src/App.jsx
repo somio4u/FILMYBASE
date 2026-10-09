@@ -204,7 +204,8 @@ const LABELS = {
     changesChatEmptyNote: "Type a change below — it'll show up here, along with what happened.",
     changesChatWorkingLabel: 'On it, bro',
     generateIdeaButton: 'Give me an idea',
-    micButtonTitle: 'Talk instead of typing',
+    micButtonTitle: "Talk instead of typing — Odia, Hindi or English, I'll write it down",
+    micTranscribingTitle: 'Writing down what you said…',
     micButtonListeningTitle: "I'm listening… click to stop",
     micLanguageSelectTitle: "Which language will you speak?",
     micLanguageEnglish: 'EN',
@@ -424,6 +425,20 @@ const LABELS = {
     downloadFormatWord: 'Word',
     scriptRequestChangesWhileEditingNote: 'Want the AI to change it? First save or cancel your edit below the scene.',
     productionStatusLoadError: "Couldn't load the production status — refresh and try again.",
+    closeLabel: 'Close',
+    voiceButtonLabel: 'Speak here',
+    voiceButtonHint: 'Click here to speak',
+    voiceTargetScene: (number) => `Goes into scene ${number}`,
+    voiceListeningLabel: "I'm listening…",
+    voiceListeningHint: 'Go ahead — say it the way you see it. Odia, Hindi or English, all fine.',
+    voiceStopLabel: 'Click when you’re done',
+    voiceThinkingLabel: 'Writing it in…',
+    voiceWritingLabel: 'Got it — turning that into screenplay lines…',
+    voiceAdded: (count, transcript) => `Added ${count} line${count === 1 ? '' : 's'} to the scene. I heard: “${transcript}”. Not right? Hit ↶ Undo.`,
+    voiceMicBlocked: "I can't hear you — allow the microphone for this site in your browser, then try again.",
+    voiceNothingHeard: "Didn't catch anything — try again and speak a little longer.",
+    voiceBlockedWhileEditing: 'Save or cancel your edit first, then speak.',
+    voiceBlockedWhileBusy: 'Hang on — the AI is busy with this script.',
     sceneUndoButton: '↶ Undo',
     sceneRedoButton: '↷ Redo',
     sceneUndoHint: 'Take this scene back to how it was before',
@@ -958,7 +973,8 @@ const LABELS = {
     changesChatEmptyNote: 'ତଳେ ଚେଞ୍ଜ ଲେଖ — ସେଇଟା ଏଠି ଦେଖାଯିବ, ଆଉ କ\'ଣ ହେଲା ତାହା ବି।',
     changesChatWorkingLabel: 'କାମ ଚାଲିଛି ଭାଇ',
     generateIdeaButton: 'ଆଇଡିଆ ବନେଇଦେ',
-    micButtonTitle: 'ଟାଇପ୍ ନ କରି କହିଦେ',
+    micButtonTitle: 'ଟାଇପ୍ ନ କରି କହିଦେ — ଓଡ଼ିଆ, ହିନ୍ଦୀ ବା ଇଂରାଜୀ, ମୁଁ ଲେଖିଦେବି',
+    micTranscribingTitle: 'ତୁ ଯାହା କହିଲୁ ଲେଖୁଛି…',
     micButtonListeningTitle: 'ଶୁଣୁଛି… ବନ୍ଦ କରିବାକୁ କ୍ଲିକ୍ କର',
     micLanguageSelectTitle: 'କେଉଁ ଭାଷାରେ କହିବୁ?',
     micLanguageEnglish: 'EN',
@@ -1178,6 +1194,20 @@ const LABELS = {
     downloadFormatWord: 'Word',
     scriptRequestChangesWhileEditingNote: 'AI କୁ ବଦଳେଇବାକୁ କହିବୁ? ଆଗେ ତଳେ ତୋ ଏଡିଟ୍ ସେଭ୍ କର, ନ ହେଲେ ବାତିଲ୍ କର।',
     productionStatusLoadError: 'ପ୍ରଡକ୍ସନ୍ ଷ୍ଟାଟସ୍ ଲୋଡ୍ ହେଲାନି — ପେଜ୍ ରିଫ୍ରେସ୍ କରି ଆଉ ଥରେ ଦେଖ।',
+    closeLabel: 'ବନ୍ଦ କର',
+    voiceButtonLabel: 'ଏଠି କହ',
+    voiceButtonHint: 'କହିବାକୁ ଏଠି ଟିପ',
+    voiceTargetScene: (number) => `ସିନ୍ ${number} ରେ ଯିବ`,
+    voiceListeningLabel: 'ଶୁଣୁଛି…',
+    voiceListeningHint: 'କହ ଭାଇ — ଯେମିତି ଦେଖୁଛୁ ସେମିତି କହ। ଓଡ଼ିଆ, ହିନ୍ଦୀ ବା ଇଂରାଜୀ, ସବୁ ଚଳିବ।',
+    voiceStopLabel: 'ସରିଲେ ଟିପ',
+    voiceThinkingLabel: 'ଲେଖୁଛି…',
+    voiceWritingLabel: 'ବୁଝିଗଲି — ସ୍କ୍ରିନପ୍ଲେ ଲାଇନ୍ ବନଉଛି…',
+    voiceAdded: (count, transcript) => `ସିନ୍‌ରେ ${count}ଟା ଲାଇନ୍ ଯୋଡ଼ିଦେଲି। ମୁଁ ଶୁଣିଲି: “${transcript}”। ଠିକ୍ ନାହିଁ? ↶ ପଛକୁ ଫେର ଦବା।`,
+    voiceMicBlocked: 'ତୋ କଥା ଶୁଣିପାରୁନି — ବ୍ରାଉଜରରେ ଏ ସାଇଟ୍ ପାଇଁ ମାଇକ୍ ଅନୁମତି ଦେ, ତା\'ପରେ ଆଉ ଥରେ ଚେଷ୍ଟା କର।',
+    voiceNothingHeard: 'କିଛି ଶୁଣିପାରିଲିନି — ଆଉ ଥରେ ଟିକେ ଲମ୍ବା କରି କହ।',
+    voiceBlockedWhileEditing: 'ଆଗେ ତୋ ଏଡିଟ୍ ସେଭ୍ କର ବା ବାତିଲ୍ କର, ତା\'ପରେ କହ।',
+    voiceBlockedWhileBusy: 'ଟିକେ ରହ — AI ଏ ସ୍କ୍ରିପ୍ଟରେ ବ୍ୟସ୍ତ ଅଛି।',
     sceneUndoButton: '↶ ପଛକୁ ଫେର',
     sceneRedoButton: '↷ ପୁଣି ଆଗକୁ',
     sceneUndoHint: 'ଏ ସିନ୍ ଆଗରୁ ଯେମିତି ଥିଲା, ସେମିତି କରିଦେ',
@@ -2949,6 +2979,190 @@ function MovieBreakdownFreshnessNote({ sceneListId, t }) {
   return stale ? <p className="feedback-note movie-breakdown-stale-note">{t.movieBreakdownStaleNote}</p> : null
 }
 
+// "Speak here": a glowing button on the screenplay screen. The writer talks
+// (mostly Odia, sometimes Hindi / English); the recording goes to the AI,
+// which writes it into the selected scene as proper screenplay lines — saved
+// as a new version, so ↶ Undo takes it back. While listening, the glow
+// follows the writer's voice; the browser's live captions show as a preview
+// where the browser can do them.
+const VOICE_MAX_SECONDS = 180
+
+function VoiceWriterButton({ t, sceneListId, episodeIndex, sceneIndex, sceneNumber, blockedNote, onAdded }) {
+  const [phase, setPhase] = useState('idle') // idle | listening | writing
+  const [liveText, setLiveText] = useState('')
+  const [message, setMessage] = useState(null) // { kind: 'done' | 'error', text }
+  const [seconds, setSeconds] = useState(0)
+  const buttonRef = useRef(null)
+  const sessionRef = useRef(null)
+
+  useEffect(() => () => sessionRef.current?.cleanup(), [])
+
+  async function startListening() {
+    setMessage(null)
+    setLiveText('')
+    let stream
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+    } catch {
+      setMessage({ kind: 'error', text: t.voiceMicBlocked })
+      return
+    }
+    const mimeType = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4', 'audio/ogg'].find((type) => window.MediaRecorder?.isTypeSupported?.(type)) || ''
+    const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined)
+    const chunks = []
+    recorder.ondataavailable = (event) => event.data.size && chunks.push(event.data)
+
+    // The glow follows the voice: mic level → --voice-level on the button.
+    const audioContext = new (window.AudioContext || window.webkitAudioContext)()
+    const analyser = audioContext.createAnalyser()
+    analyser.fftSize = 512
+    audioContext.createMediaStreamSource(stream).connect(analyser)
+    const samples = new Uint8Array(analyser.fftSize)
+    let levelFrame = null
+    const updateLevel = () => {
+      analyser.getByteTimeDomainData(samples)
+      let peak = 0
+      for (const sample of samples) peak = Math.max(peak, Math.abs(sample - 128))
+      buttonRef.current?.style.setProperty('--voice-level', Math.min(1, peak / 60).toFixed(2))
+      levelFrame = requestAnimationFrame(updateLevel)
+    }
+    updateLevel()
+
+    // Live captions where the browser offers them (a preview only — the AI
+    // listens to the actual recording).
+    const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition
+    let recognition = null
+    if (Recognition) {
+      try {
+        recognition = new Recognition()
+        recognition.lang = 'or-IN'
+        recognition.interimResults = true
+        recognition.continuous = true
+        recognition.onresult = (event) => setLiveText(Array.from(event.results).map((r) => r[0].transcript).join(' '))
+        recognition.onerror = () => {}
+        recognition.start()
+      } catch {
+        recognition = null
+      }
+    }
+
+    const startedAt = Date.now()
+    const timer = setInterval(() => {
+      const elapsed = Math.round((Date.now() - startedAt) / 1000)
+      setSeconds(elapsed)
+      if (elapsed >= VOICE_MAX_SECONDS) stopListening()
+    }, 500)
+
+    const cleanup = () => {
+      clearInterval(timer)
+      if (levelFrame) cancelAnimationFrame(levelFrame)
+      try { recognition?.stop() } catch { /* already stopped */ }
+      stream.getTracks().forEach((track) => track.stop())
+      audioContext.close().catch(() => {})
+      buttonRef.current?.style.setProperty('--voice-level', '0')
+    }
+    sessionRef.current = { recorder, chunks, cleanup, mimeType: recorder.mimeType || mimeType || 'audio/webm' }
+    recorder.start(250)
+    setSeconds(0)
+    setPhase('listening')
+  }
+
+  function stopListening() {
+    const session = sessionRef.current
+    if (!session || session.recorder.state === 'inactive') return
+    session.recorder.onstop = () => {
+      session.cleanup()
+      sessionRef.current = null
+      sendRecording(new Blob(session.chunks, { type: session.mimeType }), session.mimeType)
+    }
+    session.recorder.stop()
+  }
+
+  async function sendRecording(blob, mimeType) {
+    if (blob.size < 1500) {
+      setPhase('idle')
+      setMessage({ kind: 'error', text: t.voiceNothingHeard })
+      return
+    }
+    setPhase('writing')
+    try {
+      const audio = await new Promise((resolve, reject) => {
+        const reader = new FileReader()
+        reader.onload = () => resolve(String(reader.result).split(',')[1] ?? '')
+        reader.onerror = reject
+        reader.readAsDataURL(blob)
+      })
+      const response = await fetch(`${BACKEND_URL}/api/screenplay/scene/voice`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sceneListId, episodeIndex, sceneIndex, audio, mimeType, liveText }),
+      })
+      const data = await response.json()
+      if (!response.ok) {
+        setMessage({ kind: 'error', text: data.error || t.genericError })
+      } else {
+        onAdded(data.scene)
+        setMessage({ kind: 'done', text: t.voiceAdded(data.added, data.transcript) })
+      }
+    } catch {
+      setMessage({ kind: 'error', text: t.genericError })
+    }
+    setLiveText('')
+    setPhase('idle')
+  }
+
+  const blocked = Boolean(blockedNote) && phase === 'idle'
+  return (
+    <div className="voice-writer">
+      {(phase !== 'idle' || message || blocked) && (
+        <div className={`voice-writer-bubble${message?.kind === 'error' ? ' is-error' : ''}`}>
+          {phase === 'listening' && <p>{liveText || t.voiceListeningHint}</p>}
+          {phase === 'writing' && <p>{t.voiceWritingLabel}</p>}
+          {phase === 'idle' && message && (
+            <>
+              <p>{message.text}</p>
+              <button type="button" className="voice-writer-bubble-close" onClick={() => setMessage(null)} aria-label={t.closeLabel}>×</button>
+            </>
+          )}
+          {phase === 'idle' && !message && blocked && <p>{blockedNote}</p>}
+        </div>
+      )}
+      <button
+        ref={buttonRef}
+        type="button"
+        className={`voice-writer-button is-${phase}`}
+        onClick={phase === 'idle' ? startListening : phase === 'listening' ? stopListening : undefined}
+        disabled={phase === 'writing' || blocked}
+        aria-label={phase === 'listening' ? t.voiceStopLabel : t.voiceButtonHint}
+      >
+        <span className="voice-writer-orb" aria-hidden="true" />
+        <span className="voice-writer-text">
+          {phase === 'idle' && (
+            <>
+              <strong>{t.voiceButtonLabel}</strong>
+              <span>{t.voiceButtonHint}</span>
+              <small>{t.voiceTargetScene(sceneNumber)}</small>
+            </>
+          )}
+          {phase === 'listening' && (
+            <>
+              <strong>{t.voiceListeningLabel}</strong>
+              <span>{t.voiceStopLabel}</span>
+              <small>{`${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`}</small>
+            </>
+          )}
+          {phase === 'writing' && (
+            <>
+              <strong>{t.voiceThinkingLabel}</strong>
+              <span>{t.voiceTargetScene(sceneNumber)}</span>
+            </>
+          )}
+        </span>
+      </button>
+    </div>
+  )
+}
+
 function MovieScreenplayWorkspace({
   sceneList, episodes, t, language, screenplay, scriptTheme, onChangeScriptTheme, onSceneSaved, onReloadScenes, onSceneListChanged,
 }) {
@@ -3542,6 +3756,22 @@ function MovieScreenplayWorkspace({
           </div>
         )}
       </div>
+
+      {screenplay && scene && (
+        <VoiceWriterButton
+          key={`${sceneList.id}-${group.episodeIndex}-${sceneIndex}`}
+          t={t}
+          sceneListId={sceneList.id}
+          episodeIndex={group.episodeIndex}
+          sceneIndex={sceneIndex}
+          sceneNumber={numberOf(scene, sceneIndex)}
+          blockedNote={editing ? t.voiceBlockedWhileEditing : isAiWriting || isChecking || isChangingScenes ? t.voiceBlockedWhileBusy : null}
+          onAdded={(data) => {
+            setEditFixes(null)
+            onSceneSaved?.(keyOf(sceneIndex), data)
+          }}
+        />
+      )}
 
       {createPortal(
         <div className={`script-letterbox-layer${isAiWriting ? ' is-ai-writing' : ''}`} aria-hidden="true">
@@ -4397,58 +4627,102 @@ const DICTATION_BCP47_BY_LANGUAGE = { en: 'en-IN', hi: 'hi-IN', or: 'or-IN' }
 // no server round-trip). Renders nothing if the browser doesn't support it
 // (Safari/Firefox), rather than showing a mic that can't work. English and
 // Hindi recognition are both reliable; Odia support varies by device/OS.
-function MicButton({ t, dictationLanguage, onDictationLanguageChange, onResult, className, wrapClassName, title, listeningTitle }) {
-  const [isListening, setIsListening] = useState(false)
-  const recognitionRef = useRef(null)
+// Every 🎤 in the app. It records the person's voice and the AI writes down
+// what they said — Odia, Hindi or English, or a mix — each in its own script,
+// so there's no language to pick first. (dictationLanguage /
+// onDictationLanguageChange are still passed by older call sites; unused.)
+function MicButton({ t, onResult, className, wrapClassName, title, listeningTitle }) {
+  const [phase, setPhase] = useState('idle') // idle | listening | transcribing
+  const sessionRef = useRef(null)
+  const buttonRef = useRef(null)
 
-  const SpeechRecognitionImpl =
-    typeof window !== 'undefined' ? window.SpeechRecognition || window.webkitSpeechRecognition : null
+  useEffect(() => () => sessionRef.current?.cleanup(), [])
 
-  function handleClick() {
-    if (!SpeechRecognitionImpl) return
+  if (typeof window === 'undefined' || !window.MediaRecorder || !navigator.mediaDevices?.getUserMedia) return null
 
-    if (isListening) {
-      recognitionRef.current?.stop()
+  async function start() {
+    let stream
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+    } catch {
+      window.alert(t.voiceMicBlocked)
       return
     }
-
-    const recognition = new SpeechRecognitionImpl()
-    recognition.lang = DICTATION_BCP47_BY_LANGUAGE[dictationLanguage] ?? 'en-IN'
-    recognition.interimResults = false
-    recognition.maxAlternatives = 1
-    recognition.onresult = (event) => {
-      const transcript = Array.from(event.results)
-        .map((result) => result[0].transcript)
-        .join(' ')
-        .trim()
-      if (transcript) onResult(transcript)
+    const mimeType = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4', 'audio/ogg'].find((type) => window.MediaRecorder.isTypeSupported?.(type)) || ''
+    const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined)
+    const chunks = []
+    recorder.ondataavailable = (event) => event.data.size && chunks.push(event.data)
+    const audioContext = new (window.AudioContext || window.webkitAudioContext)()
+    const analyser = audioContext.createAnalyser()
+    analyser.fftSize = 512
+    audioContext.createMediaStreamSource(stream).connect(analyser)
+    const samples = new Uint8Array(analyser.fftSize)
+    let frame = null
+    const level = () => {
+      analyser.getByteTimeDomainData(samples)
+      let peak = 0
+      for (const sample of samples) peak = Math.max(peak, Math.abs(sample - 128))
+      buttonRef.current?.style.setProperty('--voice-level', Math.min(1, peak / 60).toFixed(2))
+      frame = requestAnimationFrame(level)
     }
-    recognition.onend = () => setIsListening(false)
-    recognition.onerror = () => setIsListening(false)
-    recognitionRef.current = recognition
-    recognition.start()
-    setIsListening(true)
+    level()
+    const limit = setTimeout(stop, VOICE_MAX_SECONDS * 1000)
+    const cleanup = () => {
+      clearTimeout(limit)
+      if (frame) cancelAnimationFrame(frame)
+      stream.getTracks().forEach((track) => track.stop())
+      audioContext.close().catch(() => {})
+      buttonRef.current?.style.setProperty('--voice-level', '0')
+    }
+    sessionRef.current = { recorder, chunks, cleanup, mimeType: recorder.mimeType || mimeType || 'audio/webm' }
+    recorder.start(250)
+    setPhase('listening')
   }
 
-  if (!SpeechRecognitionImpl) return null
+  function stop() {
+    const session = sessionRef.current
+    if (!session || session.recorder.state === 'inactive') return
+    session.recorder.onstop = async () => {
+      session.cleanup()
+      sessionRef.current = null
+      const blob = new Blob(session.chunks, { type: session.mimeType })
+      if (blob.size < 1500) {
+        setPhase('idle')
+        return
+      }
+      setPhase('transcribing')
+      try {
+        const audio = await new Promise((resolve, reject) => {
+          const reader = new FileReader()
+          reader.onload = () => resolve(String(reader.result).split(',')[1] ?? '')
+          reader.onerror = reject
+          reader.readAsDataURL(blob)
+        })
+        const response = await fetch(`${BACKEND_URL}/api/transcribe`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ audio, mimeType: session.mimeType }),
+        })
+        const data = await response.json()
+        if (response.ok && data.text) onResult(data.text)
+        else if (!response.ok) window.alert(data.error || t.genericError)
+      } catch {
+        window.alert(t.genericError)
+      }
+      setPhase('idle')
+    }
+    session.recorder.stop()
+  }
 
   return (
     <span className={wrapClassName}>
-      <select
-        className="mic-language-select"
-        value={dictationLanguage}
-        onChange={(e) => onDictationLanguageChange(e.target.value)}
-        title={t.micLanguageSelectTitle}
-      >
-        <option value="en">{t.micLanguageEnglish}</option>
-        <option value="hi">{t.micLanguageHindi}</option>
-        <option value="or">{t.micLanguageOdia}</option>
-      </select>
       <button
+        ref={buttonRef}
         type="button"
-        className={isListening ? `${className} mic-button-listening` : className}
-        onClick={handleClick}
-        title={isListening ? listeningTitle : title}
+        className={`${className}${phase === 'listening' ? ' mic-button-listening' : ''}${phase === 'transcribing' ? ' mic-button-transcribing' : ''}`}
+        onClick={phase === 'idle' ? start : phase === 'listening' ? stop : undefined}
+        disabled={phase === 'transcribing'}
+        title={phase === 'listening' ? listeningTitle : phase === 'transcribing' ? t.micTranscribingTitle : title}
       >
         {ICONS.mic}
       </button>

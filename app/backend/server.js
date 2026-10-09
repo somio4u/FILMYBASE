@@ -1419,6 +1419,7 @@ const PRODUCTION_ONLY_ROUTES = [
   ["POST", /^\/api\/clapboard\/(\d+)\/log$/, "sceneList"],
   ["POST", /^\/api\/concept\/(\d+)\/clapboard-banner$/, "concept"],
   ["DELETE", /^\/api\/concept\/(\d+)\/clapboard-banner$/, "concept"],
+  ["POST", /^\/api\/transcribe$/, null], // the 🎤 mic buttons
   // The Production Management chat helper — breakdown and schedule only.
   ["GET", /^\/api\/agent-chat\/(\d+)\/(breakdown|schedule)\/history$/, "concept"],
   ["POST", /^\/api\/agent-chat\/(\d+)\/(breakdown|schedule)\/(message|resolve-action)$/, "concept"],
@@ -11081,6 +11082,176 @@ async function stepScreenplaySceneHistory(req, res, direction) {
     client.release();
   }
 }
+
+// --- Voice writing ("Speak here"): the writer talks — mostly Odia, sometimes
+// Hindi or English, often mixed — and the AI writes it down and turns it
+// into proper screenplay lines (action / CHARACTER + dialogue) added to the
+// scene, as a new version so ↶ Undo takes it back.
+const VOICE_TO_SCREENPLAY_MODEL_NAME = "gemini-2.5-flash";
+const VOICE_AUDIO_TYPES = ["audio/webm", "audio/ogg", "audio/mp4", "audio/mpeg", "audio/wav", "audio/aac", "audio/m4a"];
+
+const VOICE_TO_SCREENPLAY_SCHEMA = {
+  type: Type.OBJECT,
+  properties: {
+    transcript: { type: Type.STRING },
+    elements: {
+      type: Type.ARRAY,
+      items: {
+        type: Type.OBJECT,
+        properties: {
+          type: { type: Type.STRING, enum: ["action", "dialogue", "transition"] },
+          character: { type: Type.STRING },
+          parenthetical: { type: Type.STRING },
+          text: { type: Type.STRING },
+        },
+        required: ["type", "character", "parenthetical", "text"],
+      },
+    },
+    insertAfterLine: { type: Type.INTEGER },
+    note: { type: Type.STRING },
+  },
+  required: ["transcript", "elements", "insertAfterLine", "note"],
+};
+
+async function voiceNoteToScreenplayElements({ audioBase64, mimeType, liveText, sceneOutline, existingElements, dialogueLanguage }) {
+  const numbered = existingElements.length
+    ? existingElements.map((e, i) => `${i + 1}. ${e.type === "dialogue" ? `${e.character}${e.parenthetical ? ` (${e.parenthetical})` : ""}: ${e.text}` : `[${e.type}] ${e.text}`}`).join("\n")
+    : "(the scene is empty so far)";
+  const languageName = { or: "Odia", hi: "Hindi", en: "English" }[dialogueLanguage] ?? "Odia";
+  const instructions = `A screenwriter just spoke a voice note while writing this scene. They mostly speak Odia, sometimes Hindi or English, often mixed in one sentence.
+
+THE SCENE: ${sceneOutline}
+The scene's dialogue language: ${languageName}.
+THE SCENE SO FAR (numbered lines):
+${numbered}
+${liveText ? `\nThe browser's rough live captions of the voice note (may be wrong — trust the audio): "${liveText}"` : ""}
+
+Do three things:
+1. transcript: write down exactly what they said, word for word, each language in its own script (Odia in Odia script, Hindi in Devanagari, English in Latin). If the audio is silent or unclear, transcript is "" and explain in note.
+2. elements: turn what they said into screenplay lines to ADD to this scene, in proper screenplay form — "action" lines for what we see and hear, and "dialogue" with the speaking CHARACTER's name in capitals exactly as it is spelled in the scene so far (a new character: their name in capital Latin letters). Keep the writer's own words and story — do not invent new events, characters or lines they didn't say; only shape it into screenplay form (e.g. "Meera walks in and says, '…'" → an action line + MEERA's dialogue). Write action lines in the same language and script as the scene's existing action lines (if the scene is empty, in ${languageName}), and dialogue in the language the line was spoken in (normally ${languageName}), in natural spoken style. Use parenthetical only for a short acting note they actually gave, otherwise "". character is "" for action and transition lines. If they only gave an instruction you can't turn into lines to add (e.g. "delete scene 4"), return no elements and say so in note.
+3. insertAfterLine: where the new lines go. If they said where ("after Meera's line", "at the start", "before he leaves"), the number of the existing line the new lines should come right after (0 = at the very start of the scene). Otherwise ${existingElements.length} (the end).
+note: one short friendly sentence for the writer, like a close friend talking, in the language they mostly spoke — in Odia always the casual ତୁ form (ତୁ / ତୋ / କର / କହ, never ତୁମେ / ଆପଣ) and everyday words (ସିନ୍, not ଦୃଶ୍ୟ), e.g. "ହେଇଗଲା ଭାଇ, ସିନ୍ ଶେଷରେ ମୀରାର ଡାଇଲଗ୍ ଯୋଡ଼ିଦେଲି।" — what you added, or what you couldn't do and why.`;
+
+  const response = await generateContentWithRetry({
+    model: VOICE_TO_SCREENPLAY_MODEL_NAME,
+    contents: [{ role: "user", parts: [{ inlineData: { data: audioBase64, mimeType } }, { text: instructions }] }],
+    config: { responseMimeType: "application/json", responseSchema: VOICE_TO_SCREENPLAY_SCHEMA, maxOutputTokens: 8192, temperature: 0.3 },
+  });
+  const parsed = JSON.parse(response.text);
+  const elements = (parsed.elements ?? [])
+    .filter((e) => String(e.text ?? "").trim())
+    .map((e) => ({
+      type: ["action", "dialogue", "transition"].includes(e.type) ? e.type : "action",
+      character: e.type === "dialogue" ? String(e.character ?? "").trim().toUpperCase() : "",
+      ...(e.type === "dialogue" && String(e.parenthetical ?? "").trim() ? { parenthetical: String(e.parenthetical).trim() } : {}),
+      text: String(e.text).trim(),
+    }));
+  const insertAfter = Math.max(0, Math.min(existingElements.length, Number.isInteger(parsed.insertAfterLine) ? parsed.insertAfterLine : existingElements.length));
+  return { transcript: String(parsed.transcript ?? "").trim(), elements, insertAfter, note: String(parsed.note ?? "").trim() };
+}
+
+// Every 🎤 mic button in the app: the person speaks Odia, Hindi or English
+// (or a mix) and gets back exactly what they said, each language in its own
+// script — no language picker needed.
+const TRANSCRIBE_SCHEMA = {
+  type: Type.OBJECT,
+  properties: { text: { type: Type.STRING }, language: { type: Type.STRING, enum: ["or", "hi", "en", "mixed", "none"] } },
+  required: ["text", "language"],
+};
+
+app.post("/api/transcribe", requireLogin, async (req, res) => {
+  const mimeType = String(req.body.mimeType ?? "").split(";")[0].trim().toLowerCase();
+  const audioBase64 = String(req.body.audio ?? "");
+  if (!VOICE_AUDIO_TYPES.includes(mimeType) || audioBase64.length < 200) {
+    res.status(400).json({ error: "No recording came through — try again." });
+    return;
+  }
+  try {
+    const response = await generateContentWithRetry({
+      model: VOICE_TO_SCREENPLAY_MODEL_NAME,
+      contents: [{
+        role: "user",
+        parts: [
+          { inlineData: { data: audioBase64, mimeType } },
+          { text: `Write down exactly what is said in this recording. The speaker may use Odia, Hindi or English, or switch between them mid-sentence. Write each part in its own script: Odia in Odia script, Hindi in Devanagari, English in Latin letters. Do not translate, summarise, correct or add anything — only drop filler sounds like "umm". Use normal punctuation. language: the main language spoken ("or", "hi", "en"), "mixed" if it's a real mix, or "none" (with text "") if nothing is said.` },
+        ],
+      }],
+      config: { responseMimeType: "application/json", responseSchema: TRANSCRIBE_SCHEMA, maxOutputTokens: 4096, temperature: 0 },
+    });
+    const parsed = JSON.parse(response.text);
+    res.json({ text: String(parsed.text ?? "").trim(), language: parsed.language });
+  } catch (error) {
+    console.error("Transcription failed:", error.message);
+    res.status(502).json({ error: error.message });
+  }
+});
+
+app.post("/api/screenplay/scene/voice", requireRole("admin"), async (req, res) => {
+  const sceneListId = Number(req.body.sceneListId);
+  const episodeIndex = req.body.episodeIndex === null || req.body.episodeIndex === undefined ? null : Number(req.body.episodeIndex);
+  const sceneIndex = Number(req.body.sceneIndex);
+  const mimeType = String(req.body.mimeType ?? "").split(";")[0].trim().toLowerCase();
+  const audioBase64 = String(req.body.audio ?? "");
+  if (!VOICE_AUDIO_TYPES.includes(mimeType) || audioBase64.length < 200) {
+    res.status(400).json({ error: "No recording came through — try speaking again." });
+    return;
+  }
+
+  try {
+    const listRow = (await db.query("SELECT content, status FROM scene_lists WHERE id = $1", [sceneListId])).rows[0];
+    if (!listRow || listRow.status !== "approved") {
+      res.status(400).json({ error: "The scene list must be approved before writing the screenplay." });
+      return;
+    }
+    const running = await db.query("SELECT 1 FROM auto_pipeline_runs WHERE scene_list_id = $1 AND status = 'running' LIMIT 1", [sceneListId]);
+    if (running.rows.length > 0) {
+      res.status(409).json({ error: "The AI is still writing this script. Try again once it has finished." });
+      return;
+    }
+    const scene = sceneArrayOf(listRow.content, episodeIndex)?.[sceneIndex];
+    if (!scene) {
+      res.status(400).json({ error: "That scene doesn't exist." });
+      return;
+    }
+    const latest = await fetchLatestScreenplayScene(sceneListId, episodeIndex, sceneIndex);
+    const previous = latest?.content ?? { elements: [], dialogueLanguage: "or" };
+    const existingElements = previous.elements ?? [];
+    const heading = `${scene.intExt}. ${scene.location?.en ?? ""} - ${scene.timeOfDay}`;
+    const outline = `${heading} — ${scene.oneLiner?.en ?? ""}`;
+
+    const voice = await voiceNoteToScreenplayElements({
+      audioBase64,
+      mimeType,
+      liveText: String(req.body.liveText ?? "").slice(0, 2000),
+      sceneOutline: outline,
+      existingElements,
+      dialogueLanguage: previous.dialogueLanguage ?? "or",
+    });
+    if (voice.elements.length === 0) {
+      res.status(422).json({ error: voice.note || "I couldn't make out anything to add — try again, a little closer to the mic.", transcript: voice.transcript });
+      return;
+    }
+
+    const elements = [...existingElements.slice(0, voice.insertAfter), ...voice.elements, ...existingElements.slice(voice.insertAfter)];
+    const speakers = voice.elements.filter((e) => e.type === "dialogue" && e.character).map((e) => e.character);
+    const charactersPresent = [...new Set([...(previous.charactersPresent ?? []), ...speakers])];
+    const content = { ...previous, elements, charactersPresent, dialogueLanguage: previous.dialogueLanguage ?? "or", editedByVoice: true };
+    await db.query(
+      "INSERT INTO screenplay_scenes (scene_list_id, episode_index, scene_index, content) VALUES ($1, $2, $3, $4)",
+      [sceneListId, episodeIndex, sceneIndex, JSON.stringify(content)]
+    );
+    const current = (await db.query(
+      `${SCREENPLAY_SCENE_WITH_HISTORY_SQL}
+       WHERE s.scene_list_id = $1 AND s.episode_index IS NOT DISTINCT FROM $2 AND s.scene_index = $3
+       ORDER BY s.episode_index, s.scene_index, s.created_at DESC, s.id DESC`,
+      [sceneListId, episodeIndex, sceneIndex]
+    )).rows[0];
+    res.json({ scene: screenplaySceneJson(current), transcript: voice.transcript, note: voice.note, added: voice.elements.length, insertAfter: voice.insertAfter });
+  } catch (error) {
+    console.error("Voice writing failed:", error.message);
+    res.status(502).json({ error: error.message });
+  }
+});
 
 app.post("/api/screenplay/scene/undo", requireRole("admin"), (req, res) => stepScreenplaySceneHistory(req, res, "undo"));
 app.post("/api/screenplay/scene/redo", requireRole("admin"), (req, res) => stepScreenplaySceneHistory(req, res, "redo"));

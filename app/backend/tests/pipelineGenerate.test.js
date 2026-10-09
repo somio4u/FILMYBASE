@@ -15,7 +15,7 @@ import { createMediaStore, createLocalBackend } from "../mediaStore.js";
 import { createProviders, pcmToWav, wavDurationMs } from "../providers.js";
 import { createGenerationService, failStaleGenerations, speechText, describeDetails, assetPrompt } from "../generations.js";
 import { saveSettings, getSettings, spendSummary, assertWithinBudget } from "../pipelineSettings.js";
-import { divideScene, listShots, generateStoryboard, approveStoryboard } from "../shots.js";
+import { divideScene, listShots, generateStoryboard, approveStoryboard, approveShots } from "../shots.js";
 import { startMockGemini } from "./mockGemini.js";
 
 const db = new pg.Pool({ database: process.env.TEST_DB || "filmmaking_app_test", user: process.env.PGUSER || "root", host: process.env.PGHOST || "/var/run/postgresql" });
@@ -46,7 +46,7 @@ async function ready({ approveStoryboardToo = true } = {}) {
   const scene = (await listScenes(db, projectId)).find((s) => s.number === "2");
   await divideScene(db, projectId, scene.id, { mode: "script" });
   await generateStoryboard(db, projectId, scene.id, {});
-  if (approveStoryboardToo) await approveStoryboard(db, projectId, scene.id);
+  if (approveStoryboardToo) await approveShots(db, projectId, scene.id);
   mock.state.requests.length = 0;
   return { projectId, scene };
 }
@@ -234,11 +234,11 @@ test("money limit: refuses work that would go over, counting work still running"
 // Step 5: a picture per shot
 // ---------------------------------------------------------------------------
 
-test("keyframe gates: the text storyboard must be approved, and every person/place/object in the shot needs an approved reference", async () => {
+test("keyframe gates: the shot division must be approved, and every person/place/object in the shot needs an approved reference", async () => {
   const { projectId, scene } = await ready({ approveStoryboardToo: false });
   const shots = await listShots(db, projectId, { sceneId: scene.id });
-  await assert.rejects(gens.generateKeyframe(projectId, shots[0]), /Approve the text storyboard for scene 2/);
-  await approveStoryboard(db, projectId, scene.id);
+  await assert.rejects(gens.generateKeyframe(projectId, shots[0]), /Approve the shot division for scene 2/);
+  await approveShots(db, projectId, scene.id);
   const approved = await listShots(db, projectId, { sceneId: scene.id });
   await assert.rejects(gens.generateKeyframe(projectId, approved[0]), (e) => e.status === 409 && /approved reference picture first/.test(e.message) && /Rahul Mohapatra/.test(e.message));
   const rahul = await assetByName(projectId, /Rahul/);
@@ -375,7 +375,8 @@ test("status shows how far the pipeline has got", async () => {
   let s = await gens.status(projectId);
   assert.equal(s.scenes, 12);
   assert.equal(s.shots.total, 8);
-  assert.equal(s.shots.storyboardApproved, 8);
+  assert.equal(s.shots.shotsApproved, 8);
+  assert.equal(s.shots.storyboardApproved, 0);
   assert.equal(s.references.characters.approved, 0);
   assert.ok(s.references.characters.total >= 8);
   const rahul = await assetByName(projectId, /Rahul/);

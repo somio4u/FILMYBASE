@@ -110,6 +110,7 @@ test("steps 2-3 over the web: cut the scene, write and approve the storyboard", 
   assert.equal(edit.json.shot.durationSec, 3);
   assert.equal((await api("PATCH", `/api/production/${projectId}/shots/${sb.json.shots[0].id}`, { expectedRevision: 1, edits: { durationSec: 2 } })).status, 409);
   assert.equal((await api("POST", `/api/production/${projectId}/scenes/${scenes[2]}/storyboard/approve`, {})).json.approved, true);
+  assert.equal((await api("POST", `/api/production/${projectId}/scenes/${scenes[2]}/shots/approve`, {})).json.approved, true);
   // a shot can be added, split, merged, deleted over the web too
   const added = await api("POST", `/api/production/${projectId}/scenes/${scenes[2]}/shots`, { description: "Extra insert", afterShotId: sb.json.shots[0].id });
   assert.equal(added.status, 201);
@@ -118,7 +119,10 @@ test("steps 2-3 over the web: cut the scene, write and approve the storyboard", 
   const leftover = (await shotsOf(2)).find((s) => /continued/.test(s.description));
   assert.equal((await api("DELETE", `/api/production/${projectId}/shots/${leftover.id}`)).json.deleted, true);
   assert.equal((await shotsOf(2)).length, 8);
-  await api("POST", `/api/production/${projectId}/scenes/${scenes[2]}/storyboard/approve`, {});
+  // changing the cut re-opens the approval
+  assert.ok((await shotsOf(2)).every((s) => s.shotStatus === "draft"));
+  await api("POST", `/api/production/${projectId}/scenes/${scenes[2]}/shots/approve`, {});
+  assert.ok((await shotsOf(2)).every((s) => s.shotStatus === "approved"));
 });
 
 test("step 4 over the web: references for everyone in scene 2, characters before the rest, then approved", async () => {
@@ -172,6 +176,7 @@ test("steps 4-7 on scene 5 (dialogue): voices, shot pictures, one video take, th
   assert.equal(cut.json.shots.length, 3);
   await api("POST", `/api/production/${projectId}/scenes/${scenes[5]}/storyboard`, {});
   await api("POST", `/api/production/${projectId}/scenes/${scenes[5]}/storyboard/approve`, {});
+  await api("POST", `/api/production/${projectId}/scenes/${scenes[5]}/shots/approve`, {});
   let shots = await shotsOf(5);
   // pictures need approved references, and say exactly which are missing
   const blocked = await api("POST", `/api/production/${projectId}/generate`, { kind: "keyframe", targetIds: [shots[0].id] });

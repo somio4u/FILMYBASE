@@ -234,7 +234,7 @@ export function createGenerationService({ db, store, providers, env = process.en
 
     // ---- step 5: a picture per shot, from the approved references ----
     async checkKeyframeReady(projectId, shot) {
-      if (shot.storyboardStatus !== "approved") return { ok: false, reason: `Approve the text storyboard for scene ${shot.sceneNumber} first (shot ${shot.code}).`, missing: [] };
+      if (shot.shotStatus !== "approved") return { ok: false, reason: `Approve the shot division for scene ${shot.sceneNumber} first (shot ${shot.code}).`, missing: [] };
       const needed = shot.assets.filter((a) => ["character", "location", "prop"].includes(a.kind));
       const missing = [];
       const refs = [];
@@ -249,7 +249,7 @@ export function createGenerationService({ db, store, providers, env = process.en
     async generateKeyframe(projectId, shot, { actorUserId = null, allowMissing = false } = {}) {
       const settings = await getSettings(db, projectId);
       const ready = await this.checkKeyframeReady(projectId, shot);
-      if (!ready.ok && (!allowMissing || shot.storyboardStatus !== "approved")) throw httpError(ready.reason, 409, "not_ready");
+      if (!ready.ok && (!allowMissing || shot.shotStatus !== "approved")) throw httpError(ready.reason, 409, "not_ready");
       // characters first, then the place, then objects; the AI takes at most 4
       const order = { character: 0, location: 1, prop: 2 };
       const chosen = [...ready.refs].sort((a, b) => order[a.asset.kind] - order[b.asset.kind]).slice(0, 4);
@@ -366,7 +366,7 @@ export function createGenerationService({ db, store, providers, env = process.en
       const q = async (sql) => (await db.query(sql, [projectId])).rows[0];
       const scenes = await q("SELECT count(*)::int AS n FROM production_scenes WHERE project_id = $1 AND in_latest");
       const shots = await q(
-        `SELECT count(*)::int AS n, count(*) FILTER (WHERE s.storyboard_status = 'approved')::int AS approved, count(*) FILTER (WHERE s.storyboard_text <> '')::int AS written
+        `SELECT count(*)::int AS n, count(*) FILTER (WHERE s.storyboard_status = 'approved')::int AS approved, count(*) FILTER (WHERE s.shot_status = 'approved')::int AS shots_approved, count(*) FILTER (WHERE s.storyboard_text <> '')::int AS written
          FROM production_shots s JOIN production_scenes sc ON sc.id = s.scene_id WHERE s.project_id = $1 AND sc.in_latest`
       );
       const assets = (await db.query(
@@ -382,7 +382,7 @@ export function createGenerationService({ db, store, providers, env = process.en
       const dialogue = await q("SELECT count(*)::int AS n FROM production_scene_elements WHERE project_id = $1 AND kind = 'dialogue'");
       return {
         scenes: scenes.n,
-        shots: { total: shots.n, storyboardWritten: shots.written, storyboardApproved: shots.approved },
+        shots: { total: shots.n, shotsApproved: shots.shots_approved, storyboardWritten: shots.written, storyboardApproved: shots.approved },
         references: { characters: per("character"), props: per("prop"), environments: per("location") },
         keyframes: { approved: await approvedFor("keyframe", "shot_id"), of: shots.n },
         audio: { approved: await approvedFor("audio", "element_id"), of: dialogue.n },

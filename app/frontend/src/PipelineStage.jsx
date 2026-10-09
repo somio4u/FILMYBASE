@@ -4,11 +4,12 @@
 // Environments / Shot pictures).
 import { useCallback, useEffect, useState } from 'react'
 import './ProductionDossier.css'
-import { PipelineBar, ShotsPanel, ArtPanel, FramesPanel, VoicePanel, VideoPanel, ExportPanel } from './PipelinePanels.jsx'
+import { PipelineBar, ShotDivisionPanel, StoryboardPanel, ArtPanel, FramesPanel, VoicePanel, VideoPanel, ExportPanel } from './PipelinePanels.jsx'
 
 export const PIPELINE_STAGES = {
-  storyboard: { title: 'Storyboard', intro: 'Cut each scene into shots, then write the text storyboard (no pictures).' },
-  images: { title: 'Image generation', intro: 'Make reference pictures (characters first, then props, then environments), then one picture per shot.' },
+  shots: { title: 'Shot division', intro: 'Cut every scene into numbered shots — automatically with the AI (all scenes or the ones you tick), then edit, add, remove and approve.' },
+  images: { title: 'Image generation', intro: 'Make model sheets (characters first, then props, then environments), then one picture per approved shot.' },
+  storyboard: { title: 'Storyboard', intro: 'Write the text storyboard for each shot (no pictures), edit it and approve it.' },
   audio: { title: 'Audio', intro: 'Make a voice for every dialogue line.' },
   video: { title: 'Video', intro: 'Make video takes from the approved shot pictures and choose the best one.' },
   export: { title: 'Assemble & export', intro: 'Join the approved video, pictures and voices into a rough cut and an edit package.' },
@@ -36,10 +37,8 @@ export default function PipelineStage({ stage, projectId, backendUrl }) {
   const st = pipeline?.status
   const ref = (key) => (st ? `${st.references[key].approved}/${st.references[key].total}` : '')
   const tabs = {
-    storyboard: [
-      { key: 'shots', label: 'Shot division', count: st ? `${st.shots.total} shots` : '' },
-      { key: 'text', label: 'Text storyboard', count: st ? `${st.shots.storyboardApproved}/${st.shots.total} approved` : '' },
-    ],
+    shots: [{ key: 'division', label: 'Scenes & shots', count: st ? `${st.shots.shotsApproved}/${st.shots.total} approved` : '' }],
+    storyboard: [{ key: 'text', label: 'Text storyboard', count: st ? `${st.shots.storyboardApproved}/${st.shots.total} approved` : '' }],
     images: [
       { key: 'character', label: 'Characters', count: ref('characters') },
       { key: 'prop', label: 'Props', count: ref('props') },
@@ -74,7 +73,8 @@ export default function PipelineStage({ stage, projectId, backendUrl }) {
           ))}
         </nav>
       )}
-      {stage === 'storyboard' && <ShotsPanel {...shared} {...scene} section={current} />}
+      {stage === 'shots' && <ShotDivisionPanel {...shared} {...scene} />}
+      {stage === 'storyboard' && <StoryboardPanel {...shared} {...scene} />}
       {stage === 'images' && (current === 'frames'
         ? <FramesPanel {...shared} {...scene} />
         : <ArtPanel {...shared} assets={assets} only={current} />)}

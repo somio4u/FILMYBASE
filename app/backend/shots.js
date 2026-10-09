@@ -46,6 +46,8 @@ export async function ensureShotSchema(db) {
     )`,
   ];
   for (const sql of statements) await db.query(sql);
+  // Whether the person has approved this scene's shot division (unlocks shot pictures).
+  await db.query("ALTER TABLE production_shots ADD COLUMN IF NOT EXISTS shot_status TEXT NOT NULL DEFAULT 'draft'");
 }
 
 const httpError = (message, status = 400, code = "bad_request") => Object.assign(new Error(message), { status, code });
@@ -356,7 +358,7 @@ export async function listShots(db, projectId, { sceneId = null } = {}) {
     return {
       id: r.id, code: r.code, sceneId: r.scene_id, sceneCode: r.scene_code, sceneNumber: r.scene_number, number: `${r.scene_number}.${n}`, heading: r.heading,
       framing: r.framing, cameraAngle: r.camera_angle, cameraMove: r.camera_move, description: r.description, durationSec: Number(r.duration_sec),
-      source: r.source, sourceLabel: r.source_label, storyboardText: r.storyboard_text, storyboardStatus: r.storyboard_status, edited: r.edited, revision: r.revision,
+      source: r.source, sourceLabel: r.source_label, storyboardText: r.storyboard_text, storyboardStatus: r.storyboard_status, shotStatus: r.shot_status, edited: r.edited, revision: r.revision,
       assets: assets.filter((a) => a.shot_id === r.id).map(({ id, code, name, kind }) => ({ id, code, name, kind })),
       dialogue: dialogue.filter((d) => d.shot_id === r.id).map((d) => ({ id: d.id, code: d.code, speaker: d.speaker, parenthetical: d.parenthetical, text: d.text_en || d.text_hi })),
     };
@@ -367,6 +369,11 @@ async function loadShot(client, projectId, shotId) {
   const shot = (await client.query("SELECT * FROM production_shots WHERE id = $1 AND project_id = $2", [shotId, projectId])).rows[0];
   if (!shot) throw httpError("Shot not found.", 404, "not_found");
   return shot;
+}
+
+// Any change to the cut of a scene means it has to be approved again.
+async function reopenScene(client, sceneId) {
+  await client.query("UPDATE production_shots SET shot_status = 'draft' WHERE scene_id = $1", [sceneId]);
 }
 
 async function renumber(client, sceneId) {
@@ -402,6 +409,8 @@ export async function updateShot(db, projectId, shotId, { expectedRevision, edit
       push("storyboard_text", edits.storyboardText.trim());
       push("storyboard_status", "draft");
     }
+    const structural = ["framing", "cameraAngle", "cameraMove", "description", "durationSec", "assetIds", "dialogueIds"].some((k) => edits[k] !== undefined);
+    if (structural) await reopenScene(client, shot.scene_id);
     if (sets.length > 0) await client.query(`UPDATE production_shots SET ${sets.join(", ")}, edited = TRUE, revision = revision + 1, updated_at = now() WHERE id = ${Number(shot.id)}`, values);
     if (Array.isArray(edits.assetIds)) {
       const valid = (await client.query("SELECT id FROM production_assets WHERE project_id = $1 AND id = ANY($2)", [projectId, edits.assetIds.map(Number).filter(Number.isInteger)])).rows.map((r) => r.id);
@@ -442,6 +451,7 @@ export async function addShot(db, projectId, sceneId, { afterShotId = null, desc
     }
     const [row] = await insertShots(client, projectId, ctx.scene, ctx.elements, ctx.assets, [{ framing, description: text.slice(0, 1500), durationSec, dialogueIds: [], source: "manual" }], position);
     await renumber(client, sceneId);
+    await reopenScene(client, sceneId);
     await client.query("COMMIT");
     return (await listShots(db, projectId)).find((s) => s.id === row.id);
   } catch (error) {
@@ -461,6 +471,7 @@ export async function deleteShot(db, projectId, shotId) {
     if (made > 0) throw httpError("Pictures, sound or video were already made for this shot, so it cannot be deleted.", 409, "has_generations");
     await client.query("DELETE FROM production_shots WHERE id = $1", [shotId]);
     await renumber(client, shot.scene_id);
+    await reopenScene(client, shot.scene_id);
     await client.query("COMMIT");
     return { deleted: true };
   } catch (error) {
@@ -499,6 +510,7 @@ export async function splitShot(db, projectId, shotId) {
     }
     await client.query("UPDATE production_shots SET edited = TRUE, revision = revision + 1, updated_at = now() WHERE id = $1", [shotId]);
     await renumber(client, shot.scene_id);
+    await reopenScene(client, shot.scene_id);
     await client.query("COMMIT");
     return (await listShots(db, projectId, { sceneId: shot.scene_id })).filter((s) => s.id === shotId || s.id === row.id);
   } catch (error) {
@@ -528,6 +540,7 @@ export async function mergeShotWithNext(db, projectId, shotId) {
     );
     await client.query("DELETE FROM production_shots WHERE id = $1", [next.id]);
     await renumber(client, shot.scene_id);
+    await reopenScene(client, shot.scene_id);
     await client.query("COMMIT");
     return (await listShots(db, projectId)).find((s) => s.id === shot.id);
   } catch (error) {
@@ -604,5 +617,15 @@ export async function approveStoryboard(db, projectId, sceneId, { approved = tru
   if (shots.length === 0) throw httpError("This scene has no shots yet.", 400, "no_shots");
   if (approved && shots.some((s) => !s.storyboardText)) throw httpError("Every shot needs its storyboard text before you can approve the scene.", 400, "missing_text");
   await db.query("UPDATE production_shots SET storyboard_status = $1 WHERE scene_id = $2 AND project_id = $3", [approved ? "approved" : "draft", sceneId, projectId]);
+  return { approved, shots: shots.length };
+}
+
+// Approving a scene's shot division is what lets its shots go on to pictures.
+export async function approveShots(db, projectId, sceneId, { approved = true } = {}) {
+  const scene = (await db.query("SELECT 1 FROM production_scenes WHERE id = $1 AND project_id = $2", [sceneId, projectId])).rowCount;
+  if (!scene) throw httpError("Scene not found.", 404, "not_found");
+  const shots = await listShots(db, projectId, { sceneId });
+  if (shots.length === 0) throw httpError("This scene has no shots to approve yet.", 400, "no_shots");
+  await db.query("UPDATE production_shots SET shot_status = $1 WHERE scene_id = $2 AND project_id = $3", [approved ? "approved" : "draft", sceneId, projectId]);
   return { approved, shots: shots.length };
 }

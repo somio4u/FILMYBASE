@@ -43,3 +43,6 @@
   .pipe-money { flex-direction: column; align-items: flex-start; }
 }
 .pipe-panel > .dossier-small-button { align-self: flex-start; }
+.pipe-scene-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 8px 12px; }
+.pipe-scene-row.open { border-color: var(--border-strong); background: var(--bg-surface-raised); }
+.pipe-scene-name { flex: 1; min-width: 160px; text-align: left; background: none; border: none; color: var(--text-primary); font: inherit; cursor: pointer; padding: 6px 0; overflow-wrap: anywhere; }

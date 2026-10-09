@@ -9,8 +9,9 @@
   --bg-surface: rgba(14, 18, 32, 0.5);
   --bg-surface-raised: rgba(46, 54, 76, 0.42);
   --bg-input: rgba(8, 10, 20, 0.6);
-  --border-subtle: #3c4043;
-  --border-strong: #5f6368;
+  /* Soft blue glow edges instead of hard grey lines (neo glass theme). */
+  --border-subtle: rgba(120, 170, 255, 0.16);
+  --border-strong: rgba(140, 190, 255, 0.36);
   --text-primary: #e8eaed;
   --text-secondary: #9aa0a6;
   --text-muted: #80868b;
@@ -28,7 +29,7 @@
   /* Depth & motion — the "onion-skin" layered surfaces and gradient sheen
      that a flat single-hex-per-token palette can't give on its own. */
   --glass-bg: rgba(12, 16, 30, 0.5);
-  --glass-border: rgba(255, 255, 255, 0.08);
+  --glass-border: rgba(120, 170, 255, 0.16);
   --glow-accent: 0 0 0 1px rgba(138, 180, 248, 0.16), 0 8px 28px rgba(138, 180, 248, 0.16), 0 2px 10px rgba(0, 0, 0, 0.35);
   --shadow-soft: 0 2px 10px rgba(0, 0, 0, 0.25);
   --shadow-lift: 0 10px 32px rgba(0, 0, 0, 0.4);
@@ -6685,4 +6686,350 @@ button:not(:disabled):active {
   pointer-events: none;
   backdrop-filter: blur(14px) saturate(1.15);
   -webkit-backdrop-filter: blur(14px) saturate(1.15);
+}
+
+/* =====================================================================
+   NEO GLASS THEME — the app-wide look (owner's pick, from the tab mockup):
+   dark glass trays with big curves and a soft blue edge glow, no hard
+   lines; anything selected / current lifts out as a glowing blue→purple
+   tile; the sidebar floats with a light flowing around its edge.
+   Only looks are set here — no layout or behaviour changes.
+   ===================================================================== */
+:root {
+  --neo-radius: 22px;
+  --neo-radius-sm: 14px;
+  --neo-tray: linear-gradient(180deg, rgba(30, 40, 74, 0.55), rgba(10, 14, 34, 0.68));
+  --neo-edge: rgba(120, 170, 255, 0.22);
+  --neo-edge-hover: rgba(140, 195, 255, 0.45);
+  --neo-card-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06), 0 14px 34px rgba(0, 0, 0, 0.35), 0 0 28px rgba(60, 120, 255, 0.1);
+  --neo-active-bg: linear-gradient(140deg, rgba(70, 120, 255, 0.6), rgba(110, 70, 255, 0.58) 60%, rgba(40, 20, 120, 0.75));
+  --neo-active-shadow: 0 0 0 1.5px rgba(150, 190, 255, 0.9), 0 0 18px rgba(90, 140, 255, 0.75), 0 0 42px rgba(120, 80, 255, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.3);
+}
+
+@property --neo-edge-angle {
+  syntax: '<angle>';
+  initial-value: 0deg;
+  inherits: false;
+}
+
+@keyframes neo-edge-flow {
+  to { --neo-edge-angle: 360deg; }
+}
+
+@keyframes neo-breathe {
+  0%, 100% { box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5), 12px 0 40px rgba(40, 120, 255, 0.12); }
+  50% { box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5), 18px 0 70px rgba(60, 150, 255, 0.28); }
+}
+
+@keyframes neo-active-pulse {
+  0%, 100% { filter: brightness(1); }
+  50% { filter: brightness(1.16); }
+}
+
+/* --- The floating sidebar: no straight line, a light flowing round its edge. */
+.sidebar {
+  margin: 14px 0 14px 14px;
+  height: calc(100% - 28px);
+  width: 290px;
+  border-radius: 28px;
+  border: 1.5px solid transparent;
+  background:
+    radial-gradient(120% 45% at 0% 0%, rgba(90, 170, 255, 0.22), transparent 70%) padding-box,
+    radial-gradient(90% 40% at 100% 55%, rgba(110, 90, 255, 0.14), transparent 70%) padding-box,
+    radial-gradient(120% 40% at 20% 100%, rgba(60, 200, 255, 0.16), transparent 70%) padding-box,
+    repeating-linear-gradient(0deg, rgba(140, 200, 255, 0.035) 0 1px, transparent 1px 4px) padding-box,
+    linear-gradient(180deg, rgba(10, 18, 40, 0.82), rgba(6, 10, 26, 0.86)) padding-box,
+    conic-gradient(from var(--neo-edge-angle), rgba(110, 160, 255, 0.12), rgba(90, 210, 255, 0.95) 50deg, rgba(150, 100, 255, 0.95) 95deg, rgba(110, 160, 255, 0.12) 150deg, rgba(110, 160, 255, 0.12) 360deg) border-box;
+  animation: neo-edge-flow 7s linear infinite, neo-breathe 4.5s ease-in-out infinite;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(120, 170, 255, 0.3) transparent;
+}
+
+@media (max-width: 768px) {
+  .sidebar {
+    margin: 0;
+    height: 100%;
+    border-radius: 0 26px 26px 0;
+  }
+}
+
+/* --- Big glowing stage tabs on a glass tray (Idea → Screenplay, AI Movie stages). */
+.stage-progress.agent-substages {
+  counter-reset: neo-stage;
+  gap: 6px;
+  margin: 6px 0 12px;
+  padding: 8px;
+  border-left: none;
+  border-radius: 24px;
+  background: var(--neo-tray);
+  border: 1px solid var(--neo-edge);
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.35), 0 0 26px rgba(60, 120, 255, 0.14);
+}
+
+.agent-substages .stage-progress-item {
+  counter-increment: neo-stage;
+  min-height: 56px;
+  gap: 12px;
+  padding: 8px 14px;
+  border-radius: 18px;
+  font-family: var(--font-heading);
+  font-size: 17px;
+  font-weight: 600;
+  color: #b9c3d8;
+  transition: transform 0.25s var(--ease-spring), background 0.2s ease, box-shadow 0.2s ease, color 0.2s ease;
+}
+
+.agent-substages .stage-progress-item.stage-upcoming {
+  color: #6f7890;
+}
+
+.agent-substages .stage-progress-item:hover {
+  background: rgba(120, 170, 255, 0.1);
+  color: #fff;
+}
+
+.agent-substages .stage-progress-dot {
+  width: 30px;
+  height: 30px;
+  border-radius: 10px;
+  display: grid;
+  place-items: center;
+  background: transparent;
+  border: 1.5px solid rgba(160, 190, 255, 0.45);
+  color: #cfe0ff;
+  font-size: 13px;
+  font-weight: 700;
+  box-shadow: none;
+}
+
+.agent-substages .stage-progress-dot::before {
+  content: counter(neo-stage);
+}
+
+.agent-substages .stage-progress-item.stage-done .stage-progress-dot {
+  background: rgba(129, 201, 149, 0.12);
+  border-color: rgba(129, 201, 149, 0.8);
+  color: var(--success);
+}
+
+.agent-substages .stage-progress-item.stage-done .stage-progress-dot::before {
+  content: '✓';
+}
+
+.agent-substages .stage-progress-item.stage-upcoming .stage-progress-dot {
+  border-color: rgba(120, 130, 160, 0.35);
+  color: #6f7890;
+}
+
+/* --- One "selected / current" look everywhere: the glowing tile. */
+.agent-substages .stage-progress-item.is-shown,
+.production-main-nav-item.stage-current,
+.agent-header.active,
+.sidebar-history-row.active .sidebar-history-item,
+.script-nav-item.is-active,
+.start-stage-tab.active,
+.clapboard-daynight-button.active,
+.format-type-button.is-selected {
+  position: relative;
+  color: #fff;
+  background: var(--neo-active-bg);
+  border-color: transparent;
+  box-shadow: var(--neo-active-shadow);
+  animation: neo-active-pulse 2.8s ease-in-out infinite;
+}
+
+.agent-substages .stage-progress-item.is-shown {
+  transform: translateX(6px) scale(1.02);
+}
+
+.agent-substages .stage-progress-item.is-shown::after {
+  content: '';
+  position: absolute;
+  right: -7px;
+  top: 14px;
+  bottom: 14px;
+  width: 4px;
+  border-radius: 4px;
+  background: #9fd8ff;
+  box-shadow: 0 0 12px #6fd0ff, 0 0 24px #7b5cff;
+}
+
+.agent-substages .stage-progress-item.is-shown .stage-progress-dot {
+  border-color: #fff;
+  color: #fff;
+  background: rgba(255, 255, 255, 0.15);
+  box-shadow: 0 0 10px rgba(255, 255, 255, 0.8);
+}
+
+/* Production stages: same big tabs, keeping their icons. */
+.production-main-nav {
+  gap: 6px;
+  padding: 8px;
+  border-radius: 24px;
+  background: var(--neo-tray);
+  border: 1px solid var(--neo-edge);
+}
+
+.production-main-nav-item {
+  min-height: 52px;
+  border-radius: 18px;
+  font-family: var(--font-heading);
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.production-main-nav-icon {
+  border-radius: 10px;
+}
+
+.agent-header {
+  border-radius: 16px;
+  font-family: var(--font-heading);
+  font-size: 15px;
+}
+
+.sidebar-history-item {
+  border-radius: 14px;
+}
+
+/* --- Every card, panel and pop-up: a glass tray with big curves and a soft edge glow. */
+.pitch-deck,
+.three-act-structure,
+.storyline-card,
+.character-card,
+.character-sheet-card,
+.episode-card,
+.episode-structure-card,
+.act-block,
+.ai-movie-scene-card,
+.ai-movie-screenplay-current-card,
+.crew-member-card,
+.schedule-day-card,
+.master-list-card,
+.director-overview-panel,
+.director-overview-section,
+.ad-sheet-panel,
+.reimport-screenplay-panel,
+.manage-users-panel,
+.format-editor-panel,
+.handwritten-note-panel,
+.floating-agent-panel,
+.changes-chat-panel,
+.camera-modal,
+.script-tools,
+.script-check-report,
+.format-picker,
+.format-form,
+.login-form,
+.screenplay-block,
+.breakdown-category,
+.crew-cast-group {
+  border-radius: var(--neo-radius);
+  border: 1px solid var(--neo-edge);
+  box-shadow: var(--neo-card-shadow);
+  transition: border-color 0.25s ease, box-shadow 0.25s ease;
+}
+
+.pitch-deck,
+.three-act-structure,
+.storyline-card,
+.director-overview-panel,
+.ad-sheet-panel,
+.reimport-screenplay-panel,
+.format-picker,
+.format-form {
+  background: var(--neo-tray);
+}
+
+.breakdown-category:hover,
+.storyline-card:hover,
+.character-card:hover,
+.character-sheet-card:hover,
+.episode-card:hover,
+.crew-member-card:hover,
+.schedule-day-card:hover,
+.master-list-card:hover,
+.ai-movie-scene-card:hover {
+  border-color: var(--neo-edge-hover);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08), 0 14px 34px rgba(0, 0, 0, 0.35), 0 0 30px rgba(90, 150, 255, 0.28);
+}
+
+/* The big stage container in the editor: rounder, and a glow instead of a line at its sides. */
+:is(.ai-movie-editor, .movie-editor) .three-act-structure {
+  border-radius: 30px;
+  border-color: rgba(120, 170, 255, 0.12);
+  background: var(--neo-tray);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06), 0 0 0 1px rgba(0, 0, 0, 0.25), 0 0 40px rgba(60, 120, 255, 0.14), 0 20px 50px rgba(0, 0, 0, 0.35);
+}
+
+/* The current stage's number badge glows blue. */
+.agent-substages .stage-progress-item.stage-current:not(.is-shown) .stage-progress-dot {
+  background: rgba(90, 150, 255, 0.18);
+  border-color: rgba(140, 190, 255, 0.9);
+  color: #dbe8ff;
+  box-shadow: 0 0 10px rgba(90, 150, 255, 0.6);
+}
+
+/* --- Buttons: glowing pills. Main action = the glowing tile; others = glass. */
+.choose-button {
+  border-radius: 999px;
+  border: 1px solid transparent;
+  color: #fff;
+  background: var(--neo-active-bg);
+  box-shadow: 0 0 0 1px rgba(150, 190, 255, 0.55), 0 0 18px rgba(90, 140, 255, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.25);
+  transition: transform 0.2s var(--ease-spring), box-shadow 0.2s ease, filter 0.2s ease;
+}
+
+.choose-button:hover:not(:disabled) {
+  transform: translateY(-2px);
+  filter: brightness(1.12);
+  box-shadow: var(--neo-active-shadow);
+}
+
+.cancel-button,
+.import-export-row button,
+.format-change-button {
+  border-radius: 999px;
+  background: rgba(120, 170, 255, 0.06);
+  border: 1px solid var(--neo-edge);
+  transition: border-color 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
+}
+
+.cancel-button:hover:not(:disabled),
+.import-export-row button:hover:not(:disabled),
+.format-change-button:hover {
+  border-color: var(--neo-edge-hover);
+  background: rgba(120, 170, 255, 0.12);
+  box-shadow: 0 0 16px rgba(90, 150, 255, 0.3);
+}
+
+.approve-button {
+  border-radius: 999px;
+  box-shadow: 0 0 16px rgba(129, 201, 149, 0.35);
+}
+
+/* --- Inputs: glass with a glowing ring when typing. (Not the white script page.) */
+:is(input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='file']), textarea, select):not(.script-edit-field) {
+  border-radius: var(--neo-radius-sm);
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+:is(input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='file']), textarea, select):not(.script-edit-field):focus {
+  outline: none;
+  border-color: rgba(140, 195, 255, 0.7);
+  box-shadow: 0 0 0 3px rgba(90, 150, 255, 0.22), 0 0 18px rgba(90, 150, 255, 0.3);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sidebar,
+  .agent-substages .stage-progress-item.is-shown,
+  .production-main-nav-item.stage-current,
+  .agent-header.active,
+  .sidebar-history-row.active .sidebar-history-item,
+  .script-nav-item.is-active,
+  .start-stage-tab.active,
+  .clapboard-daynight-button.active,
+  .format-type-button.is-selected {
+    animation: none;
+  }
 }

@@ -46,7 +46,7 @@ export function makeMp4(seed, seconds = 2) {
   return fs.readFileSync(out);
 }
 
-export async function startMockGemini() {
+export async function startMockGemini({ port = 0 } = {}) {
   const state = { requests: [], failNext: null, ops: new Map(), opCounter: 0, videoPollsBeforeDone: 1 };
   const server = http.createServer(async (req, res) => {
     const chunks = [];
@@ -96,7 +96,7 @@ export async function startMockGemini() {
     }
     json(404, { error: { message: "not found: " + url.pathname } });
   });
-  await new Promise((r) => server.listen(0, "127.0.0.1", r));
+  await new Promise((r) => server.listen(port, "127.0.0.1", r));
   return {
     state, port: server.address().port, base: `http://127.0.0.1:${server.address().port}`,
     close: () => new Promise((r) => { server.closeAllConnections?.(); server.close(r); }),

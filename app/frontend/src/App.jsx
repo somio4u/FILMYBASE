@@ -437,7 +437,9 @@ const LABELS = {
     voiceAdded: (count, transcript) => `Added ${count} line${count === 1 ? '' : 's'} to the scene. I heard: “${transcript}”. Not right? Hit ↶ Undo.`,
     voiceMicBlocked: "I can't hear you — allow the microphone for this site in your browser, then try again.",
     voiceNothingHeard: "Didn't catch anything — try again and speak a little longer.",
-    voiceBlockedWhileEditing: 'Save or cancel your edit first, then speak.',
+    voiceTargetCursor: (number) => `Types into your edit of scene ${number}, where your cursor is`,
+    voiceAddedToEdit: (count, transcript) => `Added ${count} line${count === 1 ? '' : 's'} to your edit (they glow). I heard: “${transcript}”. Happy? Hit "Save my changes".`,
+    voiceDragHint: 'Drag me anywhere',
     voiceBlockedWhileBusy: 'Hang on — the AI is busy with this script.',
     sceneUndoButton: '↶ Undo',
     sceneRedoButton: '↷ Redo',
@@ -1229,7 +1231,9 @@ const LABELS = {
     voiceAdded: (count, transcript) => `ସିନ୍‌ରେ ${count}ଟା ଲାଇନ୍ ଯୋଡ଼ିଦେଲି। ମୁଁ ଶୁଣିଲି: “${transcript}”। ଠିକ୍ ନାହିଁ? ↶ ପଛକୁ ଫେର ଦବା।`,
     voiceMicBlocked: 'ତୋ କଥା ଶୁଣିପାରୁନି — ବ୍ରାଉଜରରେ ଏ ସାଇଟ୍ ପାଇଁ ମାଇକ୍ ଅନୁମତି ଦେ, ତା\'ପରେ ଆଉ ଥରେ ଚେଷ୍ଟା କର।',
     voiceNothingHeard: 'କିଛି ଶୁଣିପାରିଲିନି — ଆଉ ଥରେ ଟିକେ ଲମ୍ବା କରି କହ।',
-    voiceBlockedWhileEditing: 'ଆଗେ ତୋ ଏଡିଟ୍ ସେଭ୍ କର ବା ବାତିଲ୍ କର, ତା\'ପରେ କହ।',
+    voiceTargetCursor: (number) => `ସିନ୍ ${number} ର ଏଡିଟ୍‌ରେ, ତୋ କର୍ସର୍ ଯେଉଁଠି ଅଛି ସେଠି ଲେଖିବି`,
+    voiceAddedToEdit: (count, transcript) => `ତୋ ଏଡିଟ୍‌ରେ ${count}ଟା ଲାଇନ୍ ଯୋଡ଼ିଦେଲି (ଚମକୁଛି)। ମୁଁ ଶୁଣିଲି: “${transcript}”। ଠିକ୍ ଅଛି? "ମୋ ଚେଞ୍ଜ ସେଭ୍ କର" ଦବା।`,
+    voiceDragHint: 'ମୋତେ ଯେଉଁଠି ଇଚ୍ଛା ଟାଣିନେ',
     voiceBlockedWhileBusy: 'ଟିକେ ରହ — AI ଏ ସ୍କ୍ରିପ୍ଟରେ ବ୍ୟସ୍ତ ଅଛି।',
     sceneUndoButton: '↶ ପଛକୁ ଫେର',
     sceneRedoButton: '↷ ପୁଣି ଆଗକୁ',
@@ -3033,13 +3037,58 @@ function MovieBreakdownFreshnessNote({ sceneListId, t }) {
 // where the browser can do them.
 const VOICE_MAX_SECONDS = 180
 
-function VoiceWriterButton({ t, sceneListId, episodeIndex, sceneIndex, sceneNumber, blockedNote, onAdded }) {
+const VOICE_ORB_POSITION_STORAGE_KEY = 'filmybase.voiceOrbPosition'
+const VOICE_ORB_SIZE = 76
+
+// The floating, draggable "speak here" orb on the screenplay screen (like
+// the pen buddy). Not editing: what you say is written into the selected
+// scene and saved as a new version. Editing on the page (`editDraft` given):
+// the lines go into your unsaved edit where your cursor is, and you save.
+function VoiceWriterButton({ t, sceneListId, episodeIndex, sceneIndex, sceneNumber, blockedNote, editDraft, onAdded, onDraftLines }) {
   const [phase, setPhase] = useState('idle') // idle | listening | writing
   const [liveText, setLiveText] = useState('')
   const [message, setMessage] = useState(null) // { kind: 'done' | 'error', text }
   const [seconds, setSeconds] = useState(0)
   const buttonRef = useRef(null)
   const sessionRef = useRef(null)
+  const [position, setPosition] = useState(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem(VOICE_ORB_POSITION_STORAGE_KEY) || 'null')
+      if (saved && Number.isFinite(saved.x) && Number.isFinite(saved.y)) return saved
+    } catch {
+      // per-viewer convenience only
+    }
+    return { x: window.innerWidth - VOICE_ORB_SIZE - 32, y: window.innerHeight - VOICE_ORB_SIZE - 150 }
+  })
+  const dragRef = useRef(null)
+  const draggedRef = useRef(false)
+  // Kept on screen even if the window got smaller since it was placed.
+  const left = Math.min(Math.max(8, position.x), window.innerWidth - VOICE_ORB_SIZE - 8)
+  const top = Math.min(Math.max(8, position.y), window.innerHeight - VOICE_ORB_SIZE - 8)
+
+  function handlePointerDown(e) {
+    draggedRef.current = false
+    dragRef.current = { startX: e.clientX, startY: e.clientY, dx: e.clientX - left, dy: e.clientY - top }
+    const move = (event) => {
+      const drag = dragRef.current
+      if (!drag) return
+      if (Math.abs(event.clientX - drag.startX) > 5 || Math.abs(event.clientY - drag.startY) > 5) draggedRef.current = true
+      if (draggedRef.current) setPosition({ x: event.clientX - drag.dx, y: event.clientY - drag.dy })
+    }
+    const up = () => {
+      dragRef.current = null
+      window.removeEventListener('pointermove', move)
+      window.removeEventListener('pointerup', up)
+      if (draggedRef.current) {
+        setPosition((current) => {
+          try { localStorage.setItem(VOICE_ORB_POSITION_STORAGE_KEY, JSON.stringify(current)) } catch { /* fine */ }
+          return current
+        })
+      }
+    }
+    window.addEventListener('pointermove', move)
+    window.addEventListener('pointerup', up)
+  }
 
   useEffect(() => () => sessionRef.current?.cleanup(), [])
 
@@ -3131,6 +3180,8 @@ function VoiceWriterButton({ t, sceneListId, episodeIndex, sceneIndex, sceneNumb
       return
     }
     setPhase('writing')
+    // Read the editor at the moment the recording is sent (lines typed while speaking count).
+    const draft = editDraft?.()
     try {
       const audio = await new Promise((resolve, reject) => {
         const reader = new FileReader()
@@ -3141,11 +3192,17 @@ function VoiceWriterButton({ t, sceneListId, episodeIndex, sceneIndex, sceneNumb
       const response = await fetch(`${BACKEND_URL}/api/screenplay/scene/voice`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sceneListId, episodeIndex, sceneIndex, audio, mimeType, liveText }),
+        body: JSON.stringify({
+          sceneListId, episodeIndex, sceneIndex, audio, mimeType, liveText,
+          ...(draft ? { draftElements: draft.elements, cursorAfter: draft.cursorAfter } : {}),
+        }),
       })
       const data = await response.json()
       if (!response.ok) {
         setMessage({ kind: 'error', text: data.error || t.genericError })
+      } else if (data.draft) {
+        onDraftLines(data)
+        setMessage({ kind: 'done', text: t.voiceAddedToEdit(data.added, data.transcript) })
       } else {
         onAdded(data.scene)
         setMessage({ kind: 'done', text: t.voiceAdded(data.added, data.transcript) })
@@ -3158,10 +3215,18 @@ function VoiceWriterButton({ t, sceneListId, episodeIndex, sceneIndex, sceneNumb
   }
 
   const blocked = Boolean(blockedNote) && phase === 'idle'
-  return (
-    <div className="voice-writer">
-      {(phase !== 'idle' || message || blocked) && (
-        <div className={`voice-writer-bubble${message?.kind === 'error' ? ' is-error' : ''}`}>
+  const isEditing = Boolean(editDraft)
+  const bubbleBelow = top < window.innerHeight / 2
+  const bubbleStyle = {
+    right: Math.max(8, window.innerWidth - left - VOICE_ORB_SIZE),
+    ...(bubbleBelow ? { top: top + VOICE_ORB_SIZE + 12 } : { bottom: window.innerHeight - top + 12 }),
+  }
+  const target = isEditing ? t.voiceTargetCursor(sceneNumber) : t.voiceTargetScene(sceneNumber)
+  // On <body>, so no panel's effects can pull it out of its floating spot.
+  return createPortal(
+    <>
+      {(phase !== 'idle' || message || blocked || isEditing) && (
+        <div className={`voice-writer-bubble${message?.kind === 'error' ? ' is-error' : ''}`} style={bubbleStyle}>
           {phase === 'listening' && <p>{liveText || t.voiceListeningHint}</p>}
           {phase === 'writing' && <p>{t.voiceWritingLabel}</p>}
           {phase === 'idle' && message && (
@@ -3171,41 +3236,37 @@ function VoiceWriterButton({ t, sceneListId, episodeIndex, sceneIndex, sceneNumb
             </>
           )}
           {phase === 'idle' && !message && blocked && <p>{blockedNote}</p>}
+          {phase === 'idle' && !message && !blocked && isEditing && (
+            <p><strong>{t.voiceButtonLabel}</strong> — {target}</p>
+          )}
         </div>
       )}
       <button
         ref={buttonRef}
         type="button"
-        className={`voice-writer-button is-${phase}`}
-        onClick={phase === 'idle' ? startListening : phase === 'listening' ? stopListening : undefined}
-        disabled={phase === 'writing' || blocked}
-        aria-label={phase === 'listening' ? t.voiceStopLabel : t.voiceButtonHint}
+        className={`voice-writer-button is-${phase}${isEditing ? ' is-editing' : ''}`}
+        style={{ left, top }}
+        onPointerDown={handlePointerDown}
+        onClick={() => {
+          if (draggedRef.current) return
+          if (phase === 'idle' && !blocked) startListening()
+          else if (phase === 'listening') stopListening()
+        }}
+        aria-disabled={phase === 'writing' || blocked}
+        aria-label={phase === 'listening' ? t.voiceStopLabel : `${t.voiceButtonLabel} — ${target}`}
+        title={phase === 'idle' ? `${t.voiceButtonLabel} · ${t.voiceButtonHint} · ${target} · ${t.voiceDragHint}` : undefined}
       >
-        <span className="voice-writer-orb" aria-hidden="true" />
-        <span className="voice-writer-text">
-          {phase === 'idle' && (
-            <>
-              <strong>{t.voiceButtonLabel}</strong>
-              <span>{t.voiceButtonHint}</span>
-              <small>{t.voiceTargetScene(sceneNumber)}</small>
-            </>
-          )}
-          {phase === 'listening' && (
-            <>
-              <strong>{t.voiceListeningLabel}</strong>
-              <span>{t.voiceStopLabel}</span>
-              <small>{`${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`}</small>
-            </>
-          )}
-          {phase === 'writing' && (
-            <>
-              <strong>{t.voiceThinkingLabel}</strong>
-              <span>{t.voiceTargetScene(sceneNumber)}</span>
-            </>
-          )}
+        <span className="voice-writer-orb" aria-hidden="true">
+          <span className="voice-writer-mic">{phase === 'listening' ? '■' : '🎙'}</span>
+        </span>
+        <span className="voice-writer-caption">
+          {phase === 'idle' && t.voiceButtonLabel}
+          {phase === 'listening' && `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`}
+          {phase === 'writing' && t.voiceThinkingLabel}
         </span>
       </button>
-    </div>
+    </>,
+    document.body,
   )
 }
 
@@ -3415,6 +3476,31 @@ function MovieScreenplayWorkspace({
       elements: [...prev.elements.slice(0, after + 1), { type, character: '', characterModifier: 'none', parenthetical: '', text: '' }, ...prev.elements.slice(after + 1)],
     })
   const removeElement = (i) => setEditing((prev) => prev && { ...prev, elements: prev.elements.filter((_, j) => j !== i) })
+  // The line the writer's cursor was last in (the voice orb inserts after it).
+  const editCursorRef = useRef(null)
+  useEffect(() => {
+    editCursorRef.current = null
+  }, [editing?.key])
+  // Voice lines arrive for the open edit: put them in and make them glow for a moment.
+  function insertVoiceLines(data) {
+    const added = (data.elements ?? []).map((e) => ({
+      type: e.type,
+      character: e.character ?? '',
+      characterModifier: 'none',
+      parenthetical: e.parenthetical ?? '',
+      text: e.text ?? '',
+    }))
+    setEditing((prev) => {
+      if (!prev) return prev
+      const at = Math.max(0, Math.min(prev.elements.length, data.insertAfter ?? prev.elements.length))
+      return {
+        ...prev,
+        elements: [...prev.elements.slice(0, at), ...added, ...prev.elements.slice(at)],
+        voiceGlow: { from: at, count: added.length, at: Date.now() },
+      }
+    })
+    setTimeout(() => setEditing((prev) => prev && { ...prev, voiceGlow: null }), 4000)
+  }
 
   async function submitEdit() {
     if (!editing) return
@@ -3497,7 +3583,11 @@ function MovieScreenplayWorkspace({
           <span className="script-scene-number script-scene-number-right">{numberOf(s, index)}</span>
         </p>
         {editing.elements.map((element, i) => (
-          <div key={i} className={`script-edit-block script-edit-block-${element.type}`}>
+          <div
+            key={i}
+            className={`script-edit-block script-edit-block-${element.type}${editing.voiceGlow && i >= editing.voiceGlow.from && i < editing.voiceGlow.from + editing.voiceGlow.count ? ' is-voice-new' : ''}`}
+            onFocus={() => { editCursorRef.current = i }}
+          >
             {element.type === 'dialogue' ? (
               <div className="script-dialogue">
                 <input className="script-edit-field script-character" value={element.character} onChange={(e) => updateElement(i, { character: e.target.value.toUpperCase() })} placeholder={t.scriptEditCharacterPlaceholder} />
@@ -3811,7 +3901,12 @@ function MovieScreenplayWorkspace({
           episodeIndex={group.episodeIndex}
           sceneIndex={sceneIndex}
           sceneNumber={numberOf(scene, sceneIndex)}
-          blockedNote={editing ? t.voiceBlockedWhileEditing : isAiWriting || isChecking || isChangingScenes ? t.voiceBlockedWhileBusy : null}
+          blockedNote={isAiWriting || isChecking || isChangingScenes ? t.voiceBlockedWhileBusy : null}
+          editDraft={editing && editing.key === keyOf(sceneIndex) ? () => ({
+            elements: editing.elements,
+            cursorAfter: editCursorRef.current === null ? editing.elements.length : editCursorRef.current + 1,
+          }) : null}
+          onDraftLines={insertVoiceLines}
           onAdded={(data) => {
             setEditFixes(null)
             onSceneSaved?.(keyOf(sceneIndex), data)

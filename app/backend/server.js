@@ -11245,13 +11245,15 @@ const VOICE_TO_SCREENPLAY_SCHEMA = {
         required: ["type", "character", "parenthetical", "text"],
       },
     },
+    placeSaid: { type: Type.BOOLEAN },
     insertAfterLine: { type: Type.INTEGER },
     note: { type: Type.STRING },
   },
-  required: ["transcript", "elements", "insertAfterLine", "note"],
+  required: ["transcript", "elements", "placeSaid", "insertAfterLine", "note"],
 };
 
-async function voiceNoteToScreenplayElements({ audioBase64, mimeType, liveText, sceneOutline, existingElements, dialogueLanguage }) {
+async function voiceNoteToScreenplayElements({ audioBase64, mimeType, liveText, sceneOutline, existingElements, dialogueLanguage, defaultInsertAfter }) {
+  const fallbackAfter = Number.isInteger(defaultInsertAfter) ? Math.max(0, Math.min(existingElements.length, defaultInsertAfter)) : existingElements.length;
   const numbered = existingElements.length
     ? existingElements.map((e, i) => `${i + 1}. ${e.type === "dialogue" ? `${e.character}${e.parenthetical ? ` (${e.parenthetical})` : ""}: ${e.text}` : `[${e.type}] ${e.text}`}`).join("\n")
     : "(the scene is empty so far)";
@@ -11267,7 +11269,8 @@ ${liveText ? `\nThe browser's rough live captions of the voice note (may be wron
 Do three things:
 1. transcript: write down exactly what they said, word for word, each language in its own script (Odia in Odia script, Hindi in Devanagari, English in Latin). If the audio is silent or unclear, transcript is "" and explain in note.
 2. elements: turn what they said into screenplay lines to ADD to this scene, in proper screenplay form — "action" lines for what we see and hear, and "dialogue" with the speaking CHARACTER's name in capitals exactly as it is spelled in the scene so far (a new character: their name in capital Latin letters). Keep the writer's own words and story — do not invent new events, characters or lines they didn't say; only shape it into screenplay form (e.g. "Meera walks in and says, '…'" → an action line + MEERA's dialogue). Write action lines in the same language and script as the scene's existing action lines (if the scene is empty, in ${languageName}), and dialogue in the language the line was spoken in (normally ${languageName}), in natural spoken style. Use parenthetical only for a short acting note they actually gave, otherwise "". character is "" for action and transition lines. If they only gave an instruction you can't turn into lines to add (e.g. "delete scene 4"), return no elements and say so in note.
-3. insertAfterLine: where the new lines go. If they said where ("after Meera's line", "at the start", "before he leaves"), the number of the existing line the new lines should come right after (0 = at the very start of the scene). Otherwise ${existingElements.length} (the end).
+3. placeSaid: true only if they actually said out loud where the lines should go; otherwise false.
+insertAfterLine: where the new lines go. If they said where ("after Meera's line", "at the start", "before he leaves"), the number of the existing line the new lines should come right after (0 = at the very start of the scene). Otherwise ${fallbackAfter}${fallbackAfter === existingElements.length ? " (the end)" : " (where the writer's cursor is)"}.
 note: one short friendly sentence for the writer, like a close friend talking, in the language they mostly spoke — in Odia always the casual ତୁ form (ତୁ / ତୋ / କର / କହ, never ତୁମେ / ଆପଣ) and everyday words (ସିନ୍, not ଦୃଶ୍ୟ), e.g. "ହେଇଗଲା ଭାଇ, ସିନ୍ ଶେଷରେ ମୀରାର ଡାଇଲଗ୍ ଯୋଡ଼ିଦେଲି।" — what you added, or what you couldn't do and why.`;
 
   const response = await generateContentWithRetry({
@@ -11284,7 +11287,10 @@ note: one short friendly sentence for the writer, like a close friend talking, i
       ...(e.type === "dialogue" && String(e.parenthetical ?? "").trim() ? { parenthetical: String(e.parenthetical).trim() } : {}),
       text: String(e.text).trim(),
     }));
-  const insertAfter = Math.max(0, Math.min(existingElements.length, Number.isInteger(parsed.insertAfterLine) ? parsed.insertAfterLine : existingElements.length));
+  // Unless they named a place, the lines go to the default spot (the cursor
+  // while editing, otherwise the end) — not wherever the model guesses.
+  const spoken = parsed.placeSaid === true && Number.isInteger(parsed.insertAfterLine);
+  const insertAfter = Math.max(0, Math.min(existingElements.length, spoken ? parsed.insertAfterLine : fallbackAfter));
   return { transcript: String(parsed.transcript ?? "").trim(), elements, insertAfter, note: String(parsed.note ?? "").trim() };
 }
 
@@ -11353,7 +11359,18 @@ app.post("/api/screenplay/scene/voice", requireRole("admin"), async (req, res) =
     }
     const latest = await fetchLatestScreenplayScene(sceneListId, episodeIndex, sceneIndex);
     const previous = latest?.content ?? { elements: [], dialogueLanguage: "or" };
-    const existingElements = previous.elements ?? [];
+    // While the writer is editing the scene on the page, the voice lines go
+    // into their unsaved editor copy (at the cursor) instead of a new saved
+    // version — they press "Save my changes" themselves.
+    const isDraft = Array.isArray(req.body.draftElements);
+    const existingElements = isDraft
+      ? req.body.draftElements.slice(0, 500).map((e) => ({
+          type: String(e?.type ?? "action"),
+          character: String(e?.character ?? ""),
+          parenthetical: String(e?.parenthetical ?? ""),
+          text: String(e?.text ?? ""),
+        }))
+      : previous.elements ?? [];
     const heading = `${scene.intExt}. ${scene.location?.en ?? ""} - ${scene.timeOfDay}`;
     const outline = `${heading} — ${scene.oneLiner?.en ?? ""}`;
 
@@ -11364,9 +11381,15 @@ app.post("/api/screenplay/scene/voice", requireRole("admin"), async (req, res) =
       sceneOutline: outline,
       existingElements,
       dialogueLanguage: previous.dialogueLanguage ?? "or",
+      defaultInsertAfter: isDraft && Number.isInteger(req.body.cursorAfter) ? req.body.cursorAfter : undefined,
     });
     if (voice.elements.length === 0) {
       res.status(422).json({ error: voice.note || "I couldn't make out anything to add — try again, a little closer to the mic.", transcript: voice.transcript });
+      return;
+    }
+
+    if (isDraft) {
+      res.json({ draft: true, elements: voice.elements, transcript: voice.transcript, note: voice.note, added: voice.elements.length, insertAfter: voice.insertAfter });
       return;
     }
 

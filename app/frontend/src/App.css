@@ -1,11 +1,14 @@
 @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&family=Courier+Prime:ital,wght@0,400;0,700;1,400&family=Noto+Sans+Devanagari:wght@400;600&display=swap');
 
 :root {
-  --bg-app: #131314;
-  --bg-sidebar: #1e1f20;
-  --bg-surface: #1e1f20;
-  --bg-surface-raised: #282a2c;
-  --bg-input: #1e1f20;
+  /* "Onion screen": every surface is see-through so the animated AI
+     background (AiBackground.jsx) shows behind the panels; the blur in
+     the onion block near the end of this file keeps text readable. */
+  --bg-app: rgba(8, 10, 20, 0.35);
+  --bg-sidebar: rgba(12, 16, 30, 0.55);
+  --bg-surface: rgba(14, 18, 32, 0.5);
+  --bg-surface-raised: rgba(46, 54, 76, 0.42);
+  --bg-input: rgba(8, 10, 20, 0.6);
   --border-subtle: #3c4043;
   --border-strong: #5f6368;
   --text-primary: #e8eaed;
@@ -24,7 +27,7 @@
 
   /* Depth & motion — the "onion-skin" layered surfaces and gradient sheen
      that a flat single-hex-per-token palette can't give on its own. */
-  --glass-bg: rgba(30, 31, 34, 0.72);
+  --glass-bg: rgba(12, 16, 30, 0.5);
   --glass-border: rgba(255, 255, 255, 0.08);
   --glow-accent: 0 0 0 1px rgba(138, 180, 248, 0.16), 0 8px 28px rgba(138, 180, 248, 0.16), 0 2px 10px rgba(0, 0, 0, 0.35);
   --shadow-soft: 0 2px 10px rgba(0, 0, 0, 0.25);
@@ -6420,58 +6423,77 @@ button:not(:disabled):active {
 /* --- "Speak here" voice writing on the screenplay screen (VoiceWriterButton).
    A glowing AI orb-button floating at the bottom centre; while listening its
    glow follows the writer's voice (--voice-level, 0 → 1). */
-.voice-writer {
+/* The floating, draggable "speak here" orb (VoiceWriterButton). */
+.voice-writer-button {
+  --voice-level: 0;
   position: fixed;
-  left: 50%;
-  bottom: 22px;
-  z-index: 40;
-  transform: translateX(-50%);
+  z-index: 880;
+  width: 76px;
+  height: 76px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--text-primary);
+  cursor: grab;
+  touch-action: none;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 10px;
-  pointer-events: none;
+  justify-content: center;
+  animation: voice-orb-in 0.5s var(--ease-spring) both;
 }
 
-.voice-writer > * {
-  pointer-events: auto;
+.voice-writer-button:active {
+  cursor: grabbing;
 }
 
-.voice-writer-button {
-  --voice-level: 0;
-  position: relative;
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  padding: 10px 26px 10px 12px;
-  border-radius: 999px;
-  border: 1px solid rgba(110, 210, 255, 0.6);
-  background: radial-gradient(140% 160% at 0% 50%, rgba(80, 200, 255, 0.28), rgba(8, 14, 38, 0.92) 55%);
-  color: var(--text-primary);
-  cursor: pointer;
-  box-shadow: 0 0 0 1px rgba(110, 210, 255, 0.18), 0 0 30px rgba(80, 200, 255, 0.4), 0 10px 30px rgba(0, 0, 0, 0.45);
-  animation: voice-breathe 3s ease-in-out infinite;
-  transition: transform 0.25s var(--ease-spring), box-shadow 0.25s ease;
-}
-
-.voice-writer-button:hover:not(:disabled) {
-  transform: translateY(-3px) scale(1.03);
-  box-shadow: 0 0 0 1px rgba(110, 210, 255, 0.35), 0 0 48px rgba(80, 200, 255, 0.6), 0 12px 34px rgba(0, 0, 0, 0.5);
-}
-
-.voice-writer-button:disabled {
+.voice-writer-button[aria-disabled='true'] {
   cursor: default;
-  opacity: 0.75;
+  opacity: 0.7;
 }
 
 .voice-writer-orb {
   position: relative;
-  width: 46px;
-  height: 46px;
-  flex-shrink: 0;
+  width: 62px;
+  height: 62px;
   border-radius: 50%;
-  background: radial-gradient(circle at 35% 30%, #e6fbff 0%, #6fe0ff 28%, #3a7cff 62%, #6a3cff 100%);
-  box-shadow: 0 0 18px rgba(110, 220, 255, 0.9), 0 0 40px rgba(90, 140, 255, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: radial-gradient(circle at 35% 30%, #e6fbff 0%, #6fe0ff 26%, #3a7cff 60%, #6a3cff 100%);
+  box-shadow: 0 0 18px rgba(110, 220, 255, 0.9), 0 0 44px rgba(90, 140, 255, 0.6), 0 8px 18px rgba(0, 0, 0, 0.45);
+  animation: voice-breathe 3s ease-in-out infinite;
+  transition: transform 0.25s var(--ease-spring);
+}
+
+.voice-writer-button:hover:not([aria-disabled='true']) .voice-writer-orb {
+  transform: scale(1.08);
+}
+
+.voice-writer-mic {
+  font-size: 24px;
+  line-height: 1;
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.4));
+  pointer-events: none;
+}
+
+.voice-writer-button.is-listening .voice-writer-mic {
+  font-size: 18px;
+  color: #fff;
+}
+
+.voice-writer-caption {
+  position: absolute;
+  top: 100%;
+  margin-top: 4px;
+  white-space: nowrap;
+  font-family: var(--font-heading);
+  font-size: 12px;
+  font-weight: 600;
+  color: #dff6ff;
+  text-shadow: 0 0 10px rgba(110, 220, 255, 0.9), 0 1px 3px rgba(0, 0, 0, 0.8);
+  pointer-events: none;
 }
 
 /* A ring that ripples out of the orb — wider and brighter as the voice gets louder. */
@@ -6485,7 +6507,13 @@ button:not(:disabled):active {
   opacity: 0;
 }
 
+/* While editing on the page the orb calls for attention with a slow halo. */
+.voice-writer-button.is-editing.is-idle .voice-writer-orb::before {
+  animation: voice-ripple 2.4s ease-out infinite;
+}
+
 .voice-writer-button.is-listening .voice-writer-orb {
+  animation: none;
   transform: scale(calc(1 + var(--voice-level) * 0.35));
   box-shadow: 0 0 calc(18px + var(--voice-level) * 40px) rgba(110, 220, 255, 0.95), 0 0 calc(40px + var(--voice-level) * 70px) rgba(140, 110, 255, 0.7);
   transition: transform 0.08s linear, box-shadow 0.08s linear;
@@ -6500,44 +6528,35 @@ button:not(:disabled):active {
   animation-delay: 0.8s;
 }
 
-.voice-writer-button.is-listening {
-  border-color: rgba(150, 230, 255, 0.95);
-  box-shadow: 0 0 0 1px rgba(150, 230, 255, 0.4), 0 0 calc(40px + var(--voice-level) * 60px) rgba(80, 200, 255, 0.7), 0 10px 30px rgba(0, 0, 0, 0.45);
-}
-
 .voice-writer-button.is-writing .voice-writer-orb {
   animation: voice-think 1s linear infinite;
   background: conic-gradient(from 0deg, #6fe0ff, #6a3cff, #f8a3c4, #6fe0ff);
 }
 
-.voice-writer-text {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  line-height: 1.25;
-  text-align: left;
+.voice-writer-button.is-writing .voice-writer-mic {
+  animation: voice-think 1s linear infinite reverse;
 }
 
-.voice-writer-text strong {
-  font-family: var(--font-heading);
-  font-size: 17px;
-  letter-spacing: 0.01em;
-  text-shadow: 0 0 14px rgba(110, 220, 255, 0.7);
+/* Lines the voice orb just put into the edit glow for a few seconds. */
+.script-edit-block.is-voice-new {
+  border-radius: 6px;
+  animation: voice-new-line 4s ease-out both;
 }
 
-.voice-writer-text span {
-  font-size: 13px;
-  color: var(--text-secondary);
+@keyframes voice-new-line {
+  0%, 40% { background: rgba(110, 220, 255, 0.22); box-shadow: 0 0 0 2px rgba(110, 220, 255, 0.6), 0 0 18px rgba(110, 220, 255, 0.45); }
+  100% { background: transparent; box-shadow: none; }
 }
 
-.voice-writer-text small {
-  font-size: 11px;
-  color: var(--text-muted);
+@keyframes voice-orb-in {
+  from { opacity: 0; transform: scale(0.4); }
+  to { opacity: 1; transform: none; }
 }
 
 .voice-writer-bubble {
-  position: relative;
-  max-width: min(560px, 86vw);
+  position: fixed;
+  z-index: 881;
+  max-width: min(420px, 86vw);
   padding: 10px 34px 10px 14px;
   border-radius: 14px;
   border: 1px solid rgba(110, 210, 255, 0.4);
@@ -6569,8 +6588,8 @@ button:not(:disabled):active {
 }
 
 @keyframes voice-breathe {
-  0%, 100% { box-shadow: 0 0 0 1px rgba(110, 210, 255, 0.18), 0 0 26px rgba(80, 200, 255, 0.35), 0 10px 30px rgba(0, 0, 0, 0.45); }
-  50% { box-shadow: 0 0 0 1px rgba(110, 210, 255, 0.32), 0 0 44px rgba(80, 200, 255, 0.55), 0 10px 30px rgba(0, 0, 0, 0.45); }
+  0%, 100% { box-shadow: 0 0 16px rgba(110, 220, 255, 0.8), 0 0 36px rgba(90, 140, 255, 0.5), 0 8px 18px rgba(0, 0, 0, 0.45); }
+  50% { box-shadow: 0 0 26px rgba(110, 220, 255, 1), 0 0 60px rgba(90, 140, 255, 0.75), 0 8px 18px rgba(0, 0, 0, 0.45); }
 }
 
 @keyframes voice-ripple {
@@ -6587,15 +6606,8 @@ button:not(:disabled):active {
   to { opacity: 1; transform: none; }
 }
 
-@media (max-width: 600px) {
-  .voice-writer { bottom: 14px; }
-  .voice-writer-button { padding: 8px 18px 8px 8px; gap: 10px; }
-  .voice-writer-orb { width: 38px; height: 38px; }
-  .voice-writer-text strong { font-size: 15px; }
-}
-
 @media (prefers-reduced-motion: reduce) {
-  .voice-writer-button, .voice-writer-orb::before, .voice-writer-orb::after { animation: none; }
+  .voice-writer-button, .voice-writer-orb, .voice-writer-orb::before, .voice-writer-orb::after { animation: none !important; }
 }
 
 /* Every 🎤: while listening it glows with the speaker's voice (--voice-level
@@ -6620,4 +6632,47 @@ button:not(:disabled):active {
   border-top-color: rgba(110, 220, 255, 0.95);
   border-right-color: rgba(197, 138, 249, 0.8);
   animation: voice-think 0.9s linear infinite;
+}
+
+/* "Onion screen": the big panels are see-through layers over the animated
+   AI background; a soft blur behind each keeps its text easy to read.
+   (Colours come from the translucent --bg-* tokens at the top.) The blur
+   sits on a layer BEHIND each panel, not on the panel itself: a
+   backdrop-filter on the panel would trap every floating (position: fixed)
+   thing inside it, like menus and pop-ups. */
+.sidebar {
+  backdrop-filter: blur(14px) saturate(1.15);
+  -webkit-backdrop-filter: blur(14px) saturate(1.15);
+}
+
+.pitch-deck,
+.three-act-structure,
+.storyline-card,
+.format-picker,
+.format-form,
+.director-overview-panel,
+.script-scene-list,
+.ai-movie-editor,
+.movie-editor {
+  position: relative;
+  isolation: isolate;
+}
+
+.pitch-deck::before,
+.three-act-structure::before,
+.storyline-card::before,
+.format-picker::before,
+.format-form::before,
+.director-overview-panel::before,
+.script-scene-list::before,
+.ai-movie-editor::before,
+.movie-editor::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  pointer-events: none;
+  backdrop-filter: blur(14px) saturate(1.15);
+  -webkit-backdrop-filter: blur(14px) saturate(1.15);
 }

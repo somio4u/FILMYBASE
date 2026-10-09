@@ -9,8 +9,17 @@ import TaskBrief from './TaskBrief.jsx'
 import TaskComments from './TaskComments.jsx'
 import SubmissionPanel from './SubmissionPanel.jsx'
 import DriveCard from './DriveCard.jsx'
+import SceneList from './SceneList.jsx'
+import { PipelineBar, ShotsPanel, ArtPanel, FramesPanel, VoicePanel, VideoPanel, ExportPanel } from './PipelinePanels.jsx'
 
 const KIND_TABS = [
+  { key: 'scenes', label: 'Scenes' },
+  { key: 'shots', label: 'Shots & storyboard' },
+  { key: 'art', label: 'Reference art' },
+  { key: 'frames', label: 'Shot pictures' },
+  { key: 'voices', label: 'Voices' },
+  { key: 'video', label: 'Video' },
+  { key: 'export', label: 'Assemble & export' },
   { key: 'character', label: 'Characters' },
   { key: 'prop', label: 'Properties' },
   { key: 'location', label: 'Locations' },
@@ -33,6 +42,9 @@ const ISSUE_CATEGORY_TEXT = {
   ambiguous_match: 'Needs a decision',
   duplicate_in_output: 'Listed twice',
   quarantined: 'Skipped entry',
+  not_in_any_scene: 'Not found in the screenplay',
+  screenplay_unknown_speaker: 'Speaker not in the dossier',
+  screenplay_no_location: 'Scene without a location',
 }
 
 // "CONFLICT: ..." / "DECISION: ..." notes written by the agent are the ones
@@ -55,7 +67,10 @@ export default function ProductionDossier({ projectId, backendUrl, onProjectCrea
   const [issues, setIssues] = useState([])
   const [tasks, setTasks] = useState([])
   const [selectedTaskId, setSelectedTaskId] = useState(null)
-  const [tab, setTab] = useState('character')
+  const [sceneRefresh, setSceneRefresh] = useState(0)
+  const [pipeline, setPipeline] = useState(null)
+  const [pipeSceneId, setPipeSceneId] = useState(null)
+  const [tab, setTab] = useState('scenes')
   const [selectedId, setSelectedId] = useState(null)
   const [loadError, setLoadError] = useState(null)
   const [isBusy, setIsBusy] = useState(false)
@@ -82,12 +97,22 @@ export default function ProductionDossier({ projectId, backendUrl, onProjectCrea
     }
   }, [api, projectId])
 
+  const reloadPipeline = useCallback(async () => {
+    if (!projectId) return
+    try {
+      const response = await fetch(`${api}/${projectId}/pipeline`)
+      if (response.ok) setPipeline(await response.json())
+    } catch { /* the strip simply stays hidden */ }
+  }, [api, projectId])
+
   useEffect(() => {
     setSelectedId(null)
     setSelectedTaskId(null)
+    setPipeSceneId(null)
     setMessage(null)
     reload()
-  }, [reload])
+    reloadPipeline()
+  }, [reload, reloadPipeline])
 
   async function importFromAgent() {
     setIsBusy(true)
@@ -99,7 +124,11 @@ export default function ProductionDossier({ projectId, backendUrl, onProjectCrea
       else if (data.outcome === 'duplicate') setMessage('Nothing new: the agent’s output has not changed since the last import.')
       else if (data.outcome === 'failed') setMessage(data.error)
       else setMessage(`Imported: ${data.summary.created} new, ${data.summary.updated} updated, ${data.summary.unchanged} unchanged.`)
+      // the dossier may have changed: re-link the scenes to it (quietly; fine if there is no screenplay yet)
+      await fetch(`${api}/${projectId}/analyze-screenplay`, { method: 'POST' }).catch(() => {})
+      setSceneRefresh((n) => n + 1)
       await reload()
+      reloadPipeline()
     } catch {
       setMessage('Could not reach the server.')
     }
@@ -151,13 +180,14 @@ export default function ProductionDossier({ projectId, backendUrl, onProjectCrea
       </header>
 
       <DriveCard projectId={projectId} backendUrl={backendUrl} />
+      <PipelineBar pipeline={pipeline} api={api} projectId={projectId} onSaved={reloadPipeline} />
 
       {message && <p className="dossier-message" role="status">{message}</p>}
       {loadError && <p className="dossier-error" role="alert">{loadError}</p>}
 
       <nav className="dossier-tabs" aria-label="Dossier sections">
         {KIND_TABS.map(({ key, label }) => {
-          const n = key === 'issues' ? issues.length : key === 'tasks' ? tasks.filter((t) => t.state !== 'cancelled').length : counts[key] ?? 0
+          const n = ['scenes', 'shots', 'art', 'frames', 'voices', 'video', 'export'].includes(key) ? null : key === 'issues' ? issues.length : key === 'tasks' ? tasks.filter((t) => t.state !== 'cancelled').length : counts[key] ?? 0
           return (
             <button
               key={key}
@@ -165,13 +195,36 @@ export default function ProductionDossier({ projectId, backendUrl, onProjectCrea
               className={tab === key ? 'dossier-tab active' : 'dossier-tab'}
               onClick={() => { setTab(key); setSelectedId(null); setSelectedTaskId(null) }}
             >
-              {label} <span className="dossier-tab-count">{n}</span>
+              {label}{n === null ? null : <span className="dossier-tab-count"> {n}</span>}
             </button>
           )
         })}
       </nav>
 
-      {tab === 'tasks' ? (
+      {tab === 'scenes' ? (
+        <SceneList
+          projectId={projectId}
+          api={api}
+          refreshKey={sceneRefresh}
+          onAnalyzed={() => { reload(); reloadPipeline() }}
+          onOpenAsset={(assetId) => {
+            const asset = assets.find((a) => a.id === assetId)
+            if (asset) { setTab(asset.kind); setSelectedId(asset.id) }
+          }}
+        />
+      ) : tab === 'shots' ? (
+        <ShotsPanel projectId={projectId} api={api} sceneId={pipeSceneId} onSceneChange={setPipeSceneId} onChanged={reloadPipeline} pipeline={pipeline} />
+      ) : tab === 'art' ? (
+        <ArtPanel projectId={projectId} api={api} backendUrl={backendUrl} assets={assets} pipeline={pipeline} onChanged={reloadPipeline} />
+      ) : tab === 'frames' ? (
+        <FramesPanel projectId={projectId} api={api} backendUrl={backendUrl} sceneId={pipeSceneId} onSceneChange={setPipeSceneId} pipeline={pipeline} onChanged={reloadPipeline} />
+      ) : tab === 'voices' ? (
+        <VoicePanel projectId={projectId} api={api} backendUrl={backendUrl} sceneId={pipeSceneId} onSceneChange={setPipeSceneId} pipeline={pipeline} onChanged={reloadPipeline} />
+      ) : tab === 'video' ? (
+        <VideoPanel projectId={projectId} api={api} backendUrl={backendUrl} sceneId={pipeSceneId} onSceneChange={setPipeSceneId} pipeline={pipeline} onChanged={reloadPipeline} />
+      ) : tab === 'export' ? (
+        <ExportPanel projectId={projectId} api={api} backendUrl={backendUrl} sceneId={pipeSceneId} onSceneChange={setPipeSceneId} />
+      ) : tab === 'tasks' ? (
         <TasksView
           tasks={tasks}
           selectedTaskId={selectedTaskId}

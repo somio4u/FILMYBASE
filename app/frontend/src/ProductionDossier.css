@@ -116,3 +116,15 @@
 .drive-folder { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border-subtle); }
 .drive-layout, .drive-layout ul { margin: 6px 0; padding-left: 20px; }
 .drive-card code { overflow-wrap: anywhere; font-size: 0.85em; }
+
+/* Scenes */
+.scene-heading { margin: 2px 0 4px; font-family: var(--font-heading); letter-spacing: 0.02em; }
+.scene-chips { margin: 6px 0; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.scene-chip { padding: 3px 10px; border-radius: 999px; border: 1px solid var(--border-subtle); background: var(--bg-surface-raised); color: var(--text-primary); cursor: pointer; font: inherit; font-size: 0.82rem; min-height: 30px; }
+.scene-chip:hover { border-color: var(--border-strong); }
+.scene-elements { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.scene-elements p { margin: 2px 0 0; overflow-wrap: anywhere; }
+.scene-action { color: var(--text-secondary); font-style: italic; }
+.scene-dialogue { padding: 8px 12px; border-radius: 10px; border-left: 3px solid var(--accent); background: var(--bg-surface-raised); }
+.scene-dialogue p { color: var(--text-primary); }
+.scene-transition { text-align: right; font-size: 0.82rem; letter-spacing: 0.06em; color: var(--text-muted); }

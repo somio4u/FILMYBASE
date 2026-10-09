@@ -1,0 +1,45 @@
+/* AI production screens (shots, art, pictures, voices, video, export). */
+.pipe-bar { margin: 12px 0; padding: 12px 14px; border: 1px solid var(--border-subtle); border-radius: 14px; background: var(--bg-surface); }
+.pipe-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.pipe-chip { padding: 3px 10px; border-radius: 999px; font-size: 0.8rem; background: var(--bg-surface-raised); border: 1px solid var(--border-subtle); color: var(--text-secondary); }
+.pipe-chip.done { color: var(--success); background: var(--success-bg); border-color: transparent; }
+.pipe-money { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 10px; font-size: 0.88rem; }
+.pipe-meter { flex: 1; min-width: 80px; max-width: 220px; height: 8px; border-radius: 999px; background: var(--bg-surface-raised); overflow: hidden; }
+.pipe-meter > span { display: block; height: 100%; background: var(--accent); }
+.pipe-meter > span.hot { background: var(--danger); }
+.pipe-settings { margin-top: 12px; }
+.pipe-panel { display: flex; flex-direction: column; gap: 12px; }
+.pipe-toolbar { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 10px; }
+.pipe-inline { margin: 0; flex-direction: row; align-items: center; gap: 8px; }
+.pipe-scene-select { display: flex; flex-direction: column; gap: 4px; font-size: 0.85rem; color: var(--text-secondary); max-width: 560px; }
+.pipe-scene-select select { background: var(--bg-input); color: var(--text-primary); border: 1px solid var(--border-subtle); border-radius: 10px; padding: 8px 10px; font: inherit; min-height: 40px; }
+.pipe-shots, .pipe-items { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.pipe-shot, .pipe-item { padding: 12px 14px; border: 1px solid var(--border-subtle); border-radius: 12px; background: var(--bg-surface); }
+.pipe-shot p, .pipe-item p { margin: 6px 0; overflow-wrap: anywhere; }
+.pipe-shot-head, .pipe-item-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.pipe-item-head .dossier-small-button { margin-left: auto; }
+.pipe-shot-camera { color: var(--text-secondary); font-size: 0.85rem; }
+.pipe-storyboard { color: var(--text-secondary); }
+.pipe-lines { margin: 4px 0; padding-left: 18px; font-size: 0.9rem; }
+.pipe-card-buttons { display: inline-flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 6px; }
+.pipe-group { margin-top: 8px; }
+.pipe-group-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; }
+.pipe-group-head h3 { margin: 0; font-family: var(--font-heading); }
+.pipe-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 10px; margin-top: 8px; }
+.pipe-grid-wide { grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); }
+.pipe-card { margin: 0; padding: 8px; border: 1px solid var(--border-subtle); border-radius: 10px; background: var(--bg-surface-raised); display: flex; flex-direction: column; gap: 6px; }
+.pipe-card.approved { border-color: var(--success); }
+.pipe-card.rejected { opacity: 0.6; }
+.pipe-card figcaption { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: 0.82rem; }
+.pipe-media { width: 100%; max-height: 260px; object-fit: contain; border-radius: 8px; background: #000; display: block; }
+.pipe-working, .pipe-failed { min-height: 80px; display: flex; align-items: center; justify-content: center; text-align: center; padding: 8px; background: var(--bg-input); color: var(--text-secondary); font-size: 0.85rem; }
+.pipe-failed { color: var(--danger); }
+.pipe-audio { width: 100%; }
+.pipe-thumb { width: 96px; height: 60px; object-fit: cover; border-radius: 6px; }
+.pipe-plan { padding: 8px 12px; border-radius: 10px; background: var(--bg-surface); border: 1px solid var(--border-subtle); }
+@media (max-width: 760px) {
+  .pipe-grid, .pipe-grid-wide { grid-template-columns: 1fr 1fr; }
+  .pipe-item-head .dossier-small-button { margin-left: 0; }
+  .pipe-money { flex-direction: column; align-items: flex-start; }
+}
+.pipe-panel > .dossier-small-button { align-self: flex-start; }

@@ -36,6 +36,7 @@ test("from a blank database every production table is created with no failures, 
     "production_media_files", "production_drive_folders", "production_drive_tokens",
     "production_design_tasks", "production_task_comments",
     "production_design_submissions", "production_submission_files",
+    "production_scenes", "production_scene_elements", "production_scene_assets",
   ]) assert.ok(tables.includes(t), `missing table ${t}`);
 });
 

@@ -238,7 +238,7 @@ export function effectiveDetails(asset) {
 // Ingestion
 // ---------------------------------------------------------------------------
 
-async function addIssue(client, { projectId, assetId = null, importId = null, category, severity = "info", message }) {
+export async function addIssue(client, { projectId, assetId = null, importId = null, category, severity = "info", message }) {
   const existing = await client.query(
     `SELECT 1 FROM production_issues
      WHERE project_id = $1 AND COALESCE(asset_id, 0) = $2 AND category = $3 AND message = $4 AND status IN ('open','dismissed')`,

@@ -12,3 +12,9 @@ app/backend/media-spool/
 
 # Claude Code personal settings (machine-specific, never commit)
 .claude/settings.local.json
+
+# Local tool files (machine-specific, never commit)
+.claude/.headroom_wrap_*
+.claude/skills/
+.serena/
+skills-lock.json

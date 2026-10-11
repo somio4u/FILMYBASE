@@ -9,3 +9,6 @@ app/frontend/dist/
 
 app/backend/media/
 app/backend/media-spool/
+
+# Claude Code personal settings (machine-specific, never commit)
+.claude/settings.local.json

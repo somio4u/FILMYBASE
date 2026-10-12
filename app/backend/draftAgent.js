@@ -672,6 +672,13 @@ export async function startRevision(db, models, draftId, { instruction, constrai
   if (parent.status === "archived") throw httpError("An archived draft cannot be revised.", 409, "archived");
   const units = await draftUnits(db, parent.module, parent.project_ref);
   if (units.filter((u) => u.section === "screenplay").length === 0 && units.length < 2) throw httpError("There is nothing in this draft to revise yet.", 409, "empty_draft");
+  // ONE new draft at a time per draft: pressing Create twice (or from two places) returns the one already in progress
+  const lockKey = `revision:${parent.id}`;
+  if (STARTING.has(lockKey)) { const open = await openRequestFor(db, parent.id); if (open) return { request: requestView(open), draft: open.draft_id ? await getDraft(db, open.draft_id) : null, duplicate: true }; throw httpError("A new draft is already being started from this draft. Give it a moment.", 409, "already_starting"); }
+  STARTING.add(lockKey);
+  try {
+  const existing = await openRequestFor(db, parent.id);
+  if (existing) return { request: requestView(existing), draft: existing.draft_id ? await getDraft(db, existing.draft_id) : null, duplicate: true };
   const draft = parent.module === "film" ? null : await branchDraft(db, draftId, { label, actorUserId, note: `Revision of ${parent.label ?? `Draft ${parent.draft_number}`}: ${clip(text, 200)}` });
   const row = (await db.query(
     `INSERT INTO draft_revision_requests (group_id, module, parent_draft_id, draft_id, intent, instruction, source, constraints, context, status, created_by) VALUES ($1,$2,$3,$4,'NEW_DRAFT',$5,$6,$7,$8,'analyzing',$9) RETURNING *`,
@@ -680,6 +687,42 @@ export async function startRevision(db, models, draftId, { instruction, constrai
   if (draft) await db.query("UPDATE project_drafts SET status = 'pending_approval', current_stage = 'analyzing' WHERE id = $1", [draft.id]);
   launch(db, row.id, () => analyze(db, models, row.id));
   return { request: requestView(row), draft };
+  } finally { STARTING.delete(lockKey); }
+}
+
+const STARTING = new Set();
+const OPEN_STATUSES = ["analyzing", "awaiting_synopsis_approval", "synopsis_approved", "rewriting", "awaiting_final_approval"];
+async function openRequestFor(db, parentDraftId) {
+  return (await db.query("SELECT * FROM draft_revision_requests WHERE parent_draft_id = $1 AND intent = 'NEW_DRAFT' AND status = ANY($2) ORDER BY id DESC LIMIT 1", [parentDraftId, OPEN_STATUSES])).rows[0] ?? null;
+}
+
+// "Clean up duplicates": for every draft that has several new drafts in progress, keep only the NEWEST and remove the rest
+// (their copies are deleted, but never an approved or locked draft, Draft 1, or anything that is not a pending copy).
+export async function cleanupDuplicateRevisions(db, module, projectRef, { dryRun = false, keep: keepMode = "newest" } = {}) {
+  const g = (await db.query("SELECT group_id FROM project_drafts WHERE module = $1 AND project_ref = $2 LIMIT 1", [module, String(projectRef)])).rows[0];
+  if (!g) return { kept: [], removed: [], skipped: [] };
+  const reqs = (await db.query("SELECT * FROM draft_revision_requests WHERE group_id = $1 AND intent = 'NEW_DRAFT' AND status = ANY($2) ORDER BY parent_draft_id, id", [g.group_id, [...OPEN_STATUSES, "failed"]])).rows;
+  const byParent = new Map();
+  for (const r of reqs) byParent.set(r.parent_draft_id, [...(byParent.get(r.parent_draft_id) ?? []), r]);
+  const out = { kept: [], removed: [], skipped: [] };
+  for (const list of byParent.values()) {
+    const keep = keepMode === "none" ? null : list[list.length - 1];
+    if (keep) out.kept.push({ requestId: keep.id, draftId: keep.draft_id });
+    for (const r of keepMode === "none" ? list : list.slice(0, -1)) {
+      const d = r.draft_id ? (await db.query("SELECT * FROM project_drafts WHERE id = $1", [r.draft_id])).rows[0] : null;
+      const removable = !d || (["pending_approval", "archived"].includes(d.status) && d.kind !== "alternative");
+      if (!removable) { out.skipped.push({ requestId: r.id, draftId: r.draft_id, why: "that draft was approved or locked, so it was kept" }); continue; }
+      out.removed.push({ requestId: r.id, draftId: r.draft_id, title: d ? (d.label ?? `Draft ${d.draft_number}`) : null });
+      if (dryRun) continue;
+      await db.query("UPDATE draft_revision_requests SET status = 'cancelled', updated_at = now() WHERE id = $1", [r.id]);
+      if (r.proposal?.pipelineRunId) await db.query("UPDATE auto_pipeline_runs SET status = 'failed', error = 'Cleaned up as a duplicate.' WHERE id = $1 AND status = 'awaiting_approval'", [r.proposal.pipelineRunId]).catch(() => {});
+      if (d) {
+        await db.query("DELETE FROM project_drafts WHERE id = $1", [d.id]);
+        if (d.module === "ai_movie" && d.project_ref && String(d.project_ref) !== String(projectRef)) await db.query("DELETE FROM ai_movie_projects WHERE id = $1", [d.project_ref]).catch(() => {});
+      }
+    }
+  }
+  return out;
 }
 
 export async function retryRequest(db, models, requestId) {
@@ -925,7 +968,7 @@ export function registerDraftAgentRoutes(app, db, requireRole, { models = null }
   app.post("/api/drafts/change-sets/:id/reject", admin, wrap(async (req, res) => res.json({ changeSet: await rejectChangeSet(db, id(req.params.id) ?? 0) })));
   app.post("/api/drafts/change-sets/:id/undo", admin, wrap(async (req, res) => res.json({ changeSet: await undoChangeSet(db, id(req.params.id) ?? 0) })));
   app.post(`${base}/alternative`, admin, wrap(async (req, res) => res.status(201).json(await startAlternative(db, models, did(req), { instruction: req.body?.instruction, targetKeys: Array.isArray(req.body?.targetKeys) ? req.body.targetKeys : [], context: ctx(req), constraints: req.body?.constraints ?? {}, confirmed: req.body?.confirmed === true, actorUserId: req.user?.id }))));
-  app.post(`${base}/revision`, admin, wrap(async (req, res) => res.status(202).json(await startRevision(db, models, did(req), { instruction: req.body?.instruction, constraints: req.body?.constraints ?? {}, source: req.body?.source ?? "text", context: ctx(req), label: req.body?.label ?? null, confirmed: req.body?.confirmed === true, actorUserId: req.user?.id }))));
+  app.post(`${base}/revision`, admin, wrap(async (req, res) => { const out = await startRevision(db, models, did(req), { instruction: req.body?.instruction, constraints: req.body?.constraints ?? {}, source: req.body?.source ?? "text", context: ctx(req), label: req.body?.label ?? null, confirmed: req.body?.confirmed === true, actorUserId: req.user?.id }); res.status(out.duplicate ? 200 : 202).json(out); }));
   app.post(`${base}/new-story`, admin, wrap(async (req, res) => {
     const draft = await getDraft(db, did(req));
     const dest = req.body?.destination;
@@ -934,6 +977,11 @@ export function registerDraftAgentRoutes(app, db, requireRole, { models = null }
   }));
   app.post(`${base}/continue`, admin, wrap(async (req, res) => { const d = await saveResume(db, did(req), {}); res.json({ draftId: d.id, projectRef: d.project_ref, module: d.module, stage: d.current_stage, context: d.resume_context }); }));
   app.get("/api/drafts/:draftId/requests", admin, wrap(async (req, res) => res.json({ requests: await listRequests(db, did(req)) })));
+  app.post("/api/drafts/cleanup-duplicates", admin, wrap(async (req, res) => {
+    const { module, projectRef } = req.body ?? {};
+    if (!["film", "ai_movie"].includes(module) || !projectRef) throw httpError("Say which project to clean up.", 400, "bad_request");
+    res.json(await cleanupDuplicateRevisions(db, module, projectRef, { dryRun: req.body?.dryRun === true, keep: req.body?.keep === "none" ? "none" : "newest" }));
+  }));
   app.get("/api/drafts/requests/:id", admin, wrap(async (req, res) => res.json(await revisionDetail(db, id(req.params.id) ?? 0))));
   app.post("/api/drafts/requests/:id/synopsis/approve", admin, wrap(async (req, res) => res.json({ request: await approveSynopsis(db, models, id(req.params.id) ?? 0, { expectedRevision: req.body?.expectedRevision ?? null, actorUserId: req.user?.id }) })));
   app.post("/api/drafts/requests/:id/synopsis/changes", admin, wrap(async (req, res) => res.json({ request: await requestSynopsisChanges(db, models, id(req.params.id) ?? 0, { feedback: req.body?.feedback, expectedRevision: req.body?.expectedRevision ?? null }) })));

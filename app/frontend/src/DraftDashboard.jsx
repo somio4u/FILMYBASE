@@ -105,6 +105,14 @@ export default function DraftDashboard({ module, projectRef, backendUrl, onConti
     )
   }
 
+  const cleanup = async () => {
+    const preview = await call(`${api}/cleanup-duplicates`, 'POST', { module, projectRef, dryRun: true, keep: 'none' })
+    if (!preview.ok) { setError(preview.data?.error ?? 'Could not check for duplicates.'); return }
+    const names = (preview.data.removed ?? []).map((x) => x.title ?? 'a draft being made').join(', ')
+    if (!window.confirm(`Delete these unfinished duplicate copies: ${names || 'none'}?\n\nYour original draft and any draft you made yourself are kept.`)) return
+    await act('cleanup', () => call(`${api}/cleanup-duplicates`, 'POST', { module, projectRef, keep: 'none' }))
+  }
+
   const Card = ({ d }) => {
     const parent = d.parentDraftId ? byId.get(d.parentDraftId) : null
     return (
@@ -151,7 +159,10 @@ export default function DraftDashboard({ module, projectRef, backendUrl, onConti
         {picked.length === 2 && <p><button type="button" className="dd-btn primary" onClick={() => setCompare(picked.map((id) => byId.get(id)))}>Compare {byId.get(picked[0])?.title} with {byId.get(picked[1])?.title}</button></p>}
         {picked.length < 2 && visible.length > 1 && <p className="dd-fine">Tick two drafts to compare them.</p>}
         {compare && <Compare a={compare[0]} b={compare[1]} backendUrl={backendUrl} onClose={() => setCompare(null)} />}
-        {(dash.revisions ?? []).map((q) => <p key={q.id} className="dd-flag" data-request-id={q.id}>A new draft is being made: “{String(q.instruction).slice(0, 90)}” — {q.status.replace(/_/g, ' ')} <button type="button" className="dd-btn" onClick={() => onReviewRequest?.({ openRequest: q })}>Review revision</button></p>)}
+        {(dash.revisions ?? []).length === 1 && (() => { const q = dash.revisions[0]; return <p className="dd-flag" data-request-id={q.id}>A new draft is being made: “{String(q.instruction).slice(0, 90)}” — {q.status.replace(/_/g, ' ')} <button type="button" className="dd-btn" onClick={() => onReviewRequest?.({ openRequest: q })}>Review revision</button></p> })()}
+        {(dash.revisions ?? []).length > 1 && (
+          <p className="dd-flag" data-testid="dup-warning">There are {dash.revisions.length} unfinished “new draft” copies here — probably duplicates. <button type="button" className="dd-btn primary" disabled={Boolean(busy)} onClick={cleanup}>Delete the duplicates</button></p>
+        )}
         <ul className="dd-cards">{visible.map((d) => <Card key={d.id} d={d} />)}</ul>
         {archived.length > 0 && <details className="dd-archived"><summary>Archived ({archived.length})</summary><ul className="dd-cards">{archived.map((d) => <Card key={d.id} d={d} />)}</ul></details>}
       </div>

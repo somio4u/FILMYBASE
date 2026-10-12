@@ -11,7 +11,7 @@ import { branchDraft, compareDrafts, draftUnits, ensureDraftFor, getDraft, updat
 import { applyChangeSet, approveFinal, approveSynopsis, cancelRequest, classifyPrompt, conform, failInterruptedRequests, getRequest, heuristicIntent, interpret, productionImpact, propose, registerDraftAgentRoutes, rejectChangeSet, requestSynopsisChanges, resolveTargets, retryRequest, revisionDetail, startAlternative, startRevision, undoChangeSet, whenIdle, readUnit } from "../draftAgent.js";
 import { createBlank } from "../drafts.js";
 import { fakePipeline } from "../draftAgentMock.js";
-import { setPollMs } from "../draftAgent.js";
+import { setPollMs, cleanupDuplicateRevisions } from "../draftAgent.js";
 
 const db = new pg.Pool({ database: process.env.TEST_DB || "filmmaking_app_test", user: process.env.PGUSER || "root", host: process.env.PGHOST || "/var/run/postgresql" });
 const requireRole = () => (req, res, next) => ((req.user = { id: 1 }), next());
@@ -379,10 +379,46 @@ test("cancel archives the copy (kept for the record) and the original is untouch
     assert.equal(await unitHashes(module, ref()), before);
   }
   const d = await ensureDraftFor(db, "ai_movie", ai);
+  await cancelRequest(db, (await db.query("SELECT id FROM draft_revision_requests WHERE status = 'awaiting_final_approval' ORDER BY id DESC LIMIT 1")).rows[0].id);
   const never = new Promise(() => {});
   const stuck = await startRevision(db, mockModels({ json: () => never }), d.id, { instruction: "Change the villain.", confirmed: true });
   assert.equal(await failInterruptedRequests(db), 1);
   assert.equal((await getRequest(db, stuck.request.id)).status, "failed");
+});
+
+test("duplicates: pressing Create twice gives the ONE request in progress; cleanup removes the extra copies, keeps other drafts, and never touches the original", async () => {
+  for (const [module, ref] of MODS()) {
+    const d = await ensureDraftFor(db, module, ref());
+    const before = await unitHashes(module, ref());
+    const [a, b] = await Promise.all([1, 2].map(() => startRevision(db, mockModels(), d.id, { instruction: "Change the villain.", confirmed: true, actorUserId: 1 }).catch((e) => ({ err: e }))));
+    const ok = [a, b].filter((x) => !x.err);
+    assert.ok(ok.length >= 1);
+    await whenIdle(ok[0].request.id);
+    const again = await startRevision(db, mockModels(), d.id, { instruction: "Something else entirely.", confirmed: true, actorUserId: 1 });
+    assert.equal(again.duplicate, true, "a second request while one is open returns the first");
+    assert.equal(again.request.id, ok[0].request.id);
+    assert.equal((await db.query("SELECT count(*)::int AS n FROM draft_revision_requests WHERE parent_draft_id = $1 AND status NOT IN ('cancelled','failed')", [d.id])).rows[0].n, 1);
+    // older stray copies (made before the guard existed) are cleaned up
+    if (module === "ai_movie") {
+      const stray = await startRevision(db, mockModels(), d.id, { instruction: "x", confirmed: true }).catch(() => null);
+      await cancelRequest(db, ok[0].request.id);
+      const s1 = await startRevision(db, mockModels(), d.id, { instruction: "stray one", confirmed: true, actorUserId: 1 }); await whenIdle(s1.request.id);
+      await db.query("UPDATE draft_revision_requests SET status = 'cancelled' WHERE id = $1", [s1.request.id]);
+      const s2 = await startRevision(db, mockModels(), d.id, { instruction: "stray two", confirmed: true, actorUserId: 1 }); await whenIdle(s2.request.id);
+      await db.query("UPDATE draft_revision_requests SET status = 'awaiting_final_approval' WHERE id = $1", [s1.request.id]);
+      const own = await branchDraft(db, d.id, { label: "NIRAKARS CHANGE" });
+      void stray;
+      const dry = await cleanupDuplicateRevisions(db, module, ref(), { dryRun: true, keep: "none" });
+      assert.equal((await getDraft(db, s1.draft.id)).id, s1.draft.id, "a dry run deletes nothing");
+      assert.ok(dry.removed.length >= 2);
+      const out = await cleanupDuplicateRevisions(db, module, ref(), { keep: "none" });
+      assert.ok(out.removed.length >= 2);
+      for (const x of [s1, s2]) assert.equal((await db.query("SELECT count(*)::int AS n FROM project_drafts WHERE id = $1", [x.draft.id])).rows[0].n, 0, "the extra copy is gone");
+      assert.equal((await getDraft(db, own.id)).label, "NIRAKARS CHANGE", "a draft that is not a revision copy is kept");
+      assert.equal((await getDraft(db, d.id)).id, d.id, "the original is kept");
+    } else await cancelRequest(db, ok[0].request.id);
+    assert.equal(await unitHashes(module, ref()), before);
+  }
 });
 
 test("new story: choose same project (a draft on the dashboard) or a new project; the current draft is untouched; both modules", async () => {

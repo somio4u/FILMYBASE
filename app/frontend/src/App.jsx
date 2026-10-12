@@ -6910,6 +6910,14 @@ function App() {
     setDraftDashboard({ module, projectRef: id })
   }
 
+  // If the drafts service is unavailable, the project must still open exactly as it always did.
+  async function openProjectDirect({ module, projectRef }) {
+    setDraftDashboard(null)
+    setIsSidebarOpen(false)
+    if (module === 'film') { setActiveAgent('story'); await loadProject(projectRef) }
+    else { await loadAiMovieProject(projectRef); setAiMovieView('editor') }
+  }
+
   async function continueDraft(draft) {
     setDraftDashboard(null)
     setIsSidebarOpen(false)
@@ -11371,7 +11379,7 @@ function App() {
         <DictationContext.Provider value={{ t, dictationLanguage, onDictationLanguageChange: handleDictationLanguageChange }}>
           <FloatingAgentWidget currentUser={currentUser} t={t} onRunCompleted={() => loadProjectList()} />
         </DictationContext.Provider>
-      {draftDashboard && <DraftDashboard module={draftDashboard.module} projectRef={draftDashboard.projectRef} backendUrl={BACKEND_URL} onContinue={continueDraft} onClose={() => setDraftDashboard(null)} onReviewRequest={(d) => { setDraftDashboard(null); openAgentPanel(d.openRequest?.id ?? null) }} />}
+      {draftDashboard && <DraftDashboard module={draftDashboard.module} projectRef={draftDashboard.projectRef} backendUrl={BACKEND_URL} onContinue={continueDraft} onClose={() => setDraftDashboard(null)} onOpenDirect={openProjectDirect} onReviewRequest={(d) => { setDraftDashboard(null); openAgentPanel(d.openRequest?.id ?? null) }} />}
       {currentDraft && !agentPanel && !draftDashboard && (
         <button type="button" className="dd-btn da-launch" onMouseDown={(e) => e.preventDefault()} onClick={() => openAgentPanel()} title="Ask the Auto Screenplay Agent — works from any stage">✍ Auto Screenplay Agent</button>
       )}
@@ -12648,7 +12656,7 @@ function App() {
         onRunCompleted={() => loadProjectList()}
         onOpenProject={(id) => { setActiveAgent('story'); loadProject(id) }}
       />
-      {draftDashboard && <DraftDashboard module={draftDashboard.module} projectRef={draftDashboard.projectRef} backendUrl={BACKEND_URL} onContinue={continueDraft} onClose={() => setDraftDashboard(null)} onReviewRequest={(d) => { setDraftDashboard(null); openAgentPanel(d.openRequest?.id ?? null) }} />}
+      {draftDashboard && <DraftDashboard module={draftDashboard.module} projectRef={draftDashboard.projectRef} backendUrl={BACKEND_URL} onContinue={continueDraft} onClose={() => setDraftDashboard(null)} onOpenDirect={openProjectDirect} onReviewRequest={(d) => { setDraftDashboard(null); openAgentPanel(d.openRequest?.id ?? null) }} />}
       {currentDraft && !agentPanel && !draftDashboard && (
         <button type="button" className="dd-btn da-launch" onMouseDown={(e) => e.preventDefault()} onClick={() => openAgentPanel()} title="Ask the Auto Screenplay Agent — works from any stage">✍ Auto Screenplay Agent</button>
       )}

@@ -52,7 +52,7 @@ function Compare({ a, b, backendUrl, onClose }) {
   )
 }
 
-export default function DraftDashboard({ module, projectRef, backendUrl, onContinue, onClose, onChanged, onReviewRequest }) {
+export default function DraftDashboard({ module, projectRef, backendUrl, onContinue, onClose, onChanged, onReviewRequest, onOpenDirect }) {
   const api = `${backendUrl}/api/drafts`
   const [dash, setDash] = useState(null)
   const [error, setError] = useState(null)
@@ -63,7 +63,8 @@ export default function DraftDashboard({ module, projectRef, backendUrl, onConti
 
   const load = useCallback(async () => {
     const r = await call(`${api}?module=${module}&projectRef=${projectRef}`)
-    if (r.ok) setDash(r.data); else setError(r.data.error ?? 'Could not load the drafts.')
+    if (r.ok) setDash(r.data)
+    else setError(r.data.error ?? (r.status ? `The server did not answer the drafts request properly (status ${r.status}). The backend may still be updating — try again in a minute.` : 'Could not reach the server.'))
   }, [api, module, projectRef])
   useEffect(() => { load() }, [load])
 
@@ -86,7 +87,20 @@ export default function DraftDashboard({ module, projectRef, backendUrl, onConti
   const visible = (dash?.drafts ?? []).filter((d) => d.status !== 'archived')
   const archived = (dash?.drafts ?? []).filter((d) => d.status === 'archived')
 
-  if (!dash) return <div className="dd-overlay"><div className="dd">{error ? <p className="dd-error" role="alert">{error}</p> : <p className="dd-note">Loading drafts…</p>}<button type="button" className="dd-btn" onClick={onClose}>Close</button></div></div>
+  if (!dash) {
+    return (
+      <div className="dd-overlay">
+        <div className="dd">
+          {error ? <p className="dd-error" role="alert">{error}</p> : <p className="dd-note">Loading drafts…</p>}
+          <div className="dd-actions">
+            {error && <button type="button" className="dd-btn primary" onClick={() => onOpenDirect?.({ module, projectRef })}>Open the project anyway (without drafts)</button>}
+            {error && <button type="button" className="dd-btn" onClick={load}>Try again</button>}
+            <button type="button" className="dd-btn" onClick={onClose}>Close</button>
+          </div>
+        </div>
+      </div>
+    )
+  }
 
   const Card = ({ d }) => {
     const parent = d.parentDraftId ? byId.get(d.parentDraftId) : null

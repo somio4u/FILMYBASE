@@ -18470,6 +18470,37 @@ em{color:#555}@media print{body{padding:0}}
 // row only ever gets inserted once that stage fully succeeds, so "does this
 // row exist yet" is already an exact, free checkpoint marker; no separate
 // progress-tracking scheme needed.
+// Restarts a stopped run from its last saved point. Used by the Resume button AND automatically after a
+// server restart / redeploy, so a story run no longer dies just because the host restarted.
+// Returns { runId } or { error, status }.
+async function resumeAutoPipelineRun(run) {
+  if (!run.concept_id && usesStoryBrain(run.format)) {
+    // Stopped while the Story Brain was working: a finished Bible goes back
+    // to waiting for approval; otherwise the Brain designs it again.
+    if (run.story_bible) {
+      await updateAutoPipelineRun(run.id, { status: "awaiting_approval", progress_stage: "story-bible", error: null });
+    } else {
+      await db.query("UPDATE auto_pipeline_runs SET status = 'running', error = NULL, updated_at = now() WHERE id = $1", [run.id]);
+      runStoryBrainStage(run.id, ideaWithReferences(run.concept_text, run.reference_context), run.format);
+    }
+    return { runId: run.id };
+  }
+  if (!run.concept_id) return { error: "This run failed before any progress was saved — start a new run instead.", status: 400 };
+
+  await db.query("UPDATE auto_pipeline_runs SET status = 'running', error = NULL, updated_at = now() WHERE id = $1", [run.id]);
+
+  // Deliberately not awaited — see runAutoPipeline's own comment.
+  if (run.story_bible) {
+    runAutoPipeline(run.id, bibleAsIdea(run.concept_text, run.story_bible), run.format, run.dialogue_language, run.concept_id, {
+      storyBible: run.story_bible,
+      ideaText: run.concept_text,
+    });
+  } else {
+    runAutoPipeline(run.id, ideaWithReferences(run.concept_text, run.reference_context), run.format, run.dialogue_language, run.concept_id, { ideaText: run.concept_text });
+  }
+  return { runId: run.id };
+}
+
 app.post("/api/auto-pipeline/:id/resume", requireRole("admin"), async (req, res) => {
   const runResult = await db.query("SELECT * FROM auto_pipeline_runs WHERE id = $1", [req.params.id]);
   const run = runResult.rows[0];
@@ -18482,37 +18513,27 @@ app.post("/api/auto-pipeline/:id/resume", requireRole("admin"), async (req, res)
     res.status(400).json({ error: "Only a failed run can be resumed." });
     return;
   }
-  if (!run.concept_id && usesStoryBrain(run.format)) {
-    // Stopped while the Story Brain was working: a finished Bible goes back
-    // to waiting for approval; otherwise the Brain designs it again.
-    if (run.story_bible) {
-      await updateAutoPipelineRun(run.id, { status: "awaiting_approval", progress_stage: "story-bible", error: null });
-    } else {
-      await db.query("UPDATE auto_pipeline_runs SET status = 'running', error = NULL WHERE id = $1", [run.id]);
-      runStoryBrainStage(run.id, ideaWithReferences(run.concept_text, run.reference_context), run.format);
-    }
-    res.json({ runId: run.id });
-    return;
-  }
-  if (!run.concept_id) {
-    res.status(400).json({ error: "This run failed before any progress was saved — start a new run instead." });
-    return;
-  }
-
-  await db.query("UPDATE auto_pipeline_runs SET status = 'running', error = NULL WHERE id = $1", [run.id]);
-
-  // Deliberately not awaited — see runAutoPipeline's own comment.
-  if (run.story_bible) {
-    runAutoPipeline(run.id, bibleAsIdea(run.concept_text, run.story_bible), run.format, run.dialogue_language, run.concept_id, {
-      storyBible: run.story_bible,
-      ideaText: run.concept_text,
-    });
-  } else {
-    runAutoPipeline(run.id, ideaWithReferences(run.concept_text, run.reference_context), run.format, run.dialogue_language, run.concept_id, { ideaText: run.concept_text });
-  }
-
-  res.json({ runId: run.id });
+  const out = await resumeAutoPipelineRun(run);
+  if (out.error) { res.status(out.status ?? 400).json({ error: out.error }); return; }
+  res.json({ runId: out.runId });
 });
+
+// A new server process has no run in flight, so anything still marked "running" was cut off by a restart or redeploy.
+// Pick it up again by itself (at most 3 automatic tries per run, so a run that keeps crashing cannot loop or run up cost).
+async function resumeInterruptedAutoPipelineRuns() {
+  try {
+    await db.query("ALTER TABLE auto_pipeline_runs ADD COLUMN IF NOT EXISTS auto_resumes INTEGER NOT NULL DEFAULT 0");
+    const cut = (await db.query("SELECT * FROM auto_pipeline_runs WHERE status = 'running' AND updated_at > now() - interval '12 hours' ORDER BY id")).rows;
+    for (const run of cut) {
+      if ((run.auto_resumes ?? 0) >= 3) continue;
+      await db.query("UPDATE auto_pipeline_runs SET auto_resumes = auto_resumes + 1 WHERE id = $1", [run.id]);
+      const out = await resumeAutoPipelineRun(run);
+      console.log(out.error ? `Could not auto-resume run ${run.id}: ${out.error}` : `Auto-resumed run ${run.id} after a restart.`);
+    }
+  } catch (error) {
+    console.error("Auto-resume of interrupted runs failed:", error.message);
+  }
+}
 
 // Odia is the base/canonical dialogue language for the auto-pipeline (see
 // buildScreenplaySystemPrompt) — Hindi/English are produced by translating
@@ -19356,7 +19377,7 @@ ensureAiMovieSchema()
 // Runs once on every process start (catches anything left stale from a
 // previous process lifetime — e.g. right after a host restart) and then
 // on a regular interval for the rest of this process's own lifetime.
-reapStaleAutoPipelineRuns();
+setTimeout(() => resumeInterruptedAutoPipelineRuns().finally(reapStaleAutoPipelineRuns), 8000);
 setInterval(reapStaleAutoPipelineRuns, 5 * 60 * 1000);
 
 // Self-keepalive: Render's free/hobby tier spins this service down after
@@ -19369,9 +19390,12 @@ setInterval(reapStaleAutoPipelineRuns, 5 * 60 * 1000);
 // external dependency at all: the app pings its own public URL, which
 // Render sees as ordinary incoming traffic (same as any real visitor),
 // so the service never has a reason to go idle in the first place.
-if (!BACKEND_URL.includes("localhost")) {
-  const SELF_PING_INTERVAL_MS = 10 * 60 * 1000; // safely under Render's ~15-minute idle window
+// Render sets RENDER_EXTERNAL_URL itself, so this works even when BACKEND_URL was never configured.
+const KEEPALIVE_URL = (!BACKEND_URL.includes("localhost") ? BACKEND_URL : process.env.RENDER_EXTERNAL_URL) || null;
+if (KEEPALIVE_URL) {
+  const SELF_PING_INTERVAL_MS = 4 * 60 * 1000; // well under Render's ~15-minute idle window
+  console.log(`Keepalive on: pinging ${KEEPALIVE_URL}/api/health every 4 minutes.`);
   setInterval(() => {
-    fetch(`${BACKEND_URL}/api/health`).catch((error) => console.error("Self-ping failed:", error.message));
+    fetch(`${KEEPALIVE_URL}/api/health`).catch((error) => console.error("Self-ping failed:", error.message));
   }, SELF_PING_INTERVAL_MS);
 }

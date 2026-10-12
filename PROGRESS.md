@@ -1620,3 +1620,8 @@ Plain version: every project is now a set of **drafts**. Opening a project shows
 
 ## Resume button for a stopped story run
 - A run that stopped while Story Brain was still designing (no project yet) had no Resume button, even though the message told you to press it. The button ("Pick up where it broke") now shows for every stopped run, and any error from it is shown right under it.
+
+## Story runs survive restarts
+- Keep-awake: the backend pings its own address every 4 minutes. It now also works when only Render's own address setting exists (no BACKEND_URL needed).
+- Auto-resume: when the backend starts (after a redeploy or sleep), any story run that was cut off while "running" is picked up again by itself from its last saved point. At most 3 automatic tries per run.
+- Note: every deploy restarts the backend, so a run in progress at that moment now continues by itself instead of stopping.

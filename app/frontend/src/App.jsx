@@ -2774,23 +2774,36 @@ function FloatingAgentWidget({ currentUser, t, onRunCompleted, onOpenProject, dr
 
   // The backend can be waking up or restarting (free hosting): retry a few times instead of showing an error.
   // Returns { ok, status, data } or null if the server never answered.
+  const lastProblemRef = useRef('')
   async function postWithRetry(url, body) {
     const waits = [0, 3000, 7000, 15000, 25000]
+    lastProblemRef.current = ''
     for (let i = 0; i < waits.length; i += 1) {
       if (waits[i]) {
-        setErrorMessage('The server is waking up — trying again…')
+        setErrorMessage(`The server is waking up — trying again (${i}/${waits.length - 1})…${lastProblemRef.current ? ` [${lastProblemRef.current}]` : ''}`)
         await new Promise((resolve) => setTimeout(resolve, waits[i]))
       }
       try {
         const response = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body ?? {}) })
-        const data = await response.json().catch(() => null)
+        const raw = await response.text()
+        let data = null
+        try { data = JSON.parse(raw) } catch { data = null }
         // the app's own answers are JSON (success or a real message): stop here. A gateway page (not JSON) means it is restarting: try again
         if (data) return { ok: response.ok, status: response.status, data }
-      } catch {
-        // network error: try again
+        lastProblemRef.current = `HTTP ${response.status}, not a normal reply: ${raw.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 80) || 'empty'}`
+      } catch (error) {
+        lastProblemRef.current = `${error?.name ?? 'Error'}: ${error?.message ?? 'no connection'}`
       }
     }
     return null
+  }
+
+  // The exact reason, so a failure can be diagnosed from a screenshot
+  function describeFailure(action, result) {
+    let host = BACKEND_URL
+    try { host = new URL(BACKEND_URL).host } catch { /* keep as is */ }
+    if (!result) return `${t.genericError}\n[Technical: ${action} — no usable reply from ${host} after 5 tries. Last problem: ${lastProblemRef.current || 'unknown'}]`
+    return `${result.data?.error || t.genericError}\n[Technical: ${action} — HTTP ${result.status} from ${host}${result.data?.error ? '' : `, reply: ${JSON.stringify(result.data).slice(0, 120)}`}]`
   }
 
   async function handleResume() {
@@ -2798,8 +2811,7 @@ function FloatingAgentWidget({ currentUser, t, onRunCompleted, onOpenProject, dr
     setIsResuming(true)
     setErrorMessage(null)
     const result = await postWithRetry(`${BACKEND_URL}/api/auto-pipeline/${runId}/resume`)
-    if (!result) setErrorMessage(t.genericError)
-    else if (!result.ok) setErrorMessage(result.data.error || t.genericError)
+    if (!result || !result.ok) setErrorMessage(describeFailure('resume', result))
     else {
       setErrorMessage(null)
       notifiedRef.current = false
@@ -2816,8 +2828,7 @@ function FloatingAgentWidget({ currentUser, t, onRunCompleted, onOpenProject, dr
     setIsSendingBible(true)
     setErrorMessage(null)
     const result = await postWithRetry(`${BACKEND_URL}/api/auto-pipeline/${runId}/${action === 'approve' ? 'bible-approve' : 'bible-note'}`, action === 'note' ? { note: bibleNote } : {})
-    if (!result) setErrorMessage(t.genericError)
-    else if (!result.ok && !/isn't waiting/.test(result.data.error ?? '')) setErrorMessage(result.data.error || t.genericError)
+    if (!result || (!result.ok && !/isn't waiting/.test(result.data.error ?? ''))) setErrorMessage(describeFailure(action === 'approve' ? 'approve' : 'note', result))
     else {
       // success, or an earlier try had already gone through (it is no longer waiting): just refresh
       setErrorMessage(null)

@@ -1635,3 +1635,6 @@ Plain version: every project is now a set of **drafts**. Opening a project shows
 - The audience critic now scores every ending (anything under 8 is a problem) and flags repeated types and weak "to be continued" endings.
 - Divine and supernatural elements (possession, miracles, divine help) are now welcome: the critics no longer treat them as clichés or "deus ex machina" when they follow the story's own rules. "Fix it with my note" keeps them and keeps the cliffhanger standard.
 - Applies to NEW Story Bibles and to any Bible revised with a note. A Bible that is already finished keeps its old endings until it is revised.
+
+## Errors name themselves
+- When Approve / Fix it with my note / Pick up where it broke fails, the panel now adds a "[Technical: …]" line: which action, which server it contacted, the HTTP status or the browser's error name, and the first words of what came back. This makes a failure diagnosable from a screenshot.

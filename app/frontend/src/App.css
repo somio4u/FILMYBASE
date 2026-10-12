@@ -7525,3 +7525,4 @@ button:not(:disabled):active {
     white-space: nowrap;
   }
 }
+.floating-agent-panel .feedback-note { white-space: pre-line; overflow-wrap: anywhere; }

@@ -167,3 +167,10 @@
 .ex-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
 .ex-flags span { margin-right: 8px; }
 @media (max-width: 640px) { .tl-edit-row input[type='number'] { width: 60px; } }
+
+/* drag handles */
+.tl-clip { touch-action: pan-y; user-select: none; }
+.tl-clip.dragging { opacity: .85; z-index: 5; outline: 2px dashed #2563eb; cursor: grabbing; }
+.tl-handle { position: absolute; top: 0; right: 0; width: 10px; height: 100%; cursor: ew-resize; background: linear-gradient(90deg, transparent, rgba(255,255,255,.55)); border-radius: 0 6px 6px 0; touch-action: none; }
+.tl-handle:hover { background: rgba(37,99,235,.7); }
+.tl-drag-tip { position: absolute; top: 2px; right: 14px; background: #111; color: #fff; font-size: .7rem; padding: 1px 6px; border-radius: 4px; white-space: nowrap; pointer-events: none; }

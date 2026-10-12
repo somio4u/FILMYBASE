@@ -24,19 +24,26 @@ export const fmtTime = (ms) => {
   const s = (total - m * 60).toFixed(1).padStart(4, '0')
   return `${m}:${s}`
 }
+const MIN_MS = 300
 const STATE_LABEL = { planned: 'Planned', first_frame: 'First frame approved', video: 'Video approved', audio: 'Audio approved' }
 const STATE_ICON = { planned: '○', first_frame: '▣', video: '▶', audio: '♪' }
 
-function Clip({ c, scale, selected, onSelect, backendUrl }) {
-  const left = c.startMs * scale
-  const width = Math.max(14, c.durationMs * scale)
+function Clip({ c, scale, selected, onSelect, backendUrl, drag, onDragStart }) {
+  // while this clip is being dragged, show where it will land (nothing is saved until the mouse/finger is released)
+  const live = drag && drag.clipId === c.id ? drag : null
+  const startMs = live?.mode === 'move' ? Math.max(0, live.origStart + live.deltaMs) : c.startMs
+  const durationMs = live?.mode === 'trim' ? Math.max(MIN_MS, live.origDur + live.deltaMs) : c.durationMs
+  const left = startMs * scale
+  const width = Math.max(14, durationMs * scale)
+  const canTrim = c.kind === 'shot' && !c.orphaned
   const thumb = c.kind === 'shot' ? (c.frame?.url ?? (c.media?.type === 'image' ? c.media.url : null)) : null
   const review = Object.values(c.reviewNeeded ?? {}).reduce((a, b) => a + b, 0)
   return (
     <button
       type="button"
       data-clip-id={c.id}
-      className={`tl-clip tl-${c.kind} state-${c.state}${selected ? ' selected' : ''}${c.orphaned ? ' orphaned' : ''}`}
+      className={`tl-clip tl-${c.kind} state-${c.state}${selected ? ' selected' : ''}${c.orphaned ? ' orphaned' : ''}${live ? ' dragging' : ''}`}
+      onPointerDown={(e) => { if (!c.orphaned && e.button === 0) onDragStart?.(e, c, 'move') }}
       style={{ left, width, backgroundImage: thumb ? `linear-gradient(rgba(0,0,0,.25), rgba(0,0,0,.55)), url(${backendUrl}${thumb})` : undefined }}
       onClick={() => onSelect(c.id)}
       aria-pressed={selected}
@@ -46,6 +53,8 @@ function Clip({ c, scale, selected, onSelect, backendUrl }) {
       <span className="tl-clip-icon" aria-hidden="true">{STATE_ICON[c.state]}</span>
       <span className="tl-clip-label">{c.kind === 'shot' ? (width < 110 ? (c.shotRef ?? '').replace(/^SC\d+_/, '') : c.shotRef) : c.label}</span>
       {review > 0 && <span className="tl-clip-review" aria-hidden="true">●</span>}
+      {canTrim && <span className="tl-handle" role="presentation" title="Drag to make the clip longer or shorter" onPointerDown={(e) => { e.stopPropagation(); if (e.button === 0) onDragStart?.(e, c, 'trim') }} />}
+      {live && <span className="tl-drag-tip" aria-hidden="true">{live.mode === 'trim' ? `${(durationMs / 1000).toFixed(1)} s` : c.kind === 'shot' ? 'drop to reorder' : `${(startMs / 1000).toFixed(1)} s`}</span>}
     </button>
   )
 }
@@ -148,6 +157,10 @@ export default function TimelineView({ projectId, backendUrl, onNavigate }) {
   const [playhead, setPlayhead] = useState(0)
   const scroller = useRef(null)
   const [note, setNote] = useState(null)
+  const [ripple, setRipple] = useState(false)
+  const [drag, setDrag] = useState(null)
+  const dragRef = useRef(null)
+  const justDragged = useRef(false)
   const load = useCallback(async () => {
     const r = await call(`${api}/${projectId}/timeline`)
     if (r.ok) setTl(r.data)
@@ -167,6 +180,44 @@ export default function TimelineView({ projectId, backendUrl, onNavigate }) {
     setNote(r.ok ? { ok: true, text: `Saved timeline version ${r.data.snapshot.version}. Open Export & Delivery to render it.` } : { ok: false, text: r.data?.error ?? 'Could not save.' })
   }
   const scale = zoom / 1000
+  // Drag a clip's right edge to trim it; drag the clip itself to move it (a shot is re-ordered, a sound clip moves in time).
+  // Only one edit is sent, when the pointer is released, and it can be undone. Ripple follows the checkbox above the timeline.
+  function onDragStart(e, c, mode) {
+    {
+      const state = { clipId: c.id, mode, startX: e.clientX, origStart: c.startMs, origDur: c.durationMs, deltaMs: 0, moved: false }
+      dragRef.current = state
+      setSelected(c.id)
+      const onMove = (ev) => {
+        const delta = Math.round((ev.clientX - state.startX) / scale / 100) * 100
+        if (!state.moved && Math.abs(ev.clientX - state.startX) < 4) return
+        state.moved = true
+        state.deltaMs = delta
+        setDrag({ ...state })
+      }
+      const onUp = async () => {
+        window.removeEventListener('pointermove', onMove)
+        window.removeEventListener('pointerup', onUp)
+        window.removeEventListener('pointercancel', onUp)
+        dragRef.current = null
+        setDrag(null)
+        if (!state.moved || state.deltaMs === 0) return
+        justDragged.current = true
+        setTimeout(() => { justDragged.current = false }, 0)
+        if (mode === 'trim') await editOp({ type: 'trim', clipId: c.id, durationMs: Math.max(MIN_MS, state.origDur + state.deltaMs), ripple })
+        else if (c.kind === 'shot') {
+          const centre = state.origStart + state.deltaMs + state.origDur / 2
+          const others = shotClips.filter((x) => x.shotId !== c.shotId)
+          const target = others.find((x) => x.startMs + x.durationMs / 2 > centre) ?? null
+          const i = shotClips.findIndex((x) => x.id === c.id)
+          if ((target?.id ?? null) === (shotClips.slice(i + 1).find((x) => x.shotId !== c.shotId)?.id ?? null)) return
+          await editOp({ type: 'reorder', clipId: c.id, beforeClipId: target?.id ?? null })
+        } else await editOp({ type: 'move', clipId: c.id, startMs: Math.max(0, state.origStart + state.deltaMs) })
+      }
+      window.addEventListener('pointermove', onMove)
+      window.addEventListener('pointerup', onUp)
+      window.addEventListener('pointercancel', onUp)
+    }
+  }
   const clips = useMemo(() => (tl?.clips ?? []).filter((c) => !c.orphaned || c.media), [tl])
   const shotClips = useMemo(() => clips.filter((c) => c.kind === 'shot').sort((a, b) => a.startMs - b.startMs), [clips])
   useEffect(() => { if (!selected && shotClips[0]) setSelected(shotClips[0].id) }, [shotClips, selected])
@@ -213,7 +264,7 @@ export default function TimelineView({ projectId, backendUrl, onNavigate }) {
         <button type="button" className="dossier-small-button" onClick={saveSnapshot} title="Freeze this exact edit as a numbered version that can be exported">Save version</button>
         <button type="button" className="dossier-small-button" onClick={() => onNavigate?.('export')}>Export…</button>
       </header>
-      <TimelineEditBar api={api} projectId={projectId} tl={tl} clip={clip} shotClips={shotClips} playhead={playhead} call={call} reload={load} />
+      <TimelineEditBar ripple={ripple} setRipple={setRipple} api={api} projectId={projectId} tl={tl} clip={clip} shotClips={shotClips} playhead={playhead} call={call} reload={load} />
       {note && <p className={note.ok ? 'dossier-note' : 'dossier-error'} role={note.ok ? 'status' : 'alert'}>{note.text}</p>}
       <div className="tl-main">
         <Monitor clip={clip} backendUrl={backendUrl} />
@@ -236,7 +287,7 @@ export default function TimelineView({ projectId, backendUrl, onNavigate }) {
                 )}
               </span>
               <div className="tl-lane" onClick={(e) => { if (e.target === e.currentTarget) selectAt((e.clientX - e.currentTarget.getBoundingClientRect().left) / scale) }}>
-                {clips.filter((c) => c.trackId === track.id).map((c) => <Clip key={c.id} c={c} scale={scale} selected={c.id === selected} onSelect={(id) => { setSelected(id); setPlayhead(c.startMs) }} backendUrl={backendUrl} />)}
+                {clips.filter((c) => c.trackId === track.id).map((c) => <Clip key={c.id} c={c} scale={scale} selected={c.id === selected} onSelect={(id) => { if (justDragged.current) return; setSelected(id); setPlayhead(c.startMs) }} backendUrl={backendUrl} drag={drag} onDragStart={onDragStart} />)}
               </div>
             </div>
           ))}

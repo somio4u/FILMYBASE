@@ -7,8 +7,7 @@ import { fmtTime } from './TimelineView.jsx'
 
 const toMs = (seconds) => Math.round(Number(seconds) * 1000)
 
-export default function TimelineEditBar({ api, projectId, tl, clip, shotClips, playhead, call, reload }) {
-  const [ripple, setRipple] = useState(false)
+export default function TimelineEditBar({ ripple, setRipple, api, projectId, tl, clip, shotClips, playhead, call, reload }) {
   const [history, setHistory] = useState({ canUndo: false, canRedo: false })
   const [message, setMessage] = useState(null)
   const [busy, setBusy] = useState(false)
@@ -55,7 +54,7 @@ export default function TimelineEditBar({ api, projectId, tl, clip, shotClips, p
         <label className="tl-ripple" title="Ripple: everything after the clip moves by the same amount, on every track.">
           <input type="checkbox" checked={ripple} onChange={(e) => setRipple(e.target.checked)} /> Ripple
         </label>
-        <span className="dossier-fine-print">{ripple ? 'ON — clips after the edit move with it.' : 'OFF — nothing else moves; an edit that would overlap is refused.'}</span>
+        <span className="dossier-fine-print">Drag a clip's right edge to trim, drag a clip to move or reorder it. {ripple ? 'ON — clips after the edit move with it.' : 'OFF — nothing else moves; an edit that would overlap is refused.'}</span>
       </div>
       {clip ? (
         <div className="tl-edit-row" role="group" aria-label={`Edit ${clip.label}`}>

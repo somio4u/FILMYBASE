@@ -11243,6 +11243,8 @@ function App() {
     const t = LABELS.en
     return (
       <div className="app-shell">
+        {/* Adu works in AI Movie mode too ("activate adu" in any writing box). Opening a Film project from his panel is Film-side only. */}
+        <FloatingAgentWidget currentUser={currentUser} t={t} onRunCompleted={() => loadProjectList()} />
         <div className="mobile-topbar">
           <button className="mobile-menu-button" onClick={() => setIsSidebarOpen(true)} aria-label={t.openMenuLabel}>
             ☰

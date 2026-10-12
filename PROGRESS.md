@@ -1617,3 +1617,6 @@ Plain version: every project is now a set of **drafts**. Opening a project shows
 - Phones: the animated background now draws at most 20 frames a second (30 on computers) at a lighter size; on a throttled phone test the idle frame rate went from about 14 to 26.
 - The drafts screens load only when opened (smaller first download); the project list no longer sends each project's whole pasted text.
 - A crash in the drafts screens (or anywhere) now shows "Something went wrong on this screen — your work is saved" with a Close/Reload button instead of a blank white page. Odd story fields can no longer break the review screen.
+
+## Resume button for a stopped story run
+- A run that stopped while Story Brain was still designing (no project yet) had no Resume button, even though the message told you to press it. The button ("Pick up where it broke") now shows for every stopped run, and any error from it is shown right under it.

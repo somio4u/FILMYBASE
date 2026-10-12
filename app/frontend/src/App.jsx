@@ -3071,11 +3071,11 @@ function FloatingAgentWidget({ currentUser, t, onRunCompleted, onOpenProject, dr
                 {status.status === 'failed' && (
                   <div className="floating-agent-done">
                     <p className="feedback-note">{status.error}</p>
-                    {status.conceptId && (
-                      <button type="button" className="choose-button" onClick={handleResume} disabled={isResuming}>
-                        {isResuming ? t.floatingAgentResuming : t.floatingAgentResumeButton}
-                      </button>
-                    )}
+                    {/* shown for every stopped run, including one that stopped while the Story Brain was still designing (no project yet) */}
+                    <button type="button" className="choose-button" onClick={handleResume} disabled={isResuming}>
+                      {isResuming ? t.floatingAgentResuming : t.floatingAgentResumeButton}
+                    </button>
+                    {errorMessage && <p className="feedback-note">{errorMessage}</p>}
                     <button type="button" className="cancel-button" onClick={handleStartNew}>
                       {t.floatingAgentNewRunButton}
                     </button>

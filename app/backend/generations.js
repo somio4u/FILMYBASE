@@ -221,11 +221,19 @@ export function createGenerationService({ db, store, providers, env = process.en
     const version = await nextVersion(targetWhere, targetParams);
     const providerName = "gemini";
     const model = kind === "audio" ? providers.models.speech : kind === "video" ? providers.models.video : providers.models.image;
-    const row = (await db.query(
+    const row = await (async () => {
+      try {
+        return (await db.query(
         `INSERT INTO production_generations (project_id, kind, asset_id, shot_id, element_id, version, prompt, prompt_id, params, provider, model, cost_usd, created_by)
          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING *`,
         [projectId, kind, assetId, shotId, elementId, version, prompt, promptId, JSON.stringify(params ?? {}), providerName, model, estimate, actorUserId ?? null]
       )).rows[0];
+      } catch (error) {
+        // the database refuses a second running job for the same target (see production_generations_one_running)
+        if (error.code === "23505") throw httpError("This is already being made. Wait for it to finish first.", 409, "already_running");
+        throw error;
+      }
+    })();
     const target = { kind, assetId, shotId, elementId, generationId: row.id };
     publish(projectId, { type: "job_started", ...target });
     const done = enqueue(async () => {

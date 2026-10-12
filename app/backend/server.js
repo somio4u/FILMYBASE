@@ -36,6 +36,7 @@ import { MODEL_TIERS, estimateCost, isKeyBeat, modelFor } from "./modelRouting.j
 import { ensureAiMovieLanguageSchema, registerAiMovieLanguageRoutes } from "./aiMovieLanguage.js";
 import { onScreenplayApproved, registerBlueprintRoutes } from "./blueprint.js";
 import { registerPlanningRoutes } from "./planning.js";
+import { registerStudioRoutes } from "./studio.js";
 import { registerTimelineRoutes } from "./timeline.js";
 import { registerEventRoutes } from "./events.js";
 import cookieParser from "cookie-parser";
@@ -19248,6 +19249,7 @@ registerProductionRoutes(app, db, requireRole);
 registerDesignTaskRoutes(app, db, requireRole);
 registerBlueprintRoutes(app, db, requireRole);
 registerPlanningRoutes(app, db, requireRole);
+registerStudioRoutes(app, db, requireRole);
 registerTimelineRoutes(app, db, requireRole);
 registerScreenplayRoutes(app, db, requireRole);
 // Pipeline steps 2-8: shots, storyboard, AI pictures/voices/video, export.

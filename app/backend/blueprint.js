@@ -63,6 +63,9 @@ export async function ensureBlueprintSchema(db) {
     // At most one CURRENT prompt per target and purpose; older versions stay forever.
     `CREATE UNIQUE INDEX IF NOT EXISTS production_prompts_one_current ON production_prompts
        (purpose, COALESCE(asset_id, 0), COALESCE(shot_id, 0), COALESCE(element_id, 0)) WHERE status = 'current'`,
+    // Two simultaneous requests for the same target can never both start a job (double click, two tabs, a retry on refresh).
+    `CREATE UNIQUE INDEX IF NOT EXISTS production_generations_one_running ON production_generations
+       (kind, COALESCE(asset_id, 0), COALESCE(shot_id, 0), COALESCE(element_id, 0)) WHERE status = 'running'`,
     // Which prompt (and which Blueprint) a generated file was made from.
     `ALTER TABLE production_generations ADD COLUMN IF NOT EXISTS prompt_id INTEGER REFERENCES production_prompts(id) ON DELETE SET NULL`,
   ];

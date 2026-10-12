@@ -30,9 +30,9 @@ export async function ensureAllProductionSchemas(db, log = console.error) {
     ["shots and storyboard", ensureShotSchema],
     ["generated pictures, voices and video", ensureGenerationSchema],
     ["exports", ensureExportSchema],
+    ["clean up interrupted work", async (db) => { await failStaleGenerations(db); await failStaleExports(db); }],
     ["blueprint, prompts and screenplay versions", ensureBlueprintSchema],
     ["timeline", ensureTimelineSchema],
-    ["clean up interrupted work", async (db) => { await failStaleGenerations(db); await failStaleExports(db); }],
   ];
   const failures = [];
   for (const [name, step] of steps) {

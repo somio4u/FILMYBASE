@@ -126,7 +126,7 @@ function Overview({ api, projectId, bp, manifest, reload, onTab }) {
   )
 }
 
-function PromptCard({ p, label, api, projectId, onSaved }) {
+export function PromptCard({ p, label, api, projectId, onSaved }) {
   const [editing, setEditing] = useState(false)
   const [text, setText] = useState(p.text)
   const [history, setHistory] = useState(null)

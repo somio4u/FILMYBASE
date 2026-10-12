@@ -19273,7 +19273,7 @@ registerWorkspaceRoutes(app, db, requireRole);
 registerDraftRoutes(app, db, requireRole);
 // The Universal Auto Screenplay Agent. It reuses the project's own model routing (AI Movie: quality mode + money guard; Film: the same tiers).
 registerDraftAgentRoutes(app, db, requireRole, {
-  models: {
+  models: process.env.DRAFT_AGENT_MOCK === "1" ? (await import("./draftAgentMock.js")).scriptedAgentModels : {
     async json(draft, agentId, prompt, { maxOutputTokens = 8192, responseSchema } = {}) {
       if (draft.module === "ai_movie") return (await aiMovieStory.ask.ask(draft.project_ref, agentId, { contents: prompt, responseSchema, maxOutputTokens })).data;
       return callModelTier(modelFor(agentId, "professional").tier, { contents: prompt, responseSchema, maxOutputTokens });

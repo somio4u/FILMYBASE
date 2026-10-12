@@ -5,6 +5,7 @@ import { AI_ACTIVITY_EVENT, AI_WARP_EVENT } from './AiBackground.jsx'
 import ProductionStudio, { PRODUCTION_WORKSPACES, LEGACY_VIEW } from './ProductionStudio.jsx'
 import WorkspaceSources, { UsedSources } from './WorkspaceSources.jsx'
 import DraftDashboard, { OPEN_LAST_KEY } from './DraftDashboard.jsx'
+import DraftAgentPanel from './DraftAgentPanel.jsx'
 import AiMovieStudio, { AI_MOVIE_STUDIO_VIEWS, StageJudgeNote } from './AiMovieStudio.jsx'
 import ProductionDossier from './ProductionDossier.jsx'
 import DesignerWorkspace from './DesignerWorkspace.jsx'
@@ -6311,6 +6312,7 @@ function App() {
   // Draft Management: the dashboard overlay, and which draft the open project is
   const [draftDashboard, setDraftDashboard] = useState(null) // { module, projectRef }
   const [currentDraft, setCurrentDraft] = useState(null) // { id, module, projectRef }
+  const [agentPanel, setAgentPanel] = useState(null) // { selection, requestId }
   const [projectTitle, setProjectTitle] = useState(null)
   const [projectHistory, setProjectHistory] = useState([])
   const [startStage, setStartStage] = useState('idea')
@@ -6922,6 +6924,44 @@ function App() {
       setAiMovieView('editor')
       if (ctx.focused && draft.currentStage) setTimeout(() => setAiMovieFocusedStage(draft.currentStage), 350)
       if (Number.isInteger(ctx.beat)) setTimeout(() => setAiMovieScreenplayViewIndex(ctx.beat), 400)
+    }
+  }
+
+  // The Auto Screenplay Agent can be opened from any stage; it is told where you are and what text you selected.
+  function openAgentPanel(requestId = null) {
+    let selection = ''
+    try { selection = String(window.getSelection?.()?.toString() ?? '').trim().slice(0, 1500) } catch { /* no selection */ }
+    setAgentPanel({ selection, requestId })
+  }
+  function agentContext() {
+    if (!currentDraft) return {}
+    if (currentDraft.module === 'film') {
+      const stage = movieFocusedStage ?? movieCurrentStage
+      return { stage, stageLabel: stage, view: activeAgent }
+    }
+    const stage = aiMovieFocusedStage ?? getAiMovieCurrentStage(aiMovieStageStatus)?.key ?? 'screenplay'
+    return { stage, stageLabel: aiMovieView && aiMovieView !== 'editor' ? aiMovieView : stage, view: aiMovieView, beat: aiMovieScreenplayViewIndex }
+  }
+  // After the agent changes the open draft: reload it without throwing away where you were (stage focus, production workspace).
+  async function refreshOpenDraft() {
+    if (!currentDraft) return
+    const film = currentDraft.module === 'film'
+    const keepStage = film ? movieFocusedStage : aiMovieFocusedStage
+    const keepView = aiMovieView
+    if (film) await loadProject(currentDraft.projectRef)
+    else { await loadAiMovieProject(currentDraft.projectRef); setAiMovieView(keepView) }
+    if (keepStage) setTimeout(() => (film ? setMovieFocusedStage(keepStage) : setAiMovieFocusedStage(keepStage)), 350)
+  }
+  async function handleAgentOpen(what, extra) {
+    if (what === 'dashboard' || what === 'compare') { setAgentPanel(null); setDraftDashboard({ module: currentDraft.module, projectRef: currentDraft.projectRef }); return }
+    if (what === 'continue') { setAgentPanel(null); await continueDraft({ ...currentDraft, projectRef: currentDraft.projectRef, resumeContext: {}, currentStage: null }); return }
+    if (what === 'open-new') { setAgentPanel(null); await continueDraft({ module: extra.module, projectRef: extra.projectRef, resumeContext: {}, currentStage: 'idea' }); return }
+    if (what === 'open') {
+      const d = await fetch(`${BACKEND_URL}/api/drafts/requests/${extra}`).then((r) => r.json()).catch(() => null)
+      const dash = await fetch(`${BACKEND_URL}/api/drafts?module=${currentDraft.module}&projectRef=${currentDraft.projectRef}`).then((r) => r.json()).catch(() => null)
+      const target = dash?.drafts?.find((x) => x.id === d?.request?.draftId)
+      setAgentPanel(null)
+      if (target) await continueDraft(target)
     }
   }
 
@@ -11331,7 +11371,16 @@ function App() {
         <DictationContext.Provider value={{ t, dictationLanguage, onDictationLanguageChange: handleDictationLanguageChange }}>
           <FloatingAgentWidget currentUser={currentUser} t={t} onRunCompleted={() => loadProjectList()} />
         </DictationContext.Provider>
-      {draftDashboard && <DraftDashboard module={draftDashboard.module} projectRef={draftDashboard.projectRef} backendUrl={BACKEND_URL} onContinue={continueDraft} onClose={() => setDraftDashboard(null)} />}
+      {draftDashboard && <DraftDashboard module={draftDashboard.module} projectRef={draftDashboard.projectRef} backendUrl={BACKEND_URL} onContinue={continueDraft} onClose={() => setDraftDashboard(null)} onReviewRequest={(d) => { setDraftDashboard(null); openAgentPanel(d.openRequest?.id ?? null) }} />}
+      {currentDraft && !agentPanel && !draftDashboard && (
+        <button type="button" className="dd-btn da-launch" onMouseDown={(e) => e.preventDefault()} onClick={() => openAgentPanel()} title="Ask the Auto Screenplay Agent — works from any stage">✍ Auto Screenplay Agent</button>
+      )}
+      {agentPanel && currentDraft && (
+        <DictationContext.Provider value={{ t, dictationLanguage, onDictationLanguageChange: handleDictationLanguageChange }}>
+          <DraftAgentPanel backendUrl={BACKEND_URL} draft={currentDraft} getContext={agentContext} InputComponent={MicTextarea} initialSelection={agentPanel.selection} initialRequestId={agentPanel.requestId}
+            onClose={() => setAgentPanel(null)} onOpenDraft={handleAgentOpen} onApplied={refreshOpenDraft} />
+        </DictationContext.Provider>
+      )}
       {currentDraft && !draftDashboard && (
         <button type="button" className="dd-btn dd-launch" onClick={() => setDraftDashboard({ module: currentDraft.module, projectRef: currentDraft.projectRef })} title="Show all drafts of this project">
           📄 Drafts · {currentDraft.title}
@@ -12599,7 +12648,14 @@ function App() {
         onRunCompleted={() => loadProjectList()}
         onOpenProject={(id) => { setActiveAgent('story'); loadProject(id) }}
       />
-      {draftDashboard && <DraftDashboard module={draftDashboard.module} projectRef={draftDashboard.projectRef} backendUrl={BACKEND_URL} onContinue={continueDraft} onClose={() => setDraftDashboard(null)} />}
+      {draftDashboard && <DraftDashboard module={draftDashboard.module} projectRef={draftDashboard.projectRef} backendUrl={BACKEND_URL} onContinue={continueDraft} onClose={() => setDraftDashboard(null)} onReviewRequest={(d) => { setDraftDashboard(null); openAgentPanel(d.openRequest?.id ?? null) }} />}
+      {currentDraft && !agentPanel && !draftDashboard && (
+        <button type="button" className="dd-btn da-launch" onMouseDown={(e) => e.preventDefault()} onClick={() => openAgentPanel()} title="Ask the Auto Screenplay Agent — works from any stage">✍ Auto Screenplay Agent</button>
+      )}
+      {agentPanel && currentDraft && (
+        <DraftAgentPanel backendUrl={BACKEND_URL} draft={currentDraft} getContext={agentContext} InputComponent={MicTextarea} initialSelection={agentPanel.selection} initialRequestId={agentPanel.requestId}
+          onClose={() => setAgentPanel(null)} onOpenDraft={handleAgentOpen} onApplied={refreshOpenDraft} />
+      )}
       {currentDraft && !draftDashboard && (
         <button type="button" className="dd-btn dd-launch" onClick={() => setDraftDashboard({ module: currentDraft.module, projectRef: currentDraft.projectRef })} title="Show all drafts of this project">
           📄 Drafts · {currentDraft.title}

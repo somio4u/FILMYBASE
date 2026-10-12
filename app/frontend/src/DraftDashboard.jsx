@@ -52,7 +52,7 @@ function Compare({ a, b, backendUrl, onClose }) {
   )
 }
 
-export default function DraftDashboard({ module, projectRef, backendUrl, onContinue, onClose, onChanged }) {
+export default function DraftDashboard({ module, projectRef, backendUrl, onContinue, onClose, onChanged, onReviewRequest }) {
   const api = `${backendUrl}/api/drafts`
   const [dash, setDash] = useState(null)
   const [error, setError] = useState(null)
@@ -104,7 +104,7 @@ export default function DraftDashboard({ module, projectRef, backendUrl, onConti
           <div><dt>Edited</dt><dd>{when(d.updatedAt)}</dd></div>
         </dl>
         {d.projectTitle && <p className="dd-fine">{d.projectTitle}</p>}
-        {d.openRequest && <p className="dd-flag">Revision in progress: {d.openRequest.status.replace(/_/g, ' ')}</p>}
+        {d.openRequest && <p className="dd-flag">Revision in progress: {d.openRequest.status.replace(/_/g, ' ')} <button type="button" className="dd-btn" onClick={() => onReviewRequest?.(d)}>Review revision</button></p>}
         {d.note && <p className="dd-fine">{d.note}</p>}
         <div className="dd-actions">
           <button type="button" className="dd-btn primary" onClick={() => onContinue(d)}>Continue Draft</button>

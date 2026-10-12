@@ -21,3 +21,20 @@
 .dd-sides { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; } .dd-sides pre { white-space: pre-wrap; margin: 0; font-size: .78rem; background: rgba(128,128,128,.1); padding: 6px; border-radius: 6px; } .dd-sides h5 { margin: 2px 0; }
 .dd-launch { position: fixed; top: 10px; right: 64px; z-index: 2000; background: var(--bg-surface-raised, #fff); box-shadow: 0 2px 8px rgba(0,0,0,.2); max-width: 240px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 @media (max-width: 640px) { .dd-sides { grid-template-columns: 1fr; } .dd-launch { top: auto; bottom: 12px; right: 12px; } }
+
+/* Auto Screenplay Agent panel */
+.da { position: fixed; top: 0; right: 0; bottom: 0; width: min(520px, 100vw); z-index: 2900; background: var(--bg-surface-raised, #fff); color: var(--text-primary, #111); box-shadow: -4px 0 24px rgba(0,0,0,.35); padding: 14px 16px; overflow-y: auto; display: grid; align-content: start; gap: 10px; box-sizing: border-box; }
+.da-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; } .da-head h2 { margin: 0; font-size: 1.1rem; }
+.da-crumbs { margin: 2px 0 0; font-size: .78rem; opacity: .75; }
+.da-ask { display: grid; gap: 4px; font-size: .88rem; } .da-ask textarea { width: 100%; box-sizing: border-box; }
+.da-selection { background: rgba(37,99,235,.1); padding: 6px 8px; border-radius: 8px; font-size: .82rem; margin: 0; }
+.da-interp, .da-preview, .da-revision { border: 1px solid rgba(128,128,128,.35); border-radius: 12px; padding: 10px 12px; display: grid; gap: 6px; }
+.da-interp h3, .da-preview h3, .da-revision h3 { margin: 0; font-size: 1rem; }
+.da-picker ul, .da-impact ul, .da-progress { margin: 4px 0; padding-left: 18px; font-size: .84rem; } .da-progress { list-style: none; padding: 0; }
+.da-gate { border-top: 1px dashed rgba(128,128,128,.5); padding-top: 8px; display: grid; gap: 6px; }
+.da-feedback { display: grid; gap: 4px; font-size: .84rem; } .da-feedback textarea, .da-newstory textarea { width: 100%; box-sizing: border-box; }
+.da-synopsis { background: rgba(128,128,128,.1); padding: 8px; border-radius: 8px; }
+.da-edits { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; max-height: 40vh; overflow-y: auto; }
+.da-newstory { display: grid; gap: 6px; font-size: .85rem; }
+.da-launch { position: fixed; top: 48px; right: 64px; z-index: 2000; background: #2563eb; color: #fff; border-color: #2563eb; box-shadow: 0 2px 8px rgba(0,0,0,.25); }
+@media (max-width: 640px) { .da-launch { top: auto; bottom: 56px; right: 12px; } .da { width: 100vw; } }

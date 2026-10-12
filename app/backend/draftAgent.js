@@ -12,7 +12,7 @@
 //
 // A classifier's answer is only a recommendation. Nothing is changed, copied or paid for until the person confirms a specific action.
 
-import { branchDraft, createBlank, draftUnits, diffUnits, fingerprintOf, getDraft, httpError, saveResume, updateDraft } from "./drafts.js";
+import { branchDraft, createBlank, draftUnits, diffUnits, fingerprintOf, getDraft, httpError, saveResume, sceneText, updateDraft } from "./drafts.js";
 import { flatten } from "./workspaceContext.js";
 import { analyzeScreenplay } from "./screenplayAnalysis.js";
 import { publish } from "./events.js";
@@ -220,6 +220,7 @@ export function resolveTargets(units, targets, instruction, context = {}) {
   if (context.selectedText && !list.some((t) => t.type === "selection")) list.push({ type: "selection" });
   for (const t of list) {
     if (t.type === "selection") {
+      if (!norm(context.selectedText)) continue; // the model assumed a selection that does not exist: nothing to place
       const sel = norm(context.selectedText);
       const hit = sel ? units.find((u) => norm(u.text).includes(sel)) : null;
       if (hit) keys.add(hit.key); else unresolved.push({ type: "selection", why: "The selected text was not found in this draft (it may have changed). Select it again." });
@@ -330,7 +331,8 @@ export async function rewriteUnit(db, models, draft, key, { instruction, constra
   return { key, label: unit.label, section: unit.section, before: raw.value, after: value, changed: JSON.stringify(value) !== JSON.stringify(raw.value) };
 }
 
-const textOf = (v) => (typeof v === "string" ? v : flatten(v));
+// readable text for the preview: scenes as script lines, everything else as plain text
+const textOf = (v) => (typeof v === "string" ? v : v && (v.elements || v.content || v.sceneHeading || v.heading) ? sceneText(v) : flatten(v));
 
 export async function propose(db, models, draftId, { instruction, intent = "SCOPED_REWRITE", targetKeys = [], context = {}, constraints = {}, confirmed = false, actorUserId = null, requestId = null }) {
   if (confirmed !== true) throw httpError("Confirm the action first: this uses the AI (and money) to prepare the changes.", 409, "confirm_required");

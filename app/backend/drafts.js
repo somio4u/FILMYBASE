@@ -403,7 +403,7 @@ export async function saveResume(db, draftId, { stage = null, context = null } =
 // ---------------------------------------------------------------------------
 const hash = (s) => createHash("sha256").update(String(s ?? "")).digest("hex").slice(0, 12);
 
-function sceneText(scene) {
+export function sceneText(scene) {
   if (!scene) return "";
   const blocks = Array.isArray(scene.content) ? scene.content : Array.isArray(scene.elements) ? scene.elements : null;
   const heading = flatten(scene.sceneHeading ?? scene.heading ?? "");

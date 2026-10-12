@@ -6609,7 +6609,7 @@ app.post("/api/ai-movie/stages/:stage/approve", requireRole("admin"), async (req
 
 app.get("/api/ai-movie/projects", requireRole("admin"), async (req, res) => {
   const result = await db.query(
-    `SELECT id, title, pasted_text, detected_stage, updated_at FROM ai_movie_projects WHERE NOT EXISTS (SELECT 1 FROM project_drafts d JOIN project_drafts p ON p.id = d.parent_draft_id WHERE d.module = 'ai_movie' AND d.project_ref = ai_movie_projects.id AND EXISTS (SELECT 1 FROM ai_movie_projects pc WHERE pc.id = p.project_ref)) ORDER BY updated_at DESC`
+    `SELECT id, title, left(pasted_text, 200) AS pasted_text, detected_stage, updated_at FROM ai_movie_projects WHERE NOT EXISTS (SELECT 1 FROM project_drafts d JOIN project_drafts p ON p.id = d.parent_draft_id WHERE d.module = 'ai_movie' AND d.project_ref = ai_movie_projects.id AND EXISTS (SELECT 1 FROM ai_movie_projects pc WHERE pc.id = p.project_ref)) ORDER BY updated_at DESC`
   );
   res.json(result.rows.map((row) => ({
     id: row.id,

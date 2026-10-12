@@ -88,6 +88,10 @@ export default function AiBackground() {
     const canvas = canvasRef.current
     const ctx = canvas.getContext('2d')
     const reduceMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
+    // Phones and slow devices: draw fewer, smaller frames so the page stays smooth and the battery lasts
+    const lite = Boolean(window.matchMedia?.('(pointer: coarse)').matches || window.innerWidth < 820 || navigator.connection?.saveData || (navigator.hardwareConcurrency ?? 8) <= 4)
+    const minGap = lite ? 1000 / 20 : 1000 / 30
+    let lastDrawn = 0
     let width = 0
     let height = 0
     let rings = []
@@ -117,7 +121,7 @@ export default function AiBackground() {
     }
 
     function resize() {
-      const ratio = Math.min(window.devicePixelRatio || 1, 1.5)
+      const ratio = lite ? 1 : Math.min(window.devicePixelRatio || 1, 1.5)
       width = window.innerWidth
       height = window.innerHeight
       canvas.width = Math.round(width * ratio)
@@ -128,6 +132,8 @@ export default function AiBackground() {
     }
 
     function draw(now) {
+      if (!reduceMotion && now - lastDrawn < minGap) { frame = requestAnimationFrame(draw); return }
+      lastDrawn = now
       const dt = Math.min(0.1, (now - last) / 1000)
       last = now
       busy += ((busyRequests > 0 ? 1 : 0) - busy) * Math.min(1, dt * 2.5)

@@ -129,7 +129,7 @@ export default function DraftDashboard({ module, projectRef, backendUrl, onConti
           <div><dt>Edited</dt><dd>{when(d.updatedAt)}</dd></div>
         </dl>
         {d.projectTitle && <p className="dd-fine">{d.projectTitle}</p>}
-        {d.openRequest && !(dash.revisions ?? []).some((q) => q.id === d.openRequest.id) && <p className="dd-flag">Revision in progress: {d.openRequest.status.replace(/_/g, ' ')} <button type="button" className="dd-btn" onClick={() => onReviewRequest?.(d)}>Review revision</button></p>}
+        {d.openRequest && !(dash.revisions ?? []).some((q) => q.id === d.openRequest.id) && <p className="dd-flag">Revision in progress: {String(d.openRequest.status ?? '').replace(/_/g, ' ')} <button type="button" className="dd-btn" onClick={() => onReviewRequest?.(d)}>Review revision</button></p>}
         {d.note && <p className="dd-fine">{d.note}</p>}
         <div className="dd-actions">
           <button type="button" className="dd-btn primary" onClick={() => onContinue(d)}>Continue Draft</button>
@@ -159,7 +159,7 @@ export default function DraftDashboard({ module, projectRef, backendUrl, onConti
         {picked.length === 2 && <p><button type="button" className="dd-btn primary" onClick={() => setCompare(picked.map((id) => byId.get(id)))}>Compare {byId.get(picked[0])?.title} with {byId.get(picked[1])?.title}</button></p>}
         {picked.length < 2 && visible.length > 1 && <p className="dd-fine">Tick two drafts to compare them.</p>}
         {compare && <Compare a={compare[0]} b={compare[1]} backendUrl={backendUrl} onClose={() => setCompare(null)} />}
-        {(dash.revisions ?? []).length === 1 && (() => { const q = dash.revisions[0]; return <p className="dd-flag" data-request-id={q.id}>A new draft is being made (it will be saved in this list when finished): “{String(q.instruction).slice(0, 90)}” — {q.status.replace(/_/g, ' ')} <button type="button" className="dd-btn" onClick={() => onReviewRequest?.({ openRequest: q })}>Review revision</button></p> })()}
+        {(dash.revisions ?? []).length === 1 && (() => { const q = dash.revisions[0]; return <p className="dd-flag" data-request-id={q.id}>A new draft is being made (it will be saved in this list when finished): “{String(q.instruction ?? '').slice(0, 90)}” — {String(q.status ?? '').replace(/_/g, ' ')} <button type="button" className="dd-btn" onClick={() => onReviewRequest?.({ openRequest: q })}>Review revision</button></p> })()}
         {(dash.revisions ?? []).length > 1 && (
           <p className="dd-flag" data-testid="dup-warning">There are {dash.revisions.length} unfinished “new draft” copies here — probably duplicates. <button type="button" className="dd-btn primary" disabled={Boolean(busy)} onClick={cleanup}>Delete the duplicates</button></p>
         )}

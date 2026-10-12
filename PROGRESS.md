@@ -1612,3 +1612,8 @@ Plain version: every project is now a set of **drafts**. Opening a project shows
 - "Delete the duplicates" never removes a request that is still working (reading the draft or writing the script).
 - A Film story run that was interrupted can be retried without approving the Story Bible twice.
 - The review screen now says where the finished script is saved (Drafts, as the next draft number).
+
+## Faster, and no more white screen
+- Phones: the animated background now draws at most 20 frames a second (30 on computers) at a lighter size; on a throttled phone test the idle frame rate went from about 14 to 26.
+- The drafts screens load only when opened (smaller first download); the project list no longer sends each project's whole pasted text.
+- A crash in the drafts screens (or anywhere) now shows "Something went wrong on this screen — your work is saved" with a Close/Reload button instead of a blank white page. Odd story fields can no longer break the review screen.

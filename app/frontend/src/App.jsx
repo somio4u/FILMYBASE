@@ -1,11 +1,14 @@
-import { useState, useEffect, useRef, useContext, createContext, Fragment } from 'react'
+import { useState, useEffect, useRef, useContext, createContext, Fragment, lazy, Suspense } from 'react'
 import { createPortal } from 'react-dom'
 import './App.css'
 import { AI_ACTIVITY_EVENT, AI_WARP_EVENT } from './AiBackground.jsx'
 import ProductionStudio, { PRODUCTION_WORKSPACES, LEGACY_VIEW } from './ProductionStudio.jsx'
 import WorkspaceSources, { UsedSources } from './WorkspaceSources.jsx'
-import DraftDashboard, { OPEN_LAST_KEY } from './DraftDashboard.jsx'
-import DraftAgentPanel from './DraftAgentPanel.jsx'
+// the drafts screens are loaded only when first opened (keeps the first download small)
+const DraftDashboard = lazy(() => import('./DraftDashboard.jsx'))
+const OPEN_LAST_KEY = 'filmmaking-app:openLastDraft'
+import ErrorBoundary from './ErrorBoundary.jsx'
+const DraftAgentPanel = lazy(() => import('./DraftAgentPanel.jsx'))
 import AiMovieStudio, { AI_MOVIE_STUDIO_VIEWS, StageJudgeNote } from './AiMovieStudio.jsx'
 import ProductionDossier from './ProductionDossier.jsx'
 import DesignerWorkspace from './DesignerWorkspace.jsx'
@@ -2926,8 +2929,8 @@ function FloatingAgentWidget({ currentUser, t, onRunCompleted, onOpenProject, dr
               </div>
               {tabs}
               <div className="floating-agent-embed">
-                <DraftAgentPanel embedded backendUrl={BACKEND_URL} draft={draftCtx.draft} getContext={draftCtx.getContext} InputComponent={MicTextarea} initialSelection={aduSelection}
-                  initialRequestId={draftCtx.openRequestId ?? null} onClose={() => setIsOpen(false)} onOpenDraft={(what, extra) => { if (what !== 'dashboard' && what !== 'compare') setIsOpen(false); draftCtx.onOpenDraft?.(what, extra) }} onApplied={draftCtx.onApplied} />
+                <ErrorBoundary inline><Suspense fallback={null}><DraftAgentPanel embedded backendUrl={BACKEND_URL} draft={draftCtx.draft} getContext={draftCtx.getContext} InputComponent={MicTextarea} initialSelection={aduSelection}
+                  initialRequestId={draftCtx.openRequestId ?? null} onClose={() => setIsOpen(false)} onOpenDraft={(what, extra) => { if (what !== 'dashboard' && what !== 'compare') setIsOpen(false); draftCtx.onOpenDraft?.(what, extra) }} onApplied={draftCtx.onApplied} /></Suspense></ErrorBoundary>
               </div>
             </div>
           )
@@ -11415,7 +11418,7 @@ function App() {
         <DictationContext.Provider value={{ t, dictationLanguage, onDictationLanguageChange: handleDictationLanguageChange }}>
           <FloatingAgentWidget currentUser={currentUser} t={t} onRunCompleted={() => loadProjectList()} draftCtx={aduDraftCtx} />
         </DictationContext.Provider>
-      {draftDashboard && <DraftDashboard module={draftDashboard.module} projectRef={draftDashboard.projectRef} backendUrl={BACKEND_URL} onContinue={continueDraft} onClose={() => setDraftDashboard(null)} onOpenDirect={openProjectDirect} onReviewRequest={(d) => { setDraftDashboard(null); setAduRequestId(d.openRequest?.id ?? null); setTimeout(() => setAduRequestId(null), 1500) }} />}
+      {draftDashboard && <ErrorBoundary inline onClose={() => setDraftDashboard(null)}><Suspense fallback={null}><DraftDashboard module={draftDashboard.module} projectRef={draftDashboard.projectRef} backendUrl={BACKEND_URL} onContinue={continueDraft} onClose={() => setDraftDashboard(null)} onOpenDirect={openProjectDirect} onReviewRequest={(d) => { setDraftDashboard(null); setAduRequestId(d.openRequest?.id ?? null); setTimeout(() => setAduRequestId(null), 1500) }} /></Suspense></ErrorBoundary>}
         <div className="mobile-topbar">
           <button className="mobile-menu-button" onClick={() => setIsSidebarOpen(true)} aria-label={t.openMenuLabel}>
             ☰
@@ -12679,7 +12682,7 @@ function App() {
         onOpenProject={(id) => { setActiveAgent('story'); loadProject(id) }}
         draftCtx={aduDraftCtx}
       />
-      {draftDashboard && <DraftDashboard module={draftDashboard.module} projectRef={draftDashboard.projectRef} backendUrl={BACKEND_URL} onContinue={continueDraft} onClose={() => setDraftDashboard(null)} onOpenDirect={openProjectDirect} onReviewRequest={(d) => { setDraftDashboard(null); setAduRequestId(d.openRequest?.id ?? null); setTimeout(() => setAduRequestId(null), 1500) }} />}
+      {draftDashboard && <ErrorBoundary inline onClose={() => setDraftDashboard(null)}><Suspense fallback={null}><DraftDashboard module={draftDashboard.module} projectRef={draftDashboard.projectRef} backendUrl={BACKEND_URL} onContinue={continueDraft} onClose={() => setDraftDashboard(null)} onOpenDirect={openProjectDirect} onReviewRequest={(d) => { setDraftDashboard(null); setAduRequestId(d.openRequest?.id ?? null); setTimeout(() => setAduRequestId(null), 1500) }} /></Suspense></ErrorBoundary>}
       <div className="mobile-topbar">
         <button className="mobile-menu-button" onClick={() => setIsSidebarOpen(true)} aria-label={t.openMenuLabel}>
           ☰

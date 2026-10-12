@@ -13,6 +13,15 @@ async function call(url, method = 'GET', body) {
   }
 }
 const INTENT_LABEL = { LOCAL_EDIT: 'Edit a selected piece', SCOPED_REWRITE: 'Rewrite several pieces', NEW_DRAFT: 'Create a new draft', ALTERNATIVE: 'Explore an alternative', NEW_STORY: 'Start a new story', CONTINUE: 'Continue the draft', UNCLEAR: 'Not sure yet' }
+// story fields can arrive as plain text or as {en, hi} style objects; always draw text, never an object
+const txt = (v) => {
+  if (v == null) return ''
+  if (typeof v === 'string' || typeof v === 'number') return String(v)
+  if (Array.isArray(v)) return v.map(txt).filter(Boolean).join(', ')
+  if (typeof v === 'object') return txt(v.en ?? v.text ?? v.problem ?? v.title ?? Object.values(v)[0])
+  return ''
+}
+
 const REQUEST_LABEL = { analyzing: 'Reading the whole draft and designing the new story…', awaiting_synopsis_approval: 'Waiting for your approval of the new Story Bible', synopsis_approved: 'Story Bible approved', rewriting: 'Writing the new draft with the story process…', awaiting_final_approval: 'Waiting for your final approval', completed: 'Completed', cancelled: 'Cancelled', failed: 'Stopped — can be retried' }
 
 function Diff({ edit }) {
@@ -67,22 +76,22 @@ function Revision({ requestId, backendUrl, onOpenDraft, onClose, onChanged }) {
         <details open={status === 'awaiting_synopsis_approval'} className="da-impact">
           <summary>Revision Impact Map — {impact.counts?.unchanged ?? 0} unchanged · {impact.counts?.modified ?? 0} modified · {impact.counts?.indirect ?? 0} indirectly affected · {impact.counts?.added ?? 0} new · {impact.counts?.removed ?? 0} removed</summary>
           <ul>
-            {(impact.modified ?? []).map((x) => <li key={x.key}><span className="chip modified">modified</span> {label(x.key)} — {x.why}</li>)}
-            {(impact.indirect ?? []).map((x) => <li key={x.key}><span className="chip">affected</span> {label(x.key)} — {x.why}</li>)}
-            {(impact.added ?? []).map((x, i) => <li key={`a${i}`}><span className="chip added">new</span> {x.label} — {x.why}</li>)}
-            {(impact.removed ?? []).map((x) => <li key={x.key}><span className="chip removed">removed</span> {label(x.key)} — {x.why}</li>)}
+            {(impact.modified ?? []).map((x) => <li key={x.key}><span className="chip modified">modified</span> {label(x.key)} — {txt(x.why)}</li>)}
+            {(impact.indirect ?? []).map((x) => <li key={x.key}><span className="chip">affected</span> {label(x.key)} — {txt(x.why)}</li>)}
+            {(impact.added ?? []).map((x, i) => <li key={`a${i}`}><span className="chip added">new</span> {txt(x.label)} — {txt(x.why)}</li>)}
+            {(impact.removed ?? []).map((x) => <li key={x.key}><span className="chip removed">removed</span> {label(x.key)} — {txt(x.why)}</li>)}
           </ul>
         </details>
       )}
       {r.proposal && (
         <div className="da-proposal">
-          <h4>New Story Bible — {r.proposal.title}</h4>
-          {r.proposal.logline && <p className="da-synopsis">{r.proposal.logline}</p>}
-          {r.proposal.centralQuestion && <p className="dd-fine">Central question: {typeof r.proposal.centralQuestion === 'string' ? r.proposal.centralQuestion : JSON.stringify(r.proposal.centralQuestion)}</p>}
+          <h4>New Story Bible — {txt(r.proposal.title)}</h4>
+          {r.proposal.logline && <p className="da-synopsis">{txt(r.proposal.logline)}</p>}
+          {r.proposal.centralQuestion && <p className="dd-fine">Central question: {txt(r.proposal.centralQuestion)}</p>}
           {r.proposal.critics?.scores && (
-            <p>Critics' scores: {Object.entries(r.proposal.critics.scores).map(([k, v]) => <span key={k} className={`chip ${v >= (r.proposal.critics.passScore ?? 8) ? 'modified' : 'removed'}`}>{k} {v}/10</span>)} {r.proposal.critics.passed ? '— passed' : `— below ${r.proposal.critics.passScore ?? 8}; you can ask for changes`}</p>
+            <p>Critics' scores: {Object.entries(r.proposal.critics.scores).map(([k, v]) => <span key={k} className={`chip ${v >= (r.proposal.critics.passScore ?? 8) ? 'modified' : 'removed'}`}>{k} {txt(v)}/10</span>)} {r.proposal.critics.passed ? '— passed' : `— below ${r.proposal.critics.passScore ?? 8}; you can ask for changes`}</p>
           )}
-          {(r.proposal.critics?.open ?? []).length > 0 && <><h5>Open problems the critics still see</h5><ul>{r.proposal.critics.open.map((o, i) => <li key={i}>{typeof o === 'string' ? o : (o.problem ?? JSON.stringify(o))}</li>)}</ul></>}
+          {(r.proposal.critics?.open ?? []).length > 0 && <><h5>Open problems the critics still see</h5><ul>{r.proposal.critics.open.map((o, i) => <li key={i}>{txt(o)}</li>)}</ul></>}
         </div>
       )}
       {status === 'awaiting_synopsis_approval' && (
@@ -185,7 +194,7 @@ export default function DraftAgentPanel({ backendUrl, draft, getContext, InputCo
               {interp.draft.message && <p className="dd-error" role="alert">{interp.draft.message}</p>}
               {interp.constraints.mustKeep.length > 0 && <p className="dd-fine">Keep: {interp.constraints.mustKeep.join('; ')}</p>}
               {interp.constraints.mustChange.length > 0 && <p className="dd-fine">Change: {interp.constraints.mustChange.join('; ')}</p>}
-              {interp.unresolved.map((u, i) => <p key={i} className="dd-flag">{u.why}</p>)}
+              {interp.unresolved.map((u, i) => <p key={i} className="dd-flag">{txt(u.why)}</p>)}
               {(interp.candidates?.length > 0 || asEdit) && (
                 <details open={interp.candidates?.length > 0} className="da-picker">
                   <summary>{picked.length} piece{picked.length === 1 ? '' : 's'} chosen — change the choice</summary>

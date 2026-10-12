@@ -271,7 +271,7 @@ async function copyFilm(client, parentRef, { title, actorUserId }) {
 }
 
 // kind 'numbered' takes the next draft number; 'alternative' takes none until promoted.
-export async function branchDraft(db, parentDraftId, { label = null, kind = "numbered", actorUserId = null, note = null } = {}) {
+export async function branchDraft(db, parentDraftId, { label = null, kind = "numbered", actorUserId = null, note = null, dedupe = false } = {}) {
   if (!["numbered", "alternative"].includes(kind)) throw httpError("kind must be numbered or alternative.", 400);
   const parent = await getDraft(db, parentDraftId);
   if (parent.status === "archived") throw httpError("An archived draft cannot be branched. Unarchive it first.", 409, "archived");
@@ -279,6 +279,14 @@ export async function branchDraft(db, parentDraftId, { label = null, kind = "num
   try {
     await client.query("BEGIN");
     await client.query("SELECT pg_advisory_xact_lock($1)", [800000 + parent.group_id]);
+    // a double-click must not make two drafts: an identical request from the same draft within a few seconds returns the one just made
+    if (dedupe) {
+      const dup = (await client.query(
+        "SELECT * FROM project_drafts WHERE parent_draft_id = $1 AND kind = $2 AND COALESCE(label,'') = COALESCE($3,'') AND COALESCE(note,'') = COALESCE($4,'') AND created_at > now() - interval '8 seconds' ORDER BY id DESC LIMIT 1",
+        [parent.id, kind, label, note]
+      )).rows[0];
+      if (dup) { await client.query("COMMIT"); return dup; }
+    }
     const title0 = (await projectTitle(client, parent.module, parent.project_ref)) ?? "Untitled";
     const baseTitle = title0.replace(/\s+[—-]\s+(Draft \d+|Alternative.*)$/, "");
     const number = kind === "numbered" ? Number((await client.query("SELECT COALESCE(MAX(draft_number),0)+1 AS n FROM project_drafts WHERE group_id = $1", [parent.group_id])).rows[0].n) : null;
@@ -500,7 +508,7 @@ export function registerDraftRoutes(app, db, requireRole) {
     res.json(await compareDrafts(db, a, b));
   }));
   app.post("/api/drafts/:draftId/branch", admin, wrap(async (req, res) => {
-    const row = await branchDraft(db, draftId(req), { label: req.body?.label ?? null, kind: req.body?.kind ?? "numbered", actorUserId: req.user?.id, note: req.body?.note ?? null });
+    const row = await branchDraft(db, draftId(req), { label: req.body?.label ?? null, kind: req.body?.kind ?? "numbered", actorUserId: req.user?.id, note: req.body?.note ?? null, dedupe: true });
     res.status(201).json({ draft: rowView(row) });
   }));
   app.post("/api/drafts/:draftId/promote", admin, wrap(async (req, res) => res.json({ draft: rowView(await promoteAlternative(db, draftId(req), { label: req.body?.label ?? null })) })));

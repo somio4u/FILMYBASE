@@ -1863,6 +1863,7 @@ app.get("/api/projects/master-list", requireRole("admin"), async (req, res) => {
      LEFT JOIN three_act_structures tas ON tas.pitch_deck_id = pd.id
      LEFT JOIN bit_sheets bs ON bs.three_act_structure_id = tas.id
      LEFT JOIN scene_lists sl ON sl.bit_sheet_id = bs.id OR sl.concept_id = c.id
+     WHERE NOT EXISTS (SELECT 1 FROM project_drafts d JOIN project_drafts p ON p.id = d.parent_draft_id WHERE d.module = 'film' AND d.project_ref = c.id AND EXISTS (SELECT 1 FROM concepts pc WHERE pc.id = p.project_ref))
      GROUP BY c.id, c.title, c.concept_text, c.project_type, c.pinned, c.created_at
      ORDER BY c.pinned DESC, c.created_at DESC`
   );

@@ -108,9 +108,10 @@ export async function readSource(db, kind, id, { parts = null } = {}) {
 // ---------------------------------------------------------------------------
 export async function listSources(db, { query = "", exclude = [], limit = 60 } = {}) {
   const rows = [];
-  const film = (await db.query("SELECT id, title, concept_text, project_type, created_at FROM concepts ORDER BY created_at DESC LIMIT 200").catch(() => ({ rows: [] }))).rows;
+  // drafts of a project are shown inside that project (Draft Dashboard), not as projects of their own
+  const film = (await db.query(`SELECT id, title, concept_text, project_type, created_at FROM concepts WHERE NOT EXISTS (SELECT 1 FROM project_drafts d JOIN project_drafts p ON p.id = d.parent_draft_id WHERE d.module = 'film' AND d.project_ref = concepts.id AND EXISTS (SELECT 1 FROM concepts pc WHERE pc.id = p.project_ref)) ORDER BY created_at DESC LIMIT 200`).catch(() => ({ rows: [] }))).rows;
   for (const c of film) rows.push({ kind: "film", id: c.id, title: c.title || c.concept_text.slice(0, 60), type: c.project_type === "production" ? "film (production only)" : "film / series", text: c.concept_text, createdAt: c.created_at });
-  const ai = (await db.query("SELECT id, title, pasted_text, backfill, created_at FROM ai_movie_projects ORDER BY created_at DESC LIMIT 200").catch(() => ({ rows: [] }))).rows;
+  const ai = (await db.query(`SELECT id, title, pasted_text, backfill, created_at FROM ai_movie_projects WHERE NOT EXISTS (SELECT 1 FROM project_drafts d JOIN project_drafts p ON p.id = d.parent_draft_id WHERE d.module = 'ai_movie' AND d.project_ref = ai_movie_projects.id AND EXISTS (SELECT 1 FROM ai_movie_projects pc WHERE pc.id = p.project_ref)) ORDER BY created_at DESC LIMIT 200`).catch(() => ({ rows: [] }))).rows;
   for (const a of ai) rows.push({ kind: "ai_movie", id: a.id, title: a.title || a.pasted_text.slice(0, 60), type: "AI Movie", text: `${a.pasted_text} ${flatten(a.backfill?.synopsis)}`, createdAt: a.created_at });
   const q = words(query);
   const skip = new Set(exclude.map((e) => `${e.kind}:${e.id}`));

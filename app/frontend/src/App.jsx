@@ -2469,7 +2469,7 @@ function autoPipelineProgressPercent(stage) {
 // back as one downloadable PDF, without clicking through each stage
 // manually. Position is a per-viewer convenience (localStorage only); the
 // run itself lives server-side so a page refresh doesn't lose progress.
-function FloatingAgentWidget({ currentUser, t, onRunCompleted, onOpenProject }) {
+function FloatingAgentWidget({ currentUser, t, onRunCompleted, onOpenProject, draftCtx = null }) {
   useAduCommand()
   // hidden | arriving | shown | leaving
   const [aduPhase, setAduPhase] = useState(() => (readAduActive() ? 'shown' : 'hidden'))
@@ -2513,6 +2513,10 @@ function FloatingAgentWidget({ currentUser, t, onRunCompleted, onOpenProject }) 
   const aduX = Math.min(Math.max(4, position.x), window.innerWidth - aduWidth - 4)
   const aduY = Math.min(Math.max(4, position.y), window.innerHeight - aduHeight - 4)
   const [isOpen, setIsOpen] = useState(false)
+  // Adu is also the Auto Screenplay Agent for the open project: one tab for the project's drafts, one for writing a brand-new story
+  const [aduTab, setAduTab] = useState(null) // null = follow whether a project is open
+  const aduSelectionRef = useRef('')
+  const [aduSelection, setAduSelection] = useState('')
   const [isDragging, setIsDragging] = useState(false)
   const dragOffset = useRef({ x: 0, y: 0 })
   const dragStart = useRef({ x: 0, y: 0 })
@@ -2679,6 +2683,8 @@ function FloatingAgentWidget({ currentUser, t, onRunCompleted, onOpenProject }) 
   }, [runId, pollNonce, t.genericError, onRunCompleted])
 
   function handlePointerDown(e) {
+    // remember what text was selected on the page BEFORE the click, so "rewrite this" knows what "this" is
+    try { aduSelectionRef.current = String(window.getSelection?.()?.toString() ?? '').trim().slice(0, 1500) } catch { aduSelectionRef.current = '' }
     setIsDragging(true)
     hasDraggedRef.current = false
     dragStart.current = { x: e.clientX, y: e.clientY }
@@ -2715,8 +2721,16 @@ function FloatingAgentWidget({ currentUser, t, onRunCompleted, onOpenProject }) 
 
   function handleButtonClick() {
     if (hasDraggedRef.current) return
+    if (!isOpen) setAduSelection(aduSelectionRef.current)
     setIsOpen((v) => !v)
   }
+  // "Review revision" on the Drafts list calls Adu: wake him, open his panel on the project tab, show that revision
+  useEffect(() => {
+    if (!draftCtx?.openRequestId) return
+    try { localStorage.setItem(ADU_ACTIVE_STORAGE_KEY, '1') } catch { /* per-browser convenience */ }
+    window.dispatchEvent(new CustomEvent(ADU_EVENT, { detail: { active: true } }))
+    setAduTab('project'); setIsOpen(true)
+  }, [draftCtx?.openRequestId])
 
   async function handleStart() {
     if (!concept.trim()) return
@@ -2894,6 +2908,31 @@ function FloatingAgentWidget({ currentUser, t, onRunCompleted, onOpenProject }) 
           : status?.status === 'approved' ? t.floatingAgentStatusApproved
           : null
 
+        const projectMode = Boolean(draftCtx?.draft)
+        const tab = projectMode ? (aduTab ?? 'project') : 'new'
+        const tabs = projectMode ? (
+          <div className="floating-agent-tabs" role="tablist" aria-label="What Adu works on">
+            <button type="button" role="tab" aria-selected={tab === 'project'} className={tab === 'project' ? 'on' : ''} onClick={() => setAduTab('project')}>This project</button>
+            <button type="button" role="tab" aria-selected={tab === 'new'} className={tab === 'new' ? 'on' : ''} onClick={() => setAduTab('new')}>Write a new story</button>
+          </div>
+        ) : null
+        if (tab === 'project') {
+          return (
+            <div className="floating-agent-panel" style={panelStyle}>
+              <div className="floating-agent-header">
+                <img src={currentFrames[frameIndex] ?? currentFrames[0]} alt="" className={`floating-agent-header-character floating-agent-pose-${poseState}`} draggable="false" />
+                <div className="floating-agent-header-text"><strong>{t.floatingAgentTitle}</strong><span className="floating-agent-concept">Works on the project that is open</span></div>
+                <button type="button" className="floating-agent-close" onClick={() => setIsOpen(false)} aria-label="Close">×</button>
+              </div>
+              {tabs}
+              <div className="floating-agent-embed">
+                <DraftAgentPanel embedded backendUrl={BACKEND_URL} draft={draftCtx.draft} getContext={draftCtx.getContext} InputComponent={MicTextarea} initialSelection={aduSelection}
+                  initialRequestId={draftCtx.openRequestId ?? null} onClose={() => setIsOpen(false)} onOpenDraft={(what, extra) => { if (what !== 'dashboard' && what !== 'compare') setIsOpen(false); draftCtx.onOpenDraft?.(what, extra) }} onApplied={draftCtx.onApplied} />
+              </div>
+            </div>
+          )
+        }
+
         return (
           <div className={`floating-agent-panel${status?.status ? ` is-${status.status}` : ''}`} style={panelStyle}>
             <div className="floating-agent-header">
@@ -2905,6 +2944,7 @@ function FloatingAgentWidget({ currentUser, t, onRunCompleted, onOpenProject }) 
               {statusLabel && <span className={`floating-agent-status-pill is-${status.status}`}>{statusLabel}</span>}
               <button type="button" className="floating-agent-close" onClick={() => setIsOpen(false)} aria-label="Close">×</button>
             </div>
+            {tabs}
 
             {!runId && (
               <div className="floating-agent-form">
@@ -6312,7 +6352,7 @@ function App() {
   // Draft Management: the dashboard overlay, and which draft the open project is
   const [draftDashboard, setDraftDashboard] = useState(null) // { module, projectRef }
   const [currentDraft, setCurrentDraft] = useState(null) // { id, module, projectRef }
-  const [agentPanel, setAgentPanel] = useState(null) // { selection, requestId }
+  const [aduRequestId, setAduRequestId] = useState(null) // asks Adu to open a revision that is waiting for review
   const [projectTitle, setProjectTitle] = useState(null)
   const [projectHistory, setProjectHistory] = useState([])
   const [startStage, setStartStage] = useState('idea')
@@ -6935,12 +6975,7 @@ function App() {
     }
   }
 
-  // The Auto Screenplay Agent can be opened from any stage; it is told where you are and what text you selected.
-  function openAgentPanel(requestId = null) {
-    let selection = ''
-    try { selection = String(window.getSelection?.()?.toString() ?? '').trim().slice(0, 1500) } catch { /* no selection */ }
-    setAgentPanel({ selection, requestId })
-  }
+  // Adu IS the Auto Screenplay Agent: his panel has a "This project" tab. He is told where you are and what text you selected.
   function agentContext() {
     if (!currentDraft) return {}
     if (currentDraft.module === 'film') {
@@ -6961,17 +6996,18 @@ function App() {
     if (keepStage) setTimeout(() => (film ? setMovieFocusedStage(keepStage) : setAiMovieFocusedStage(keepStage)), 350)
   }
   async function handleAgentOpen(what, extra) {
-    if (what === 'dashboard' || what === 'compare') { setAgentPanel(null); setDraftDashboard({ module: currentDraft.module, projectRef: currentDraft.projectRef }); return }
-    if (what === 'continue') { setAgentPanel(null); await continueDraft({ ...currentDraft, projectRef: currentDraft.projectRef, resumeContext: {}, currentStage: null }); return }
-    if (what === 'open-new') { setAgentPanel(null); await continueDraft({ module: extra.module, projectRef: extra.projectRef, resumeContext: {}, currentStage: 'idea' }); return }
+    if (what === 'dashboard' || what === 'compare') { setDraftDashboard({ module: currentDraft.module, projectRef: currentDraft.projectRef }); return }
+    if (what === 'continue') { await continueDraft({ ...currentDraft, projectRef: currentDraft.projectRef, resumeContext: {}, currentStage: null }); return }
+    if (what === 'open-new') { await continueDraft({ module: extra.module, projectRef: extra.projectRef, resumeContext: {}, currentStage: 'idea' }); return }
     if (what === 'open') {
       const d = await fetch(`${BACKEND_URL}/api/drafts/requests/${extra}`).then((r) => r.json()).catch(() => null)
       const dash = await fetch(`${BACKEND_URL}/api/drafts?module=${currentDraft.module}&projectRef=${currentDraft.projectRef}`).then((r) => r.json()).catch(() => null)
       const target = dash?.drafts?.find((x) => x.id === d?.request?.draftId)
-      setAgentPanel(null)
       if (target) await continueDraft(target)
     }
   }
+
+  const aduDraftCtx = { draft: currentDraft, getContext: agentContext, onOpenDraft: handleAgentOpen, onApplied: refreshOpenDraft, openRequestId: aduRequestId }
 
   // Which draft is the open project? (Every existing project is Draft 1 automatically.)
   useEffect(() => {
@@ -11377,23 +11413,9 @@ function App() {
         {/* Adu works in AI Movie mode too ("activate adu" in any writing box). Opening a Film project from his panel is Film-side only. */}
         {/* its idea box has a mic button, which needs the dictation provider the Film-mode screen wraps everything in */}
         <DictationContext.Provider value={{ t, dictationLanguage, onDictationLanguageChange: handleDictationLanguageChange }}>
-          <FloatingAgentWidget currentUser={currentUser} t={t} onRunCompleted={() => loadProjectList()} />
+          <FloatingAgentWidget currentUser={currentUser} t={t} onRunCompleted={() => loadProjectList()} draftCtx={aduDraftCtx} />
         </DictationContext.Provider>
-      {draftDashboard && <DraftDashboard module={draftDashboard.module} projectRef={draftDashboard.projectRef} backendUrl={BACKEND_URL} onContinue={continueDraft} onClose={() => setDraftDashboard(null)} onOpenDirect={openProjectDirect} onReviewRequest={(d) => { setDraftDashboard(null); openAgentPanel(d.openRequest?.id ?? null) }} />}
-      {currentDraft && !agentPanel && !draftDashboard && (
-        <button type="button" className="dd-btn da-launch" onMouseDown={(e) => e.preventDefault()} onClick={() => openAgentPanel()} title="Ask the Auto Screenplay Agent — works from any stage">✍ Auto Screenplay Agent</button>
-      )}
-      {agentPanel && currentDraft && (
-        <DictationContext.Provider value={{ t, dictationLanguage, onDictationLanguageChange: handleDictationLanguageChange }}>
-          <DraftAgentPanel backendUrl={BACKEND_URL} draft={currentDraft} getContext={agentContext} InputComponent={MicTextarea} initialSelection={agentPanel.selection} initialRequestId={agentPanel.requestId}
-            onClose={() => setAgentPanel(null)} onOpenDraft={handleAgentOpen} onApplied={refreshOpenDraft} />
-        </DictationContext.Provider>
-      )}
-      {currentDraft && !draftDashboard && (
-        <button type="button" className="dd-btn dd-launch" onClick={() => setDraftDashboard({ module: currentDraft.module, projectRef: currentDraft.projectRef })} title="Show all drafts of this project">
-          📄 Drafts · {currentDraft.title}
-        </button>
-      )}
+      {draftDashboard && <DraftDashboard module={draftDashboard.module} projectRef={draftDashboard.projectRef} backendUrl={BACKEND_URL} onContinue={continueDraft} onClose={() => setDraftDashboard(null)} onOpenDirect={openProjectDirect} onReviewRequest={(d) => { setDraftDashboard(null); setAduRequestId(d.openRequest?.id ?? null); setTimeout(() => setAduRequestId(null), 1500) }} />}
         <div className="mobile-topbar">
           <button className="mobile-menu-button" onClick={() => setIsSidebarOpen(true)} aria-label={t.openMenuLabel}>
             ☰
@@ -12655,20 +12677,9 @@ function App() {
         t={t}
         onRunCompleted={() => loadProjectList()}
         onOpenProject={(id) => { setActiveAgent('story'); loadProject(id) }}
+        draftCtx={aduDraftCtx}
       />
-      {draftDashboard && <DraftDashboard module={draftDashboard.module} projectRef={draftDashboard.projectRef} backendUrl={BACKEND_URL} onContinue={continueDraft} onClose={() => setDraftDashboard(null)} onOpenDirect={openProjectDirect} onReviewRequest={(d) => { setDraftDashboard(null); openAgentPanel(d.openRequest?.id ?? null) }} />}
-      {currentDraft && !agentPanel && !draftDashboard && (
-        <button type="button" className="dd-btn da-launch" onMouseDown={(e) => e.preventDefault()} onClick={() => openAgentPanel()} title="Ask the Auto Screenplay Agent — works from any stage">✍ Auto Screenplay Agent</button>
-      )}
-      {agentPanel && currentDraft && (
-        <DraftAgentPanel backendUrl={BACKEND_URL} draft={currentDraft} getContext={agentContext} InputComponent={MicTextarea} initialSelection={agentPanel.selection} initialRequestId={agentPanel.requestId}
-          onClose={() => setAgentPanel(null)} onOpenDraft={handleAgentOpen} onApplied={refreshOpenDraft} />
-      )}
-      {currentDraft && !draftDashboard && (
-        <button type="button" className="dd-btn dd-launch" onClick={() => setDraftDashboard({ module: currentDraft.module, projectRef: currentDraft.projectRef })} title="Show all drafts of this project">
-          📄 Drafts · {currentDraft.title}
-        </button>
-      )}
+      {draftDashboard && <DraftDashboard module={draftDashboard.module} projectRef={draftDashboard.projectRef} backendUrl={BACKEND_URL} onContinue={continueDraft} onClose={() => setDraftDashboard(null)} onOpenDirect={openProjectDirect} onReviewRequest={(d) => { setDraftDashboard(null); setAduRequestId(d.openRequest?.id ?? null); setTimeout(() => setAduRequestId(null), 1500) }} />}
       <div className="mobile-topbar">
         <button className="mobile-menu-button" onClick={() => setIsSidebarOpen(true)} aria-label={t.openMenuLabel}>
           ☰

@@ -189,6 +189,16 @@ test("comparison marks preserved, modified, added and removed sections", async (
   await assert.rejects(compareDrafts(db, d1.id, filmD.id), /different modules/);
 });
 
+test("a double-click on 'Create Draft' makes ONE draft (the screen's route); two deliberate calls with different names still make two", async () => {
+  const d1 = (await http("GET", `/api/drafts?module=ai_movie&projectRef=${ai}`)).json.drafts[0].id;
+  const [a, b] = await Promise.all([http("POST", `/api/drafts/${d1}/branch`, {}), http("POST", `/api/drafts/${d1}/branch`, {})]);
+  assert.equal(a.json.draft.id, b.json.draft.id, "the second click returned the first draft");
+  assert.equal((await http("GET", `/api/drafts?module=ai_movie&projectRef=${ai}`)).json.drafts.length, 2);
+  const c = await http("POST", `/api/drafts/${d1}/branch`, { label: "A different idea" });
+  assert.notEqual(c.json.draft.id, a.json.draft.id);
+  assert.equal((await http("GET", `/api/drafts?module=ai_movie&projectRef=${ai}`)).json.drafts.length, 3);
+});
+
 test("routes: dashboard, branch, promote, patch, resume, compare — plain errors, nothing for the wrong module", async () => {
   const dash = await http("GET", `/api/drafts?module=ai_movie&projectRef=${ai}`);
   assert.equal(dash.status, 200);

@@ -115,7 +115,7 @@ function Revision({ requestId, backendUrl, onOpenDraft, onClose, onChanged }) {
   )
 }
 
-export default function DraftAgentPanel({ backendUrl, draft, getContext, InputComponent, onClose, onOpenDraft, onApplied, initialRequestId = null, initialSelection = '' }) {
+export default function DraftAgentPanel({ backendUrl, draft, getContext, InputComponent, onClose, onOpenDraft, onApplied, initialRequestId = null, initialSelection = '', embedded = false }) {
   const api = `${backendUrl}/api/drafts/${draft.id}`
   const [text, setText] = useState('')
   const [source, setSource] = useState('pen')
@@ -150,13 +150,15 @@ export default function DraftAgentPanel({ backendUrl, draft, getContext, InputCo
 
   const asEdit = interp && ['LOCAL_EDIT', 'SCOPED_REWRITE'].includes(interp.intent)
   return (
-    <aside className="da" role="dialog" aria-label="Auto Screenplay Agent">
+    <aside className={embedded ? 'da da-embedded' : 'da'} aria-label="Auto Screenplay Agent">
       <header className="da-head">
         <div>
-          <h2>Auto Screenplay Agent</h2>
+          {!embedded && <h2>Auto Screenplay Agent</h2>}
           <p className="da-crumbs" aria-label="Where you are">{draft.title} · {draft.module === 'film' ? 'Movie' : 'AI Movie'} · {getContext?.()?.stageLabel ?? 'current stage'}{selection ? ' · text selected' : ''}</p>
         </div>
-        <button type="button" className="dd-btn" onClick={onClose} aria-label="Close agent">×</button>
+        {embedded
+          ? <button type="button" className="dd-btn" onClick={() => onOpenDraft?.('dashboard')}>All drafts</button>
+          : <button type="button" className="dd-btn" onClick={onClose} aria-label="Close agent">×</button>}
       </header>
       {requestId ? (
         <Revision requestId={requestId} backendUrl={backendUrl} onClose={() => setRequestId(null)} onChanged={onApplied} onOpenDraft={(what) => onOpenDraft?.(what, requestId)} />

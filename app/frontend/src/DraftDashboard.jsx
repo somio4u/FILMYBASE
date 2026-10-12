@@ -2,7 +2,7 @@
 // Opening a project shows this first; "Continue" resumes the draft at its saved stage. Making a new draft COPIES the chosen one —
 // the original (and any pictures, voices, video or timeline made for it) is never changed.
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import './Drafts.css'
 
 async function call(url, method = 'GET', body) {
@@ -59,6 +59,7 @@ export default function DraftDashboard({ module, projectRef, backendUrl, onConti
   const [busy, setBusy] = useState('')
   const [picked, setPicked] = useState([])
   const [compare, setCompare] = useState(null)
+  const lock = useRef(false) // a double-click must not run an action twice
   const [openLast, setOpenLast] = useState(() => { try { return localStorage.getItem(OPEN_LAST_KEY) === '1' } catch { return false } })
 
   const load = useCallback(async () => {
@@ -69,9 +70,11 @@ export default function DraftDashboard({ module, projectRef, backendUrl, onConti
   useEffect(() => { load() }, [load])
 
   async function act(label, fn, after) {
-    if (busy) return
+    if (busy || lock.current) return
+    lock.current = true
     setBusy(label); setError(null)
     const r = await fn()
+    lock.current = false
     setBusy('')
     if (!r.ok) { setError(r.data.error ?? 'That did not work.'); return }
     await load(); onChanged?.()

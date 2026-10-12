@@ -74,6 +74,15 @@ test("every Film project and every AI Movie project is visible, with what each o
   assert.deepEqual(Object.keys(only.parts), ["idea"]);
 });
 
+test("drafts of a project are not listed as separate projects (they live inside the project)", async () => {
+  const { branchDraft, ensureDraftFor } = await import("../drafts.js");
+  await ensureDraftFor(db, "ai_movie", aiId);
+  const copy = await branchDraft(db, (await db.query("SELECT id FROM project_drafts WHERE module = 'ai_movie' AND project_ref = $1", [aiId])).rows[0].id);
+  const all = await listSources(db);
+  assert.equal(all.filter((s) => s.kind === "ai_movie" && /\[WS-TEST\] Tandava Storm/.test(s.title)).length, 1, "one entry, not one per draft");
+  assert.ok(!all.some((s) => s.kind === "ai_movie" && s.id === copy.project_ref));
+});
+
 test("related projects are found by real shared words, not by guessing", async () => {
   const hit = await findRelated(db, "A lighthouse keeper in a storm catches smugglers hiding at the harbour");
   assert.ok(hit.some((h) => h.kind === "film" && h.id === filmId), "the lighthouse project is found");

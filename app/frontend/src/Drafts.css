@@ -38,3 +38,10 @@
 .da-newstory { display: grid; gap: 6px; font-size: .85rem; }
 .da-launch { position: fixed; top: 48px; right: 64px; z-index: 2000; background: #2563eb; color: #fff; border-color: #2563eb; box-shadow: 0 2px 8px rgba(0,0,0,.25); }
 @media (max-width: 640px) { .da-launch { top: auto; bottom: 56px; right: 12px; } .da { width: 100vw; } }
+
+/* the agent inside Adu's panel */
+.da.da-embedded { position: static; width: auto; box-shadow: none; padding: 0; overflow: visible; background: transparent; }
+.floating-agent-tabs { display: flex; gap: 6px; padding: 0 12px 8px; }
+.floating-agent-tabs button { flex: 1; border: 1px solid rgba(128,128,128,.4); background: transparent; color: inherit; border-radius: 999px; padding: 4px 8px; font: inherit; font-size: .8rem; cursor: pointer; }
+.floating-agent-tabs button.on { background: #2563eb; border-color: #2563eb; color: #fff; }
+.floating-agent-embed { padding: 0 12px 12px; }

@@ -7540,3 +7540,4 @@ button:not(:disabled):active {
   .floating-agent-panel { animation: none !important; box-shadow: 0 0 0 1px rgba(138, 180, 248, 0.15) !important; }
 }
 .floating-agent-tab-badge { display: block; font-size: 0.72em; color: #ffd27a; font-weight: 600; }
+.story-bible-synopsis { margin: 4px 0; line-height: 1.5; }

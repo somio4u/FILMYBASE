@@ -2419,7 +2419,11 @@ function StoryBibleSummary({ bible, t }) {
       <p className="floating-agent-section-title">{bible.units?.kind === 'episode' ? t.bibleEpisodeHooksLabel : t.bibleSequenceHooksLabel}</p>
       <ol className="story-bible-hooks">
         {units.map((u) => (
-          <li key={u.number}><strong>{u.title}</strong> — {u.endingHook}</li>
+          <li key={u.number}>
+            <strong>{u.title}</strong>
+            {u.synopsis ? <p className="story-bible-synopsis">{u.synopsis}</p> : <> — {u.endingHook}</>}
+            {u.synopsis && (u.cliffhangerImage || u.endingHook) && <p><em>Ends on: {u.cliffhangerImage || u.endingHook}</em>{u.burningQuestion ? <><br /><em>Burning question: {u.burningQuestion}</em></> : null}</p>}
+          </li>
         ))}
       </ol>
       {openProblems.length > 0 && (
@@ -2749,7 +2753,7 @@ function FloatingAgentWidget({ currentUser, t, onRunCompleted, onOpenProject, dr
       const response = await fetch(`${BACKEND_URL}/api/auto-pipeline/start`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ concept, format, dialogueLanguage, autoReferences: refAuto, references: refPicked.map(({ kind, id }) => ({ kind, id })) }),
+        body: JSON.stringify({ concept, format, dialogueLanguage, autoReferences: refAuto, references: refPicked.map(({ kind, id }) => ({ kind, id })), parentDraftId: draftCtx?.draft?.module === 'film' ? draftCtx.draft.id : undefined }),
       })
       const data = await response.json()
       if (!response.ok) {

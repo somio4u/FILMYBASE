@@ -42,7 +42,7 @@ import { registerAudioCueRoutes } from "./audioCues.js";
 import { registerTimelineEditRoutes } from "./timelineEdit.js";
 import { registerShotPlanRoutes } from "./shotPlans.js";
 import { backfillDrafts, registerDraftRoutes } from "./drafts.js";
-import { failInterruptedRequests, registerDraftAgentRoutes, setPollMs } from "./draftAgent.js";
+import { failInterruptedRequests, registerDraftAgentRoutes, setPollMs, startPlainDraft } from "./draftAgent.js";
 import { buildReferenceBlock, findRelated as findRelatedSources, ideaWithReferences, registerWorkspaceRoutes } from "./workspaceContext.js";
 import { registerTimelineExportRoutes } from "./timelineExport.js";
 import { registerEventRoutes } from "./events.js";
@@ -18340,6 +18340,13 @@ app.post("/api/auto-pipeline/start", requireRole("admin"), async (req, res) => {
     );
     const runId = insertResult.rows[0].id;
 
+    // A story written from inside a project (with one of its drafts open) is a NEW DRAFT of that project: it is recorded as
+    // soon as its project exists, offline while it is written, and appears in that project's Drafts when it is finished.
+    if (Number(req.body.parentDraftId) > 0 && draftAgentModels.value) {
+      startPlainDraft(db, draftAgentModels.value, { runId, parentDraftId: Number(req.body.parentDraftId), instruction: concept, actorUserId: req.user.id })
+        .catch((error) => console.error("Could not link the story run to the project's drafts:", error.message));
+    }
+
     // Films and web series are designed by the Story Brain first and wait
     // for the user's approval; vertical micro-dramas go straight to writing.
     // Deliberately not awaited — see runAutoPipeline's own comment.
@@ -19319,8 +19326,8 @@ const draftPipeline = {
     };
   },
 };
-registerDraftAgentRoutes(app, db, requireRole, {
-  models: process.env.DRAFT_AGENT_MOCK === "1"
+const draftAgentModels = {
+  value: process.env.DRAFT_AGENT_MOCK === "1"
     ? await (async () => { const m = await import("./draftAgentMock.js"); setPollMs(Number(process.env.DRAFT_AGENT_POLL_MS ?? 400)); return { ...m.scriptedAgentModels, pipeline: m.fakePipeline(db) }; })()
     : {
       async json(draft, agentId, prompt, { maxOutputTokens = 8192, responseSchema } = {}) {
@@ -19329,7 +19336,8 @@ registerDraftAgentRoutes(app, db, requireRole, {
       },
       pipeline: draftPipeline,
     },
-});
+};
+registerDraftAgentRoutes(app, db, requireRole, { models: draftAgentModels.value });
 registerShotPlanRoutes(app, db, requireRole, { getTextJson: async (projectId) => async (prompt) => (await aiMovieStory.ask.ask(projectId, "shot-cutter-complex", { contents: prompt, maxOutputTokens: 8192 })).data });
 registerTimelineExportRoutes(app, db, requireRole, { store: productionMedia.store });
 registerScreenplayRoutes(app, db, requireRole);

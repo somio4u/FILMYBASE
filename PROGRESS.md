@@ -1656,3 +1656,8 @@ Plain version: every project is now a set of **drafts**. Opening a project shows
 - Before: a Film draft was only recorded when the whole script was finished, so the draft pages showed only the OLD draft. Now the new draft is recorded as soon as the agent's project exists (still offline, in "Being made"), and its pages hold only what the agent has written.
 - The Review screen lists, live: Pitch deck / synopsis, Characters, Story structure, Beats, Scene list, Screenplay (scene count), each with what the agent wrote or "Not yet created — the screenplay writer is at an earlier stage", plus the judges' scores so far and a button "Open what the agent has made so far". The Drafts "Being made" list has "Open so far".
 - After a server restart, interrupted draft requests now continue by themselves (at most 3 automatic tries each), in addition to the story run itself resuming.
+
+## A story written inside a project becomes that project's new draft; episode synopses
+- Cause of "the draft is not showing": a story started from Adu's "Write a new story" tab while a project was open made a separate new project and was never linked to the project's drafts. Now such a run is recorded as a new draft of the open project as soon as its project exists: offline in "Being made" while written, a draft waiting for approval when finished. The agent never approves the Story Bible for the user.
+- A run that is already going (started from a project before this change) is linked automatically ~30 seconds after the backend starts.
+- Episode / sequence synopses: every episode of the Story Bible now has a full synopsis (150-250 words of prose), shown in Adu's Bible view and in the draft Review, in addition to its cliffhanger.

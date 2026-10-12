@@ -464,6 +464,29 @@ export async function failInterruptedRequests(db) {
 
 // A restart cuts the agent's tracking off even though the story process itself is picked up again by the server. Continue such
 // requests by themselves from their last saved point (at most 3 automatic tries each, so nothing can loop).
+// Story runs that were started from inside a project BEFORE runs were linked to drafts: link each unfinished one to the draft whose
+// material it used, so its work shows up as a new (offline) draft of that project instead of a stray project.
+export async function linkOrphanRuns(db, models) {
+  if (!models) return 0;
+  let linked = 0;
+  const runs = (await db.query(
+    `SELECT id, concept_text, created_by, reference_sources FROM auto_pipeline_runs
+     WHERE reference_sources IS NOT NULL AND status IN ('running','awaiting_approval','failed') AND created_at > now() - interval '3 days'
+       AND NOT EXISTS (SELECT 1 FROM draft_revision_requests q WHERE (q.proposal->>'pipelineRunId')::int = auto_pipeline_runs.id)
+     ORDER BY id`)).rows;
+  for (const run of runs) {
+    const refs = (Array.isArray(run.reference_sources) ? run.reference_sources : []).filter((x) => x?.kind === "film" && Number(x?.id) > 0);
+    for (const ref of refs) {
+      const parent = (await db.query("SELECT id FROM project_drafts WHERE module = 'film' AND project_ref = $1", [Number(ref.id)])).rows[0];
+      if (!parent) continue;
+      await startPlainDraft(db, models, { runId: run.id, parentDraftId: parent.id, instruction: run.concept_text, actorUserId: run.created_by });
+      linked += 1;
+      break;
+    }
+  }
+  return linked;
+}
+
 export async function resumeInterruptedRequests(db, models) {
   if (!models) return 0;
   const rows = (await db.query("SELECT id, context FROM draft_revision_requests WHERE status = 'failed' AND error LIKE 'Interrupted by a server restart%' AND updated_at > now() - interval '12 hours' ORDER BY id")).rows;
@@ -540,7 +563,7 @@ export function proposalFromBible(bible, extra = {}) {
     hiddenTruth: clip(bible.hiddenTruth?.summary, 700),
     characters: (bible.characters ?? []).slice(0, 12).map((c) => ({ name: c.name, role: clip(c.role, 80), want: clip(c.want, 160), secret: clip(c.secret, 160) })),
     climax: { reversal: clip(bible.climax?.reversal, 400), heroChoice: clip(bible.climax?.heroChoice, 300), finalImage: clip(bible.climax?.finalImage, 300) },
-    unitKind: bible.units?.kind ?? "sequence", blueprint: (bible.blueprint ?? []).slice(0, 60).map((u) => ({ number: u.number, title: clip(u.title, 100), coldOpen: clip(u.coldOpen, 260), question: clip(u.question, 200), endingHook: clip(u.endingHook, 300), cliffhangerType: clip(u.cliffhangerType, 60), cliffhangerImage: clip(u.cliffhangerImage, 300), burningQuestion: clip(u.burningQuestion, 200), audienceTheories: (u.audienceTheories ?? []).slice(0, 4).map((t) => clip(t, 160)), nextEpisodePayoff: clip(u.nextEpisodePayoff, 240) })),
+    unitKind: bible.units?.kind ?? "sequence", blueprint: (bible.blueprint ?? []).slice(0, 60).map((u) => ({ number: u.number, title: clip(u.title, 100), synopsis: clip(u.synopsis, 1800), coldOpen: clip(u.coldOpen, 260), question: clip(u.question, 200), endingHook: clip(u.endingHook, 300), cliffhangerType: clip(u.cliffhangerType, 60), cliffhangerImage: clip(u.cliffhangerImage, 300), burningQuestion: clip(u.burningQuestion, 200), audienceTheories: (u.audienceTheories ?? []).slice(0, 4).map((t) => clip(t, 160)), nextEpisodePayoff: clip(u.nextEpisodePayoff, 240) })),
     critics: { scores: r?.scores ?? null, passed: Boolean(r?.passed), passScore: CRITIC_PASS, rounds: (r?.history ?? []).map((h) => Object.values(h.scores ?? {}).join(" / ")), open: open.slice(0, 10) },
     ...extra,
   };
@@ -714,6 +737,19 @@ async function openRequestFor(db, parentDraftId) {
 
 export { cleanupDuplicateRevisions } from "./drafts.js";
 
+// A story run started from inside a project (the user's own idea, with the project's material) becomes a NEW DRAFT of that project.
+// The run is the app's normal story process; this only watches it and records its project as the new draft. It never approves for the user.
+export async function startPlainDraft(db, models, { runId, parentDraftId, instruction, actorUserId = null }) {
+  const parent = await getDraft(db, parentDraftId);
+  if (parent.module !== "film") return null;
+  const row = (await db.query(
+    `INSERT INTO draft_revision_requests (group_id, module, parent_draft_id, draft_id, intent, instruction, source, constraints, context, status, proposal, created_by) VALUES ($1,'film',$2,NULL,'NEW_DRAFT',$3,'text','{}','{}','rewriting',$4,$5) RETURNING *`,
+    [parent.group_id, parent.id, clip(instruction, 4000), JSON.stringify({ kind: "story_bible", pipelineRunId: runId, approved: true, plain: true }), actorUserId]
+  )).rows[0];
+  launch(db, row.id, () => rawRun(db, models, row.id));
+  return requestView(row);
+}
+
 export async function retryRequest(db, models, requestId) {
   const r = await getRequest(db, requestId);
   if (r.status !== "failed") throw httpError("Only a failed request can be retried.", 409, "not_failed");
@@ -852,7 +888,7 @@ async function rawRun(db, models, requestId) {
 
 async function rawRunFilm(db, pl, r, log, save) {
   const runId = r.proposal.pipelineRunId;
-  if (!log.some((x) => x.key === "storyBible" && x.status === "done")) {
+  if (!r.proposal.plain && !log.some((x) => x.key === "storyBible" && x.status === "done")) {
     const now = must(await pl.call("GET", `/api/auto-pipeline/${runId}/status`), "Reading the run");
     if (now.status === "awaiting_approval") must(await pl.call("POST", `/api/auto-pipeline/${runId}/bible-approve`, {}), "Approving the Story Bible");
     log.push({ key: "storyBible", status: "done", score: r.proposal.critics?.scores ? Math.min(...Object.values(r.proposal.critics.scores)) : null });
@@ -929,7 +965,7 @@ async function filmWork(db, r) {
   const scenes = list ? (await one("SELECT count(*)::int AS n FROM screenplay_scenes WHERE scene_list_id = $1", [list.id])).n : 0;
   const finished = ["awaiting_final_approval", "completed"].includes(r.status);
   const have = { synopsis: deck?.content, characterArc: sheet?.content, threeAct: act?.content, plot: bits?.content, sceneList: list?.content };
-  const run = r.proposal?.pipelineRunId ? await one("SELECT review_notes FROM auto_pipeline_runs WHERE id = $1", [r.proposal.pipelineRunId]).catch(() => null) : null;
+  const run = r.proposal?.pipelineRunId ? await one("SELECT review_notes, story_bible, status FROM auto_pipeline_runs WHERE id = $1", [r.proposal.pipelineRunId]).catch(() => null) : null;
   const best = new Map();
   for (const n of run?.review_notes ?? []) { const t = typeof n === "string" ? n : n.text ?? ""; const m = /Judge score: (\d+)\/10/.exec(t); if (m) best.set(n.stage ?? "stage", Math.max(best.get(n.stage ?? "stage") ?? 0, Number(m[1]))); }
   let working = null;
@@ -944,7 +980,9 @@ async function filmWork(db, r) {
     if (!working && r.status === "rewriting") { working = key; return { key, label, state: "working" }; }
     return { key, label, state: "not_yet", note: "Not yet created — the screenplay writer is at an earlier stage." };
   });
-  return { story: { ready: Boolean(r.proposal?.title), approved: Boolean(r.proposal?.approved), note: "The Story Brain is still designing the story." }, steps, judgeScores: [...best].map(([stage, score]) => ({ stage, score })), openable: Boolean(cid) };
+  const storyReady = Boolean(r.proposal?.title) || Boolean(run?.story_bible);
+  const storyApproved = r.proposal?.plain ? Boolean(run?.story_bible) && run?.status !== "awaiting_approval" : Boolean(r.proposal?.approved);
+  return { story: { ready: storyReady, approved: storyApproved, note: "The Story Brain is still designing the story." }, steps, judgeScores: [...best].map(([stage, score]) => ({ stage, score })), openable: Boolean(cid) };
 }
 
 async function agentWork(db, r) {
@@ -1006,7 +1044,7 @@ export async function productionImpact(db, draftId) {
 export function registerDraftAgentRoutes(app, db, requireRole, { models = null } = {}) {
   const admin = requireRole("admin");
   // after a restart, pick interrupted requests up again once the server has settled (the real server only; tests call resumeInterruptedRequests directly)
-  if (models && process.env.NODE_ENV !== "test" && !process.argv.some((a) => a.includes("--test"))) setTimeout(() => resumeInterruptedRequests(db, models).then((n) => n && console.log(`Auto-resumed ${n} draft request(s) after a restart.`)).catch((e) => console.error("Auto-resume of draft requests failed:", e.message)), 25000);
+  if (models && process.env.NODE_ENV !== "test" && !process.argv.some((a) => a.includes("--test"))) setTimeout(() => linkOrphanRuns(db, models).then((n) => n && console.log(`Linked ${n} story run(s) to their project's drafts.`)).then(() => resumeInterruptedRequests(db, models)).then((n) => n && console.log(`Auto-resumed ${n} draft request(s) after a restart.`)).catch((e) => console.error("Auto-resume of draft requests failed:", e.message)), 25000);
   const id = (v) => (/^\d+$/.test(String(v)) && Number(v) > 0 ? Number(v) : null);
   const wrap = (fn) => async (req, res) => {
     try { await fn(req, res); } catch (error) {

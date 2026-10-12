@@ -105,6 +105,7 @@ function Revision({ requestId, backendUrl, onOpenDraft, onClose, onChanged }) {
               <ol className="da-episodes">{r.proposal.blueprint.map((u) => (
                 <li key={u.number} value={u.number}>
                   <strong>{txt(u.title)}</strong>
+                  {u.synopsis && <p className="da-synopsis">{txt(u.synopsis)}</p>}
                   {u.question && <div>Asks: {txt(u.question)}</div>}
                   {(u.cliffhangerImage || u.endingHook) && <div>Ends on: {txt(u.cliffhangerImage || u.endingHook)}</div>}
                   {u.burningQuestion && <div>Burning question: {txt(u.burningQuestion)}</div>}

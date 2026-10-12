@@ -11,7 +11,7 @@ import { branchDraft, registerExternalDraft, compareDrafts, draftUnits, ensureDr
 import { applyChangeSet, approveFinal, approveSynopsis, cancelRequest, classifyPrompt, conform, failInterruptedRequests, getRequest, heuristicIntent, interpret, productionImpact, propose, registerDraftAgentRoutes, rejectChangeSet, requestSynopsisChanges, resolveTargets, retryRequest, revisionDetail, startAlternative, startRevision, undoChangeSet, whenIdle, readUnit } from "../draftAgent.js";
 import { createBlank } from "../drafts.js";
 import { fakePipeline } from "../draftAgentMock.js";
-import { setPollMs, cleanupDuplicateRevisions, resumeInterruptedRequests } from "../draftAgent.js";
+import { setPollMs, cleanupDuplicateRevisions, resumeInterruptedRequests, startPlainDraft } from "../draftAgent.js";
 
 const db = new pg.Pool({ database: process.env.TEST_DB || "filmmaking_app_test", user: process.env.PGUSER || "root", host: process.env.PGHOST || "/var/run/postgresql" });
 const requireRole = () => (req, res, next) => ((req.user = { id: 1 }), next());
@@ -481,6 +481,29 @@ test("after a restart, requests that were interrupted continue by themselves (at
   await db.query("UPDATE draft_revision_requests SET status = 'failed', error = 'Interrupted by a server restart. Press Retry to continue.', context = context || '{\"autoRetries\":3}'::jsonb WHERE id = $1", [request.id]);
   assert.equal(await resumeInterruptedRequests(db, models), 0, "never more than 3 automatic tries");
   await cancelRequest(db, request.id);
+});
+
+test("a story the user writes from inside a project becomes a new offline draft of it; the agent never approves the Story Bible for them", async () => {
+  const d = await ensureDraftFor(db, "film", film);
+  const models = mockModels();
+  const pl = await models.pipeline.open(1);
+  const started = (await pl.call("POST", "/api/auto-pipeline/start", { concept: "Bishpan - Kali Mata's stolen eyes", format: { type: "film", runtimeMinutes: 120 }, references: [{ kind: "film", id: film }] })).json;
+  await pl.close();
+  const before = (await db.query("SELECT count(*)::int AS n FROM concepts WHERE title = 'The Revised Story'")).rows[0].n;
+  const q = await startPlainDraft(db, models, { runId: started.runId, parentDraftId: d.id, instruction: "Bishpan - Kali Mata's stolen eyes", actorUserId: 1 });
+  await new Promise((r) => setTimeout(r, 300));
+  let r = await getRequest(db, q.id);
+  assert.equal(r.status, "rewriting", "it waits for the user's own approval of the Story Bible");
+  assert.equal((await db.query("SELECT count(*)::int AS n FROM concepts WHERE title = 'The Revised Story'")).rows[0].n, before, "nothing was approved on the user's behalf");
+  // the user approves in the app (the app's own route), then the run writes its project
+  const pl2 = await models.pipeline.open(1); await pl2.call("POST", `/api/auto-pipeline/${started.runId}/bible-approve`, {}); await pl2.close();
+  await whenIdle(q.id);
+  r = await getRequest(db, q.id);
+  assert.equal(r.status, "awaiting_final_approval", r.error);
+  assert.ok(r.draft_id, "its project is recorded as the new draft");
+  const dash = await getDashboard(db, "film", film);
+  assert.ok(dash.drafts.some((x) => x.id === r.draft_id), "finished: it appears as a draft of the project");
+  await cancelRequest(db, q.id).catch(() => {});
 });
 
 test("new story: choose same project (a draft on the dashboard) or a new project; the current draft is untouched; both modules", async () => {

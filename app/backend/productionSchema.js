@@ -22,6 +22,7 @@ import { ensureAudioCueSchema } from "./audioCues.js";
 import { ensureTimelineEditSchema } from "./timelineEdit.js";
 import { ensureSnapshotSchema } from "./timelineExport.js";
 import { ensureShotPlanSchema } from "./shotPlans.js";
+import { ensureDraftSchema } from "./drafts.js";
 
 export async function ensureAllProductionSchemas(db, log = console.error) {
   const steps = [
@@ -41,6 +42,7 @@ export async function ensureAllProductionSchemas(db, log = console.error) {
     ["timeline editing", ensureTimelineEditSchema],
     ["timeline snapshots", ensureSnapshotSchema],
     ["shot optimization plans", ensureShotPlanSchema],
+    ["drafts and revision requests", ensureDraftSchema],
   ];
   const failures = [];
   for (const [name, step] of steps) {

@@ -41,6 +41,7 @@ import { registerTimelineRoutes } from "./timeline.js";
 import { registerAudioCueRoutes } from "./audioCues.js";
 import { registerTimelineEditRoutes } from "./timelineEdit.js";
 import { registerShotPlanRoutes } from "./shotPlans.js";
+import { backfillDrafts, registerDraftRoutes } from "./drafts.js";
 import { buildReferenceBlock, findRelated as findRelatedSources, ideaWithReferences, registerWorkspaceRoutes } from "./workspaceContext.js";
 import { registerTimelineExportRoutes } from "./timelineExport.js";
 import { registerEventRoutes } from "./events.js";
@@ -1823,7 +1824,7 @@ app.get("/api/concepts", requireLogin, async (req, res) => {
   // they were assigned to.
   const result =
     req.user.role === "admin"
-      ? await db.query("SELECT id, concept_text, title, pinned, project_type, created_at FROM concepts ORDER BY pinned DESC, created_at DESC")
+      ? await db.query(`SELECT id, concept_text, title, pinned, project_type, created_at FROM concepts WHERE NOT EXISTS (SELECT 1 FROM project_drafts d JOIN project_drafts p ON p.id = d.parent_draft_id WHERE d.module = 'film' AND d.project_ref = concepts.id AND EXISTS (SELECT 1 FROM concepts pc WHERE pc.id = p.project_ref)) ORDER BY pinned DESC, created_at DESC`)
       : req.user.role === PRODUCTION_ONLY_ROLE
       ? await db.query(
           "SELECT id, concept_text, title, pinned, project_type, created_at FROM concepts WHERE owner_user_id = $1 AND project_type = 'production' ORDER BY pinned DESC, created_at DESC",
@@ -6605,7 +6606,7 @@ app.post("/api/ai-movie/stages/:stage/approve", requireRole("admin"), async (req
 
 app.get("/api/ai-movie/projects", requireRole("admin"), async (req, res) => {
   const result = await db.query(
-    "SELECT id, title, pasted_text, detected_stage, updated_at FROM ai_movie_projects ORDER BY updated_at DESC"
+    `SELECT id, title, pasted_text, detected_stage, updated_at FROM ai_movie_projects WHERE NOT EXISTS (SELECT 1 FROM project_drafts d JOIN project_drafts p ON p.id = d.parent_draft_id WHERE d.module = 'ai_movie' AND d.project_ref = ai_movie_projects.id AND EXISTS (SELECT 1 FROM ai_movie_projects pc WHERE pc.id = p.project_ref)) ORDER BY updated_at DESC`
   );
   res.json(result.rows.map((row) => ({
     id: row.id,
@@ -19268,6 +19269,7 @@ registerTimelineRoutes(app, db, requireRole);
 registerTimelineEditRoutes(app, db, requireRole);
 // The Shot Optimization review runs through the Shot Cutter's own model route (Pro in Professional/Maximum) and the money guard.
 registerWorkspaceRoutes(app, db, requireRole);
+registerDraftRoutes(app, db, requireRole);
 registerShotPlanRoutes(app, db, requireRole, { getTextJson: async (projectId) => async (prompt) => (await aiMovieStory.ask.ask(projectId, "shot-cutter-complex", { contents: prompt, maxOutputTokens: 8192 })).data });
 registerTimelineExportRoutes(app, db, requireRole, { store: productionMedia.store });
 registerScreenplayRoutes(app, db, requireRole);
@@ -19304,6 +19306,7 @@ registerAudioCueRoutes(app, db, requireRole, { store: productionMedia.store });
 // starts, rather than blocking startup entirely.
 ensureAiMovieSchema()
   .then(() => ensureAllProductionSchemas(db))
+  .then(async (failures) => { try { const made = await backfillDrafts(db); if (made) console.log(`Draft Management: ${made} existing project(s) are now Draft 1 of their project.`); } catch (error) { console.error("Draft backfill failed:", error.message); } return failures; })
   .catch((error) => console.error("Schema setup failed:", error.message))
   .finally(() => {
   app.listen(PORT, () => {

@@ -58,6 +58,9 @@ function Revision({ requestId, backendUrl, onOpenDraft, onClose, onChanged }) {
       <p className="dd-fine">From {data.parentDraft?.title}. Your instruction (kept exactly): “{r.instruction}” {r.source === 'mic' ? '· spoken' : ''}</p>
       {r.constraints?.mustKeep?.length > 0 && <p className="dd-fine">Must keep: {r.constraints.mustKeep.join('; ')}</p>}
       {r.constraints?.mustChange?.length > 0 && <p className="dd-fine">Must change: {r.constraints.mustChange.join('; ')}</p>}
+      {['analyzing', 'rewriting', 'synopsis_approved', 'awaiting_synopsis_approval', 'awaiting_final_approval'].includes(status) && (
+        <p className="dd-fine da-where">Where it is saved: the finished script appears in <strong>Drafts</strong> for this project as <strong>{data.draft?.title ?? 'the next draft number'}</strong>{data.draft ? '' : ' (it shows up there when the writing finishes)'}. Nothing here is deleted.</p>
+      )}
       {error && <p className="dd-error" role="alert">{error}</p>}
       {r.error && status === 'failed' && <p className="dd-error" role="alert">{r.error}</p>}
       {impact && (

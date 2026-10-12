@@ -709,6 +709,8 @@ export async function cleanupDuplicateRevisions(db, module, projectRef, { dryRun
     const keep = keepMode === "none" ? null : list[list.length - 1];
     if (keep) out.kept.push({ requestId: keep.id, draftId: keep.draft_id });
     for (const r of keepMode === "none" ? list : list.slice(0, -1)) {
+      // a request that is actively working (reading the draft or writing the script) is NEVER removed
+      if (["analyzing", "rewriting", "synopsis_approved"].includes(r.status)) { out.skipped.push({ requestId: r.id, draftId: r.draft_id, why: "it is still working, so it was kept" }); continue; }
       const d = r.draft_id ? (await db.query("SELECT * FROM project_drafts WHERE id = $1", [r.draft_id])).rows[0] : null;
       const removable = !d || (["pending_approval", "archived"].includes(d.status) && d.kind !== "alternative");
       if (!removable) { out.skipped.push({ requestId: r.id, draftId: r.draft_id, why: "that draft was approved or locked, so it was kept" }); continue; }
@@ -864,7 +866,8 @@ async function rawRun(db, models, requestId) {
 async function rawRunFilm(db, pl, r, log, save) {
   const runId = r.proposal.pipelineRunId;
   if (!log.some((x) => x.key === "storyBible" && x.status === "done")) {
-    must(await pl.call("POST", `/api/auto-pipeline/${runId}/bible-approve`, {}), "Approving the Story Bible");
+    const now = must(await pl.call("GET", `/api/auto-pipeline/${runId}/status`), "Reading the run");
+    if (now.status === "awaiting_approval") must(await pl.call("POST", `/api/auto-pipeline/${runId}/bible-approve`, {}), "Approving the Story Bible");
     log.push({ key: "storyBible", status: "done", score: r.proposal.critics?.scores ? Math.min(...Object.values(r.proposal.critics.scores)) : null });
     await save();
   }

@@ -1607,3 +1607,8 @@ Plain version: every project is now a set of **drafts**. Opening a project shows
 - It still stops once for your approval of the new Story Bible, shows the critics' scores, and writes nothing until you approve.
 - The Revision screen shows the Story Bible, critic scores and per-stage judge scores. The dashboard shows a "new draft is being made" banner (Movie has no draft until the script is finished).
 - Next step: check it with a real Google run, and redeploy the Render backend.
+
+## Protect work in progress
+- "Delete the duplicates" never removes a request that is still working (reading the draft or writing the script).
+- A Film story run that was interrupted can be retried without approving the Story Bible twice.
+- The review screen now says where the finished script is saved (Drafts, as the next draft number).

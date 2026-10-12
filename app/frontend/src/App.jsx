@@ -4,6 +4,7 @@ import './App.css'
 import { AI_ACTIVITY_EVENT, AI_WARP_EVENT } from './AiBackground.jsx'
 import ProductionStudio, { PRODUCTION_WORKSPACES, LEGACY_VIEW } from './ProductionStudio.jsx'
 import WorkspaceSources, { UsedSources } from './WorkspaceSources.jsx'
+import DraftDashboard, { OPEN_LAST_KEY } from './DraftDashboard.jsx'
 import AiMovieStudio, { AI_MOVIE_STUDIO_VIEWS, StageJudgeNote } from './AiMovieStudio.jsx'
 import ProductionDossier from './ProductionDossier.jsx'
 import DesignerWorkspace from './DesignerWorkspace.jsx'
@@ -6307,6 +6308,9 @@ function App() {
   const [language, setLanguage] = useState('en')
   const [concept, setConcept] = useState('')
   const [conceptId, setConceptId] = useState(null)
+  // Draft Management: the dashboard overlay, and which draft the open project is
+  const [draftDashboard, setDraftDashboard] = useState(null) // { module, projectRef }
+  const [currentDraft, setCurrentDraft] = useState(null) // { id, module, projectRef }
   const [projectTitle, setProjectTitle] = useState(null)
   const [projectHistory, setProjectHistory] = useState([])
   const [startStage, setStartStage] = useState('idea')
@@ -6881,10 +6885,70 @@ function App() {
     setIsLoadingMasterList(false)
   }
 
+  // ---- Draft Management ----
+  // Opening a project shows its Draft Dashboard (admin); "Continue" resumes the draft at its saved stage.
+  async function openProjectEntry(module, id) {
+    if (currentUser?.role !== 'admin') {
+      if (module === 'film') loadProject(id)
+      else loadAiMovieProject(id)
+      return
+    }
+    let openLast = false
+    try { openLast = localStorage.getItem(OPEN_LAST_KEY) === '1' } catch { /* per-browser convenience */ }
+    if (openLast) {
+      try {
+        const r = await fetch(`${BACKEND_URL}/api/drafts?module=${module}&projectRef=${id}`)
+        if (r.ok) {
+          const d = await r.json()
+          const last = d.drafts.find((x) => x.id === d.activeDraftId && x.status !== 'archived') ?? d.drafts.find((x) => x.status !== 'archived')
+          if (last) { continueDraft(last); return }
+        }
+      } catch { /* fall through to the dashboard */ }
+    }
+    setDraftDashboard({ module, projectRef: id })
+  }
+
+  async function continueDraft(draft) {
+    setDraftDashboard(null)
+    setIsSidebarOpen(false)
+    const ctx = draft.resumeContext ?? {}
+    if (draft.module === 'film') {
+      setActiveAgent('story')
+      await loadProject(draft.projectRef)
+      // loadProject resets the stage focus, so the saved stage is applied just after it
+      if (ctx.focused && draft.currentStage) setTimeout(() => setMovieFocusedStage(draft.currentStage), 350)
+    } else {
+      await loadAiMovieProject(draft.projectRef)
+      setAiMovieView('editor')
+      if (ctx.focused && draft.currentStage) setTimeout(() => setAiMovieFocusedStage(draft.currentStage), 350)
+      if (Number.isInteger(ctx.beat)) setTimeout(() => setAiMovieScreenplayViewIndex(ctx.beat), 400)
+    }
+  }
+
+  // Which draft is the open project? (Every existing project is Draft 1 automatically.)
+  useEffect(() => {
+    const module = appMode === 'ai' ? 'ai_movie' : 'film'
+    const ref = module === 'film' ? conceptId : aiMovieProjectId
+    if (!ref || currentUser?.role !== 'admin') { setCurrentDraft(null); return undefined }
+    let cancelled = false
+    fetch(`${BACKEND_URL}/api/drafts?module=${module}&projectRef=${ref}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        const mine = d?.drafts?.find((x) => x.projectRef === ref)
+        if (!cancelled && mine) {
+          setCurrentDraft({ id: mine.id, module, projectRef: ref, title: mine.title, status: mine.status })
+          fetch(`${BACKEND_URL}/api/drafts/${mine.id}/resume`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: '{}' }).catch(() => {})
+        }
+      })
+      .catch(() => {})
+    return () => { cancelled = true }
+  }, [appMode, conceptId, aiMovieProjectId, currentUser?.role])
+
   function handleOpenMasterProjectClick(project) {
     setIsSidebarOpen(false)
     setActiveAgent(project.projectType === 'production' ? 'production' : 'story')
-    loadProject(project.id)
+    if (project.projectType === 'production') loadProject(project.id)
+    else openProjectEntry('film', project.id)
   }
 
   // Unlike handleRenameProjectClick (which only ever renames whichever
@@ -10966,6 +11030,19 @@ function App() {
   useEffect(() => {
     setMovieFocusedStage(null)
   }, [movieCurrentStage, conceptId])
+  // The draft remembers where you were (stage you focused, beat you were on), so Continue reopens exactly there.
+  useEffect(() => {
+    if (!currentDraft) return undefined
+    const film = currentDraft.module === 'film'
+    const stage = film ? movieFocusedStage : aiMovieFocusedStage
+    const timer = setTimeout(() => {
+      const body = stage
+        ? { stage, context: { focused: true, ...(film ? {} : { beat: aiMovieScreenplayViewIndex }) } }
+        : { context: { focused: false, ...(film ? {} : { beat: aiMovieScreenplayViewIndex }) } }
+      fetch(`${BACKEND_URL}/api/drafts/${currentDraft.id}/resume`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }).catch(() => {})
+    }, 900)
+    return () => clearTimeout(timer)
+  }, [currentDraft, movieFocusedStage, aiMovieFocusedStage, aiMovieScreenplayViewIndex])
   const stageBreakdown =
     scriptBreakdown?.status === 'approved' ? 'done' : sceneList?.status === 'approved' ? 'current' : 'upcoming'
   const stageSchedule =
@@ -11254,6 +11331,12 @@ function App() {
         <DictationContext.Provider value={{ t, dictationLanguage, onDictationLanguageChange: handleDictationLanguageChange }}>
           <FloatingAgentWidget currentUser={currentUser} t={t} onRunCompleted={() => loadProjectList()} />
         </DictationContext.Provider>
+      {draftDashboard && <DraftDashboard module={draftDashboard.module} projectRef={draftDashboard.projectRef} backendUrl={BACKEND_URL} onContinue={continueDraft} onClose={() => setDraftDashboard(null)} />}
+      {currentDraft && !draftDashboard && (
+        <button type="button" className="dd-btn dd-launch" onClick={() => setDraftDashboard({ module: currentDraft.module, projectRef: currentDraft.projectRef })} title="Show all drafts of this project">
+          📄 Drafts · {currentDraft.title}
+        </button>
+      )}
         <div className="mobile-topbar">
           <button className="mobile-menu-button" onClick={() => setIsSidebarOpen(true)} aria-label={t.openMenuLabel}>
             ☰
@@ -11437,7 +11520,7 @@ function App() {
               <div className="master-list-grid">
                 {aiMovieProjectList.map((project) => (
                   <div key={project.id} className="master-list-card">
-                    <button className="master-list-card-open" onClick={() => loadAiMovieProject(project.id)}>
+                    <button className="master-list-card-open" onClick={() => openProjectEntry('ai_movie', project.id)}>
                       <strong>{project.title || project.pastedText?.slice(0, 40)}</strong>
                       <span className="breakdown-item-meta">{project.detectedStage}</span>
                     </button>
@@ -12516,6 +12599,12 @@ function App() {
         onRunCompleted={() => loadProjectList()}
         onOpenProject={(id) => { setActiveAgent('story'); loadProject(id) }}
       />
+      {draftDashboard && <DraftDashboard module={draftDashboard.module} projectRef={draftDashboard.projectRef} backendUrl={BACKEND_URL} onContinue={continueDraft} onClose={() => setDraftDashboard(null)} />}
+      {currentDraft && !draftDashboard && (
+        <button type="button" className="dd-btn dd-launch" onClick={() => setDraftDashboard({ module: currentDraft.module, projectRef: currentDraft.projectRef })} title="Show all drafts of this project">
+          📄 Drafts · {currentDraft.title}
+        </button>
+      )}
       <div className="mobile-topbar">
         <button className="mobile-menu-button" onClick={() => setIsSidebarOpen(true)} aria-label={t.openMenuLabel}>
           ☰
@@ -12742,7 +12831,7 @@ function App() {
                 <div key={item.id} className={isActive ? 'sidebar-history-row active' : 'sidebar-history-row'}>
                   <button
                     className="sidebar-history-item"
-                    onClick={() => loadProject(item.id)}
+                    onClick={() => openProjectEntry('film', item.id)}
                   >
                     {item.pinned && <span className="sidebar-history-pin-marker">{ICONS.pin}</span>}
                     {isActive ? sidebarProjectLabel : projectHistoryLabel(item)}

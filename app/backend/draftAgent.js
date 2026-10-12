@@ -1072,6 +1072,28 @@ export function registerDraftAgentRoutes(app, db, requireRole, { models = null }
   }));
   app.post(`${base}/continue`, admin, wrap(async (req, res) => { const d = await saveResume(db, did(req), {}); res.json({ draftId: d.id, projectRef: d.project_ref, module: d.module, stage: d.current_stage, context: d.resume_context }); }));
   app.get("/api/drafts/:draftId/requests", admin, wrap(async (req, res) => res.json({ requests: await listRequests(db, did(req)) })));
+  // Where is this story run saved? (as a draft of the open project, or not linked yet)
+  app.get("/api/drafts/run-link", admin, wrap(async (req, res) => {
+    const runId = id(req.query.runId);
+    if (!runId) throw httpError("Say which story run.", 400, "bad_request");
+    const q = (await db.query("SELECT id, status, draft_id, parent_draft_id FROM draft_revision_requests WHERE (proposal->>'pipelineRunId')::int = $1 ORDER BY id DESC LIMIT 1", [runId]).catch(() => ({ rows: [] }))).rows[0];
+    if (!q) return res.json({ linked: false });
+    const d = q.draft_id ? (await db.query("SELECT id, module, project_ref, draft_number, label, status FROM project_drafts WHERE id = $1", [q.draft_id])).rows[0] : null;
+    const parent = q.parent_draft_id ? (await db.query("SELECT label, draft_number FROM project_drafts WHERE id = $1", [q.parent_draft_id])).rows[0] : null;
+    res.json({ linked: true, requestId: q.id, requestStatus: q.status, parentTitle: parent ? (parent.label ?? `Draft ${parent.draft_number}`) : null, draft: d ? { id: d.id, module: d.module, projectRef: d.project_ref, title: d.label ?? `Draft ${d.draft_number}`, status: d.status } : null });
+  }));
+  // Save a story run as a new draft of the project (when it was not linked automatically)
+  app.post("/api/drafts/link-run", admin, wrap(async (req, res) => {
+    const runId = id(req.body?.runId), parentDraftId = id(req.body?.parentDraftId);
+    if (!runId || !parentDraftId) throw httpError("Say which story run and which draft.", 400, "bad_request");
+    const run = (await db.query("SELECT id, concept_text, created_by FROM auto_pipeline_runs WHERE id = $1", [runId]).catch(() => ({ rows: [] }))).rows[0];
+    if (!run) throw httpError("That story run was not found.", 404, "not_found");
+    const have = (await db.query("SELECT id FROM draft_revision_requests WHERE (proposal->>'pipelineRunId')::int = $1 AND status NOT IN ('cancelled') LIMIT 1", [runId])).rows[0];
+    if (have) return res.json({ requestId: have.id, already: true });
+    const out = await startPlainDraft(db, models, { runId, parentDraftId, instruction: run.concept_text, actorUserId: req.user?.id });
+    if (!out) throw httpError("Only Movie stories can be saved as a draft.", 409, "not_supported");
+    res.status(201).json({ requestId: out.id });
+  }));
   app.post("/api/drafts/cleanup-duplicates", admin, wrap(async (req, res) => {
     const { module, projectRef } = req.body ?? {};
     if (!["film", "ai_movie"].includes(module) || !projectRef) throw httpError("Say which project to clean up.", 400, "bad_request");

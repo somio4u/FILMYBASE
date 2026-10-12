@@ -2476,6 +2476,52 @@ function autoPipelineProgressPercent(stage) {
 // back as one downloadable PDF, without clicking through each stage
 // manually. Position is a per-viewer convenience (localStorage only); the
 // run itself lives server-side so a page refresh doesn't lose progress.
+// What a story run can do for the project: download its episode synopses, and show / set where it is saved as a draft.
+function RunTools({ runId, status, draftCtx }) {
+  const [link, setLink] = useState(null)
+  const [busy, setBusy] = useState(false)
+  const [note, setNote] = useState('')
+  const filmDraft = draftCtx?.draft?.module === 'film' ? draftCtx.draft : null
+  const state = status?.status
+  useEffect(() => {
+    if (!runId) return undefined
+    let cancelled = false
+    const load = () => fetch(`${BACKEND_URL}/api/drafts/run-link?runId=${runId}`).then((r) => (r.ok ? r.json() : null)).then((d) => { if (!cancelled && d) setLink(d) }).catch(() => {})
+    load()
+    const timer = setInterval(load, 8000)
+    return () => { cancelled = true; clearInterval(timer) }
+  }, [runId])
+  async function saveAsDraft() {
+    if (!filmDraft || busy) return
+    setBusy(true); setNote('')
+    try {
+      const response = await fetch(`${BACKEND_URL}/api/drafts/link-run`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ runId, parentDraftId: filmDraft.id }) })
+      const data = await response.json().catch(() => ({}))
+      setNote(response.ok ? 'Saved. It stays offline in "Being made" until the writing finishes.' : (data.error || 'That did not work.'))
+      const next = await fetch(`${BACKEND_URL}/api/drafts/run-link?runId=${runId}`).then((r) => (r.ok ? r.json() : null)).catch(() => null)
+      if (next) setLink(next)
+    } catch { setNote('That did not work. Try again in a moment.') }
+    setBusy(false)
+  }
+  const hasStory = Boolean(status?.storyBible || status?.conceptId)
+  return (
+    <div className="floating-agent-section run-tools">
+      {hasStory && <a className="cancel-button floating-agent-download" href={`${BACKEND_URL}/api/auto-pipeline/${runId}/synopses-pdf`} target="_blank" rel="noreferrer">Download episode synopses (PDF)</a>}
+      {link?.linked ? (
+        <p className="dd-fine">Saved as a draft of {link.parentTitle ? `the project of ${link.parentTitle}` : 'this project'}: {link.draft ? <strong>{link.draft.title}</strong> : 'being set up'} — {link.requestStatus === 'awaiting_final_approval' ? 'finished, waiting for your approval' : link.requestStatus === 'failed' ? 'stopped (open it in Drafts and press Retry)' : 'offline while it is written'}.
+          {link.draft && <> <button type="button" className="cancel-button" onClick={() => draftCtx?.openLinked?.(link.draft)}>Open so far</button></>}
+          {draftCtx?.openDrafts && <> <button type="button" className="cancel-button" onClick={() => draftCtx.openDrafts()}>See in Drafts</button></>}</p>
+      ) : filmDraft && ['running', 'awaiting_approval', 'completed', 'failed'].includes(state) ? (
+        <>
+          <p className="dd-fine">This story is not saved as a draft of this project yet.</p>
+          <button type="button" className="choose-button" onClick={saveAsDraft} disabled={busy}>{busy ? 'Saving…' : 'Save as a new draft of this project'}</button>
+        </>
+      ) : null}
+      {note && <p className="feedback-note">{note}</p>}
+    </div>
+  )
+}
+
 function FloatingAgentWidget({ currentUser, t, onRunCompleted, onOpenProject, draftCtx = null }) {
   useAduCommand()
   // hidden | arriving | shown | leaving
@@ -3022,6 +3068,7 @@ function FloatingAgentWidget({ currentUser, t, onRunCompleted, onOpenProject, dr
             {runId && status && (
               <>
                 <UsedSources sources={status.referenceSources} />
+                <RunTools runId={runId} status={status} draftCtx={draftCtx} />
                 {status.status === 'running' && (
                   <div className="floating-agent-now">
                     <div className="floating-agent-progress-bar">
@@ -7038,7 +7085,7 @@ function App() {
     }
   }
 
-  const aduDraftCtx = { draft: currentDraft ?? aduReviewDraft, onAduClosed: () => setAduReviewDraft(null), getContext: agentContext, onOpenDraft: handleAgentOpen, onApplied: refreshOpenDraft, openRequestId: aduRequestId }
+  const aduDraftCtx = { openLinked: (d) => continueDraft({ id: d.id, module: d.module, projectRef: d.projectRef, resumeContext: {}, currentStage: null }), openDrafts: currentDraft ? () => setDraftDashboard({ module: currentDraft.module, projectRef: currentDraft.projectRef }) : null, draft: currentDraft ?? aduReviewDraft, onAduClosed: () => setAduReviewDraft(null), getContext: agentContext, onOpenDraft: handleAgentOpen, onApplied: refreshOpenDraft, openRequestId: aduRequestId }
 
   // Which draft is the open project? (Every existing project is Draft 1 automatically.)
   useEffect(() => {

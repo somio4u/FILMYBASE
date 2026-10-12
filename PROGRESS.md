@@ -1661,3 +1661,7 @@ Plain version: every project is now a set of **drafts**. Opening a project shows
 - Cause of "the draft is not showing": a story started from Adu's "Write a new story" tab while a project was open made a separate new project and was never linked to the project's drafts. Now such a run is recorded as a new draft of the open project as soon as its project exists: offline in "Being made" while written, a draft waiting for approval when finished. The agent never approves the Story Bible for the user.
 - A run that is already going (started from a project before this change) is linked automatically ~30 seconds after the backend starts.
 - Episode / sequence synopses: every episode of the Story Bible now has a full synopsis (150-250 words of prose), shown in Adu's Bible view and in the draft Review, in addition to its cliffhanger.
+
+## Episode synopses PDF + "where is my draft" controls
+- The story run panel in Adu now has **Download episode synopses (PDF)** (English by default; add ?lang=hi for Hindi). It lists every episode: the Story Bible's full synopsis + cliffhanger + burning question + audience theories, and the pitch deck's episode-by-episode text; a step not made yet says "Not yet created".
+- The panel also says where the story is saved as a draft (offline while written, finished, or stopped) with **Open so far** and **See in Drafts**. If a story run is not linked to the open project, **Save as a new draft of this project** links it by hand.

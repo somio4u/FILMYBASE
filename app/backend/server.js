@@ -18931,6 +18931,56 @@ app.get("/api/scene-lists/:id/screenplay-pdf", requireLogin, async (req, res) =>
   }
 });
 
+// Every episode's synopsis for a story run, as one PDF: the Story Bible's synopsis and cliffhanger for each episode (when the
+// run has a Bible) and the pitch deck's episode-by-episode text (once the pitch deck is written). A step not made yet says so.
+app.get("/api/auto-pipeline/:id/synopses-pdf", requireLogin, async (req, res) => {
+  const run = (await db.query("SELECT id, concept_text, story_bible, concept_id, status FROM auto_pipeline_runs WHERE id = $1", [req.params.id])).rows[0];
+  if (!run) { res.status(404).json({ error: "Run not found." }); return; }
+  const lang = req.query.lang === "hi" ? "hi" : "en";
+  const deck = run.concept_id ? (await db.query("SELECT content FROM pitch_decks WHERE concept_id = $1 ORDER BY id DESC LIMIT 1", [run.concept_id])).rows[0]?.content ?? null : null;
+  const pick = (v) => (v && typeof v === "object" ? (v[lang] ?? v.en ?? Object.values(v)[0] ?? "") : String(v ?? ""));
+  const bible = run.story_bible ?? null;
+  const units = Array.isArray(bible?.blueprint) ? bible.blueprint : [];
+  const deckEpisodes = Array.isArray(deck?.episodes) ? deck.episodes : [];
+  const count = Math.max(units.length, deckEpisodes.length);
+  const title = pick(deck?.title) || bible?.promise?.title || "Story";
+  try {
+    const doc = new PDFDocument({ size: "A4", margin: 56, bufferPages: true });
+    doc.registerFont("hindiRegular", FONTS.hindiRegular);
+    doc.registerFont("hindiBold", FONTS.hindiBold);
+    const body = lang === "hi" ? "hindiRegular" : "Times-Roman";
+    const bold = lang === "hi" ? "hindiBold" : "Times-Bold";
+    const italic = lang === "hi" ? "hindiRegular" : "Times-Italic";
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", `attachment; filename="episode-synopses-${run.id}.pdf"`);
+    doc.pipe(res);
+    doc.font(bold).fontSize(22).text(`${title} — Episode synopses`, { align: "center" });
+    doc.moveDown(0.3).font(italic).fontSize(11).fillColor("#555").text(pick(deck?.logline) || bible?.promise?.logline || "", { align: "center" }).fillColor("#000");
+    doc.moveDown(1);
+    if (count === 0) {
+      doc.font(body).fontSize(12).text("Not yet created — the screenplay writer is at an earlier stage (the story is still being designed).");
+    }
+    for (let i = 0; i < count; i += 1) {
+      const u = units[i] ?? null;
+      const e = deckEpisodes[i] ?? null;
+      doc.font(bold).fontSize(14).fillColor("#7a1010").text(`Episode ${i + 1}: ${pick(e?.title) || u?.title || ""}`).fillColor("#000");
+      doc.moveDown(0.2);
+      if (u?.synopsis) { doc.font(body).fontSize(11.5).text(u.synopsis, { align: "justify" }); doc.moveDown(0.3); }
+      if (e?.synopsis) { doc.font(body).fontSize(11.5).text(pick(e.synopsis), { align: "justify" }); doc.moveDown(0.3); }
+      if (!u?.synopsis && !e?.synopsis) doc.font(italic).fontSize(11).text("Not yet created.");
+      const end = u?.cliffhangerImage || u?.endingHook || pick(e?.hook);
+      if (end) { doc.font(bold).fontSize(11).text("Cliffhanger: ", { continued: true }).font(italic).text(end); }
+      if (u?.burningQuestion) doc.font(bold).fontSize(11).text("Burning question: ", { continued: true }).font(italic).text(u.burningQuestion);
+      if (Array.isArray(u?.audienceTheories) && u.audienceTheories.length) doc.font(bold).fontSize(11).text("Viewers will guess: ", { continued: true }).font(italic).text(u.audienceTheories.join("  |  "));
+      doc.moveDown(0.9);
+    }
+    doc.end();
+  } catch (error) {
+    console.error("Episode synopses PDF failed:", error.message);
+    if (!res.headersSent) res.status(500).json({ error: error.message }); else res.end();
+  }
+});
+
 app.get("/api/auto-pipeline/:id/screenplay-pdf", requireLogin, async (req, res) => {
   const targetLang = ["en", "hi"].includes(req.query.lang) ? req.query.lang : "or";
   const data = await fetchAutoPipelineScreenplayData(req.params.id, targetLang);

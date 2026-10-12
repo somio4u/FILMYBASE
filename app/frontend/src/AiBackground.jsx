@@ -90,7 +90,7 @@ export default function AiBackground() {
     const reduceMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
     // Phones and slow devices: draw fewer, smaller frames so the page stays smooth and the battery lasts
     const lite = Boolean(window.matchMedia?.('(pointer: coarse)').matches || window.innerWidth < 820 || navigator.connection?.saveData || (navigator.hardwareConcurrency ?? 8) <= 4)
-    const minGap = lite ? 1000 / 20 : 1000 / 30
+    const minGap = lite ? 1000 / 15 : 1000 / 30
     let lastDrawn = 0
     let width = 0
     let height = 0
@@ -134,6 +134,8 @@ export default function AiBackground() {
     function draw(now) {
       if (!reduceMotion && now - lastDrawn < minGap) { frame = requestAnimationFrame(draw); return }
       lastDrawn = now
+      // phones: while a big panel (Adu, drafts) is open, keep the background still so the panel stays smooth and light
+      if (lite && !reduceMotion && document.querySelector('.floating-agent-panel, .dd-overlay')) { frame = requestAnimationFrame(draw); return }
       const dt = Math.min(0.1, (now - last) / 1000)
       last = now
       busy += ((busyRequests > 0 ? 1 : 0) - busy) * Math.min(1, dt * 2.5)

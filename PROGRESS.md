@@ -1638,3 +1638,6 @@ Plain version: every project is now a set of **drafts**. Opening a project shows
 
 ## Errors name themselves
 - When Approve / Fix it with my note / Pick up where it broke fails, the panel now adds a "[Technical: …]" line: which action, which server it contacted, the HTTP status or the browser's error name, and the first words of what came back. This makes a failure diagnosable from a screenshot.
+
+## White screen on phones (graphics memory)
+- On phones the panels no longer use live blur (backdrop-filter) and the animated background stays still while the Adu or Drafts panel is open and draws at most 15 frames a second. A long blurred panel (like the Story Bible) over a moving background can run a phone's graphics memory out, which shows as a plain white screen. Panels are now solid, which also makes the text easier to read.

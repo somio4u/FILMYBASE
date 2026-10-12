@@ -2933,11 +2933,14 @@ function FloatingAgentWidget({ currentUser, t, onRunCompleted, onOpenProject, dr
           : null
 
         const projectMode = Boolean(draftCtx?.draft)
-        const tab = projectMode ? (aduTab ?? 'project') : 'new'
+        // while a story run is working, waiting for you, or stopped, Adu opens on that run by default
+        const runNeedsYou = ['running', 'awaiting_approval', 'failed'].includes(status?.status)
+        const tab = projectMode ? (aduTab ?? (runNeedsYou ? 'new' : 'project')) : 'new'
+        const runBadge = status?.status === 'running' ? '● writing' : status?.status === 'awaiting_approval' ? '● needs your approval' : status?.status === 'failed' ? '● stopped' : ''
         const tabs = projectMode ? (
           <div className="floating-agent-tabs" role="tablist" aria-label="What Adu works on">
             <button type="button" role="tab" aria-selected={tab === 'project'} className={tab === 'project' ? 'on' : ''} onClick={() => setAduTab('project')}>This project</button>
-            <button type="button" role="tab" aria-selected={tab === 'new'} className={tab === 'new' ? 'on' : ''} onClick={() => setAduTab('new')}>Write a new story</button>
+            <button type="button" role="tab" aria-selected={tab === 'new'} className={tab === 'new' ? 'on' : ''} onClick={() => setAduTab('new')}>Write a new story{runBadge && <small className="floating-agent-tab-badge"> {runBadge}</small>}</button>
           </div>
         ) : null
         if (tab === 'project') {

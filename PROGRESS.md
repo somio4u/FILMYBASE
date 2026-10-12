@@ -1648,3 +1648,6 @@ Plain version: every project is now a set of **drafts**. Opening a project shows
 - The Review screen shows the story the agent designed (hidden truth, characters, each episode with its cliffhanger and burning question) and "What the agent has made so far": Synopsis, Characters, Story structure, Plot, Screenplay, each with its judged score and what the agent wrote, or "Not yet created — the screenplay writer is at an earlier stage". It never shows an older draft's content for a step the agent has not made.
 - Review now opens from the Drafts list even when no draft is open; on phones the Drafts overlay is solid.
 - Next: deploy (merge to main) once no story run is in progress.
+
+## Adu opens on your story run
+- With a project open, Adu used to open on "This project" and the story run was hidden on the other tab. Now, while a story run is writing, waiting for your approval, or stopped, Adu opens on that run by default, and the "Write a new story" tab shows its state (● writing / ● needs your approval / ● stopped).

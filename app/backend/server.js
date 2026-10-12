@@ -29,6 +29,11 @@ import { setupProductionMedia } from "./productionMedia.js";
 import { registerDesignTaskRoutes } from "./designTasks.js";
 import { registerSubmissionRoutes, designerGatekeeper, DESIGNER_ROLE } from "./designSubmissions.js";
 import { BIBLE_PASS_SCORE, designStoryBible, generateBrainJson, reviseBibleWithNote, storyBibleToMarkdown } from "./storyBrain.js";
+import { ensureAiMovieStorySchema, getProjectModes, judgedStage, registerAiMovieStoryRoutes } from "./aiMovieStory.js";
+import { assertWithinBudget, recordSpend } from "./pipelineSettings.js";
+import { ensureCinematicSchema, registerSpectacleRoutes, createShotCutterHook } from "./spectacleDirector.js";
+import { MODEL_TIERS, estimateCost, isKeyBeat, modelFor } from "./modelRouting.js";
+import { ensureAiMovieLanguageSchema, registerAiMovieLanguageRoutes } from "./aiMovieLanguage.js";
 import cookieParser from "cookie-parser";
 import { createClient } from "@supabase/supabase-js";
 import {
@@ -190,6 +195,14 @@ async function ensureAiMovieSchema() {
       console.error("AI Movie schema self-heal step failed (server will still start):", error.message);
     }
   }
+  // Story Bible / quality mode / review cache (aiMovieStory.js) and the Cinematic Director's items (spectacleDirector.js).
+  for (const ensure of [ensureAiMovieStorySchema, ensureCinematicSchema, ensureAiMovieLanguageSchema]) {
+    try {
+      await ensure(db);
+    } catch (error) {
+      console.error("AI Movie story/cinematic schema step failed (server will still start):", error.message);
+    }
+  }
   console.log("AI Movie schema check complete.");
 }
 
@@ -285,6 +298,16 @@ const MAX_GEMINI_OUTPUT_TOKENS = 65536;
 // writers drifted (seen for real: the Pujari's SON became his grandson).
 const userIdeaContext = new AsyncLocalStorage();
 
+// Which AI Movie project the current request (and anything it starts in the background) belongs to.
+// Set once by the middleware before the AI Movie routes. It lets a call tagged with an `agent` hint pick its
+// model from the project's quality mode (modelRouting.js) and lets every Pro call check/record the project's money limit.
+const aiMovieCallContext = new AsyncLocalStorage();
+const aiMovieSceneWriterAgent = () => (aiMovieCallContext.getStore()?.keyBeat ? "scene-writer-key" : "scene-writer");
+function markAiMovieKeyBeat(beats, beatIndex, intervalAfterBeat) {
+  const store = aiMovieCallContext.getStore();
+  if (store) store.keyBeat = isKeyBeat(beats, beatIndex, intervalAfterBeat);
+}
+
 // The locked cast list (from the character sheet), given to every scene
 // writer and the script editor inside castContext.run(...). Without it each
 // scene invented its own ages and relationships (seen for real: the hero's
@@ -320,13 +343,27 @@ async function generateJsonContent(params, { jsonRetries = 3 } = {}) {
       contents: `THE USER'S ORIGINAL IDEA — stay true to every point in it (who the characters are and how they are related, where they live, the twists the user asked for):\n${userIdea}\n\n${params.contents}`,
     };
   }
+  // An AI Movie call tagged with an `agent` takes the model its project's quality mode gives that agent
+  // (Pro -> the strong model below; otherwise the model written at the call site stays).
+  const callProjectId = aiMovieCallContext.getStore()?.projectId;
+  if (params.agent) {
+    const { agent, ...rest } = params;
+    params = rest;
+    if (callProjectId) {
+      const modes = await getProjectModes(db, callProjectId).catch(() => null);
+      if (modes && modelFor(agent, modes.qualityMode).tier === "pro") params = { ...params, model: SCENE_LIST_STRONG_MODEL_NAME };
+    }
+  }
   if (params.model === SCENE_LIST_STRONG_MODEL_NAME) {
+    // Gemini 3.1 Pro: inside an AI Movie project the money limit is checked first and the cost written to the ledger.
+    if (callProjectId) await assertWithinBudget(db, callProjectId, estimateCost("pro"));
     const { data } = await generateBrainJson({
       systemInstruction: params.config?.systemInstruction,
       contents: params.contents,
       responseSchema: params.config?.responseSchema,
-      label: "Scene list (Gemini 3.1 Pro)",
+      label: "Gemini 3.1 Pro",
     });
+    if (callProjectId) await recordSpend(db, callProjectId, { kind: "text", provider: "Gemini 3.1 Pro", units: 1, costUsd: estimateCost("pro"), ref: "routed-call" });
     return data;
   }
   let lastError;
@@ -3264,6 +3301,13 @@ async function analyzeAiMovieStage(pastedText) {
   });
 }
 
+// Every AI Movie request (and the background work it starts) runs inside its project's call context.
+app.use("/api/ai-movie", (req, res, next) => {
+  const fromPath = /\/projects\/(\d+)(?:\/|$)/.exec(req.path)?.[1];
+  const projectId = Number(req.body?.projectId ?? req.query?.projectId ?? fromPath);
+  aiMovieCallContext.run({ projectId: Number.isInteger(projectId) && projectId > 0 ? projectId : null, keyBeat: false }, next);
+});
+
 app.post("/api/ai-movie/analyze-stage", requireRole("admin"), async (req, res) => {
   const { pastedText, projectId } = req.body;
 
@@ -3545,8 +3589,10 @@ async function generateAiMovieAssetExtraction(fullText, referenceMaterialText) {
 // regenerated and every beat already written AFTER it. The asset
 // extractor still reads every scene (that's exactly its job), so it keeps
 // the default.
-function flattenAiMovieContentForExtraction(pastedText, backfill, { includeScreenplay = true } = {}) {
+function flattenAiMovieContentForExtraction(pastedText, backfill, { includeScreenplay = true, includeCinematic = false } = {}) {
   const parts = [pastedText];
+  // The approved Story Bible (Auto Storyteller) is the authority every later stage follows.
+  if (backfill?.storyBibleText) parts.push(backfill.storyBibleText);
   if (backfill?.story) parts.push(`Story: ${backfill.story.title.en}\n${backfill.story.summary.en}`);
   if (backfill?.synopsis) {
     parts.push(
@@ -3578,6 +3624,8 @@ function flattenAiMovieContentForExtraction(pastedText, backfill, { includeScree
       parts.push(`Screenplay:\n${scenes.map((scene) => sceneToPromptText(scene)).join("\n\n")}`);
     }
   }
+  // Silent Agent only: production assets the Cinematic Director's APPROVED directions need.
+  if (includeCinematic && backfill?.cinematicAssetNotes) parts.push(backfill.cinematicAssetNotes);
   return parts.join("\n\n");
 }
 
@@ -3681,7 +3729,7 @@ app.post("/api/ai-movie/backfill", requireRole("admin"), async (req, res) => {
     const referenceMaterialText = await getAiMovieReferenceMaterialText(projectId);
     const backfill = await generateAiMovieBackfill(pastedText, stage, referenceMaterialText);
     const assets = await generateAiMovieAssetExtraction(
-      flattenAiMovieContentForExtraction(pastedText, backfill),
+      flattenAiMovieContentForExtraction(pastedText, backfill, { includeCinematic: true }),
       referenceMaterialText
     );
     // Whatever the paste already covers (plus anything backfill just
@@ -3693,6 +3741,10 @@ app.post("/api/ai-movie/backfill", requireRole("admin"), async (req, res) => {
 
     if (projectId) {
       const title = backfill.story?.title?.en ?? null;
+      // Re-running Proceed must not lose the approved Story Bible the project was built on.
+      const kept = (await db.query("SELECT backfill, story_bible, stage_status FROM ai_movie_projects WHERE id = $1", [projectId])).rows[0];
+      if (kept?.backfill?.storyBibleText) backfill.storyBibleText = kept.backfill.storyBibleText;
+      if (kept?.stage_status?.storyBible) stageStatus.storyBible = kept.stage_status.storyBible;
       await db.query(
         "UPDATE ai_movie_projects SET backfill = $1, assets = $2, stage_status = $3, title = COALESCE(title, $4), updated_at = now() WHERE id = $5",
         [JSON.stringify(backfill), JSON.stringify(assets), JSON.stringify(stageStatus), title, projectId]
@@ -3756,7 +3808,7 @@ app.post("/api/ai-movie/generate-from-reference", requireRole("admin"), async (r
     const backfill = { story };
     const pastedText = `${story.title.en}\n\n${story.summary.en}`;
     const assets = await generateAiMovieAssetExtraction(
-      flattenAiMovieContentForExtraction(pastedText, backfill),
+      flattenAiMovieContentForExtraction(pastedText, backfill, { includeCinematic: true }),
       referenceMaterialText
     );
     const stageStatus = approvedStageStatusUpTo(0); // 'story' only
@@ -4386,9 +4438,15 @@ async function fillAiMovieSceneCardsIfMissing(projectId, backfill) {
   }
 }
 
-async function generateAiMovieForwardStage(stageKey, priorContextText, referenceMaterialText, feedback) {
+// The model request for one forward story stage (shared by the plain call below and by the judged,
+// budget-checked, quality-mode-routed path in the generate route). previousDraft: the draft being revised,
+// so a revision changes only what the notes ask for instead of starting over.
+function aiMovieForwardStageRequest(stageKey, priorContextText, referenceMaterialText, feedback, previousDraft = null) {
   const referenceBlock = referenceMaterialText
     ? `\n\nThe user has also provided reference material below — treat it as authoritative grounding, stay faithful to it:\n\n${referenceMaterialText}`
+    : "";
+  const draftBlock = previousDraft
+    ? `\n\nTHE CURRENT DRAFT OF THIS LAYER (revise THIS draft — keep everything that works, word for word where possible, and change only what the notes below ask for):\n${JSON.stringify(previousDraft)}`
     : "";
   const feedbackBlock = feedback
     ? `\n\nThe user reviewed an earlier draft of this exact layer and asked for these changes — revise accordingly, still fully consistent with the locked layers above:\n${feedback}`
@@ -4400,15 +4458,24 @@ async function generateAiMovieForwardStage(stageKey, priorContextText, reference
     stageKey === "plot"
       ? `\n\nFor each beat, also estimate "runtimeMinutes" — roughly how many minutes of screen time this beat needs, based on its own scope and dramatic weight (a quick transitional or dialogue beat might be 1-2 minutes; a big action, song, or emotional set-piece might be 5+ minutes). Be honest and varied — most beats should NOT be the same length.`
       : "";
+  return {
+    systemInstruction: AI_MOVIE_STAGE_GENERATION_SYSTEM_PROMPT,
+    contents: `The story's approved layers so far:\n\n${priorContextText}${referenceBlock}${draftBlock}${feedbackBlock}${stageSpecificBlock}\n\nNow generate the "${stageKey}" layer.`,
+    maxOutputTokens: 8192,
+    responseSchema: { type: Type.OBJECT, properties: { [stageKey]: AI_MOVIE_FORWARD_STAGE_SCHEMAS[stageKey] }, required: [stageKey] },
+  };
+}
 
+async function generateAiMovieForwardStage(stageKey, priorContextText, referenceMaterialText, feedback) {
+  const request = aiMovieForwardStageRequest(stageKey, priorContextText, referenceMaterialText, feedback);
   const result = await generateJsonContent({
     model: GEMINI_MODEL_NAME,
-    contents: `The story's approved layers so far:\n\n${priorContextText}${referenceBlock}${feedbackBlock}${stageSpecificBlock}\n\nNow generate the "${stageKey}" layer.`,
+    contents: request.contents,
     config: {
-      systemInstruction: AI_MOVIE_STAGE_GENERATION_SYSTEM_PROMPT,
+      systemInstruction: request.systemInstruction,
       responseMimeType: "application/json",
-      maxOutputTokens: 8192,
-      responseSchema: { type: Type.OBJECT, properties: { [stageKey]: AI_MOVIE_FORWARD_STAGE_SCHEMAS[stageKey] }, required: [stageKey] },
+      maxOutputTokens: request.maxOutputTokens,
+      responseSchema: request.responseSchema,
     },
   });
   return result[stageKey];
@@ -4643,6 +4710,7 @@ async function generateAiMovieScreenplayBeat(priorContextText, referenceMaterial
       : "";
 
   const result = await generateJsonContent({
+    agent: aiMovieSceneWriterAgent(),
     model: AI_MOVIE_SCREENPLAY_WRITER_MODEL_NAME,
     contents: `The story's approved layers so far:\n\n${priorContextText}${referenceBlock}${feedbackBlock}${scenesBlock}\n\nNow write the scenes for this beat:\n${beat.title.en}: ${beat.description.en}${runtimeBlock}${aiMovieBeatBoundaryBlock(beat)}`,
     config: {
@@ -4709,6 +4777,7 @@ async function generateAiMovieScreenplayBeatExpansion(
   const scenesBlock = scenesSoFarText ? `\n\nScreenplay scenes already written in earlier beats:\n\n${scenesSoFarText}` : "";
 
   const result = await generateJsonContent({
+    agent: aiMovieSceneWriterAgent(),
     model: AI_MOVIE_SCREENPLAY_WRITER_MODEL_NAME,
     contents: `The story's approved layers so far:\n\n${priorContextText}${referenceBlock}${scenesBlock}\n\nThis beat (${beat.title.en}: ${beat.description.en}) already has these scenes, fixed -- do not repeat them:\n\n${existingBeatScenesText}\n\nWrite additional new scenes only for this same beat, covering roughly ${remainingMinutes} more minutes of screen time — about ${remainingMinutes} standard screenplay pages (roughly ${Math.round(remainingMinutes * AI_MOVIE_LINES_PER_PAGE)} formatted lines), built from real on-screen moments (actions, reactions, events), never from extra descriptive words.${aiMovieBeatBoundaryBlock(beat)}`,
     config: {
@@ -5008,6 +5077,7 @@ async function generateAiMovieSceneDialogue(
     : "Write dialogue (or decide none is needed) for this one scene:";
 
   const result = await generateJsonContent({
+    agent: "dialogue-draft",
     model: AI_MOVIE_DIALOGUE_MODEL_NAME,
     contents: `The story's approved layers so far:\n\n${priorContextText}${referenceBlock}${briefsBlock}${scenesBlock}${siblingBlock}\n\n${taskLine}\n\n${targetSceneText}${instructionBlock}${aiMovieBeatBoundaryBlock(beat)}`,
     config: {
@@ -5047,7 +5117,42 @@ async function generateAiMovieSceneDialogue(
   if (trimmed.length !== content.length || JSON.stringify(trimmed) !== JSON.stringify(content)) {
     console.log(`${beat?.beatNumber ? `Beat ${beat.beatNumber}: ` : ""}Write Dialogue -- took out text copied from other scenes, kept the rest.`);
   }
-  return { characters: ensureAiMovieBilingualText(result.characters), content: trimmed };
+  const polished = await polishAiMovieDialogue(trimmed, { beat, characterDialogueBriefsText });
+  return { characters: ensureAiMovieBilingualText(result.characters), content: polished };
+}
+
+// Dialogue Writers: Flash (or, in Maximum quality, Pro) drafts; in Professional and Maximum quality Gemini 3.1 Pro then
+// polishes the draft — character voice, subtext, rhythm — WITHOUT changing the scene's events or structure. The polish is
+// only used if it keeps the same blocks in the same order with the same speakers; otherwise the draft stands. It never fails
+// the user's request: if the money limit stops it (or anything goes wrong), the draft is returned.
+async function polishAiMovieDialogue(content, { beat, characterDialogueBriefsText }) {
+  const projectId = aiMovieCallContext.getStore()?.projectId;
+  if (!projectId || !content.some((b) => b.type === "dialogue")) return content;
+  try {
+    const modes = await getProjectModes(db, projectId);
+    if (modelFor("dialogue-polish", modes.qualityMode).tier !== "pro") return content;
+    const result = await generateJsonContent({
+      agent: "dialogue-polish",
+      model: AI_MOVIE_DIALOGUE_MODEL_NAME,
+      contents: `Polish the dialogue of this one scene. KEEP exactly the same blocks in the same order with the same speakers, types, extensions and meaning — change only the wording of lines and parentheticals (and action text only where it is clumsy) so that each character sounds distinct, the subtext lands and the rhythm is natural, spoken, colloquial. Keep every English ("en") and Hindi ("hi") pair consistent with each other.${characterDialogueBriefsText ? `\n\nCharacter dialogue voice briefs:\n${characterDialogueBriefsText}` : ""}\n\nThis scene belongs to the beat "${beat?.title?.en ?? ""}".\n\n${AI_MOVIE_CONTENT_BLOCK_FORMAT_RULE}\n\nTHE DRAFT:\n${JSON.stringify(content)}`,
+      config: {
+        systemInstruction: AI_MOVIE_SCENE_DIALOGUE_SYSTEM_PROMPT,
+        responseMimeType: "application/json",
+        maxOutputTokens: 32768,
+        responseSchema: { type: Type.OBJECT, properties: { content: { type: Type.ARRAY, items: AI_MOVIE_SCENE_CONTENT_BLOCK_SCHEMA } }, required: ["content"] },
+      },
+    });
+    const polished = sanitizeAiMovieContentBlocks(result.content);
+    const sameShape = polished.length === content.length && polished.every((b, i) => b.type === content[i].type && (b.type !== "dialogue" || (b.character === content[i].character && (b.extension ?? null) === (content[i].extension ?? null))));
+    if (!sameShape) {
+      console.log("Dialogue polish changed the scene's structure — the draft is kept.");
+      return content;
+    }
+    return polished;
+  } catch (error) {
+    console.error(`Dialogue polish skipped (${error.message}) — the draft is kept.`);
+    return content;
+  }
 }
 
 // Takes out of a rewritten scene the action text that really belongs to
@@ -5147,6 +5252,7 @@ async function generateNextAiMovieScreenplayBeat(projectId) {
   await saveAiMovieBackfillField(projectId, "screenplayBeats", screenplayBeats);
 
   try {
+    markAiMovieKeyBeat(beats, nextIndex, project.backfill?.intervalAfterBeat);
     const referenceMaterialText = await getAiMovieReferenceMaterialText(projectId);
     const priorContextText = withAiMovieIntervalNote(
       flattenAiMovieContentForExtraction(project.pasted_text, project.backfill, { includeScreenplay: false }),
@@ -5248,18 +5354,29 @@ app.post("/api/ai-movie/stages/:stage/generate", requireRole("admin"), async (re
   try {
     const referenceMaterialText = await getAiMovieReferenceMaterialText(projectId);
     const priorContextText = flattenAiMovieContentForExtraction(project.pasted_text, project.backfill);
-    const content = await generateAiMovieForwardStage(stageKey, priorContextText, referenceMaterialText, feedback);
+    // Story Writer (model by quality mode) -> Story Judge (Gemini 3.1 Pro) -> revise, capped per quality mode.
+    // Every call is checked against the project's money limit first and written to the spend ledger.
+    const writeStage = async (previousDraft, notes) => {
+      const request = aiMovieForwardStageRequest(stageKey, priorContextText, referenceMaterialText, notes, previousDraft);
+      const { data } = await aiMovieStory.ask.ask(projectId, "story-writer", request);
+      return data[stageKey];
+    };
+    const firstDraft = await writeStage(project.backfill?.[stageKey] && feedback ? project.backfill[stageKey] : null, feedback);
+    const { content, judge } = await judgedStage({
+      ask: aiMovieStory.ask, projectId, stageKey, idea: project.pasted_text, firstDraft,
+      revise: (draft, notes) => writeStage(draft, notes), checklists: STAGE_CHECKLISTS, criticalChecks: storyCriticalChecks(false),
+    });
 
     const backfill = { ...(project.backfill ?? {}), [stageKey]: content };
     await db.query(
       "UPDATE ai_movie_projects SET backfill = $1, stage_status = stage_status || $2::jsonb, updated_at = now() WHERE id = $3",
-      [JSON.stringify(backfill), JSON.stringify({ [stageKey]: { status: "pending", feedback: feedback ?? null } }), projectId]
+      [JSON.stringify(backfill), JSON.stringify({ [stageKey]: { status: "pending", feedback: feedback ?? null, judge } }), projectId]
     );
 
-    res.json({ stageKey, content });
+    res.json({ stageKey, content, judge });
   } catch (error) {
     console.error("Gemini API call failed:", error.message);
-    res.status(502).json({ error: error.message });
+    res.status(error.status === 402 ? 402 : 502).json({ error: error.message, code: error.code ?? null });
   }
 });
 
@@ -5279,7 +5396,7 @@ async function refreshAiMovieAssetsInBackground(projectId) {
     if (!latest) return;
     const referenceMaterialText = await getAiMovieReferenceMaterialText(projectId);
     const assets = await generateAiMovieAssetExtraction(
-      flattenAiMovieContentForExtraction(latest.pasted_text, latest.backfill),
+      flattenAiMovieContentForExtraction(latest.pasted_text, latest.backfill, { includeCinematic: true }),
       referenceMaterialText
     );
     await db.query("UPDATE ai_movie_projects SET assets = $1, updated_at = now() WHERE id = $2", [JSON.stringify(assets), projectId]);
@@ -5334,7 +5451,7 @@ app.post("/api/ai-movie/stages/screenplay/beats/:index/approve", requireRole("ad
       const latest = (await db.query("SELECT pasted_text, backfill FROM ai_movie_projects WHERE id = $1", [projectId])).rows[0];
       const referenceMaterialText = await getAiMovieReferenceMaterialText(projectId);
       const assets = await generateAiMovieAssetExtraction(
-        flattenAiMovieContentForExtraction(latest.pasted_text, latest.backfill),
+        flattenAiMovieContentForExtraction(latest.pasted_text, latest.backfill, { includeCinematic: true }),
         referenceMaterialText
       );
       await db.query("UPDATE ai_movie_projects SET assets = $1, updated_at = now() WHERE id = $2", [JSON.stringify(assets), projectId]);
@@ -5635,6 +5752,7 @@ async function generateAiMovieScriptDoctorNotes(priorContextText, referenceMater
     : "";
   const scenesBlock = scenesSoFarText ? `\n\nScenes already written in earlier beats:\n\n${scenesSoFarText}` : "";
   const result = await generateJsonContent({
+    agent: "script-editor",
     model: GEMINI_MODEL_NAME,
     contents: `The story's approved layers so far:\n\n${priorContextText}${referenceBlock}${scenesBlock}\n\nReview this beat — ${beat.title.en}: ${beat.description.en}\n\n${beatReviewText}${aiMovieBeatBoundaryBlock(beat)}`,
     config: {
@@ -6433,7 +6551,7 @@ app.post("/api/ai-movie/stages/:stage/approve", requireRole("admin"), async (req
   let assets = null;
   try {
     assets = await generateAiMovieAssetExtraction(
-      flattenAiMovieContentForExtraction(project.pasted_text, project.backfill),
+      flattenAiMovieContentForExtraction(project.pasted_text, project.backfill, { includeCinematic: true }),
       referenceMaterialText
     );
     await db.query("UPDATE ai_movie_projects SET assets = $1, updated_at = now() WHERE id = $2", [JSON.stringify(assets), projectId]);
@@ -17114,7 +17232,10 @@ const AUTO_PIPELINE_CRITICAL_SCORE_SCHEMA = {
 // The story stages' judge and Story Editor use the stronger model: this is
 // where a story's quality is decided, and the calls are few (a handful
 // per run), unlike the per-scene ones.
-const STORY_JUDGE_MODEL_NAME = "gemini-2.5-flash";
+// Upgraded from Gemini 2.5 Flash to Gemini 3.1 Pro (the strong model SCENE_LIST_STRONG_MODEL_NAME routes through the Story
+// Brain's Pro access): the judges, Story Editor and Script Editor decide quality, so they get the best model. The Film module
+// and AI Movie share these judging functions. STORY_JUDGE_MODEL can point them back at another model without a code change.
+const STORY_JUDGE_MODEL_NAME = process.env.STORY_JUDGE_MODEL || SCENE_LIST_STRONG_MODEL_NAME;
 
 // What "good" means at each story stage — given to both the Story Editor
 // (to find problems) and the judge (to score).
@@ -18939,12 +19060,179 @@ app.use((err, req, res, next) => {
 process.on("unhandledRejection", (err) => console.error("Unhandled rejection:", err));
 process.on("uncaughtException", (err) => console.error("Uncaught exception:", err));
 
+// ---------------------------------------------------------------------------
+// AI Movie: Auto Storyteller (Story Bible + judges), the Cinematic Spectacle Director and model routing.
+// The logic lives in aiMovieStory.js / spectacleDirector.js / modelRouting.js; this is only the wiring to
+// the pieces that live in this file (Gemini calls, the screenplay's own data shape, the Silent Agent).
+// ---------------------------------------------------------------------------
+
+// One call to a model tier (see modelRouting.js): "pro" is Gemini 3.1 Pro through the Story Brain's own access
+// (with its configured fallback chain); "flash" / "flashLite" go through the app's normal Gemini helper.
+async function callModelTier(tier, { systemInstruction, contents, responseSchema, maxOutputTokens = 8192 }) {
+  if (tier === "pro") {
+    // A Pro model thinks first and that counts against the answer limit, so never ask for less than 32K.
+    const { data } = await generateBrainJson({ systemInstruction, contents, responseSchema, maxOutputTokens: Math.max(maxOutputTokens, 32768), label: "AI Movie (Gemini 3.1 Pro)" });
+    return data;
+  }
+  const model = MODEL_TIERS[tier]?.model;
+  if (!model) throw new Error(`Unknown model tier "${tier}".`);
+  return generateJsonContent({ model, contents, config: { systemInstruction, responseMimeType: "application/json", responseSchema, maxOutputTokens } });
+}
+
+async function aiMovieBackfillOf(projectId) {
+  const row = (await db.query("SELECT pasted_text, backfill, story_bible, stage_status FROM ai_movie_projects WHERE id = $1", [projectId])).rows[0];
+  return row ?? null;
+}
+
+// The written scenes, keyed "b<beat>s<scene>" — the same key the Production Dossier uses (production_scenes.source_key).
+async function getAiMovieScenesForDirector(projectId) {
+  const row = await aiMovieBackfillOf(projectId);
+  const out = [];
+  (row?.backfill?.screenplayBeats ?? []).forEach((beat, beatIndex) => {
+    (beat?.scenes ?? []).forEach((rawScene, sceneIndex) => {
+      const scene = normalizeAiMovieSceneFormat(rawScene);
+      const names = new Set();
+      (scene.content ?? []).forEach((b) => b.type === "dialogue" && b.character && names.add(b.character));
+      (scene.dialogue ?? []).forEach((d) => d.character && names.add(d.character));
+      out.push({ key: `b${beatIndex}s${sceneIndex}`, beatIndex, sceneIndex, heading: scene.sceneHeading?.en ?? "", text: sceneToPromptText(scene), characters: [...names] });
+    });
+  });
+  return out;
+}
+
+async function getAiMovieDirectorContext(projectId) {
+  const row = await aiMovieBackfillOf(projectId);
+  if (!row) return { bibleMarkdown: "", contextText: "", characterBriefs: "", screenplayApproved: false };
+  const bibleMarkdown = row.story_bible ? storyBibleToMarkdown({ ...row.story_bible, pitchRoom: null, review: null }) : "";
+  const contextText = flattenAiMovieContentForExtraction(row.pasted_text, { ...row.backfill, storyBibleText: undefined }, { includeScreenplay: false }).slice(0, 14000);
+  const characterBriefs = (row.backfill?.characterArc ?? []).map((c) => `${c.name}: wants ${c.want?.en ?? ""}; needs ${c.need?.en ?? ""}`).join("\n");
+  return { bibleMarkdown, contextText, characterBriefs, screenplayApproved: row.stage_status?.screenplay?.status === "approved" };
+}
+
+// The user approved a proposed rewrite of one scene: English blocks from the Director get their Hindi version
+// from the Language Checker/Converter (Flash), are cleaned like any other scene content, and the beat goes back
+// into the normal screenplay review (and the screenplay needs its final approval again).
+async function applyAiMovieDirectorScene(projectId, beatIndex, sceneIndex, { heading, blocks }) {
+  const row = await aiMovieBackfillOf(projectId);
+  const beats = row?.backfill?.screenplayBeats ?? [];
+  const beat = beats[beatIndex];
+  if (!beat || !Array.isArray(beat.scenes) || !beat.scenes[sceneIndex]) throw Object.assign(new Error("That scene no longer exists."), { status: 409 });
+  const english = (blocks ?? []).map((b) => (b.type === "dialogue"
+    ? { type: "dialogue", character: String(b.character ?? "").toUpperCase(), line: { en: String(b.text ?? ""), hi: "" }, ...(b.parenthetical ? { parenthetical: { en: String(b.parenthetical), hi: "" } } : {}) }
+    : { type: "action", text: { en: String(b.text ?? ""), hi: "" } }));
+  let content = english;
+  try {
+    const { data } = await aiMovieStory.ask.ask(projectId, "language-checker", {
+      systemInstruction: "You are a Hindi screenplay language converter. Keep every English field exactly as given and fill every empty Hindi (hi) field with natural, spoken Hindi.",
+      contents: `Fill the Hindi ("hi") of every text, line and parenthetical below. Keep "en" EXACTLY as given. Do not add, remove or reorder blocks.\n\n${AI_MOVIE_HEADING_AND_NAMES_RULE}\n\n${AI_MOVIE_HINDI_SWITCH_LIMITS_RULE}\n\n${COLLOQUIAL_LANGUAGE_RULE}\n\n${JSON.stringify(english)}`,
+      responseSchema: { type: Type.OBJECT, properties: { content: { type: Type.ARRAY, items: AI_MOVIE_SCENE_CONTENT_BLOCK_SCHEMA } }, required: ["content"] },
+      maxOutputTokens: 16384,
+    });
+    if (Array.isArray(data.content) && data.content.length === english.length) content = data.content;
+  } catch (error) {
+    if (error.status === 402) throw error; // the money limit stops the change; nothing was written
+    console.error("Hindi version of the Director's scene failed (English is used for both):", error.message);
+  }
+  content = sanitizeAiMovieContentBlocks(content.map((b) => (b.type === "dialogue" ? { ...b, line: { en: b.line?.en ?? "", hi: b.line?.hi || b.line?.en || "" }, ...(b.parenthetical ? { parenthetical: { en: b.parenthetical.en ?? "", hi: b.parenthetical.hi || b.parenthetical.en || "" } } : {}) } : b.type === "action" ? { ...b, text: { en: b.text?.en ?? "", hi: b.text?.hi || b.text?.en || "" } } : b)));
+  const latest = (await aiMovieBackfillOf(projectId)).backfill;
+  const latestBeats = latest.screenplayBeats ?? beats;
+  const newScenes = latestBeats[beatIndex].scenes.map((existing, i) => {
+    if (i !== sceneIndex) return existing;
+    const { action: _a, dialogue: _d, card: _c, ...rest } = existing;
+    const updated = normalizeAiMovieSceneFormat({ ...rest, sceneHeading: { en: heading, hi: heading }, content, editedByCinematicDirector: true });
+    return { ...updated, estimatedMinutes: computeAiMovieSceneMinutes(updated) };
+  });
+  latestBeats[beatIndex] = { ...latestBeats[beatIndex], scenes: newScenes, status: "pending" };
+  await saveAiMovieBackfillField(projectId, "screenplayBeats", latestBeats);
+  await db.query("UPDATE ai_movie_projects SET stage_status = stage_status - 'screenplay', updated_at = now() WHERE id = $1", [projectId]);
+}
+
+// "Send to production" re-runs the Silent Agent now (and tells the caller if it failed) instead of in the background.
+async function refreshAiMovieAssetsNow(projectId) {
+  const latest = await aiMovieBackfillOf(projectId);
+  const referenceMaterialText = await getAiMovieReferenceMaterialText(projectId);
+  const assets = await generateAiMovieAssetExtraction(flattenAiMovieContentForExtraction(latest.pasted_text, latest.backfill, { includeCinematic: true }), referenceMaterialText);
+  await db.query("UPDATE ai_movie_projects SET assets = $1, updated_at = now() WHERE id = $2", [JSON.stringify(assets), projectId]);
+  syncProductionQuietly(db, projectId);
+}
+
+// The approved Story Bible becomes the authority for every later stage; the Story layer is made from it if the project has none yet.
+async function handleAiMovieBibleApproved(projectId, bible) {
+  const row = await aiMovieBackfillOf(projectId);
+  await saveAiMovieBackfillField(projectId, "storyBibleText", bibleAsIdea(row.pasted_text, bible));
+  if (!row.backfill?.story) {
+    try {
+      const { data } = await aiMovieStory.ask.ask(projectId, "language-checker", {
+        systemInstruction: "You write the Story layer of a film project: a title and a short summary, each in English and in natural spoken Hindi.",
+        contents: `From this Story Bible make the Story layer: "title" (the film's title) and "summary" (one paragraph: who, what they want, what stands in the way, how it ends), each as English (en) and Hindi (hi). Names stay in English letters.\n\n${storyBibleToMarkdown({ ...bible, pitchRoom: null, review: null })}`,
+        responseSchema: AI_MOVIE_STORY_LAYER_SCHEMA, maxOutputTokens: 4096,
+      });
+      const latest = (await aiMovieBackfillOf(projectId)).backfill ?? {};
+      await db.query(
+        "UPDATE ai_movie_projects SET backfill = $2, stage_status = COALESCE(stage_status,'{}'::jsonb) || $3::jsonb, title = COALESCE(title, $4), detected_stage = COALESCE(detected_stage, 'concept'), updated_at = now() WHERE id = $1",
+        [projectId, JSON.stringify({ ...latest, story: data }), JSON.stringify({ story: { status: "approved", feedback: null } }), data.title?.en ?? bible.promise?.title ?? null]
+      );
+    } catch (error) {
+      console.error("Story layer from the approved Bible failed (the Bible itself is approved and saved):", error.message);
+    }
+  }
+}
+
+const aiMovieStory = registerAiMovieStoryRoutes(app, db, requireRole, {
+  storyBrain: { designStoryBible, reviseBibleWithNote, storyBibleToMarkdown, BIBLE_PASS_SCORE },
+  callTier: callModelTier,
+  sceneText: (scene) => sceneToPromptText(normalizeAiMovieSceneFormat(scene)),
+  checklists: STAGE_CHECKLISTS,
+  onBibleApproved: handleAiMovieBibleApproved,
+});
+// The scenes as plain English blocks (action / dialogue / transition), for language conversion and the voice writer.
+async function getAiMovieSceneBlocks(projectId) {
+  const row = await aiMovieBackfillOf(projectId);
+  const out = [];
+  (row?.backfill?.screenplayBeats ?? []).forEach((beat, beatIndex) => {
+    (beat?.scenes ?? []).forEach((rawScene, sceneIndex) => {
+      const scene = normalizeAiMovieSceneFormat(rawScene);
+      const blocks = Array.isArray(scene.content) && scene.content.length > 0
+        ? scene.content.map((b) => (b.type === "dialogue"
+          ? { type: "dialogue", character: b.character ?? "", parenthetical: b.parenthetical?.en ?? "", text: b.line?.en ?? "" }
+          : b.type === "transition" ? { type: "transition", character: "", parenthetical: "", text: b.transition ?? "" }
+          : { type: "action", character: "", parenthetical: "", text: b.text?.en ?? "" }))
+        : [
+            ...(scene.action?.en ? [{ type: "action", character: "", parenthetical: "", text: scene.action.en }] : []),
+            ...(scene.dialogue ?? []).map((d) => ({ type: "dialogue", character: d.character ?? "", parenthetical: "", text: d.line?.en ?? "" })),
+          ];
+      out.push({ key: `b${beatIndex}s${sceneIndex}`, beatIndex, sceneIndex, heading: scene.sceneHeading?.en ?? "", blocks: blocks.filter((b) => b.text) });
+    });
+  });
+  return out;
+}
+
+registerAiMovieLanguageRoutes(app, db, requireRole, {
+  translateElements: translateScreenplaySceneElements, // the Film module's translator, shared
+  getSceneBlocks: getAiMovieSceneBlocks,
+  ask: (projectId, agent, params) => aiMovieStory.ask.ask(projectId, agent, params),
+  spokenRule: COLLOQUIAL_LANGUAGE_RULE,
+  voiceToElements: voiceNoteToScreenplayElements, // the Film module's Voice Writer, shared
+});
+
+const shotCutterHook = createShotCutterHook({ db, ask: aiMovieStory.ask, getScenes: getAiMovieScenesForDirector });
+registerSpectacleRoutes(app, db, requireRole, {
+  ask: aiMovieStory.ask,
+  getScenes: getAiMovieScenesForDirector,
+  getContext: getAiMovieDirectorContext,
+  applyScene: applyAiMovieDirectorScene,
+  refreshAssets: refreshAiMovieAssetsNow,
+  saveBackfillField: saveAiMovieBackfillField,
+  requestStoryRevision: aiMovieStory.requestRevision,
+});
+
 // Production workflow routes (agent data -> Production Dossier). See production.js.
 registerProductionRoutes(app, db, requireRole);
 registerDesignTaskRoutes(app, db, requireRole);
 registerScreenplayRoutes(app, db, requireRole);
 // Pipeline steps 2-8: shots, storyboard, AI pictures/voices/video, export.
 registerPipelineRoutes(app, db, requireRole, {
+  cinematic: { shotCutterFor: (projectId, sceneId) => shotCutterHook(projectId, sceneId) },
   store: productionMedia.store,
   providers: createProviders({
     env: process.env,

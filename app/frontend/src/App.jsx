@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom'
 import './App.css'
 import { AI_ACTIVITY_EVENT, AI_WARP_EVENT } from './AiBackground.jsx'
 import PipelineStage, { PIPELINE_STAGES } from './PipelineStage.jsx'
+import AiMovieStudio, { AI_MOVIE_STUDIO_VIEWS, StageJudgeNote } from './AiMovieStudio.jsx'
 import ProductionDossier from './ProductionDossier.jsx'
 import DesignerWorkspace from './DesignerWorkspace.jsx'
 
@@ -7561,7 +7562,7 @@ function App() {
 
       if (stageKey !== 'screenplay') {
         setAiMovieBackfillResult((prev) => ({ ...(prev ?? {}), [stageKey]: data.content }))
-        setAiMovieStageStatus((prev) => ({ ...prev, [stageKey]: { status: 'pending', feedback: feedback ?? null } }))
+        setAiMovieStageStatus((prev) => ({ ...prev, [stageKey]: { status: 'pending', feedback: feedback ?? null, judge: data.judge ?? null } }))
         setShowAiMovieStageFeedbackForm(false)
         setAiMovieStageFeedbackText('')
         setIsGeneratingAiMovieStage(false)
@@ -8254,6 +8255,7 @@ function App() {
 
   function handleAiMovieStageClick(stageKey) {
     setIsSidebarOpen(false)
+    setAiMovieView('editor')
     setAiMovieFocusedStage(stageKey)
     // A stage opened from the menu is shown open, even if it's approved.
     setAiMovieExpandedStages((prev) => ({ ...prev, [stageKey]: true }))
@@ -11328,6 +11330,15 @@ function App() {
               )}
               {aiMovieProjectId && (
                 <button
+                  className={aiMovieView === 'storyBible' ? 'agent-header active' : 'agent-header'}
+                  onClick={() => { setAiMovieView((prev) => (prev === 'storyBible' ? 'editor' : 'storyBible')); setIsSidebarOpen(false) }}
+                >
+                  <span className="agent-expand-icon">▸</span>
+                  {AI_MOVIE_STUDIO_VIEWS.storyBible.title}
+                </button>
+              )}
+              {aiMovieProjectId && (
+                <button
                   className={aiMovieView === 'dossier' ? 'agent-header active' : 'agent-header'}
                   onClick={() => { handleAiMovieDossierViewClick(); setIsSidebarOpen(false) }}
                 >
@@ -11376,6 +11387,16 @@ function App() {
                   })}
                 </div>
               )}
+              {aiMovieProjectId && ['cinematic', 'language'].map((key) => (
+                <button
+                  key={key}
+                  className={aiMovieView === key ? 'agent-header active' : 'agent-header'}
+                  onClick={() => { setAiMovieView((prev) => (prev === key ? 'editor' : key)); setIsSidebarOpen(false) }}
+                >
+                  <span className="agent-expand-icon">▸</span>
+                  {AI_MOVIE_STUDIO_VIEWS[key].title}
+                </button>
+              ))}
               <button className="agent-header">
                 <span className="agent-expand-icon">▸</span>
                 {t.aiMovieProductionLabel}
@@ -11616,6 +11637,8 @@ function App() {
                                   <p>{t.arcLabel}: {character.arc[aiMovieLanguage]}</p>
                                 </div>
                               ))}
+
+                              {content && <StageJudgeNote judge={stageStatusEntry?.judge} />}
 
                               {content && stageStatusEntry?.feedback && (
                                 <p className="feedback-note">
@@ -12395,6 +12418,12 @@ function App() {
           {aiMovieView === 'dossier' && (
             <div className="concept-page concept-page-wide">
               <ProductionDossier projectId={aiMovieProjectId} backendUrl={BACKEND_URL} />
+            </div>
+          )}
+
+          {Object.keys(AI_MOVIE_STUDIO_VIEWS).includes(aiMovieView) && (
+            <div className="concept-page">
+              <AiMovieStudio view={aiMovieView} projectId={aiMovieProjectId} backendUrl={BACKEND_URL} />
             </div>
           )}
 

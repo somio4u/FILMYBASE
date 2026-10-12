@@ -6,7 +6,7 @@ import { getSettings, saveSettings, spendSummary, VOICES } from "./pipelineSetti
 import { createGenerationService, KINDS } from "./generations.js";
 import { createAssembler } from "./assemble.js";
 
-export function registerPipelineRoutes(app, db, requireRole, { store, providers }) {
+export function registerPipelineRoutes(app, db, requireRole, { store, providers, cinematic = null }) {
   const gens = createGenerationService({ db, store, providers });
   const assembler = createAssembler({ db, store, listShots, listGenerations: (projectId, filter) => gens.list(projectId, filter) });
   const id = (value) => (/^\d+$/.test(String(value)) && Number(value) > 0 ? Number(value) : null);
@@ -57,10 +57,12 @@ export function registerPipelineRoutes(app, db, requireRole, { store, providers 
     const projectId = need(id(req.params.projectId), "project");
     const sceneId = need(id(req.params.sceneId), "scene");
     const mode = ["auto", "script", "ai", "rules"].includes(req.body?.mode) ? req.body.mode : "auto";
-    const result = await divideScene(db, projectId, sceneId, { mode, replace: req.body?.replace === true, textJson, actorUserId: req.user?.id });
+    // AI Movie: approved cinematic directions for this scene, and Pro for complex action (see modelRouting.js), when wired in.
+    const cut = (await cinematic?.shotCutterFor?.(projectId, sceneId)) ?? null;
+    const result = await divideScene(db, projectId, sceneId, { mode, replace: req.body?.replace === true, textJson: cut?.textJson ?? textJson, extraPrompt: cut?.extraPrompt ?? "", actorUserId: req.user?.id });
     if (result.outcome === "not_found") return res.status(404).json({ error: "Scene not found." });
     if (result.outcome === "exists") return res.status(409).json({ error: `This scene already has ${result.count} shots. Choose "Cut again" to replace them.`, code: "exists" });
-    res.json({ ...result, shots: await listShots(db, projectId, { sceneId }) });
+    res.json({ ...result, model: cut?.model ?? null, usedCinematicDirections: Boolean(cut?.extraPrompt), shots: await listShots(db, projectId, { sceneId }) });
   }));
 
   app.patch("/api/production/:projectId/shots/:shotId", admin, wrap(async (req, res) => {

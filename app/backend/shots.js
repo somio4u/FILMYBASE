@@ -185,7 +185,7 @@ function sceneForPrompt(scene, elements, assets) {
   return `SCENE ${scene.scene_number} — ${scene.heading}\nPeople, objects and places known in this scene: ${assets.map((a) => `${a.name} (${a.kind})`).join("; ") || "none listed"}\n\n${lines.join("\n")}`;
 }
 
-export function shotDivisionPrompt(scene, elements, assets) {
+export function shotDivisionPrompt(scene, elements, assets, extraPrompt = "") {
   return `You are an experienced film director preparing a shot list. Divide the scene below into numbered camera shots.
 
 Rules:
@@ -201,7 +201,7 @@ Rules:
 
 Return JSON only: {"shots":[{"framing":"","cameraAngle":"","cameraMove":"","description":"","durationSec":4,"characters":[],"props":[],"dialogueCodes":[]}]}
 
-${sceneForPrompt(scene, elements, assets)}`;
+${extraPrompt ? `${extraPrompt}\n\n` : ""}${sceneForPrompt(scene, elements, assets)}`;
 }
 
 // ---------------------------------------------------------------------------
@@ -273,7 +273,8 @@ async function insertShots(client, projectId, scene, elements, assets, shots, st
 // Cuts one scene into shots. mode: "auto" (script notes, else AI, else rules),
 // "script", "ai", "rules". Refuses when the scene already has shots unless
 // replace is true; refuses to replace shots that already have pictures/sound/video.
-export async function divideScene(db, projectId, sceneId, { mode = "auto", replace = false, textJson = null, actorUserId = null } = {}) {
+// extraPrompt: approved cinematic directions for this scene (from the Cinematic Spectacle Director), added to the AI cutter's brief.
+export async function divideScene(db, projectId, sceneId, { mode = "auto", replace = false, textJson = null, actorUserId = null, extraPrompt = "" } = {}) {
   const client = await db.connect();
   try {
     await client.query("BEGIN");
@@ -299,8 +300,9 @@ export async function divideScene(db, projectId, sceneId, { mode = "auto", repla
     } else if ((mode === "ai" || mode === "auto") && textJson) {
       let aiError = null;
       try {
-        shots = validateAiShots(await textJson(shotDivisionPrompt(ctx.scene, ctx.elements, ctx.assets)), ctx.elements);
+        shots = validateAiShots(await textJson(shotDivisionPrompt(ctx.scene, ctx.elements, ctx.assets, extraPrompt)), ctx.elements);
       } catch (error) {
+        if (error.status === 402) throw error; // the money limit stops the AI cut; it is not a reason to fall back silently
         aiError = error;
       }
       used = "ai";

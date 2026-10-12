@@ -11244,7 +11244,10 @@ function App() {
     return (
       <div className="app-shell">
         {/* Adu works in AI Movie mode too ("activate adu" in any writing box). Opening a Film project from his panel is Film-side only. */}
-        <FloatingAgentWidget currentUser={currentUser} t={t} onRunCompleted={() => loadProjectList()} />
+        {/* its idea box has a mic button, which needs the dictation provider the Film-mode screen wraps everything in */}
+        <DictationContext.Provider value={{ t, dictationLanguage, onDictationLanguageChange: handleDictationLanguageChange }}>
+          <FloatingAgentWidget currentUser={currentUser} t={t} onRunCompleted={() => loadProjectList()} />
+        </DictationContext.Provider>
         <div className="mobile-topbar">
           <button className="mobile-menu-button" onClick={() => setIsSidebarOpen(true)} aria-label={t.openMenuLabel}>
             ☰

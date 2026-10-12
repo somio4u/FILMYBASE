@@ -10,11 +10,14 @@ import { analyzeScreenplay } from "../screenplayAnalysis.js";
 import { branchDraft, compareDrafts, draftUnits, ensureDraftFor, getDraft, updateDraft } from "../drafts.js";
 import { applyChangeSet, approveFinal, approveSynopsis, cancelRequest, classifyPrompt, conform, failInterruptedRequests, getRequest, heuristicIntent, interpret, productionImpact, propose, registerDraftAgentRoutes, rejectChangeSet, requestSynopsisChanges, resolveTargets, retryRequest, revisionDetail, startAlternative, startRevision, undoChangeSet, whenIdle, readUnit } from "../draftAgent.js";
 import { createBlank } from "../drafts.js";
+import { fakePipeline } from "../draftAgentMock.js";
+import { setPollMs } from "../draftAgent.js";
 
 const db = new pg.Pool({ database: process.env.TEST_DB || "filmmaking_app_test", user: process.env.PGUSER || "root", host: process.env.PGHOST || "/var/run/postgresql" });
 const requireRole = () => (req, res, next) => ((req.user = { id: 1 }), next());
 const J = (v) => JSON.stringify(v);
-let film, ai, calls, server, base;
+let film, ai, calls, pipelineCalls, server, base;
+setPollMs(5);
 
 // ---- scripted model ----
 const mutate = (v) => {
@@ -25,7 +28,10 @@ const mutate = (v) => {
 };
 function mockModels(over = {}) {
   calls = [];
+  pipelineCalls = [];
+  const pipe = fakePipeline(db, { stageScores: over.stageScores ?? {}, onCall: (m, path, body) => { pipelineCalls.push({ m, path, body }); over.onPipeline?.(m, path, body); } });
   return {
+    pipeline: pipe,
     async json(draft, agent, prompt, opts) {
       calls.push({ agent, module: draft.module, kind: prompt.includes("routing step") ? "classify" : prompt.includes("Sort EVERY piece") ? "impact" : prompt.includes("REVISED DRAFT") ? "proposal" : prompt.includes("CURRENT (JSON)") || prompt.includes("CURRENT TEXT") ? "rewrite" : "other", prompt });
       if (over.json) { const r = await over.json(draft, agent, prompt, opts, calls[calls.length - 1].kind); if (r !== undefined) return r; }
@@ -219,117 +225,157 @@ test("ALTERNATIVE: a trial copy with no draft number; the preview is made inside
   }
 });
 
-test("NEW_DRAFT in BOTH modules: copy -> impact map -> revised synopsis -> STOP; changes to the synopsis start nothing; approval starts the selective rewrite; the original never changes", async () => {
+const stageCalls = (stage) => pipelineCalls.filter((c) => new RegExp(`/stages/${stage}/generate$`).test(c.path));
+
+test("NEW_DRAFT in BOTH modules: the agent's OWN process (Story Brain critics -> judged stages -> screenplay) runs from the whole current draft; it stops at the Story Bible for approval; the original never changes", async () => {
   for (const [module, ref] of MODS()) {
     const d = await ensureDraftFor(db, module, ref());
     const parentBefore = await unitHashes(module, ref());
     const models = mockModels();
     await assert.rejects(startRevision(db, models, d.id, { instruction: "Keep the opening and protagonist; change the villain.", constraints: { mustKeep: ["the opening"] } }), /Confirm first/);
+    const revisedBefore = (await db.query("SELECT count(*)::int AS n FROM concepts WHERE title = 'The Revised Story'")).rows[0].n;
     const { request, draft } = await startRevision(db, models, d.id, { instruction: "Keep the opening and protagonist; change the villain and the central conflict.", constraints: { mustKeep: ["the opening"], mustChange: ["the villain"] }, source: "mic", confirmed: true, actorUserId: 1 });
-    assert.equal(request.status, "analyzing"); assert.equal(draft.draft_number, 2); assert.equal(draft.parent_draft_id, d.id);
+    assert.equal(request.status, "analyzing");
     await whenIdle(request.id);
     let r = await getRequest(db, request.id);
     assert.equal(r.status, "awaiting_synopsis_approval", `${module}: it STOPS here`);
     assert.equal(r.instruction, "Keep the opening and protagonist; change the villain and the central conflict.", "the original instruction is kept verbatim");
     assert.equal(r.source, "mic"); assert.deepEqual(r.constraints.mustKeep, ["the opening"]);
-    assert.ok(r.impact_map.counts.modified >= 1 && r.impact_map.counts.unchanged >= 1 && r.impact_map.counts.added === 1);
-    assert.ok(r.proposal.revisedSynopsis);
-    if (module === "film") { assert.equal(r.proposal.series, true); assert.ok(r.proposal.episodes.length >= 1, "a series gets a revised synopsis per affected episode"); assert.ok(r.proposal.seasonArc); }
-    else { assert.equal(r.proposal.series, false); assert.ok(r.proposal.sequenceOutline.length >= 1, "a film gets a synopsis and a sequence outline"); }
-    const rewritesSoFar = calls.filter((c) => c.kind === "rewrite").length;
-    assert.equal(rewritesSoFar, 0, "no screenplay rewriting before approval");
-    assert.equal(await unitHashes(module, draft.project_ref), parentBefore, "the new draft is still an exact copy");
-    assert.equal(await unitHashes(module, ref()), parentBefore);
-    assert.equal((await getDraft(db, draft.id)).status, "pending_approval"); assert.equal((await getDraft(db, draft.id)).current_stage, "synopsis_review");
-    // wrong-state calls
+    assert.ok(r.impact_map.counts.modified >= 1 && r.impact_map.counts.unchanged >= 1);
+    // the checkpoint shows what the Story Brain designed, with its critics' verdict
+    assert.equal(r.proposal.kind, "story_bible"); assert.ok(r.proposal.title && r.proposal.logline);
+    assert.deepEqual(r.proposal.critics.scores, { story: 8, audience: 9 }); assert.equal(r.proposal.critics.passed, true); assert.equal(r.proposal.critics.passScore, 8);
+    // the brief carries the REQUEST and the WHOLE current draft
+    assert.match(r.proposal.brief, /REQUESTED CHANGES \(verbatim\)/); assert.match(r.proposal.brief, /MUST KEEP: the opening/); assert.match(r.proposal.brief, /THE COMPLETE CURRENT DRAFT/);
+    assert.match(r.proposal.brief, module === "film" ? /lantern bobs/ : /Mala dances before the storm/, "the scenes of the current draft are in the brief");
+    // nothing was written yet
+    assert.equal(stageCalls("synopsis").length + stageCalls("plot").length, 0, "no stage was generated before approval");
+    assert.ok(!pipelineCalls.some((c) => /beats\//.test(c.path) || /screenplay\/generate/.test(c.path)));
+    assert.equal(await unitHashes(module, ref()), parentBefore, "the original draft is untouched");
+    if (module === "ai_movie") {
+      assert.equal(await unitHashes(module, draft.project_ref), parentBefore, "the new draft is still an exact copy");
+      assert.equal((await getDraft(db, draft.id)).status, "pending_approval"); assert.equal((await getDraft(db, draft.id)).current_stage, "synopsis_review");
+      assert.ok(pipelineCalls.some((c) => /story-bible\/(note|design)$/.test(c.path)), "the Story Brain (head writer + critics) is run with the brief");
+    } else {
+      assert.equal(r.draft_id ?? null, null); assert.equal((await db.query("SELECT count(*)::int AS n FROM concepts WHERE title = 'The Revised Story'")).rows[0].n, revisedBefore, "Film: no project exists until the script is written");
+      const start = pipelineCalls.find((c) => c.path === "/api/auto-pipeline/start");
+      assert.deepEqual(start.body.references, [{ kind: "film", id: film }], "the complete current draft is handed over as reference material");
+      assert.equal(start.body.autoReferences, false); assert.equal(start.body.format.type, "film");
+      assert.match(start.body.concept, /REVISED DRAFT — requested changes: Keep the opening/);
+      assert.equal((await getDashboardRevisions(d)).length, 1, "the dashboard shows the revision that is being written");
+    }
     await assert.rejects(approveFinal(db, request.id), /not waiting for final approval/);
-    // reject / request changes: re-proposes, still nothing downstream
+    // request changes: the Story Brain revises again; still nothing downstream; the impact map is not paid for twice
     await assert.rejects(requestSynopsisChanges(db, models, request.id, { feedback: "" }), /Say what should change/);
     await requestSynopsisChanges(db, models, request.id, { feedback: "Make the villain her mentor instead." });
     await whenIdle(request.id);
     r = await getRequest(db, request.id);
     assert.equal(r.status, "awaiting_synopsis_approval"); assert.deepEqual(r.proposal.feedbackHistory, ["Make the villain her mentor instead."]);
-    assert.ok(calls.some((c) => c.kind === "proposal" && /mentor/.test(c.prompt)), "the feedback reached the planner");
-    assert.equal(calls.filter((c) => c.kind === "rewrite").length, 0, "still no downstream rewrite after a change request");
-    assert.equal(calls.filter((c) => c.kind === "impact").length, 1, "the impact map is reused, not paid for again");
-    // stale approval refused
+    assert.ok(pipelineCalls.some((c) => /note$/.test(c.path) && /mentor/.test(c.body?.note ?? "")), "the feedback reached the Story Brain");
+    assert.equal(stageCalls("synopsis").length, 0, "still no stage written");
+    assert.equal(calls.filter((c) => c.kind === "impact").length, 1, "the impact map is reused");
     await assert.rejects(approveSynopsis(db, models, request.id, { expectedRevision: r.revision - 1 }), /changed since you loaded/);
-    // approve -> rewrite
+    // approve -> the raw process writes the draft
     await approveSynopsis(db, models, request.id, { expectedRevision: r.revision, actorUserId: 1 });
     assert.equal((await getRequest(db, request.id)).status, "rewriting");
     await whenIdle(request.id);
     r = await getRequest(db, request.id);
-    assert.equal(r.status, "awaiting_final_approval");
-    const touched = r.impact_map.modified.concat(r.impact_map.indirect).map((x) => x.key);
-    const nowUnits = JSON.parse(await unitHashes(module, draft.project_ref)), wasUnits = JSON.parse(parentBefore);
-    const changedKeys = nowUnits.filter((x) => (wasUnits.find((w) => w[0] === x[0]) ?? [])[1] !== x[1]).map((x) => x[0]);
-    assert.ok(touched.every((k) => changedKeys.includes(k)), `${module}: every marked piece was rewritten`);
-    assert.ok(changedKeys.includes("synopsis"), "the approved synopsis was applied");
-    assert.ok(wasUnits.filter((w) => !touched.includes(w[0]) && w[0] !== "synopsis").every((w) => nowUnits.find((x) => x[0] === w[0])?.[1] === w[1]), "unaffected pieces are preserved byte for byte");
+    assert.equal(r.status, "awaiting_final_approval", r.error);
+    const done = (k) => r.decisions.find((x) => x.key === k);
+    assert.equal(done("storyBible").status, "done");
     assert.equal(await unitHashes(module, ref()), parentBefore, "Draft 1 never changed");
-    assert.ok(r.impact_map.manual.some((m) => /New: A new confrontation/.test(m)), "pieces that cannot be created safely are listed for the writer");
+    let newDraft = r.draft_id ? await getDraft(db, r.draft_id) : null;
+    assert.ok(newDraft, "the new draft exists"); assert.equal(newDraft.parent_draft_id, d.id); assert.equal(newDraft.draft_number, 2);
+    if (module === "ai_movie") {
+      for (const stage of ["synopsis", "characterArc", "threeAct", "plot"]) {
+        assert.equal(done(`stage:${stage}`).score, 9, `${stage} reached a judged 9`); assert.equal(done(`stage:${stage}`).attempts, 2, "a first score of 6 was sent back with the judges' notes");
+        assert.match(stageCalls(stage)[1].body.feedback, /scored the last version/); assert.match(stageCalls(stage)[1].body.feedback, /lacks a strong turn/);
+      }
+      const p = (await db.query("SELECT stage_status, backfill FROM ai_movie_projects WHERE id = $1", [newDraft.project_ref])).rows[0];
+      assert.equal(p.stage_status.screenplay.status, "approved"); assert.ok(p.backfill.screenplayBeats.every((b) => b.status === "approved"));
+      assert.equal(done("beat:0").doctor.applied, 1, "the Script Doctor's major note was applied, the minor one left");
+      assert.match(JSON.stringify(p.backfill.screenplayBeats[0].scenes[0]), /doctor fix/);
+      assert.ok(pipelineCalls.findIndex((c) => /stories\/|stages\/synopsis\/generate/.test(c.path)) > pipelineCalls.findIndex((c) => /story-bible\/approve/.test(c.path)), "stages are written only after the Story Bible is approved");
+      const order = pipelineCalls.map((c) => c.path).filter((x) => /generate$/.test(x)).map((x) => x.split("/")[4]);
+      assert.deepEqual([...new Set(order)], ["synopsis", "characterArc", "threeAct", "plot", "screenplay"]);
+    } else {
+      assert.equal(done("stage:pitch-deck").score, 9, "the best judged score the process recorded is reported");
+      assert.ok(done("stage:three-act").reachedTarget);
+      assert.equal(newDraft.status, "pending_approval");
+      assert.match((await db.query("SELECT concept_text FROM concepts WHERE id = $1", [newDraft.project_ref])).rows[0].concept_text, /REVISED DRAFT/);
+      assert.equal((await getDashboardRevisions(d)).length, 1);
+    }
     const detail = await revisionDetail(db, request.id);
-    assert.equal(detail.comparison.counts.modified, changedKeys.length); assert.ok(detail.comparison.counts.preserved >= 1);
-    const cmp = await compareDrafts(db, d.id, draft.id);
-    assert.equal(cmp.counts.modified, changedKeys.length);
-    // final approval
+    assert.ok(detail.comparison.counts.modified + detail.comparison.counts.added + detail.comparison.counts.removed >= 1);
     const fin = await approveFinal(db, request.id, { expectedRevision: r.revision, actorUserId: 1 });
-    assert.equal(fin.request.status, "completed"); assert.ok(["working", "approved"].includes((await getDraft(db, draft.id)).status));
-    assert.equal((await getDraft(db, draft.id)).approval.status, "accepted");
+    assert.equal(fin.request.status, "completed"); assert.equal((await getDraft(db, newDraft.id)).approval.status, "accepted");
+    assert.equal((await getDashboardRevisions(d)).length, 0, "a finished revision leaves the in-progress list");
     await assert.rejects(cancelRequest(db, request.id), /already completed/);
   }
 });
 
-test("rewritten AI Movie / Film pieces are marked for review (not silently approved)", async () => {
+async function getDashboardRevisions(d) {
+  const { getDashboard } = await import("../drafts.js");
+  return (await getDashboard(db, d.module, d.project_ref)).revisions;
+}
+
+test("scores: a stage that never reaches 8 is reported honestly and the BEST version is kept; a good first score is not re-run", async () => {
   const d = await ensureDraftFor(db, "ai_movie", ai);
-  const { request, draft } = await startRevision(db, mockModels(), d.id, { instruction: "Change the villain.", confirmed: true });
-  await whenIdle(request.id);
-  await approveSynopsis(db, mockModels(), request.id);
-  await whenIdle(request.id);
-  const p = (await db.query("SELECT stage_status, backfill FROM ai_movie_projects WHERE id = $1", [draft.project_ref])).rows[0];
-  assert.equal(p.stage_status.synopsis.status, "pending");
-  assert.equal(p.stage_status.screenplay, undefined, "the screenplay needs re-approval");
-  assert.ok(p.backfill.screenplayBeats.some((b) => b.status === "pending"));
-  const parent = (await db.query("SELECT stage_status FROM ai_movie_projects WHERE id = $1", [ai])).rows[0];
-  assert.equal(parent.stage_status.screenplay.status, "approved", "Draft 1 stays approved");
-  const f = await ensureDraftFor(db, "film", film);
-  const fr = await startRevision(db, mockModels(), f.id, { instruction: "Change the villain.", confirmed: true });
-  await whenIdle(fr.request.id); await approveSynopsis(db, mockModels(), fr.request.id); await whenIdle(fr.request.id);
-  const deck = (await db.query("SELECT status FROM pitch_decks WHERE concept_id = $1", [fr.draft.project_ref])).rows[0];
-  assert.equal(deck.status, "pending", "Film: the revised synopsis needs approval again");
-  assert.equal((await db.query("SELECT status FROM pitch_decks WHERE concept_id = $1", [film])).rows[0].status, "approved");
+  const models = mockModels({ stageScores: { synopsis: [7, 6, 5], characterArc: [9], threeAct: [6, 6, 6], plot: [8] } });
+  const { request, draft } = await startRevision(db, models, d.id, { instruction: "Change the villain.", confirmed: true, actorUserId: 1 });
+  await whenIdle(request.id); await approveSynopsis(db, models, request.id, { actorUserId: 1 }); await whenIdle(request.id);
+  const r = await getRequest(db, request.id);
+  assert.equal(r.status, "awaiting_final_approval", r.error);
+  const by = (k) => r.decisions.find((x) => x.key === k);
+  assert.deepEqual([by("stage:synopsis").score, by("stage:synopsis").attempts, by("stage:synopsis").reachedTarget], [7, 3, false], "3 attempts, best of them (7) kept, honestly marked as below 8");
+  assert.deepEqual([by("stage:characterArc").score, by("stage:characterArc").attempts, by("stage:characterArc").reachedTarget], [9, 1, true], "9 on the first try: not re-run");
+  assert.equal(by("stage:threeAct").reachedTarget, false);
+  const p = (await db.query("SELECT backfill, stage_status FROM ai_movie_projects WHERE id = $1", [draft.project_ref])).rows[0];
+  const text = JSON.stringify(p.backfill.synopsis);
+  assert.match(text, /new draft v1/); assert.doesNotMatch(text, /new draft v2/, "the stored synopsis is the BEST attempt (v1), not the last one");
+  assert.equal(p.stage_status.synopsis.judge.keptScore, 7);
+  assert.equal(stageCalls("characterArc").length, 1);
 });
 
-test("cancel archives the copy (kept for the record) and the original is untouched; failures can be retried and finished pieces are not redone; restarts mark running requests failed", async () => {
+test("the new draft is written by the existing routes: nothing in the story process is replaced (the agent only calls those routes, in order)", async () => {
+  const d = await ensureDraftFor(db, "ai_movie", ai);
+  const models = mockModels();
+  const { request } = await startRevision(db, models, d.id, { instruction: "Change the villain.", confirmed: true, actorUserId: 1 });
+  await whenIdle(request.id); await approveSynopsis(db, models, request.id, { actorUserId: 1 }); await whenIdle(request.id);
+  const used = new Set(pipelineCalls.map((c) => `${c.m} ${c.path.replace(/\/\d+\//g, "/:id/").replace(/beats\/\d+/, "beats/:i").replace(/scenes\/\d+/, "scenes/:j")}`));
+  for (const route of ["POST /api/ai-movie/projects/:id/story-bible/design", "POST /api/ai-movie/projects/:id/story-bible/approve", "POST /api/ai-movie/stages/synopsis/generate", "POST /api/ai-movie/stages/plot/approve", "POST /api/ai-movie/stages/screenplay/generate", "POST /api/ai-movie/stages/screenplay/beats/:id/doctor", "POST /api/ai-movie/stages/screenplay/beats/:id/scenes/:id/revise", "POST /api/ai-movie/stages/screenplay/beats/:id/approve"]) assert.ok(used.has(route), route + " in " + [...used].join(" , "));
+  assert.equal(calls.filter((c) => c.kind === "rewrite").length, 0, "no private rewriting model was used for the new draft");
+});
+
+test("cancel archives the copy (kept for the record) and the original is untouched; a failure (e.g. the money limit) can be retried and finished stages are not written twice; restarts mark running requests failed", async () => {
   for (const [module, ref] of MODS()) {
     const d = await ensureDraftFor(db, module, ref());
     const before = await unitHashes(module, ref());
-    const a = await startRevision(db, mockModels(), d.id, { instruction: "Change the villain.", confirmed: true });
+    const a = await startRevision(db, mockModels(), d.id, { instruction: "Change the villain.", confirmed: true, actorUserId: 1 });
     await whenIdle(a.request.id);
     const c = await cancelRequest(db, a.request.id);
-    assert.equal(c.status, "cancelled"); assert.equal((await getDraft(db, a.draft.id)).status, "archived");
+    assert.equal(c.status, "cancelled");
+    if (a.draft) assert.equal((await getDraft(db, a.draft.id)).status, "archived");
     assert.equal(await unitHashes(module, ref()), before);
     await assert.rejects(cancelRequest(db, a.request.id), /already cancelled/);
-    // a failure during the rewrite (here: the money limit) leaves a clear failed state; Retry resumes without redoing finished pieces
-    let rewrites = 0, failAt = 2;
-    const flaky = mockModels({ json: (dr, ag, p, o, kind) => { if (kind === "rewrite" && ++rewrites === failAt) throw Object.assign(new Error("This would cost about $0.12, but only $0.00 is left."), { status: 402 }); return undefined; } });
-    const b = await startRevision(db, flaky, d.id, { instruction: "Change the villain.", confirmed: true });
-    await whenIdle(b.request.id);
-    await approveSynopsis(db, flaky, b.request.id);
-    await whenIdle(b.request.id);
-    let r = await getRequest(db, b.request.id);
-    assert.equal(r.status, "failed"); assert.match(r.error, /\$0\.12/);
-    const doneBefore = r.decisions.filter((x) => x.status === "done").map((x) => x.key);
-    assert.ok(doneBefore.length >= 1);
-    failAt = 999;
-    await retryRequest(db, flaky, b.request.id);
-    await whenIdle(b.request.id);
-    r = await getRequest(db, b.request.id);
-    assert.equal(r.status, "awaiting_final_approval");
-    const keysDone = r.decisions.filter((x) => x.status === "done").map((x) => x.key);
-    assert.equal(new Set(keysDone).size, keysDone.length, "no piece was rewritten twice");
-    assert.ok(doneBefore.every((k) => keysDone.includes(k)));
-    await assert.rejects(retryRequest(db, flaky, b.request.id), /Only a failed request/);
+    if (module === "ai_movie") {
+      let boom = true;
+      const flaky = mockModels({ onPipeline: (m, path) => { if (boom && /stages\/threeAct\/generate$/.test(path)) throw Object.assign(new Error("This would cost about $0.12, but only $0.00 is left."), { status: 402 }); } });
+      const b = await startRevision(db, flaky, d.id, { instruction: "Change the villain.", confirmed: true, actorUserId: 1 });
+      await whenIdle(b.request.id); await approveSynopsis(db, flaky, b.request.id, { actorUserId: 1 }); await whenIdle(b.request.id);
+      let r = await getRequest(db, b.request.id);
+      assert.equal(r.status, "failed"); assert.match(r.error, /\$0\.12/);
+      const finished = r.decisions.filter((x) => x.status === "done").map((x) => x.key);
+      assert.deepEqual(finished, ["storyBible", "stage:synopsis", "stage:characterArc"]);
+      boom = false;
+      const before2 = stageCalls("synopsis").length;
+      await retryRequest(db, flaky, b.request.id);
+      await whenIdle(b.request.id);
+      r = await getRequest(db, b.request.id);
+      assert.equal(r.status, "awaiting_final_approval", r.error);
+      assert.equal(stageCalls("synopsis").length, before2, "finished stages were not written again");
+      await assert.rejects(retryRequest(db, flaky, b.request.id), /Only a failed request/);
+    }
     assert.equal(await unitHashes(module, ref()), before);
   }
   const d = await ensureDraftFor(db, "ai_movie", ai);
@@ -357,17 +403,16 @@ test("new story: choose same project (a draft on the dashboard) or a new project
 test("production safety (AI Movie): Draft 2's changes are classified against Draft 1's production work; nothing is reused or touched", async () => {
   const d = await ensureDraftFor(db, "ai_movie", ai);
   await analyzeScreenplay(db, ai);
-  const shots = await db.query("SELECT id FROM production_scenes WHERE project_id = $1 ORDER BY order_index", [ai]);
-  assert.ok(shots.rowCount >= 3);
+  assert.ok((await db.query("SELECT 1 FROM production_scenes WHERE project_id = $1", [ai])).rowCount >= 3);
   const parentProduction = J((await db.query("SELECT code, source_key, content_hash, revision FROM production_scenes WHERE project_id = $1 ORDER BY id", [ai])).rows);
   assert.equal((await productionImpact(db, d.id)).applicable, false);
-  const { request, draft } = await startRevision(db, mockModels(), d.id, { instruction: "Change the villain.", confirmed: true });
-  await whenIdle(request.id); await approveSynopsis(db, mockModels(), request.id); await whenIdle(request.id);
+  const models = mockModels();
+  const { request, draft } = await startRevision(db, models, d.id, { instruction: "Change the villain.", confirmed: true, actorUserId: 1 });
+  await whenIdle(request.id); await approveSynopsis(db, models, request.id, { actorUserId: 1 }); await whenIdle(request.id);
   const impact = await productionImpact(db, draft.id);
   assert.equal(impact.applicable, true);
-  assert.ok(impact.counts.reusable >= 1 && impact.counts.needs_review >= 1, JSON.stringify(impact.counts));
-  assert.equal(impact.overall, "needs_review");
-  assert.ok(impact.classes.reusable.every((x) => x.change === "preserved"));
+  assert.ok(impact.counts.needs_review + impact.counts.stale >= 1, JSON.stringify(impact.counts));
+  assert.notEqual(impact.overall, "compatible");
   assert.equal(impact.guarantees.length, 2);
   assert.equal(J((await db.query("SELECT code, source_key, content_hash, revision FROM production_scenes WHERE project_id = $1 ORDER BY id", [ai])).rows), parentProduction, "Draft 1's production records are exactly as before");
   assert.equal((await db.query("SELECT count(*)::int AS n FROM production_scenes WHERE project_id = $1", [draft.project_ref])).rows[0].n, 0, "Draft 2 has no production records of its own until its screenplay is approved");
@@ -398,7 +443,7 @@ test("routes: the whole flow over HTTP for both modules, with plain errors", asy
     assert.equal(rev.status, 202);
     await whenIdle(rev.json.request.id);
     const det = await http("GET", `/api/drafts/requests/${rev.json.request.id}`);
-    assert.equal(det.json.request.status, "awaiting_synopsis_approval"); assert.ok(det.json.comparison);
+    assert.equal(det.json.request.status, "awaiting_synopsis_approval"); if (module === "ai_movie") assert.ok(det.json.comparison); else assert.ok(!det.json.comparison, "Film: no draft yet, so nothing to compare");
     assert.equal((await http("POST", `/api/drafts/requests/${rev.json.request.id}/approve`, {})).status, 409, "final approval before the synopsis gate is refused");
     assert.equal((await http("POST", `/api/drafts/requests/${rev.json.request.id}/cancel`, {})).json.request.status, "cancelled");
     assert.equal((await http("POST", `/api/drafts/${d.id}/agent/new-story`, { idea: "x" })).status, 400);

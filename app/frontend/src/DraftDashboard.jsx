@@ -121,7 +121,7 @@ export default function DraftDashboard({ module, projectRef, backendUrl, onConti
           <div><dt>Edited</dt><dd>{when(d.updatedAt)}</dd></div>
         </dl>
         {d.projectTitle && <p className="dd-fine">{d.projectTitle}</p>}
-        {d.openRequest && <p className="dd-flag">Revision in progress: {d.openRequest.status.replace(/_/g, ' ')} <button type="button" className="dd-btn" onClick={() => onReviewRequest?.(d)}>Review revision</button></p>}
+        {d.openRequest && !(dash.revisions ?? []).some((q) => q.id === d.openRequest.id) && <p className="dd-flag">Revision in progress: {d.openRequest.status.replace(/_/g, ' ')} <button type="button" className="dd-btn" onClick={() => onReviewRequest?.(d)}>Review revision</button></p>}
         {d.note && <p className="dd-fine">{d.note}</p>}
         <div className="dd-actions">
           <button type="button" className="dd-btn primary" onClick={() => onContinue(d)}>Continue Draft</button>
@@ -151,6 +151,7 @@ export default function DraftDashboard({ module, projectRef, backendUrl, onConti
         {picked.length === 2 && <p><button type="button" className="dd-btn primary" onClick={() => setCompare(picked.map((id) => byId.get(id)))}>Compare {byId.get(picked[0])?.title} with {byId.get(picked[1])?.title}</button></p>}
         {picked.length < 2 && visible.length > 1 && <p className="dd-fine">Tick two drafts to compare them.</p>}
         {compare && <Compare a={compare[0]} b={compare[1]} backendUrl={backendUrl} onClose={() => setCompare(null)} />}
+        {(dash.revisions ?? []).map((q) => <p key={q.id} className="dd-flag" data-request-id={q.id}>A new draft is being made: “{String(q.instruction).slice(0, 90)}” — {q.status.replace(/_/g, ' ')} <button type="button" className="dd-btn" onClick={() => onReviewRequest?.({ openRequest: q })}>Review revision</button></p>)}
         <ul className="dd-cards">{visible.map((d) => <Card key={d.id} d={d} />)}</ul>
         {archived.length > 0 && <details className="dd-archived"><summary>Archived ({archived.length})</summary><ul className="dd-cards">{archived.map((d) => <Card key={d.id} d={d} />)}</ul></details>}
       </div>

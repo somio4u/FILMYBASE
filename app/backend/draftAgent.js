@@ -12,7 +12,7 @@
 //
 // A classifier's answer is only a recommendation. Nothing is changed, copied or paid for until the person confirms a specific action.
 
-import { branchDraft, createBlank, draftUnits, diffUnits, fingerprintOf, getDraft, httpError, saveResume, sceneText, updateDraft } from "./drafts.js";
+import { branchDraft, createBlank, detectStage, draftUnits, diffUnits, fingerprintOf, getDraft, httpError, registerExternalDraft, saveResume, sceneText, updateDraft } from "./drafts.js";
 import { flatten } from "./workspaceContext.js";
 import { analyzeScreenplay } from "./screenplayAnalysis.js";
 import { publish } from "./events.js";
@@ -491,33 +491,117 @@ Return JSON only: {"modified":[{"key":"","why":""}],"removed":[],"indirect":[],"
 ${lines}`;
 }
 
-function proposalPrompt(request, parentUnits, impact, feedback, series) {
-  const get = (k) => parentUnits.find((u) => u.key === k);
-  const list = (arr) => arr.map((x) => `- [${x.key}] ${get(x.key)?.label ?? x.key}: ${x.why ?? ""}`).join("\n") || "(none)";
-  const synopsis = parentUnits.filter((u) => ["idea", "story", "synopsis"].includes(u.section)).map((u) => `${u.label}: ${clip(u.text, 1800)}`).join("\n\n");
-  const episodes = series ? [...new Set([...impact.modified, ...impact.removed, ...impact.indirect].map((x) => /^e(\d+)s/.exec(x.key)?.[1]).filter((n) => n !== undefined))].map(Number).sort((a, b) => a - b) : [];
-  return `You are the story editor planning a REVISED DRAFT of a screenplay. The writer will review your plan before any scene is rewritten.
+// ---- Building the brief: the agent's understanding of the WHOLE current draft plus what must change ----
+export function buildBrief(request, parentUnits, impact) {
+  const label = (k) => parentUnits.find((u) => u.key === k)?.label ?? k;
+  const part = (sections, max) => parentUnits.filter((u) => sections.includes(u.section)).map((u) => `${u.label}: ${clip(u.text, max)}`).join("\n");
+  const scenes = parentUnits.filter((u) => u.section === "screenplay").map((u) => `- ${u.label}: ${clip(u.text.split("\n").slice(1).join(" "), 160)}`).join("\n");
+  const list = (arr) => arr.map((x) => `- ${label(x.key)}${x.why ? `: ${x.why}` : ""}`).join("\n") || "(none)";
+  const keep = (impact?.unchanged ?? []).map(label).slice(0, 60).join("; ");
+  return clip(`REVISION OF AN EXISTING DRAFT. Read the whole current draft below, then rework the story as requested. This is a NEW draft: write it fully, to the same standard as any new script, but start from this draft's story, people and world instead of from nothing.
 
-REVISION REQUEST (verbatim): """${request.instruction}"""
-${request.constraints?.mustKeep?.length ? `MUST KEEP: ${request.constraints.mustKeep.join("; ")}\n` : ""}${request.constraints?.mustChange?.length ? `MUST CHANGE: ${request.constraints.mustChange.join("; ")}\n` : ""}${feedback ? `THE WRITER ASKED FOR THESE CHANGES TO YOUR PREVIOUS PLAN: """${feedback}"""\n` : ""}
-CURRENT STORY:
-${synopsis}
+REQUESTED CHANGES (verbatim): """${request.instruction}"""
+${request.constraints?.mustKeep?.length ? `MUST KEEP: ${request.constraints.mustKeep.join("; ")}\n` : ""}${request.constraints?.mustChange?.length ? `MUST CHANGE: ${request.constraints.mustChange.join("; ")}\n` : ""}${keep ? `PARTS THE REVISION SHOULD LEAVE ALONE: ${keep}\n` : ""}PARTS THAT MUST BE REWORKED:\n${list([...(impact?.modified ?? []), ...(impact?.indirect ?? [])])}
+NEW MATERIAL NEEDED: ${(impact?.added ?? []).map((a) => a.label).join("; ") || "(none)"}
+REMOVED: ${(impact?.removed ?? []).map((x) => label(x.key)).join("; ") || "(none)"}
 
-PIECES TO MODIFY:\n${list(impact.modified)}
-PIECES TO REMOVE:\n${list(impact.removed)}
-INDIRECTLY AFFECTED:\n${list(impact.indirect)}
-NEW PIECES NEEDED: ${impact.added.map((a) => a.label).join("; ") || "(none)"}
-
-Write:
-- summary: two or three sentences on what the revision changes and what it keeps.
-- revisedSynopsis: the new synopsis (logline and premise) of the revised draft, in English, and the same in Hindi (revisedSynopsisHi).
-${series ? `- seasonArc: a short overview of the revised season arc.\n- episodes: for EACH affected episode number (${episodes.map((n) => n + 1).join(", ") || "none"}) a concise revised synopsis. Use "index" = the episode number starting at 1.` : "- sequenceOutline: the revised sequence-by-sequence outline (a short line per sequence or scene that changes)."}
-
-Return JSON only: {"summary":"","revisedSynopsis":"","revisedSynopsisHi":"",${series ? '"seasonArc":"","episodes":[{"index":1,"title":"","synopsis":""}]' : '"sequenceOutline":[{"label":"","change":""}]'}}`;
+THE COMPLETE CURRENT DRAFT
+${part(["idea", "story", "synopsis"], 2500)}
+${part(["characters"], 600)}
+${part(["structure"], 700)}
+${part(["beats", "sceneList"], 600)}
+SCENES (heading and gist):
+${scenes}`, 16000);
 }
 
-// Is this a series? (Film modules store episodes; AI Movie films do not.)
-const isSeries = (units) => units.some((u) => /^e[1-9]\d*s\d+$/.test(u.key)) || units.filter((u) => /^e0s\d+$/.test(u.key)).length > 0 && units.some((u) => /^Episode \d/.test(u.label));
+const CRITIC_PASS = 8;
+const polite = (e) => ({ status: e.status === 402 ? 402 : 502, message: e.message });
+
+export function proposalFromBible(bible, extra = {}) {
+  const r = bible.review;
+  const open = r ? Object.entries(r.reports ?? {}).flatMap(([k, rep]) => (rep.problems ?? []).filter((x) => x.severity !== "minor").map((x) => `[${x.severity}] ${k}: ${clip(flatten({ ...x, severity: undefined }), 220)}`)) : [];
+  return {
+    kind: "story_bible", title: clip(bible.promise?.title, 160), logline: clip(bible.promise?.logline, 600), centralQuestion: clip(bible.promise?.centralQuestion, 400),
+    characters: (bible.characters ?? []).slice(0, 12).map((c) => ({ name: c.name, role: clip(c.role, 80) })),
+    climax: { reversal: clip(bible.climax?.reversal, 400), heroChoice: clip(bible.climax?.heroChoice, 300), finalImage: clip(bible.climax?.finalImage, 300) },
+    unitKind: bible.units?.kind ?? "sequence", blueprint: (bible.blueprint ?? []).slice(0, 60).map((u) => ({ number: u.number, title: clip(u.title, 100) })),
+    critics: { scores: r?.scores ?? null, passed: Boolean(r?.passed), passScore: CRITIC_PASS, rounds: (r?.history ?? []).map((h) => Object.values(h.scores ?? {}).join(" / ")), open: open.slice(0, 10) },
+    ...extra,
+  };
+}
+
+// ---- helpers for driving the app's own routes ----
+let POLL_MS = 5000;
+export const setPollMs = (ms) => { POLL_MS = ms; };
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+class Cancelled extends Error {}
+async function waitFor(db, requestId, check, { label, timeoutMs = 4 * 3600 * 1000 }) {
+  const end = Date.now() + timeoutMs;
+  for (;;) {
+    const r = (await db.query("SELECT status FROM draft_revision_requests WHERE id = $1", [requestId])).rows[0];
+    if (!r || r.status === "cancelled") throw new Cancelled();
+    const v = await check();
+    if (v) return v;
+    if (Date.now() > end) throw httpError(`Gave up waiting for ${label}.`, 504, "timeout");
+    await sleep(POLL_MS);
+  }
+}
+async function openPipeline(models, userId) {
+  if (!models?.pipeline) throw httpError("The Auto Screenplay Agent's writing process is not available on this server.", 503, "not_configured");
+  return models.pipeline.open(userId);
+}
+const must = (res, what) => {
+  if (res.status >= 400) { const p = polite({ status: res.status, message: res.json?.error ?? `${what} failed (${res.status}).` }); throw Object.assign(new Error(p.message), { status: p.status }); }
+  return res.json;
+};
+
+// ---- Film: the language and shape of the parent, so the new draft is written the same way ----
+async function filmShape(db, ref) {
+  const deck = (await readUnit(db, "film", ref, "synopsis"))?.value ?? {};
+  const f = deck.format;
+  let format = { type: "film", runtimeMinutes: 120 };
+  if (f?.type === "series" || f?.type === "vertical") format = { type: f.type, episodeCount: Number(f.episodeCount) || (Array.isArray(deck.episodes) ? deck.episodes.length : 8), episodeMinutes: Number(f.episodeMinutes) || 10 };
+  else if (f?.type === "film" && Number(f.runtimeMinutes) > 0) format = { type: "film", runtimeMinutes: Number(f.runtimeMinutes) };
+  else if (Array.isArray(deck.episodes) && deck.episodes.length > 1) format = { type: "series", episodeCount: deck.episodes.length, episodeMinutes: 10 };
+  const sample = JSON.stringify(deck) + ((await readUnit(db, "film", ref, "idea"))?.value ?? "");
+  const dialogueLanguage = /[଀-୿]/.test(sample) ? "or" : /[ऀ-ॿ]/.test(sample) ? "hi" : "en";
+  return { format, dialogueLanguage };
+}
+
+// ---- Step 1: the story process designs the revised story. Nothing is rewritten yet. ----
+async function storyBrainAi(db, pl, request, draft, brief, feedback) {
+  const pid = draft.project_ref;
+  const p = (await db.query("SELECT pasted_text, story_bible, backfill FROM ai_movie_projects WHERE id = $1", [pid])).rows[0];
+  if (p.story_bible) must(await pl.call("POST", `/api/ai-movie/projects/${pid}/story-bible/note`, { note: feedback ?? brief }), "The Story Brain");
+  else {
+    const minutes = (p.backfill?.plot ?? []).reduce((n, b) => n + (Number(b.runtimeMinutes) || 0), 0);
+    must(await pl.call("POST", `/api/ai-movie/projects/${pid}/story-bible/design`, { idea: `${p.pasted_text}\n\n${feedback ?? brief}`, format: { type: "film", runtimeMinutes: minutes > 0 ? Math.round(minutes) : 120 } }), "The Story Brain");
+  }
+  const view = await waitFor(db, request.id, async () => {
+    const v = must(await pl.call("GET", `/api/ai-movie/projects/${pid}/story-bible`), "Reading the Story Bible");
+    if (v.job?.status === "failed") throw httpError(v.job.error ?? "The Story Brain stopped.", 502, "story_brain_failed");
+    return v.job?.status === "running" ? null : v;
+  }, { label: "the Story Brain" });
+  if (!view.bible) throw httpError("The Story Brain did not produce a Story Bible.", 502, "no_bible");
+  return proposalFromBible(view.bible, { bibleUrl: `/api/ai-movie/projects/${pid}/story-bible.html` });
+}
+
+async function storyBrainFilm(db, pl, request, parent, brief, feedback, runId) {
+  if (!runId) {
+    const shape = await filmShape(db, parent.project_ref);
+    const idea = (await readUnit(db, "film", parent.project_ref, "idea"))?.value ?? "";
+    const concept = clip(`${idea}\n\nREVISED DRAFT — requested changes: ${request.instruction}${request.constraints?.mustKeep?.length ? `\nMust keep: ${request.constraints.mustKeep.join("; ")}` : ""}${request.constraints?.mustChange?.length ? `\nMust change: ${request.constraints.mustChange.join("; ")}` : ""}`, 3000);
+    // the complete current draft goes in as read-only reference material (the same Workspace Reader every run can use)
+    const out = must(await pl.call("POST", "/api/auto-pipeline/start", { concept, format: shape.format, dialogueLanguage: shape.dialogueLanguage, autoReferences: false, references: [{ kind: "film", id: parent.project_ref }] }), "Starting the story process");
+    runId = out.runId;
+  } else must(await pl.call("POST", `/api/auto-pipeline/${runId}/bible-note`, { note: feedback }), "The Story Brain");
+  const st = await waitFor(db, request.id, async () => {
+    const s = must(await pl.call("GET", `/api/auto-pipeline/${runId}/status`), "Reading the run");
+    if (s.status === "failed") throw httpError(s.error ?? "The Story Brain stopped.", 502, "story_brain_failed");
+    return s.status === "awaiting_approval" && s.storyBible ? s : null;
+  }, { label: "the Story Brain" });
+  return proposalFromBible(st.storyBible, { pipelineRunId: runId, bibleUrl: `/api/auto-pipeline/${runId}/story-bible` });
+}
 
 async function analyze(db, models, requestId, { feedback = null } = {}) {
   const request = await getRequest(db, requestId);
@@ -536,29 +620,29 @@ async function analyze(db, models, requestId, { feedback = null } = {}) {
       cur.push(u); size += len;
     }
     if (cur.length) batches.push(cur);
-    const protectedKeys = new Set();
+    const seen = new Set();
     for (const [i, batch] of batches.entries()) {
       const a = await models.json(parent, "story-writer", impactPrompt(request.instruction, request.constraints, batch, batches.length > 1 ? `part ${i + 1} of ${batches.length}` : "the whole outline"), { maxOutputTokens: 8192, responseSchema: IMPACT_SCHEMA });
-      for (const bucket of ["modified", "removed", "indirect"]) for (const x of Array.isArray(a?.[bucket]) ? a[bucket] : []) if (valid.has(x.key) && !protectedKeys.has(x.key)) { impact[bucket].push({ key: x.key, why: clip(x.why, 240) }); protectedKeys.add(x.key); }
+      for (const bucket of ["modified", "removed", "indirect"]) for (const x of Array.isArray(a?.[bucket]) ? a[bucket] : []) if (valid.has(x.key) && !seen.has(x.key)) { impact[bucket].push({ key: x.key, why: clip(x.why, 240) }); seen.add(x.key); }
       for (const x of Array.isArray(a?.added) ? a.added : []) if (x?.label) impact.added.push({ label: clip(x.label, 120), why: clip(x.why, 240) });
     }
-    const touched = new Set([...impact.modified, ...impact.removed, ...impact.indirect].map((x) => x.key));
-    impact.unchanged = parentUnits.filter((u) => !touched.has(u.key)).map((u) => u.key);
+    impact.unchanged = parentUnits.filter((u) => !seen.has(u.key)).map((u) => u.key);
     impact.counts = { unchanged: impact.unchanged.length, modified: impact.modified.length, removed: impact.removed.length, indirect: impact.indirect.length, added: impact.added.length };
     await setRequest(db, requestId, { impact_map: impact });
   }
-  const series = isSeries(parentUnits);
-  const p = await models.json(parent, "story-writer", proposalPrompt(request, parentUnits, impact, feedback, series), { maxOutputTokens: 8192 });
-  const proposal = {
-    series, summary: clip(p?.summary, 1200), revisedSynopsis: clip(p?.revisedSynopsis, 3000), revisedSynopsisHi: clip(p?.revisedSynopsisHi, 3000),
-    seasonArc: series ? clip(p?.seasonArc, 2000) : undefined,
-    episodes: series ? (Array.isArray(p?.episodes) ? p.episodes.filter((e) => Number.isInteger(e?.index) && e.index > 0).map((e) => ({ index: e.index, title: clip(e.title, 120), synopsis: clip(e.synopsis, 1500) })) : []) : undefined,
-    sequenceOutline: series ? undefined : (Array.isArray(p?.sequenceOutline) ? p.sequenceOutline.map((s) => ({ label: clip(s.label, 120), change: clip(s.change, 400) })) : []),
-    feedbackHistory: [...(request.proposal?.feedbackHistory ?? []), ...(feedback ? [feedback] : [])],
-  };
-  if (!proposal.revisedSynopsis) throw httpError("The AI did not return a usable revised synopsis. Press Retry.", 502, "bad_proposal");
+  const brief = request.proposal?.brief ?? buildBrief(request, parentUnits, impact);
+  // The story is designed by the app's own Story Brain (head writer + critics, pass mark 8) — the unchanged raw process.
+  const pl = await openPipeline(models, request.created_by);
+  let proposal;
+  try {
+    proposal = request.module === "film"
+      ? await storyBrainFilm(db, pl, request, parent, brief, feedback, request.proposal?.pipelineRunId)
+      : await storyBrainAi(db, pl, request, await getDraft(db, request.draft_id), brief, feedback);
+  } finally { await pl.close(); }
+  proposal.brief = brief;
+  proposal.feedbackHistory = [...(request.proposal?.feedbackHistory ?? []), ...(feedback ? [feedback] : [])];
   await setRequest(db, requestId, { status: "awaiting_synopsis_approval", proposal, error: null });
-  await db.query("UPDATE project_drafts SET status = 'pending_approval', current_stage = 'synopsis_review', updated_at = now() WHERE id = $1", [request.draft_id]);
+  if (request.draft_id) await db.query("UPDATE project_drafts SET status = 'pending_approval', current_stage = 'synopsis_review', updated_at = now() WHERE id = $1", [request.draft_id]);
   publish(0, { type: "revision_ready", requestId });
 }
 
@@ -568,6 +652,7 @@ function launch(db, requestId, job) {
   const p = (async () => {
     try { await job(); }
     catch (error) {
+      if (error instanceof Cancelled) return;
       await setRequest(db, requestId, { status: "failed", error: clip(error.message, 600) }).catch(() => {});
     } finally { running.delete(requestId); }
   })();
@@ -576,21 +661,23 @@ function launch(db, requestId, job) {
 }
 export const whenIdle = (requestId) => running.get(requestId) ?? Promise.resolve();
 
-// Creates Draft N as a copy of the chosen draft and starts the analysis. Nothing is rewritten until the synopsis is approved.
+// Film: there is no copy to make — the story process writes a brand-new project, which becomes Draft N when it is finished.
+// AI Movie: Draft N is a copy of the current draft (so the complete draft is the context the writers see), rewritten in place by the story process.
 export async function startRevision(db, models, draftId, { instruction, constraints = {}, source = "text", context = {}, label = null, confirmed = false, actorUserId = null }) {
   if (confirmed !== true) throw httpError("Confirm first: this creates a new draft and uses the AI to analyse the whole screenplay.", 409, "confirm_required");
   if (!models) throw httpError("The AI is not available on this server right now.", 503, "not_configured");
   const text = String(instruction ?? "").trim();
   if (!text) throw httpError("Say what the new draft should change.", 400, "empty");
   const parent = await getDraft(db, draftId);
+  if (parent.status === "archived") throw httpError("An archived draft cannot be revised.", 409, "archived");
   const units = await draftUnits(db, parent.module, parent.project_ref);
   if (units.filter((u) => u.section === "screenplay").length === 0 && units.length < 2) throw httpError("There is nothing in this draft to revise yet.", 409, "empty_draft");
-  const draft = await branchDraft(db, draftId, { label, actorUserId, note: `Revision of ${parent.label ?? `Draft ${parent.draft_number}`}: ${clip(text, 200)}` });
+  const draft = parent.module === "film" ? null : await branchDraft(db, draftId, { label, actorUserId, note: `Revision of ${parent.label ?? `Draft ${parent.draft_number}`}: ${clip(text, 200)}` });
   const row = (await db.query(
     `INSERT INTO draft_revision_requests (group_id, module, parent_draft_id, draft_id, intent, instruction, source, constraints, context, status, created_by) VALUES ($1,$2,$3,$4,'NEW_DRAFT',$5,$6,$7,$8,'analyzing',$9) RETURNING *`,
-    [parent.group_id, parent.module, parent.id, draft.id, text, source, JSON.stringify({ mustKeep: constraints.mustKeep ?? [], mustChange: constraints.mustChange ?? [] }), JSON.stringify(context ?? {}), actorUserId]
+    [parent.group_id, parent.module, parent.id, draft?.id ?? null, text, source, JSON.stringify({ mustKeep: constraints.mustKeep ?? [], mustChange: constraints.mustChange ?? [] }), JSON.stringify(context ?? {}), actorUserId]
   )).rows[0];
-  await db.query("UPDATE project_drafts SET status = 'pending_approval', current_stage = 'analyzing' WHERE id = $1", [draft.id]);
+  if (draft) await db.query("UPDATE project_drafts SET status = 'pending_approval', current_stage = 'analyzing' WHERE id = $1", [draft.id]);
   launch(db, row.id, () => analyze(db, models, row.id));
   return { request: requestView(row), draft };
 }
@@ -598,9 +685,9 @@ export async function startRevision(db, models, draftId, { instruction, constrai
 export async function retryRequest(db, models, requestId) {
   const r = await getRequest(db, requestId);
   if (r.status !== "failed") throw httpError("Only a failed request can be retried.", 409, "not_failed");
-  const wasRewriting = (r.decisions ?? []).length > 0 || r.proposal?.approved;
-  await setRequest(db, requestId, { status: wasRewriting ? "rewriting" : "analyzing", error: null });
-  launch(db, requestId, () => (wasRewriting ? rewriteAll(db, models, requestId) : analyze(db, models, requestId)));
+  const writing = Boolean(r.proposal?.approved);
+  await setRequest(db, requestId, { status: writing ? "rewriting" : "analyzing", error: null });
+  launch(db, requestId, () => (writing ? rawRun(db, models, requestId) : analyze(db, models, requestId)));
   return requestView(await getRequest(db, requestId));
 }
 
@@ -621,62 +708,142 @@ export async function cancelRequest(db, requestId) {
   await setRequest(db, requestId, { status: "cancelled" });
   // the copy is archived, never deleted: the audit trail stays, and the parent was never touched
   if (r.draft_id) await db.query("UPDATE project_drafts SET status = 'archived', updated_at = now() WHERE id = $1", [r.draft_id]);
+  // a Film story process that is only waiting for approval is closed so it does not linger as a stray project
+  if (r.proposal?.pipelineRunId) await db.query("UPDATE auto_pipeline_runs SET status = 'failed', error = 'Cancelled from the Auto Screenplay Agent.' WHERE id = $1 AND status = 'awaiting_approval'", [r.proposal.pipelineRunId]).catch(() => {});
   return requestView(await getRequest(db, requestId));
 }
 
-// THE GATE: only here does the rewrite begin.
+// THE GATE: only here does the writing begin.
 export async function approveSynopsis(db, models, requestId, { expectedRevision = null, actorUserId = null } = {}) {
   const r = await getRequest(db, requestId);
   if (r.status !== "awaiting_synopsis_approval") throw httpError("The synopsis is not waiting for approval.", 409, "wrong_state");
   if (expectedRevision !== null && Number(expectedRevision) !== r.revision) throw httpError("This proposal changed since you loaded it. Reload it first.", 409, "stale_revision");
   const proposal = { ...r.proposal, approved: true, approvedAt: new Date().toISOString(), approvedBy: actorUserId };
-  await setRequest(db, requestId, { status: "rewriting", proposal, decisions: [] });
-  await db.query("UPDATE project_drafts SET current_stage = 'rewriting', approval = $2 WHERE id = $1", [r.draft_id, JSON.stringify({ gate: "revised_synopsis", status: "approved", at: new Date().toISOString(), by: actorUserId })]);
-  launch(db, requestId, () => rewriteAll(db, models, requestId));
+  await setRequest(db, requestId, { status: "rewriting", proposal, decisions: [], created_by: actorUserId ?? r.created_by });
+  if (r.draft_id) await db.query("UPDATE project_drafts SET current_stage = 'rewriting', approval = $2 WHERE id = $1", [r.draft_id, JSON.stringify({ gate: "revised_synopsis", status: "approved", at: new Date().toISOString(), by: actorUserId })]);
+  launch(db, requestId, () => rawRun(db, models, requestId));
   return requestView(await getRequest(db, requestId));
 }
 
-const ORDER = { idea: 0, story: 1, synopsis: 2, characters: 3, structure: 4, beats: 5, sceneList: 6, screenplay: 7 };
+// ---- Step 2: the unchanged raw process writes the new draft, stage by stage, to a judged 8+ ----
+export const SCORE_TARGET = 8;
+const STAGES = ["synopsis", "characterArc", "threeAct", "plot"];
+const MAX_ATTEMPTS = 3;
+const lastProblems = (judge) => (judge?.versions?.at(-1)?.problems ?? []).map((p) => `- [${p.severity}] ${flatten({ ...p, severity: undefined })}`).join("\n");
 
-async function rewriteAll(db, models, requestId) {
-  let r = await getRequest(db, requestId);
-  const draft = await getDraft(db, r.draft_id);
-  const units = await draftUnits(db, draft.module, draft.project_ref);
-  const approvedSynopsis = `${r.proposal.revisedSynopsis}${r.proposal.seasonArc ? `\nSeason arc: ${r.proposal.seasonArc}` : ""}`;
-  const done = new Map((r.decisions ?? []).map((d) => [d.key, d]));
+async function aiStage(db, pl, request, pid, stage, brief, log, save) {
+  let best = null, notes = "";
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    const feedback = attempt === 1 ? brief : `${brief}\n\nThe judges scored the last version ${best?.score ?? "low"}/10 on the "${stage}" stage. Fix these problems and keep what works:\n${notes}`;
+    const out = must(await pl.call("POST", `/api/ai-movie/stages/${stage}/generate`, { projectId: pid, feedback: clip(feedback, 18000) }), `The ${stage} stage`);
+    const score = Number(out.judge?.keptScore) || 0;
+    if (!best || score >= best.score) best = { content: out.content, judge: out.judge, score };
+    notes = lastProblems(out.judge);
+    if (score >= SCORE_TARGET && !out.judge?.versions?.at(-1)?.blocking) { best.attempts = attempt; break; }
+    best.attempts = attempt;
+    // the route stored THIS attempt; if an earlier one scored better, put the better one back
+    if (attempt === MAX_ATTEMPTS || !notes) break;
+  }
+  const current = (await db.query("SELECT backfill->$2 AS content FROM ai_movie_projects WHERE id = $1", [pid, stage])).rows[0]?.content;
+  if (JSON.stringify(current) !== JSON.stringify(best.content)) {
+    await db.query("UPDATE ai_movie_projects SET backfill = jsonb_set(COALESCE(backfill,'{}'::jsonb), ARRAY[$2], $3::jsonb), stage_status = COALESCE(stage_status,'{}'::jsonb) || $4::jsonb WHERE id = $1",
+      [pid, stage, JSON.stringify(best.content), JSON.stringify({ [stage]: { status: "pending", feedback: null, judge: best.judge } })]);
+  }
+  must(await pl.call("POST", `/api/ai-movie/stages/${stage}/approve`, { projectId: pid }), `Approving the ${stage} stage`);
+  log.push({ key: `stage:${stage}`, status: "done", score: best.score, attempts: best.attempts, reachedTarget: best.score >= SCORE_TARGET });
+  await save();
+}
+
+async function polishBeat(pl, pid, i, row) {
+  const doctor = await pl.call("POST", `/api/ai-movie/stages/screenplay/beats/${i}/doctor`, { projectId: pid });
+  if (doctor.status >= 400) { if (doctor.status === 402) must(doctor, "The Script Doctor"); return { notes: 0, applied: 0, skipped: doctor.json?.error }; }
+  const notes = doctor.json?.doctorNotes?.notes ?? [];
+  let applied = 0;
+  for (const [idx, n] of notes.entries()) {
+    if (applied >= 2 || n.severity !== "major" || !(n.sceneNumber > 0) || n.applied) continue;
+    const res = await pl.call("POST", `/api/ai-movie/stages/screenplay/beats/${i}/scenes/${n.sceneNumber - 1}/revise`, { projectId: pid, instruction: n.fix?.en ?? n.fix, doctorNoteIndex: idx });
+    if (res.status === 402) must(res, "Applying a Script Doctor note");
+    if (res.status < 400) applied++;
+  }
+  return { notes: notes.length, applied };
+}
+
+async function aiScreenplay(db, pl, request, pid, log, save) {
+  must(await pl.call("POST", "/api/ai-movie/stages/screenplay/generate", { projectId: pid }), "The screenplay");
+  const polished = new Set(), retries = new Map();
+  await waitFor(db, request.id, async () => {
+    const row = (await db.query("SELECT backfill, stage_status FROM ai_movie_projects WHERE id = $1", [pid])).rows[0];
+    if (row.stage_status?.screenplay?.status === "approved") return true;
+    const beats = row.backfill?.screenplayBeats ?? [];
+    for (let i = 0; i < beats.length; i++) {
+      const b = beats[i];
+      if (b.status === "error") {
+        const n = (retries.get(i) ?? 0) + 1; retries.set(i, n);
+        if (n > 2) throw httpError(`Beat ${i + 1} could not be written after retries.`, 502, "beat_failed");
+        must(await pl.call("POST", `/api/ai-movie/stages/screenplay/beats/${i}/request-changes`, { projectId: pid }), `Beat ${i + 1}`);
+        return false;
+      }
+      if (b.status === "pending" && b.scenes?.length) {
+        if (!polished.has(i)) { const p = await polishBeat(pl, pid, i, row); polished.add(i); log.push({ key: `beat:${i}`, status: "done", doctor: p }); await save(); return false; }
+        must(await pl.call("POST", `/api/ai-movie/stages/screenplay/beats/${i}/approve`, { projectId: pid }), `Approving beat ${i + 1}`);
+        return false;
+      }
+    }
+    return false;
+  }, { label: "the screenplay" });
+  log.push({ key: "stage:screenplay", status: "done" });
+  await save();
+}
+
+async function rawRun(db, models, requestId) {
+  const r = await getRequest(db, requestId);
+  const pl = await openPipeline(models, r.created_by);
   const log = [...(r.decisions ?? [])];
-  const save = async () => { await setRequest(db, requestId, { decisions: log }); };
-  // 1. the synopsis itself becomes the approved one
-  if (!done.has("synopsis") && units.some((u) => u.key === "synopsis")) {
-    const raw = await readUnit(db, draft.module, draft.project_ref, "synopsis");
-    const a = await models.json(draft, "story-writer", `Rewrite this synopsis so it matches the approved revised synopsis. Keep the same JSON structure and keys; revise English and Hindi fields to say the same thing.\n\nAPPROVED REVISED SYNOPSIS: ${r.proposal.revisedSynopsis}\n${r.proposal.revisedSynopsisHi ? `(Hindi) ${r.proposal.revisedSynopsisHi}\n` : ""}\nCURRENT (JSON):\n${JSON.stringify(raw.value)}\n\nReturn JSON only, same structure.`, { maxOutputTokens: 4096 });
-    const value = conform(raw.value, a);
-    if (value) { await writeUnit(db, draft.module, draft.project_ref, "synopsis", value, { needsReview: true }); log.push({ key: "synopsis", status: "done" }); }
-    else log.push({ key: "synopsis", status: "skipped", why: "The AI's answer did not keep the structure." });
+  const save = () => setRequest(db, requestId, { decisions: log });
+  const done = (k) => log.some((x) => x.key === k && x.status === "done");
+  try {
+    if (r.module === "film") await rawRunFilm(db, pl, r, log, save);
+    else {
+      const draft = await getDraft(db, r.draft_id);
+      const pid = draft.project_ref;
+      const brief = r.proposal.brief;
+      if (!done("storyBible")) { must(await pl.call("POST", `/api/ai-movie/projects/${pid}/story-bible/approve`, {}), "Approving the Story Bible"); log.push({ key: "storyBible", status: "done", score: r.proposal.critics?.scores ? Math.min(...Object.values(r.proposal.critics.scores)) : null }); await save(); }
+      for (const stage of STAGES) if (!done(`stage:${stage}`)) await aiStage(db, pl, r, pid, stage, brief, log, save);
+      if (!done("stage:screenplay")) await aiScreenplay(db, pl, r, pid, log, save);
+      await db.query("UPDATE project_drafts SET current_stage = 'revision_review', status = 'pending_approval', updated_at = now() WHERE id = $1", [draft.id]);
+      await refreshProduction(db, "ai_movie", pid);
+    }
+    await setRequest(db, requestId, { status: "awaiting_final_approval", decisions: log });
+    publish(0, { type: "revision_ready", requestId });
+  } finally { await pl.close(); }
+}
+
+async function rawRunFilm(db, pl, r, log, save) {
+  const runId = r.proposal.pipelineRunId;
+  if (!log.some((x) => x.key === "storyBible" && x.status === "done")) {
+    must(await pl.call("POST", `/api/auto-pipeline/${runId}/bible-approve`, {}), "Approving the Story Bible");
+    log.push({ key: "storyBible", status: "done", score: r.proposal.critics?.scores ? Math.min(...Object.values(r.proposal.critics.scores)) : null });
     await save();
   }
-  // 2. everything the impact map marked, story-level first, then scenes in order
-  const impact = r.impact_map;
-  const todo = [...impact.modified, ...impact.indirect].map((x) => ({ key: x.key, why: x.why })).filter((x) => x.key !== "synopsis")
-    .sort((a, b) => (ORDER[units.find((u) => u.key === a.key)?.section] ?? 9) - (ORDER[units.find((u) => u.key === b.key)?.section] ?? 9) || units.findIndex((u) => u.key === a.key) - units.findIndex((u) => u.key === b.key));
-  for (const item of todo) {
-    r = await getRequest(db, requestId);
-    if (r.status === "cancelled") return; // cancelled while running: stop between pieces
-    if (done.has(item.key)) continue;
-    const currentUnits = await draftUnits(db, draft.module, draft.project_ref);
-    const e = await rewriteUnit(db, models, draft, item.key, { instruction: `${r.instruction}\n\nWhy this piece changes: ${item.why || "it depends on the revision"}`, constraints: r.constraints, context: { synopsis: approvedSynopsis }, units: currentUnits }).catch((error) => { if (error.status === 402) throw error; return { error }; });
-    if (e.error) { log.push({ key: item.key, status: "failed", why: clip(e.error.message, 200) }); await save(); continue; }
-    if (!e.changed) { log.push({ key: item.key, status: "unchanged" }); await save(); continue; }
-    await writeUnit(db, draft.module, draft.project_ref, item.key, e.after, { needsReview: true });
-    const cs = (await db.query("INSERT INTO draft_change_sets (draft_id, request_id, intent, instruction, scope, edits, base_fingerprint, status, applied_at) VALUES ($1,$2,'NEW_DRAFT',$3,$4,$5,'', 'applied', now()) RETURNING id", [draft.id, requestId, r.instruction, JSON.stringify({ keys: [item.key] }), JSON.stringify([{ key: item.key, label: e.label, section: e.section, before: e.before, after: e.after, beforeText: textOf(e.before), afterText: textOf(e.after) }])])).rows[0];
-    log.push({ key: item.key, status: "done", changeSetId: cs.id });
-    await save();
+  const s = await waitFor(db, r.id, async () => {
+    const st = must(await pl.call("GET", `/api/auto-pipeline/${runId}/status`), "Reading the run");
+    if (st.status === "failed") throw httpError(st.error ?? "The story process stopped.", 502, "pipeline_failed");
+    return st.status === "completed" && st.conceptId ? st : null;
+  }, { label: "the script" });
+  // the finished project becomes Draft N of this project
+  const existing = (await db.query("SELECT id FROM project_drafts WHERE module = 'film' AND project_ref = $1", [s.conceptId])).rows[0];
+  const draft = existing ?? await registerExternalDraft(db, { parentDraftId: r.parent_draft_id, module: "film", projectRef: s.conceptId, note: `Revision: ${clip(r.instruction, 200)}`, actorUserId: r.created_by });
+  await db.query("UPDATE draft_revision_requests SET draft_id = $2 WHERE id = $1", [r.id, draft.id]);
+  // the judges' scores the process recorded, best per stage
+  const best = new Map();
+  for (const n of s.reviewNotes ?? []) {
+    const text = typeof n === "string" ? n : n.text ?? "";
+    const m = /Judge score: (\d+)\/10/.exec(text);
+    if (m) best.set(n.stage ?? "stage", Math.max(best.get(n.stage ?? "stage") ?? 0, Number(m[1])));
   }
-  await refreshProduction(db, draft.module, draft.project_ref);
-  const manual = [...impact.removed.map((x) => `Removed: ${units.find((u) => u.key === x.key)?.label ?? x.key}`), ...impact.added.map((x) => `New: ${x.label}`)];
-  await setRequest(db, requestId, { status: "awaiting_final_approval", decisions: log, impact_map: { ...impact, manual } });
-  await db.query("UPDATE project_drafts SET current_stage = 'revision_review', status = 'pending_approval', updated_at = now() WHERE id = $1", [draft.id]);
-  publish(0, { type: "revision_ready", requestId });
+  for (const [stage, score] of best) log.push({ key: `stage:${stage}`, status: "done", score, reachedTarget: score >= SCORE_TARGET });
+  log.push({ key: "stage:screenplay", status: "done" });
+  await save();
 }
 
 export async function approveFinal(db, requestId, { expectedRevision = null, actorUserId = null } = {}) {
@@ -685,22 +852,21 @@ export async function approveFinal(db, requestId, { expectedRevision = null, act
   if (expectedRevision !== null && Number(expectedRevision) !== r.revision) throw httpError("This revision changed since you loaded it. Reload it first.", 409, "stale_revision");
   await setRequest(db, requestId, { status: "completed" });
   const draft = await getDraft(db, r.draft_id);
-  // the draft's own stages still need their normal approvals where parts were rewritten: it is "approved" only when none are pending
-  const pendingParts = (r.decisions ?? []).filter((d) => d.status === "done").length;
-  await updateDraft(db, draft.id, { status: pendingParts ? "working" : "approved" });
-  await db.query("UPDATE project_drafts SET approval = $2, current_stage = $3 WHERE id = $1", [draft.id, JSON.stringify({ gate: "final", status: "accepted", requestId, at: new Date().toISOString(), by: actorUserId }), "screenplay"]);
-  return { request: requestView(await getRequest(db, requestId)), pendingParts };
+  const complete = r.module === "ai_movie" && (await detectStage(db, "ai_movie", draft.project_ref)).approved;
+  await updateDraft(db, draft.id, { status: complete ? "approved" : "working" });
+  await db.query("UPDATE project_drafts SET approval = $2, current_stage = 'screenplay' WHERE id = $1", [draft.id, JSON.stringify({ gate: "final", status: "accepted", requestId, at: new Date().toISOString(), by: actorUserId })]);
+  return { request: requestView(await getRequest(db, requestId)), pendingParts: complete ? 0 : 1 };
 }
 
 // the full picture for the review screens
 export async function revisionDetail(db, requestId) {
   const r = await getRequest(db, requestId);
   const out = { request: requestView(r) };
+  if (r.parent_draft_id) { const p = await getDraft(db, r.parent_draft_id); out.parentDraft = { id: p.id, title: p.label ?? `Draft ${p.draft_number}` }; }
   if (r.draft_id && r.parent_draft_id) {
     const [d, p] = [await getDraft(db, r.draft_id), await getDraft(db, r.parent_draft_id)];
     const diff = diffUnits(await draftUnits(db, p.module, p.project_ref), await draftUnits(db, d.module, d.project_ref));
     out.comparison = { counts: diff.counts, rows: diff.rows.filter((x) => x.status !== "preserved") };
-    out.parentDraft = { id: p.id, title: p.label ?? `Draft ${p.draft_number}` };
     out.draft = { id: d.id, title: d.label ?? `Draft ${d.draft_number}`, status: d.status };
   }
   return out;

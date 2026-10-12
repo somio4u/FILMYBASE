@@ -13,7 +13,7 @@ async function call(url, method = 'GET', body) {
   }
 }
 const INTENT_LABEL = { LOCAL_EDIT: 'Edit a selected piece', SCOPED_REWRITE: 'Rewrite several pieces', NEW_DRAFT: 'Create a new draft', ALTERNATIVE: 'Explore an alternative', NEW_STORY: 'Start a new story', CONTINUE: 'Continue the draft', UNCLEAR: 'Not sure yet' }
-const REQUEST_LABEL = { analyzing: 'Analysing the whole screenplay…', awaiting_synopsis_approval: 'Waiting for your approval of the revised synopsis', synopsis_approved: 'Synopsis approved', rewriting: 'Rewriting the affected parts…', awaiting_final_approval: 'Waiting for your final approval', completed: 'Completed', cancelled: 'Cancelled', failed: 'Stopped — can be retried' }
+const REQUEST_LABEL = { analyzing: 'Reading the whole draft and designing the new story…', awaiting_synopsis_approval: 'Waiting for your approval of the new Story Bible', synopsis_approved: 'Story Bible approved', rewriting: 'Writing the new draft with the story process…', awaiting_final_approval: 'Waiting for your final approval', completed: 'Completed', cancelled: 'Cancelled', failed: 'Stopped — can be retried' }
 
 function Diff({ edit }) {
   return (
@@ -73,35 +73,35 @@ function Revision({ requestId, backendUrl, onOpenDraft, onClose, onChanged }) {
       )}
       {r.proposal && (
         <div className="da-proposal">
-          <h4>Revised synopsis</h4>
-          <p>{r.proposal.summary}</p>
-          <p className="da-synopsis">{r.proposal.revisedSynopsis}</p>
-          {r.proposal.series && r.proposal.seasonArc && <><h5>Season arc</h5><p>{r.proposal.seasonArc}</p></>}
-          {r.proposal.series && (r.proposal.episodes ?? []).length > 0 && (<><h5>Affected episodes</h5><ol className="da-episodes">{r.proposal.episodes.map((e) => <li key={e.index} value={e.index}><strong>Episode {e.index}{e.title ? ` — ${e.title}` : ''}:</strong> {e.synopsis}</li>)}</ol></>)}
-          {!r.proposal.series && (r.proposal.sequenceOutline ?? []).length > 0 && (<><h5>Sequence outline</h5><ul>{r.proposal.sequenceOutline.map((s, i) => <li key={i}><strong>{s.label}:</strong> {s.change}</li>)}</ul></>)}
+          <h4>New Story Bible — {r.proposal.title}</h4>
+          {r.proposal.logline && <p className="da-synopsis">{r.proposal.logline}</p>}
+          {r.proposal.centralQuestion && <p className="dd-fine">Central question: {typeof r.proposal.centralQuestion === 'string' ? r.proposal.centralQuestion : JSON.stringify(r.proposal.centralQuestion)}</p>}
+          {r.proposal.critics?.scores && (
+            <p>Critics' scores: {Object.entries(r.proposal.critics.scores).map(([k, v]) => <span key={k} className={`chip ${v >= (r.proposal.critics.passScore ?? 8) ? 'modified' : 'removed'}`}>{k} {v}/10</span>)} {r.proposal.critics.passed ? '— passed' : `— below ${r.proposal.critics.passScore ?? 8}; you can ask for changes`}</p>
+          )}
+          {(r.proposal.critics?.open ?? []).length > 0 && <><h5>Open problems the critics still see</h5><ul>{r.proposal.critics.open.map((o, i) => <li key={i}>{typeof o === 'string' ? o : (o.problem ?? JSON.stringify(o))}</li>)}</ul></>}
         </div>
       )}
       {status === 'awaiting_synopsis_approval' && (
         <div className="da-gate">
-          <p><strong>Nothing has been rewritten yet.</strong> Approving starts the selective rewrite of the pieces above, in the new draft only. {data.parentDraft?.title} is never changed.</p>
+          <p><strong>Nothing has been written yet.</strong> Approving starts the normal story process (judges score every stage, weak ones are redone toward 8–9) and writes the new draft. {data.parentDraft?.title} is never changed.</p>
           <div className="dd-actions">
-            <button type="button" className="dd-btn primary" disabled={busy} onClick={() => post('synopsis/approve')}>Approve Synopsis &amp; Continue</button>
-            <button type="button" className="dd-btn" disabled={busy} onClick={() => onOpenDraft?.('compare')}>Compare with Parent</button>
+            <button type="button" className="dd-btn primary" disabled={busy} onClick={() => post('synopsis/approve')}>Approve Story &amp; Write New Draft</button>
             <button type="button" className="dd-btn" disabled={busy} onClick={() => { if (window.confirm('Cancel this revision? The new draft is archived (kept for the record).')) post('cancel') }}>Cancel</button>
           </div>
-          <label className="da-feedback">Request changes to the synopsis<textarea rows={2} value={feedback} onChange={(e) => setFeedback(e.target.value)} placeholder="For example: make the villain her mentor instead." /></label>
+          <label className="da-feedback">Request changes to the story<textarea rows={2} value={feedback} onChange={(e) => setFeedback(e.target.value)} placeholder="For example: make the villain her mentor instead." /></label>
           <button type="button" className="dd-btn" disabled={busy || !feedback.trim()} onClick={async () => { await post('synopsis/changes', { feedback }); setFeedback('') }}>Request Changes</button>
         </div>
       )}
       {(status === 'rewriting' || status === 'awaiting_final_approval' || status === 'completed') && (r.progress ?? []).length > 0 && (
-        <ul className="da-progress" aria-label="Rewrite progress">{r.progress.map((p) => <li key={p.key}><span className={`chip ${p.status === 'done' ? 'modified' : p.status === 'failed' ? 'removed' : ''}`}>{p.status}</span> {label(p.key)}{p.why ? ` — ${p.why}` : ''}</li>)}</ul>
+        <ul className="da-progress" aria-label="Rewrite progress">{r.progress.map((p) => <li key={p.key}><span className={`chip ${p.reachedTarget === false ? 'removed' : p.status === 'done' ? 'modified' : ''}`}>{p.score != null ? `${p.score}/10` : p.status}</span> {String(p.key).replace('stage:', '').replace('beat:', 'screenplay part ')}{p.attempts > 1 ? ` — ${p.attempts} tries` : ''}{p.reachedTarget === false ? ' — below 8, best version kept' : ''}</li>)}</ul>
       )}
       {status === 'failed' && <button type="button" className="dd-btn primary" disabled={busy} onClick={() => post('retry')}>Retry (finished pieces are kept)</button>}
       {status === 'awaiting_final_approval' && (
         <div className="da-gate">
           {data.comparison && <p>Compared with {data.parentDraft?.title}: <span className="chip preserved">{data.comparison.counts.preserved} preserved</span> <span className="chip modified">{data.comparison.counts.modified} modified</span> <span className="chip added">{data.comparison.counts.added} added</span> <span className="chip removed">{data.comparison.counts.removed} removed</span></p>}
           {(impact?.manual ?? []).length > 0 && <p className="dd-flag">Needs your hand: {impact.manual.join(' · ')}</p>}
-          <p className="dd-fine">Rewritten parts are marked for review in their normal stages; approve each there as usual.</p>
+          <p className="dd-fine">Every stage was judged by the normal process; the scores above are the judges' own.</p>
           <div className="dd-actions">
             <button type="button" className="dd-btn primary" disabled={busy} onClick={() => post('approve')}>Approve Revised Draft</button>
             <button type="button" className="dd-btn" onClick={() => onOpenDraft?.('compare')}>Compare with Parent</button>

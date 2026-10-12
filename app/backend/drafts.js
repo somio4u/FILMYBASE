@@ -199,7 +199,9 @@ export async function getDashboard(db, module, projectRef, { actorUserId = null 
       childCount: rows.filter((x) => x.parent_draft_id === r.id).length,
     });
   }
-  return { groupId: group.id, module, activeDraftId: group.active_draft_id, drafts, requestedProjectRef: projectRef };
+  const revisions = (await db.query("SELECT id, status, instruction, draft_id, created_at FROM draft_revision_requests WHERE group_id = $1 AND status NOT IN ('completed','cancelled') ORDER BY id DESC", [me.group_id]).catch(() => ({ rows: [] }))).rows
+    .map((r) => ({ id: r.id, status: r.status, instruction: r.instruction, draftId: r.draft_id, createdAt: r.created_at }));
+  return { groupId: group.id, module, activeDraftId: group.active_draft_id, drafts, revisions, requestedProjectRef: projectRef };
 }
 
 export async function getDraft(db, draftId) {
@@ -341,6 +343,30 @@ export async function createBlank(db, draft, { destination, idea, actorUserId = 
     await client.query("COMMIT");
     if (!row) row = await ensureDraftFor(db, draft.module, ref, { actorUserId });
     return { draft: rowView(row), projectRef: ref, module: draft.module, destination };
+  } catch (error) {
+    await client.query("ROLLBACK").catch(() => {});
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+// A project that was written elsewhere (Film: the story process makes a brand-new project) joins this project's drafts as the next numbered draft.
+export async function registerExternalDraft(db, { parentDraftId, module, projectRef, label = null, note = null, actorUserId = null }) {
+  const parent = await getDraft(db, parentDraftId);
+  if (parent.module !== module) throw httpError("A draft must stay in its own module.", 400, "module_mismatch");
+  const client = await db.connect();
+  try {
+    await client.query("BEGIN");
+    await client.query("SELECT pg_advisory_xact_lock($1)", [800000 + parent.group_id]);
+    const n = Number((await client.query("SELECT COALESCE(MAX(draft_number),0)+1 AS n FROM project_drafts WHERE group_id = $1", [parent.group_id])).rows[0].n);
+    const where = await detectStage(client, module, projectRef);
+    const row = (await client.query(
+      `INSERT INTO project_drafts (group_id, module, project_ref, draft_number, kind, label, parent_draft_id, status, current_stage, created_by, note) VALUES ($1,$2,$3,$4,'numbered',$5,$6,'pending_approval',$7,$8,$9) RETURNING *`,
+      [parent.group_id, module, projectRef, n, label, parent.id, where.stage, actorUserId, note]
+    )).rows[0];
+    await client.query("COMMIT");
+    return row;
   } catch (error) {
     await client.query("ROLLBACK").catch(() => {});
     throw error;

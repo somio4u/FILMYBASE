@@ -42,11 +42,12 @@ import { registerAudioCueRoutes } from "./audioCues.js";
 import { registerTimelineEditRoutes } from "./timelineEdit.js";
 import { registerShotPlanRoutes } from "./shotPlans.js";
 import { backfillDrafts, registerDraftRoutes } from "./drafts.js";
-import { failInterruptedRequests, registerDraftAgentRoutes } from "./draftAgent.js";
+import { failInterruptedRequests, registerDraftAgentRoutes, setPollMs } from "./draftAgent.js";
 import { buildReferenceBlock, findRelated as findRelatedSources, ideaWithReferences, registerWorkspaceRoutes } from "./workspaceContext.js";
 import { registerTimelineExportRoutes } from "./timelineExport.js";
 import { registerEventRoutes } from "./events.js";
 import cookieParser from "cookie-parser";
+import http from "node:http";
 import { createClient } from "@supabase/supabase-js";
 import {
   AKHADA_FIXED_SYNOPSIS,
@@ -19273,13 +19274,40 @@ registerTimelineEditRoutes(app, db, requireRole);
 registerWorkspaceRoutes(app, db, requireRole);
 registerDraftRoutes(app, db, requireRole);
 // The Universal Auto Screenplay Agent. It reuses the project's own model routing (AI Movie: quality mode + money guard; Film: the same tiers).
-registerDraftAgentRoutes(app, db, requireRole, {
-  models: process.env.DRAFT_AGENT_MOCK === "1" ? (await import("./draftAgentMock.js")).scriptedAgentModels : {
-    async json(draft, agentId, prompt, { maxOutputTokens = 8192, responseSchema } = {}) {
-      if (draft.module === "ai_movie") return (await aiMovieStory.ask.ask(draft.project_ref, agentId, { contents: prompt, responseSchema, maxOutputTokens })).data;
-      return callModelTier(modelFor(agentId, "professional").tier, { contents: prompt, responseSchema, maxOutputTokens });
-    },
+// The writing process the agent drives is the app's OWN (Story Brain critics, judged stages, screenplay beats, the Film story process):
+// it calls those same routes, as the person who approved, through a short-lived session that is removed when the job ends.
+const draftPipeline = {
+  async open(userId) {
+    if (!userId) throw Object.assign(new Error("Nobody is signed in for this job."), { status: 401 });
+    const token = crypto.randomBytes(32).toString("hex");
+    await db.query("INSERT INTO sessions (token, user_id, expires_at) VALUES ($1, $2, now() + interval '8 hours')", [token, userId]);
+    return {
+      // plain http with no timeout: a judged stage can run for minutes
+      call: (method, path, body) => new Promise((resolve, reject) => {
+        const payload = body === undefined ? null : JSON.stringify(body);
+        const request = http.request({ host: "127.0.0.1", port: PORT, path, method, headers: { "Content-Type": "application/json", Cookie: `${SESSION_COOKIE}=${token}`, ...(payload ? { "Content-Length": Buffer.byteLength(payload) } : {}) } }, (response) => {
+          let text = "";
+          response.on("data", (chunk) => { text += chunk; });
+          response.on("end", () => { let json = null; try { json = JSON.parse(text); } catch { /* not JSON */ } resolve({ status: response.statusCode, json }); });
+        });
+        request.on("error", reject);
+        if (payload) request.write(payload);
+        request.end();
+      }),
+      close: () => db.query("DELETE FROM sessions WHERE token = $1", [token]).catch(() => {}),
+    };
   },
+};
+registerDraftAgentRoutes(app, db, requireRole, {
+  models: process.env.DRAFT_AGENT_MOCK === "1"
+    ? await (async () => { const m = await import("./draftAgentMock.js"); setPollMs(Number(process.env.DRAFT_AGENT_POLL_MS ?? 400)); return { ...m.scriptedAgentModels, pipeline: m.fakePipeline(db) }; })()
+    : {
+      async json(draft, agentId, prompt, { maxOutputTokens = 8192, responseSchema } = {}) {
+        if (draft.module === "ai_movie") return (await aiMovieStory.ask.ask(draft.project_ref, agentId, { contents: prompt, responseSchema, maxOutputTokens })).data;
+        return callModelTier(modelFor(agentId, "professional").tier, { contents: prompt, responseSchema, maxOutputTokens });
+      },
+      pipeline: draftPipeline,
+    },
 });
 registerShotPlanRoutes(app, db, requireRole, { getTextJson: async (projectId) => async (prompt) => (await aiMovieStory.ask.ask(projectId, "shot-cutter-complex", { contents: prompt, maxOutputTokens: 8192 })).data });
 registerTimelineExportRoutes(app, db, requireRole, { store: productionMedia.store });

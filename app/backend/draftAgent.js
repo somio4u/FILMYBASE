@@ -462,6 +462,21 @@ export async function failInterruptedRequests(db) {
   return r.rowCount;
 }
 
+// A restart cuts the agent's tracking off even though the story process itself is picked up again by the server. Continue such
+// requests by themselves from their last saved point (at most 3 automatic tries each, so nothing can loop).
+export async function resumeInterruptedRequests(db, models) {
+  if (!models) return 0;
+  const rows = (await db.query("SELECT id, context FROM draft_revision_requests WHERE status = 'failed' AND error LIKE 'Interrupted by a server restart%' AND updated_at > now() - interval '12 hours' ORDER BY id")).rows;
+  let n = 0;
+  for (const r of rows) {
+    const tries = Number(r.context?.autoRetries ?? 0);
+    if (tries >= 3) continue;
+    await db.query("UPDATE draft_revision_requests SET context = COALESCE(context,'{}'::jsonb) || $2::jsonb WHERE id = $1", [r.id, JSON.stringify({ autoRetries: tries + 1 })]);
+    try { await retryRequest(db, models, r.id); n += 1; } catch (error) { console.error(`Could not auto-resume request ${r.id}:`, error.message); }
+  }
+  return n;
+}
+
 const IMPACT_SCHEMA = {
   type: "OBJECT",
   properties: {
@@ -843,15 +858,21 @@ async function rawRunFilm(db, pl, r, log, save) {
     log.push({ key: "storyBible", status: "done", score: r.proposal.critics?.scores ? Math.min(...Object.values(r.proposal.critics.scores)) : null });
     await save();
   }
+  // The new project exists as soon as the story process has made its first stage. Register it AT ONCE as the new draft (kept offline
+  // while it is being written), so what the agent has made so far can be seen and opened, never the older draft's content.
+  const register = async (conceptId) => {
+    const existing = (await db.query("SELECT id FROM project_drafts WHERE module = 'film' AND project_ref = $1", [conceptId])).rows[0];
+    const draft = existing ?? await registerExternalDraft(db, { parentDraftId: r.parent_draft_id, module: "film", projectRef: conceptId, note: `Revision: ${clip(r.instruction, 200)}`, actorUserId: r.created_by });
+    await db.query("UPDATE draft_revision_requests SET draft_id = $2 WHERE id = $1", [r.id, draft.id]);
+    return draft;
+  };
   const s = await waitFor(db, r.id, async () => {
     const st = must(await pl.call("GET", `/api/auto-pipeline/${runId}/status`), "Reading the run");
     if (st.status === "failed") throw httpError(st.error ?? "The story process stopped.", 502, "pipeline_failed");
+    if (st.conceptId) await register(st.conceptId);
     return st.status === "completed" && st.conceptId ? st : null;
   }, { label: "the script" });
-  // the finished project becomes Draft N of this project
-  const existing = (await db.query("SELECT id FROM project_drafts WHERE module = 'film' AND project_ref = $1", [s.conceptId])).rows[0];
-  const draft = existing ?? await registerExternalDraft(db, { parentDraftId: r.parent_draft_id, module: "film", projectRef: s.conceptId, note: `Revision: ${clip(r.instruction, 200)}`, actorUserId: r.created_by });
-  await db.query("UPDATE draft_revision_requests SET draft_id = $2 WHERE id = $1", [r.id, draft.id]);
+  await register(s.conceptId);
   // the judges' scores the process recorded, best per stage
   const best = new Map();
   for (const n of s.reviewNotes ?? []) {
@@ -885,7 +906,7 @@ export async function revisionDetail(db, requestId) {
     const [d, p] = [await getDraft(db, r.draft_id), await getDraft(db, r.parent_draft_id)];
     const diff = diffUnits(await draftUnits(db, p.module, p.project_ref), await draftUnits(db, d.module, d.project_ref));
     out.comparison = { counts: diff.counts, rows: diff.rows.filter((x) => x.status !== "preserved") };
-    out.draft = { id: d.id, title: d.label ?? `Draft ${d.draft_number}`, status: d.status };
+    out.draft = { id: d.id, title: d.label ?? `Draft ${d.draft_number}`, status: d.status, module: d.module, projectRef: d.project_ref };
   }
   out.agentWork = await agentWork(db, r);
   return out;
@@ -894,7 +915,40 @@ export async function revisionDetail(db, requestId) {
 // What the agent has made SO FAR for this new draft, step by step. A step the agent has not reached says so, and never shows an older draft's content.
 const WORK_STEPS = [["synopsis", "Synopsis"], ["characterArc", "Characters"], ["threeAct", "Story structure"], ["plot", "Plot"], ["screenplay", "Screenplay"]];
 const plain = (v, n = 900) => clip(flatten(v), n);
+const FILM_STEPS = [["synopsis", "Pitch deck / synopsis"], ["characterArc", "Characters"], ["threeAct", "Story structure"], ["plot", "Beats"], ["sceneList", "Scene list"], ["screenplay", "Screenplay"]];
+// Film: read what the story process has stored so far for the new project (its own tables), step by step.
+async function filmWork(db, r) {
+  const d = r.draft_id ? (await db.query("SELECT project_ref FROM project_drafts WHERE id = $1", [r.draft_id])).rows[0] : null;
+  const cid = d?.project_ref;
+  const one = async (sql, args) => (await db.query(sql, args)).rows[0] ?? null;
+  const deck = cid ? await one("SELECT id, content FROM pitch_decks WHERE concept_id = $1 ORDER BY id DESC LIMIT 1", [cid]) : null;
+  const sheet = deck ? await one("SELECT content FROM character_sheets WHERE pitch_deck_id = $1 ORDER BY id DESC LIMIT 1", [deck.id]) : null;
+  const act = deck ? await one("SELECT id, content FROM three_act_structures WHERE pitch_deck_id = $1 ORDER BY id DESC LIMIT 1", [deck.id]) : null;
+  const bits = act ? await one("SELECT id, content FROM bit_sheets WHERE three_act_structure_id = $1 ORDER BY id DESC LIMIT 1", [act.id]) : null;
+  const list = bits ? await one("SELECT id, content FROM scene_lists WHERE bit_sheet_id = $1 ORDER BY id DESC LIMIT 1", [bits.id]) : null;
+  const scenes = list ? (await one("SELECT count(*)::int AS n FROM screenplay_scenes WHERE scene_list_id = $1", [list.id])).n : 0;
+  const finished = ["awaiting_final_approval", "completed"].includes(r.status);
+  const have = { synopsis: deck?.content, characterArc: sheet?.content, threeAct: act?.content, plot: bits?.content, sceneList: list?.content };
+  const run = r.proposal?.pipelineRunId ? await one("SELECT review_notes FROM auto_pipeline_runs WHERE id = $1", [r.proposal.pipelineRunId]).catch(() => null) : null;
+  const best = new Map();
+  for (const n of run?.review_notes ?? []) { const t = typeof n === "string" ? n : n.text ?? ""; const m = /Judge score: (\d+)\/10/.exec(t); if (m) best.set(n.stage ?? "stage", Math.max(best.get(n.stage ?? "stage") ?? 0, Number(m[1]))); }
+  let working = null;
+  const steps = FILM_STEPS.map(([key, label]) => {
+    const content = have[key];
+    if (key === "screenplay") {
+      if (finished && scenes > 0) return { key, label, state: "done", text: `${scenes} scenes written.` };
+      if (scenes > 0) { working = key; return { key, label, state: "working", text: `${scenes} scenes written so far.` }; }
+    } else if (content) {
+      return { key, label, state: "done", text: plain(content) };
+    }
+    if (!working && r.status === "rewriting") { working = key; return { key, label, state: "working" }; }
+    return { key, label, state: "not_yet", note: "Not yet created — the screenplay writer is at an earlier stage." };
+  });
+  return { story: { ready: Boolean(r.proposal?.title), approved: Boolean(r.proposal?.approved), note: "The Story Brain is still designing the story." }, steps, judgeScores: [...best].map(([stage, score]) => ({ stage, score })), openable: Boolean(cid) };
+}
+
 async function agentWork(db, r) {
+  if (r.module === "film") return filmWork(db, r);
   const done = new Set((r.decisions ?? []).filter((x) => x.status === "done").map((x) => String(x.key).replace("stage:", "")));
   const step = (key) => (r.decisions ?? []).find((x) => x.key === `stage:${key}` && x.status === "done");
   let backfill = null;
@@ -951,6 +1005,8 @@ export async function productionImpact(db, draftId) {
 // ---------------------------------------------------------------------------
 export function registerDraftAgentRoutes(app, db, requireRole, { models = null } = {}) {
   const admin = requireRole("admin");
+  // after a restart, pick interrupted requests up again once the server has settled (the real server only; tests call resumeInterruptedRequests directly)
+  if (models && process.env.NODE_ENV !== "test" && !process.argv.some((a) => a.includes("--test"))) setTimeout(() => resumeInterruptedRequests(db, models).then((n) => n && console.log(`Auto-resumed ${n} draft request(s) after a restart.`)).catch((e) => console.error("Auto-resume of draft requests failed:", e.message)), 25000);
   const id = (v) => (/^\d+$/.test(String(v)) && Number(v) > 0 ? Number(v) : null);
   const wrap = (fn) => async (req, res) => {
     try { await fn(req, res); } catch (error) {

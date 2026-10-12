@@ -7029,9 +7029,8 @@ function App() {
     if (what === 'open-new') { await continueDraft({ module: extra.module, projectRef: extra.projectRef, resumeContext: {}, currentStage: 'idea' }); return }
     if (what === 'open') {
       const d = await fetch(`${BACKEND_URL}/api/drafts/requests/${extra}`).then((r) => r.json()).catch(() => null)
-      const dash = await fetch(`${BACKEND_URL}/api/drafts?module=${currentDraft.module}&projectRef=${currentDraft.projectRef}`).then((r) => r.json()).catch(() => null)
-      const target = dash?.drafts?.find((x) => x.id === d?.request?.draftId)
-      if (target) await continueDraft(target)
+      // works for a draft that is still being made too (it is offline in the list, but its project already exists)
+      if (d?.draft?.projectRef) await continueDraft({ id: d.draft.id, module: d.draft.module, projectRef: d.draft.projectRef, resumeContext: {}, currentStage: null })
     }
   }
 

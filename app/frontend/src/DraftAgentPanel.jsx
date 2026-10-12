@@ -117,6 +117,10 @@ function Revision({ requestId, backendUrl, onOpenDraft, onClose, onChanged }) {
       {data.agentWork && (
         <div className="da-work" aria-label="What the agent has made so far">
           <h4>What the agent has made so far</h4>
+          {(data.agentWork.judgeScores ?? []).length > 0 && <p className="dd-fine">Judges' scores so far: {data.agentWork.judgeScores.map((x) => `${x.stage} ${x.score}/10`).join(' · ')}</p>}
+          {data.draft && (data.agentWork.openable ?? true) && status !== 'awaiting_synopsis_approval' && (
+            <p><button type="button" className="dd-btn" onClick={() => onOpenDraft?.('open')}>Open what the agent has made so far</button> <span className="dd-fine">Read it, but let the agent finish before you edit.</span></p>
+          )}
           <ul>
             <li><span className={`chip ${data.agentWork.story.ready ? 'modified' : ''}`}>{data.agentWork.story.ready ? (data.agentWork.story.approved ? 'approved' : 'ready') : 'working'}</span> Story / synopsis{data.agentWork.story.ready ? '' : ` — ${data.agentWork.story.note}`}</li>
             {data.agentWork.steps.map((st) => (

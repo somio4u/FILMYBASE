@@ -1651,3 +1651,8 @@ Plain version: every project is now a set of **drafts**. Opening a project shows
 
 ## Adu opens on your story run
 - With a project open, Adu used to open on "This project" and the story run was hidden on the other tab. Now, while a story run is writing, waiting for your approval, or stopped, Adu opens on that run by default, and the "Write a new story" tab shows its state (● writing / ● needs your approval / ● stopped).
+
+## The agent's new draft is visible while it is being written (Film)
+- Before: a Film draft was only recorded when the whole script was finished, so the draft pages showed only the OLD draft. Now the new draft is recorded as soon as the agent's project exists (still offline, in "Being made"), and its pages hold only what the agent has written.
+- The Review screen lists, live: Pitch deck / synopsis, Characters, Story structure, Beats, Scene list, Screenplay (scene count), each with what the agent wrote or "Not yet created — the screenplay writer is at an earlier stage", plus the judges' scores so far and a button "Open what the agent has made so far". The Drafts "Being made" list has "Open so far".
+- After a server restart, interrupted draft requests now continue by themselves (at most 3 automatic tries each), in addition to the story run itself resuming.

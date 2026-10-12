@@ -168,6 +168,7 @@ export default function DraftDashboard({ module, projectRef, backendUrl, onConti
                 <li key={q.id} data-request-id={q.id}>
                   <span className="chip">{MAKING_LABEL[q.status] ?? String(q.status ?? '').replace(/_/g, ' ')}</span> “{String(q.instruction ?? '').slice(0, 80)}”
                   <button type="button" className="dd-btn primary" onClick={() => onReviewRequest?.({ openRequest: q, id: q.parentDraftId, module, projectRef })}>Review</button>
+                  {q.projectRef && q.status !== 'awaiting_synopsis_approval' && <button type="button" className="dd-btn" onClick={() => onContinue({ id: q.draftId, module, projectRef: q.projectRef, resumeContext: {}, currentStage: null })}>Open so far</button>}
                 </li>
               ))}
             </ul>

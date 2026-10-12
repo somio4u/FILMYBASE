@@ -7,11 +7,11 @@ import express from "express";
 import pg from "pg";
 import { ensureAllProductionSchemas } from "../productionSchema.js";
 import { analyzeScreenplay } from "../screenplayAnalysis.js";
-import { branchDraft, compareDrafts, draftUnits, ensureDraftFor, getDashboard, getDraft, updateDraft } from "../drafts.js";
+import { branchDraft, registerExternalDraft, compareDrafts, draftUnits, ensureDraftFor, getDashboard, getDraft, updateDraft } from "../drafts.js";
 import { applyChangeSet, approveFinal, approveSynopsis, cancelRequest, classifyPrompt, conform, failInterruptedRequests, getRequest, heuristicIntent, interpret, productionImpact, propose, registerDraftAgentRoutes, rejectChangeSet, requestSynopsisChanges, resolveTargets, retryRequest, revisionDetail, startAlternative, startRevision, undoChangeSet, whenIdle, readUnit } from "../draftAgent.js";
 import { createBlank } from "../drafts.js";
 import { fakePipeline } from "../draftAgentMock.js";
-import { setPollMs, cleanupDuplicateRevisions } from "../draftAgent.js";
+import { setPollMs, cleanupDuplicateRevisions, resumeInterruptedRequests } from "../draftAgent.js";
 
 const db = new pg.Pool({ database: process.env.TEST_DB || "filmmaking_app_test", user: process.env.PGUSER || "root", host: process.env.PGHOST || "/var/run/postgresql" });
 const requireRole = () => (req, res, next) => ((req.user = { id: 1 }), next());
@@ -450,6 +450,37 @@ test("offline until finished: a draft still being made is not listed as a draft;
   dash = await getDashboard(db, "ai_movie", ai);
   assert.equal((await db.query("SELECT count(*)::int AS n FROM project_drafts WHERE id = $1", [a.id])).rows[0].n, 0, "the older duplicate was deleted");
   assert.equal((await db.query("SELECT count(*)::int AS n FROM project_drafts WHERE id = $1", [b.id])).rows[0].n, 1, "the newest was kept");
+});
+
+test("Film: what the story process has written so far is shown step by step and can be opened; later steps say 'not yet created'", async () => {
+  const d = await ensureDraftFor(db, "film", film);
+  const c = (await db.query("INSERT INTO concepts (concept_text, storylines, title) VALUES ('x','[]','Half Written') RETURNING id")).rows[0].id;
+  const deck = (await db.query("INSERT INTO pitch_decks (concept_id, content, status) VALUES ($1,$2,'pending') RETURNING id", [c, JSON.stringify({ title: { en: "Kali's Eyes" }, logline: { en: "A doctor and a goddess." } })])).rows[0].id;
+  await db.query("INSERT INTO character_sheets (pitch_deck_id, content, status) VALUES ($1,$2,'pending')", [deck, JSON.stringify([{ name: "Soumya" }])]);
+  const nd = await registerExternalDraft(db, { parentDraftId: d.id, module: "film", projectRef: c, note: "Revision: x", actorUserId: 1 });
+  const req = (await db.query("INSERT INTO draft_revision_requests (group_id, module, parent_draft_id, draft_id, intent, instruction, status, proposal) VALUES ($1,'film',$2,$3,'NEW_DRAFT','x','rewriting',$4) RETURNING id", [d.group_id, d.id, nd.id, JSON.stringify({ title: "Kali's Eyes", approved: true })])).rows[0].id;
+  const w = (await revisionDetail(db, req)).agentWork;
+  assert.deepEqual(w.steps.map((x) => x.state), ["done", "done", "working", "not_yet", "not_yet", "not_yet"]);
+  assert.match(w.steps[0].text, /Kali's Eyes/); assert.match(w.steps[3].note, /Not yet created/); assert.equal(w.openable, true);
+  const dash = await getDashboard(db, "film", film);
+  assert.ok(!dash.drafts.some((x) => x.id === nd.id), "still offline while it is being written");
+  assert.equal(dash.revisions.find((x) => x.id === req).projectRef, c, "its project can be opened so far");
+  await cancelRequest(db, req);
+});
+
+test("after a restart, requests that were interrupted continue by themselves (at most 3 automatic tries)", async () => {
+  const d = await ensureDraftFor(db, "ai_movie", ai);
+  const models = mockModels();
+  const { request } = await startRevision(db, models, d.id, { instruction: "Change the villain.", confirmed: true, actorUserId: 1 });
+  await whenIdle(request.id);
+  await db.query("UPDATE draft_revision_requests SET status = 'failed', error = 'Interrupted by a server restart. Press Retry to continue.' WHERE id = $1", [request.id]);
+  await db.query("UPDATE draft_revision_requests SET status = 'cancelled' WHERE id <> $1 AND status NOT IN ('completed','cancelled')", [request.id]); // only this test's request
+  assert.equal(await resumeInterruptedRequests(db, models), 1);
+  await whenIdle(request.id);
+  assert.equal((await getRequest(db, request.id)).status, "awaiting_synopsis_approval", "it carried on from where it was");
+  await db.query("UPDATE draft_revision_requests SET status = 'failed', error = 'Interrupted by a server restart. Press Retry to continue.', context = context || '{\"autoRetries\":3}'::jsonb WHERE id = $1", [request.id]);
+  assert.equal(await resumeInterruptedRequests(db, models), 0, "never more than 3 automatic tries");
+  await cancelRequest(db, request.id);
 });
 
 test("new story: choose same project (a draft on the dashboard) or a new project; the current draft is untouched; both modules", async () => {

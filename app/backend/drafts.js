@@ -239,7 +239,7 @@ export async function getDashboard(db, module, projectRef, { actorUserId = null 
     });
   }
   const revisions = (await db.query("SELECT id, status, instruction, draft_id, parent_draft_id, created_at FROM draft_revision_requests WHERE group_id = $1 AND status NOT IN ('completed','cancelled') ORDER BY id DESC", [me.group_id])).rows
-    .map((r) => ({ id: r.id, status: r.status, instruction: r.instruction, draftId: r.draft_id, parentDraftId: r.parent_draft_id, createdAt: r.created_at, offline: MAKING_STATUSES.includes(r.status) }));
+    .map((r) => ({ id: r.id, status: r.status, instruction: r.instruction, draftId: r.draft_id, projectRef: r.draft_id ? (allRows.find((x) => x.id === r.draft_id)?.project_ref ?? null) : null, parentDraftId: r.parent_draft_id, createdAt: r.created_at, offline: MAKING_STATUSES.includes(r.status) }));
   const activeDraftId = offline.has(group.active_draft_id) ? (rows.find((r) => r.kind === "numbered")?.id ?? rows[0]?.id ?? null) : group.active_draft_id;
   return { groupId: group.id, module, activeDraftId, drafts, revisions, requestedProjectRef: projectRef };
 }

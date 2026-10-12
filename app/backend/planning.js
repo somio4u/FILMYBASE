@@ -6,6 +6,8 @@
 // All of it is free: no model is called here.
 
 import { effectiveDetails } from "./production.js";
+import { unitIndex } from "./generationUnits.js";
+import { GENRE_PROFILES, inferGenre } from "./shotOptimizer.js";
 import { listShots } from "./shots.js";
 import { audioSpec, estimateCost, frameSpec, sheetSpec, veoSecondsFor, videoSpec, voiceForSpeaker } from "./generations.js";
 import { currentScreenplayVersion, ensureDraftBlueprint, httpError, latestBlueprint, registerScreenplayVersion } from "./blueprint.js";
@@ -26,7 +28,18 @@ export async function computeSpecs(db, projectId) {
   )).rows;
   const specs = [];
   for (const a of assets) specs.push({ ...sheetSpec(a, style), _asset: a, _used: used.has(a.id) });
+  const units = await unitIndex(db, projectId);
   for (const s of shots) {
+    const u = units.get(s.id);
+    if (u && u.members.length > 1) {
+      // several shots share ONE generation: only the lead has a picture and a video request; the others read from it
+      if (!u.isLead) continue;
+      const rows = shots.filter((x) => u.members.includes(x.id));
+      const whole = { ...s, description: u.members.map((id) => rows.find((r) => r.id === id)?.description).filter(Boolean).join(" Then "), durationSec: u.unit.duration_ms / 1000 };
+      specs.push({ ...frameSpec(s, style, settings.aspectRatio), _shot: s });
+      specs.push({ ...videoSpec(whole, style, settings.aspectRatio), _shot: s });
+      continue;
+    }
     specs.push({ ...frameSpec(s, style, settings.aspectRatio), _shot: s });
     specs.push({ ...videoSpec(s, style, settings.aspectRatio), _shot: s });
   }
@@ -141,6 +154,11 @@ export async function validateBlueprint(db, projectId) {
   const planned = shots.reduce((n, s) => n + s.durationSec, 0) / 60;
   const wanted = scenes.reduce((n, s) => n + Number(s.estimated_minutes ?? 0), 0);
   if (wanted > 0 && planned < wanted * 0.5) add(warnings, "short_runtime", `The planned shots add up to ${planned.toFixed(1)} minutes but the screenplay estimates about ${wanted.toFixed(1)}.`);
+  // an unusually dense shot list costs a lot: point at the AI Shot Optimization review before any paid work is planned
+  const filmSeconds = shots.reduce((n, s) => n + s.durationSec, 0);
+  const range = GENRE_PROFILES[inferGenre(shots)];
+  const approvedPlan = (await db.query("SELECT 1 FROM production_shot_plans WHERE project_id = $1 AND status = 'approved'", [projectId]).catch(() => ({ rowCount: 0 }))).rowCount > 0;
+  if (!approvedPlan && filmSeconds > 0 && shots.length > range.max * (filmSeconds / 300) * 1.25) add(warnings, "dense_shot_plan", `${shots.length} shots for ${Math.round(filmSeconds)} seconds is unusually dense (a film like this usually needs ${Math.round(range.min * filmSeconds / 300)}–${Math.round(range.max * filmSeconds / 300)}). Each shot is a separate paid video request: run the AI Shot Optimization review (Shots tab) before approving.`, { count: shots.length });
   const spend = await spendSummary(db, projectId);
   const estimate = estimateBlueprint({ shots, assets, lines, approved: await approvedSets(db, projectId), spend });
   if (!estimate.fitsBudget) add(warnings, "over_budget", `Making everything would cost about $${estimate.totalUsd.toFixed(2)} but only $${estimate.remainingBudgetUsd.toFixed(2)} is left of the money limit. You can raise the limit later or generate in stages.`);

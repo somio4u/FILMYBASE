@@ -118,17 +118,25 @@ export function shotsFromScriptNotes(elements) {
   return shots;
 }
 
-// A plain cut with no AI: one wide establishing shot, then one shot per action
-// paragraph and one per spoken line.
+// A plain cut with no AI: one wide establishing shot, one shot per action paragraph, and one shot per spoken EXCHANGE
+// (up to 3 neighbouring lines) — not one per line: cutting every line separately is what makes a short film balloon to hundreds of shots.
 export function shotsFromRules(scene, elements) {
   const shots = [];
   const place = [scene.location, scene.time_of_day].filter(Boolean).join(", ");
-  const firstAction = elements.find((e) => e.kind === "action");
-  shots.push({ framing: "Wide", cameraAngle: null, cameraMove: null, description: `Establishing view of ${place || scene.heading}.${firstAction ? "" : ""}`.trim(), dialogueIds: [], source: "rules" });
+  shots.push({ framing: "Wide", cameraAngle: null, cameraMove: null, description: `Establishing view of ${place || scene.heading}.`, dialogueIds: [], source: "rules" });
+  let run = [];
+  const flush = () => {
+    if (run.length === 0) return;
+    const speakers = [...new Set(run.map((e) => e.speaker ?? "Someone"))];
+    shots.push({ framing: speakers.length > 1 ? "Two-shot" : "Medium close-up", cameraAngle: "Eye level", cameraMove: null, description: `${speakers.join(" and ")} ${run.length > 1 ? "talk" : "speaks"}${run[0].parenthetical ? ` (${run[0].parenthetical})` : ""}.`, dialogueIds: run.map((e) => e.id), source: "rules" });
+    run = [];
+  };
   for (const e of elements) {
+    if (e.kind === "dialogue") { run.push(e); if (run.length === 3) flush(); continue; }
+    flush();
     if (e.kind === "action") shots.push({ ...readShotNote(e.text), framing: readShotNote(e.text).framing ?? "Medium", description: e.text, dialogueIds: [], source: "rules" });
-    else if (e.kind === "dialogue") shots.push({ framing: "Medium close-up", cameraAngle: "Eye level", cameraMove: null, description: `${e.speaker ?? "Someone"} speaks${e.parenthetical ? ` (${e.parenthetical})` : ""}.`, dialogueIds: [e.id], source: "rules" });
   }
+  flush();
   return shots;
 }
 
@@ -156,6 +164,7 @@ export function validateAiShots(raw, elements) {
     shots.push({
       framing: clean(item.framing, 60), cameraAngle: clean(item.cameraAngle, 60), cameraMove: clean(item.cameraMove, 60), description,
       durationSec: Number.isFinite(duration) && duration >= 1 && duration <= 30 ? duration : null, dialogueIds,
+      purpose: clean(item.purpose, 160), signature: item.signature === true, continuousWithPrevious: item.continuousWithPrevious === true,
       names: [...(Array.isArray(item.characters) ? item.characters : []), ...(Array.isArray(item.props) ? item.props : [])].filter((n) => typeof n === "string").slice(0, 20),
       source: "ai",
     });
@@ -185,21 +194,38 @@ function sceneForPrompt(scene, elements, assets) {
   return `SCENE ${scene.scene_number} — ${scene.heading}\nPeople, objects and places known in this scene: ${assets.map((a) => `${a.name} (${a.kind})`).join("; ") || "none listed"}\n\n${lines.join("\n")}`;
 }
 
+// Rough on-screen seconds of a scene, to give the cutter a shot budget (a guide, never a limit).
+export function estimateSceneSeconds(elements) {
+  let sec = 0;
+  for (const e of elements) {
+    const words = String(e.text_en || e.text_hi || e.text || "").split(/\s+/).filter(Boolean).length;
+    if (e.kind === "dialogue") sec += 1 + words / 2.5;
+    else if (e.kind === "action") sec += Math.max(2, words / 4);
+  }
+  return Math.max(4, Math.round(sec));
+}
+
 export function shotDivisionPrompt(scene, elements, assets, extraPrompt = "") {
-  return `You are an experienced film director preparing a shot list. Divide the scene below into numbered camera shots.
+  const seconds = estimateSceneSeconds(elements);
+  const aim = Math.max(1, Math.round(seconds / 6.5));
+  return `You are an experienced film director preparing a shot list for AI-generated video. Divide the scene below into numbered camera shots.
+
+EVERY SHOT MUST JUSTIFY ITS EXISTENCE. A shot earns its place only if it advances the story, reveals character or emotion, establishes geography, shows essential action, builds suspense, adds new visual information, delivers a memorable moment, or is a necessary transition. Each AI-generated shot costs real money, so do NOT cut just because a character moves, changes expression, speaks, or does a small action.
 
 Rules:
-- One shot = one continuous camera view. Typical length 2-8 seconds.
-- Cover everything that happens on screen, in order. Do not invent new story events.
-- Include an establishing shot when the place changes.
-- For every spoken line (marked like [D004]) put its code in exactly one shot's dialogueCodes. A shot may hold several lines of one exchange.
+- One shot = one continuous camera view; the camera may move inside it. This scene runs about ${seconds} seconds, so aim for about ${aim} shots (more only when the action truly needs them, fewer for a quiet scene). Average 5-8 seconds per shot; longer for drama, atmosphere and reveals, shorter only for fast action and impacts.
+- Do NOT give every spoken line its own shot. Put a whole exchange in one shot (a two-shot or a slow push-in) and cut away only when the visuals change.
+- Prefer one continuous tracking, pushing or panning shot over several short cuts of the same movement, and say so in the description.
+- Never merge things that need separate views: different places, a punch and the reaction from elsewhere, a reveal and what it reveals.
+- Cover everything that happens on screen, in order. Do not invent new story events. Include an establishing shot only when the place changes.
+- For every spoken line (marked like [D004]) put its code in exactly one shot's dialogueCodes.
 - framing: one of Wide, Medium, Medium close-up, Close-up, Extreme close-up, Over-the-shoulder, POV, Two-shot, Insert.
 - cameraAngle: e.g. Eye level, Low angle, High angle, Overhead. cameraMove: e.g. Static, Pan, Tilt, Push-in, Tracking, Handheld.
-- description: ONE concrete sentence of what the camera SEES (no sound, no thoughts).
+- description: ONE concrete sentence of what the camera SEES (no sound, no thoughts). durationSec: 2 to 8.
+- purpose: a few words saying why this shot exists. signature: true only for a signature cinematic moment named in the directions below (these are never merged away). continuousWithPrevious: true if this shot continues the previous one's movement without a cut.
 - characters / props: use the exact names from the known list when they are visible in the shot.
-- durationSec: a number from 1 to 12.
 
-Return JSON only: {"shots":[{"framing":"","cameraAngle":"","cameraMove":"","description":"","durationSec":4,"characters":[],"props":[],"dialogueCodes":[]}]}
+Return JSON only: {"shots":[{"framing":"","cameraAngle":"","cameraMove":"","description":"","durationSec":5,"purpose":"","signature":false,"continuousWithPrevious":false,"characters":[],"props":[],"dialogueCodes":[]}]}
 
 ${extraPrompt ? `${extraPrompt}\n\n` : ""}${sceneForPrompt(scene, elements, assets)}`;
 }
@@ -261,6 +287,10 @@ async function insertShots(client, projectId, scene, elements, assets, shots, st
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING *`,
       [projectId, scene.id, code, startOrder + i, s.framing ?? null, s.cameraAngle ?? null, s.cameraMove ?? null, s.description, s.durationSec ?? 4, s.source ?? "manual", s.sourceLabel ?? null]
     )).rows[0];
+    if (s.purpose || s.signature || s.continuousWithPrevious) {
+      // columns added by the Shot Optimization upgrade (see shotPlans.js); only written when the AI supplied them
+      await client.query("UPDATE production_shots SET purpose = $2, is_signature = $3, continuous_with_prev = $4 WHERE id = $1", [row.id, s.purpose ?? null, Boolean(s.signature), Boolean(s.continuousWithPrevious)]).catch(() => {});
+    }
     for (const id of s.dialogueIds ?? []) await client.query("INSERT INTO production_shot_dialogue (shot_id, element_id) VALUES ($1,$2) ON CONFLICT DO NOTHING", [row.id, id]);
     for (const assetId of assetsForShot({ ...s, dialogueIds: s.dialogueIds ?? [] }, elements, assets)) {
       await client.query("INSERT INTO production_shot_assets (shot_id, asset_id) VALUES ($1,$2) ON CONFLICT DO NOTHING", [row.id, assetId]);

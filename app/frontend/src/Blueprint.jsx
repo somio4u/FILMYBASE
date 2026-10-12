@@ -5,6 +5,7 @@
 //   Assets     the Production Dossier (characters, environments, properties as planned specifications)
 // Approving the Blueprint creates the Timeline placeholders immediately.
 
+import ShotOptimization from './ShotOptimization.jsx'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import ProductionDossier from './ProductionDossier.jsx'
 import PipelineStage from './PipelineStage.jsx'
@@ -228,7 +229,12 @@ export default function Blueprint({ projectId, backendUrl, onNavigate }) {
         <button type="button" className="dossier-tab" onClick={() => onNavigate?.('cinematic')}>Cinematic Director ↗</button>
       </nav>
       {tab === 'overview' && <Overview api={api} projectId={projectId} bp={bp} manifest={manifest} reload={reload} onTab={setTab} />}
-      {tab === 'shots' && <PipelineStage stage="shots" projectId={projectId} backendUrl={backendUrl} />}
+      {tab === 'shots' && (
+        <>
+          <ShotOptimization projectId={projectId} backendUrl={backendUrl} onChanged={reload} />
+          <PipelineStage stage="shots" projectId={projectId} backendUrl={backendUrl} />
+        </>
+      )}
       {tab === 'storyboard' && <PipelineStage stage="storyboard" projectId={projectId} backendUrl={backendUrl} />}
       {tab === 'prompts' && <Prompts api={api} projectId={projectId} manifest={manifest} />}
       {tab === 'assets' && <ProductionDossier projectId={projectId} backendUrl={backendUrl} />}

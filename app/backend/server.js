@@ -40,6 +40,7 @@ import { registerStudioRoutes } from "./studio.js";
 import { registerTimelineRoutes } from "./timeline.js";
 import { registerAudioCueRoutes } from "./audioCues.js";
 import { registerTimelineEditRoutes } from "./timelineEdit.js";
+import { registerShotPlanRoutes } from "./shotPlans.js";
 import { registerTimelineExportRoutes } from "./timelineExport.js";
 import { registerEventRoutes } from "./events.js";
 import cookieParser from "cookie-parser";
@@ -19255,6 +19256,8 @@ registerPlanningRoutes(app, db, requireRole);
 registerStudioRoutes(app, db, requireRole);
 registerTimelineRoutes(app, db, requireRole);
 registerTimelineEditRoutes(app, db, requireRole);
+// The Shot Optimization review runs through the Shot Cutter's own model route (Pro in Professional/Maximum) and the money guard.
+registerShotPlanRoutes(app, db, requireRole, { getTextJson: async (projectId) => async (prompt) => (await aiMovieStory.ask.ask(projectId, "shot-cutter-complex", { contents: prompt, maxOutputTokens: 8192 })).data });
 registerTimelineExportRoutes(app, db, requireRole, { store: productionMedia.store });
 registerScreenplayRoutes(app, db, requireRole);
 // Pipeline steps 2-8: shots, storyboard, AI pictures/voices/video, export.

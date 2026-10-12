@@ -6,6 +6,7 @@
 //   frameScenes()        the scenes with how many of their first frames are approved / ready to make / blocked
 //   frameSlots(scene)    one slot per PLANNED shot: first-frame prompt, the references it depends on, state, versions
 
+import { unitIndex } from "./generationUnits.js";
 import { buildShotManifest, httpError } from "./blueprint.js";
 import { promptStatus } from "./planning.js";
 import { promptView } from "./prompts.js";
@@ -94,7 +95,11 @@ export async function frameSlots(db, projectId, sceneDbId) {
   const gens = await loadGenerations(db, projectId, ["keyframe"], "AND g.shot_id = ANY($3)", [shots.map((s) => s.db_id)]);
   const assetByCode = new Map(manifest.assets.map((a) => [a.asset_id, a]));
   const approvedRefIds = new Set((await db.query("SELECT id FROM production_generations WHERE project_id = $1 AND review = 'approved' AND asset_id IS NOT NULL", [projectId])).rows.map((r) => r.id));
+  const units = await unitIndex(db, projectId);
+  const codeOfShot = new Map(manifest.shots.map((x) => [x.db_id, x.shot_id]));
   const slots = shots.map((s) => {
+    const unit = units.get(s.db_id);
+    const covered = unit && unit.members.length > 1 && !unit.isLead ? codeOfShot.get(unit.leadId) : null;
     const list = gens.filter((g) => g.shot_id === s.db_id);
     const canonical = list.find((g) => g.review === "approved" && g.status === "ready") ?? null;
     const prompt = promptFor(status, hashFor, current, "first_frame", null, s.db_id, null);
@@ -104,8 +109,9 @@ export async function frameSlots(db, projectId, sceneDbId) {
     });
     const outdated = (g) => g.kind === "keyframe" && Array.isArray(g.params?.refs) && g.params.refs.some((r) => !approvedRefIds.has(r));
     const canonicalView = canonical && versionView(canonical, prompt?.id ?? null, outdated(canonical));
-    const ready = s.shot_status === "approved" && deps.every((d) => d.approved);
+    const ready = s.shot_status === "approved" && deps.every((d) => d.approved) && !covered;
     return {
+      generationUnit: unit ? { code: unit.unit.code, members: unit.members.length, isLead: unit.isLead } : null, coveredBy: covered,
       shotId: s.shot_id, dbId: s.db_id, number: s.number, sequence: s.sequence, action: s.action, framing: s.framing, cameraAngle: s.camera_angle, cameraMove: s.camera_move,
       plannedDurationMs: s.planned_duration_ms, state: s.image.state, prompt, dependencies: deps,
       readiness: { ok: ready, shotDivisionApproved: s.shot_status === "approved", missing: deps.filter((d) => !d.approved).map((d) => `${d.code} ${d.name}`) },
@@ -159,12 +165,16 @@ export async function videoSlots(db, projectId, sceneDbId) {
   const takes = await loadGenerations(db, projectId, ["video"], "AND g.shot_id = ANY($3)", [ids]);
   const frames = await loadGenerations(db, projectId, ["keyframe"], "AND g.shot_id = ANY($3) AND g.review = 'approved' AND g.status = 'ready'", [ids]);
   const frameOf = new Map(frames.map((g) => [g.shot_id, g]));
+  const units = await unitIndex(db, projectId);
+  const codeOf = new Map(manifest.shots.map((x) => [x.db_id, x.shot_id]));
   const slots = shots.map((s) => {
+    const unit = units.get(s.db_id);
+    const covered = unit && unit.members.length > 1 && !unit.isLead ? codeOf.get(unit.leadId) : null;
     const list = takes.filter((g) => g.shot_id === s.db_id);
     const canonical = list.find((g) => g.review === "approved" && g.status === "ready") ?? null;
     const frame = frameOf.get(s.db_id) ?? null;
     const prompt = promptFor(status, hashFor, current, "video", null, s.db_id, null);
-    const seconds = veoSecondsFor(s.planned_duration_ms / 1000);
+    const seconds = unit && unit.members.length > 1 && unit.isLead ? unit.unit.requested_seconds : veoSecondsFor(s.planned_duration_ms / 1000);
     // a take made from a first frame that has since been replaced no longer matches the approved picture
     const fromOld = (g) => Boolean(frame && g.params?.fromGeneration && g.params.fromGeneration !== frame.id);
     const latest = list[0];
@@ -173,7 +183,9 @@ export async function videoSlots(db, projectId, sceneDbId) {
       shotId: s.shot_id, dbId: s.db_id, number: s.number, sequence: s.sequence, action: s.action, framing: s.framing, cameraMove: s.camera_move,
       plannedDurationMs: s.planned_duration_ms, targetSeconds: seconds, allowedSeconds: [4, 6, 8],
       firstFrame: frame ? { id: frame.id, mediaUrl: mediaUrl(frame), version: frame.version } : null,
-      prompt, state: s.video.state, readiness: { ok: Boolean(frame), reason: frame ? null : "Approve this shot's first frame in the Image Studio first." },
+      prompt, state: s.video.state,
+      generationUnit: unit ? { code: unit.unit.code, leadShot: codeOf.get(unit.leadId), members: unit.members.length, isLead: unit.isLead, requestedSeconds: unit.unit.requested_seconds, offsetMs: unit.offsetMs } : null, coveredBy: covered,
+      readiness: covered ? { ok: false, reason: `Covered by the combined video of ${covered}.` } : { ok: Boolean(frame), reason: frame ? null : "Approve this shot's first frame in the Image Studio first." },
       characterIds: s.character_ids, environmentIds: s.environment_ids, propIds: s.prop_ids,
       canonical: canonical && { ...versionView(canonical, prompt?.id ?? null, fromOld(canonical)), seconds: canonical.params?.seconds ?? null },
       latestReady: latestReady && { ...versionView(latestReady, prompt?.id ?? null, fromOld(latestReady)), seconds: latestReady.params?.seconds ?? null },

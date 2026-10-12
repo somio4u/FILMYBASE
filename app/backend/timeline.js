@@ -12,6 +12,7 @@
 // Media that is only generated (not approved) is reported as "review needed" and never replaces the canonical media.
 // Durations are kept apart: planned (from the Shot Cutter), source (what the provider made), timeline (what the edit uses).
 
+import { unitIndex } from "./generationUnits.js";
 import { audioDurationFallbackMs } from "./timelineMath.js";
 import { publish } from "./events.js";
 import { buildShotManifest } from "./blueprint.js";
@@ -84,6 +85,8 @@ async function ensureTimeline(client, projectId, blueprintVersion) {
 // what is new: a clip a person has edited keeps its edits; a shot that left the Blueprint keeps its clip, flagged as orphaned.
 export async function syncTimelineFromBlueprint(db, projectId, blueprintVersion) {
   const manifest = await buildShotManifest(db, projectId);
+  const units = await unitIndex(db, projectId);
+  const offsetOf = (shotDbId) => { const u = units.get(shotDbId); return u && u.members.length > 1 ? u.offsetMs : 0; }; // where in the shared video this shot starts
   const client = await db.connect();
   const result = { created: 0, updated: 0, orphaned: 0, dialogue: 0 };
   let committed = false;
@@ -105,15 +108,15 @@ export async function syncTimelineFromBlueprint(db, projectId, blueprintVersion)
       if (!old) {
         const start = anyEdited ? tail : shot.planned_start_ms;
         await client.query(
-          `INSERT INTO production_timeline_clips (timeline_id, track_id, kind, shot_id, label, order_index, start_ms, duration_ms, planned_duration_ms) VALUES ($1,$2,'shot',$3,$4,$5,$6,$7,$7)`,
-          [timeline.id, tracks.V1, shot.db_id, label, shot.sequence, start, shot.planned_duration_ms]
+          `INSERT INTO production_timeline_clips (timeline_id, track_id, kind, shot_id, label, order_index, start_ms, duration_ms, planned_duration_ms, source_in_ms) VALUES ($1,$2,'shot',$3,$4,$5,$6,$7,$7,$8)`,
+          [timeline.id, tracks.V1, shot.db_id, label, shot.sequence, start, shot.planned_duration_ms, offsetOf(shot.db_id)]
         );
         if (anyEdited) tail = start + shot.planned_duration_ms;
         result.created++;
       } else if (!old.edited) {
         await client.query(
-          "UPDATE production_timeline_clips SET label = $2, order_index = $3, start_ms = $4, duration_ms = $5, planned_duration_ms = $5, orphaned = FALSE, updated_at = now() WHERE id = $1",
-          [old.id, label, shot.sequence, anyEdited ? old.start_ms : shot.planned_start_ms, shot.planned_duration_ms]
+          "UPDATE production_timeline_clips SET label = $2, order_index = $3, start_ms = $4, duration_ms = $5, planned_duration_ms = $5, source_in_ms = $6, orphaned = FALSE, updated_at = now() WHERE id = $1",
+          [old.id, label, shot.sequence, anyEdited ? old.start_ms : shot.planned_start_ms, shot.planned_duration_ms, offsetOf(shot.db_id)]
         );
         result.updated++;
       } else {
@@ -223,6 +226,7 @@ export async function getTimeline(db, projectId) {
   const approved = (kind, key, id) => gens.find((g) => g.kind === kind && g[key] === id && g.review === "approved" && g.status === "ready") ?? null;
   const pending = (kind, key, id) => gens.filter((g) => g.kind === kind && g[key] === id && g.status === "ready" && g.review === "pending").length;
   const byId = new Map(gens.map((g) => [g.id, g]));
+  const units = await unitIndex(db, projectId);
   const cuesById = new Map((await db.query("SELECT id, approved, media_id, prompt FROM production_audio_cues WHERE project_id = $1", [projectId])).rows.map((r) => [r.id, r]));
 
   const out = clips.map((c) => {
@@ -233,18 +237,22 @@ export async function getTimeline(db, projectId) {
     };
     if (c.kind === "shot") {
       const shot = shotById.get(c.shot_id);
-      const frame = approved("keyframe", "shot_id", c.shot_id);
-      let video = approved("video", "shot_id", c.shot_id);
+      // a shot that rides inside another shot's combined generation unit plays a different part of the LEAD shot's video (stored once)
+      const ux = units.get(c.shot_id);
+      const src = ux && ux.members.length > 1 ? ux.leadId : c.shot_id;
+      const frame = approved("keyframe", "shot_id", src);
+      let video = approved("video", "shot_id", src);
       // an explicit take chosen in the edit wins, if it still is a finished video of this shot
       const chosen = c.media_generation_id ? byId.get(c.media_generation_id) : null;
-      if (chosen && chosen.kind === "video" && chosen.shot_id === c.shot_id && chosen.status === "ready") video = chosen;
+      if (chosen && chosen.kind === "video" && chosen.shot_id === src && chosen.status === "ready") video = chosen;
       const sourceMs = video ? (video.params?.seconds ? Number(video.params.seconds) * 1000 : video.duration_ms ?? null) : null;
       const state = video ? "video" : frame ? "first_frame" : "planned";
       return {
         ...base, shotRef: shot?.shot_id ?? null, state, sourceDurationMs: sourceMs,
+        generationUnit: ux ? { code: ux.unit.code, members: ux.members.length, isLead: ux.isLead, leadShotId: ux.leadId, requestedSeconds: ux.unit.requested_seconds } : null,
         media: video ? { type: "video", generationId: video.id, url: mediaUrl(video), version: video.version } : frame ? { type: "image", generationId: frame.id, url: mediaUrl(frame), version: frame.version } : null,
         frame: frame ? { generationId: frame.id, url: mediaUrl(frame) } : null,
-        reviewNeeded: { frame: pending("keyframe", "shot_id", c.shot_id), video: pending("video", "shot_id", c.shot_id) },
+        reviewNeeded: { frame: pending("keyframe", "shot_id", src), video: pending("video", "shot_id", src) },
         imagePrompt: shot?.image.prompt_id ? prompts.get(shot.image.prompt_id) ?? null : null,
         videoPrompt: shot?.video.prompt_id ? prompts.get(shot.video.prompt_id) ?? null : null,
         flags: { sourceTooShort: Boolean(sourceMs && c.source_in_ms + c.duration_ms > sourceMs), removedFromBlueprint: c.orphaned },

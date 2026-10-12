@@ -18,6 +18,7 @@ import { effectiveDetails } from "./production.js";
 import { assertWithinBudget, getSettings, priceTable, recordSpend, VOICES } from "./pipelineSettings.js";
 import { ensurePrompt, hashInputs } from "./prompts.js";
 import { publish } from "./events.js";
+import { unitShotView } from "./generationUnits.js";
 
 const httpError = (message, status = 400, code = "bad_request") => Object.assign(new Error(message), { status, code });
 
@@ -342,7 +343,9 @@ export function createGenerationService({ db, store, providers, env = process.en
     },
 
     // ---- step 7: video takes ----
-    async generateTake(projectId, shot, { actorUserId = null, durationSec = null } = {}) {
+    async generateTake(projectId, rawShot, { actorUserId = null, durationSec = null } = {}) {
+      // a lead shot of a multi-shot generation unit makes ONE video for the whole unit; a shot riding inside it cannot make its own
+      const { shot } = await unitShotView(db, projectId, rawShot);
       const keyframe = (await db.query("SELECT * FROM production_generations WHERE shot_id = $1 AND kind = 'keyframe' AND review = 'approved' AND status = 'ready'", [shot.id])).rows[0];
       if (!keyframe?.media_id) throw httpError(`Shot ${shot.code} needs an approved picture first. Approve one of its pictures, then make video.`, 409, "not_ready");
       const settings = await getSettings(db, projectId);

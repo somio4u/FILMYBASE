@@ -1628,3 +1628,10 @@ Plain version: every project is now a set of **drafts**. Opening a project shows
 
 ## Buttons retry while the server wakes up
 - Approve, "Fix it with my note" and "Pick up where it broke" now retry automatically (up to about a minute) when the server is waking up or restarting, saying "The server is waking up — trying again…", instead of showing "Oops, something went wrong". Real server messages are still shown as they are.
+
+## Unmissable cliffhangers + divine elements welcome (story template)
+- The Story Brain rules now include a "cliffhanger engine": every episode (or film sequence) except the last must end on one concrete final image plus a burning question, using a rotating toolbox (impossible image, reframe, clock, turn, choice, door), bigger each time, with 2-3 theories for viewers to argue about. Episode 1 delivers the story's biggest promise (in a mythic story, the first arrival of the divine).
+- Each episode's design now also records: cliffhanger type, last image, burning question, audience theories and how the next episode picks it up. The Story Bible shows them. The old "ending hook" is kept.
+- The audience critic now scores every ending (anything under 8 is a problem) and flags repeated types and weak "to be continued" endings.
+- Divine and supernatural elements (possession, miracles, divine help) are now welcome: the critics no longer treat them as clichés or "deus ex machina" when they follow the story's own rules. "Fix it with my note" keeps them and keeps the cliffhanger standard.
+- Applies to NEW Story Bibles and to any Bible revised with a note. A Bible that is already finished keeps its old endings until it is revised.

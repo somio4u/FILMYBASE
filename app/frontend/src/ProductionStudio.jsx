@@ -7,6 +7,7 @@ import { useCallback, useEffect, useState } from 'react'
 import Blueprint from './Blueprint.jsx'
 import TimelineView from './TimelineView.jsx'
 import ImageStudio from './ImageStudio.jsx'
+import { VideoStudio, AudioStudio } from './VideoAudioStudio.jsx'
 import PipelineStage from './PipelineStage.jsx'
 import { useLive } from './useLive.js'
 import './Production.css'
@@ -81,8 +82,8 @@ export default function ProductionStudio({ workspace, projectId, backendUrl, onN
       {workspace === 'blueprint' && <Blueprint projectId={projectId} backendUrl={backendUrl} onNavigate={onNavigate} />}
       {workspace === 'timeline' && <TimelineView projectId={projectId} backendUrl={backendUrl} onNavigate={onNavigate} />}
       {workspace === 'imageStudio' && <ImageStudio projectId={projectId} backendUrl={backendUrl} />}
-      {workspace === 'videoStudio' && <PipelineStage stage="video" projectId={projectId} backendUrl={backendUrl} />}
-      {workspace === 'audioStudio' && <PipelineStage stage="audio" projectId={projectId} backendUrl={backendUrl} />}
+      {workspace === 'videoStudio' && <VideoStudio projectId={projectId} backendUrl={backendUrl} onNavigate={onNavigate} />}
+      {workspace === 'audioStudio' && <AudioStudio projectId={projectId} backendUrl={backendUrl} />}
       {workspace === 'export' && <PipelineStage stage="export" projectId={projectId} backendUrl={backendUrl} />}
     </div>
   )

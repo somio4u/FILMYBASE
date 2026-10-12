@@ -18,6 +18,7 @@ import { ensureGenerationSchema, failStaleGenerations } from "./generations.js";
 import { ensureExportSchema, failStaleExports } from "./assemble.js";
 import { ensureBlueprintSchema } from "./blueprint.js";
 import { ensureTimelineSchema } from "./timeline.js";
+import { ensureAudioCueSchema } from "./audioCues.js";
 
 export async function ensureAllProductionSchemas(db, log = console.error) {
   const steps = [
@@ -33,6 +34,7 @@ export async function ensureAllProductionSchemas(db, log = console.error) {
     ["clean up interrupted work", async (db) => { await failStaleGenerations(db); await failStaleExports(db); }],
     ["blueprint, prompts and screenplay versions", ensureBlueprintSchema],
     ["timeline", ensureTimelineSchema],
+    ["sound effect and music cues", ensureAudioCueSchema],
   ];
   const failures = [];
   for (const [name, step] of steps) {

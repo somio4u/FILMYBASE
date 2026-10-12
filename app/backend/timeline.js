@@ -87,6 +87,7 @@ export async function syncTimelineFromBlueprint(db, projectId, blueprintVersion)
   const manifest = await buildShotManifest(db, projectId);
   const client = await db.connect();
   const result = { created: 0, updated: 0, orphaned: 0, dialogue: 0 };
+  let committed = false;
   try {
     await client.query("BEGIN");
     const timeline = await ensureTimeline(client, projectId, blueprintVersion);
@@ -154,14 +155,47 @@ export async function syncTimelineFromBlueprint(db, projectId, blueprintVersion)
     }
     await client.query("UPDATE production_timelines SET edit_revision = edit_revision + 1, updated_at = now() WHERE id = $1", [timeline.id]);
     await client.query("COMMIT");
+    committed = true;
   } catch (error) {
     await client.query("ROLLBACK").catch(() => {});
     throw error;
   } finally {
     client.release();
   }
+  if (committed) await syncCueClips(db, projectId);
   publish(projectId, { type: "timeline_changed", reason: "blueprint_approved", ...result });
   return result;
+}
+
+// Sound-effect and music cues become clips on their own tracks, placed at their shot's start + the cue's offset.
+// Safe to call any time; does nothing if the Blueprint has not created the timeline yet.
+export async function syncCueClips(db, projectId) {
+  const timeline = (await db.query("SELECT * FROM production_timelines WHERE project_id = $1", [projectId])).rows[0];
+  if (!timeline) return { clips: 0 };
+  const tracks = Object.fromEntries((await db.query("SELECT id, name FROM production_timeline_tracks WHERE timeline_id = $1", [timeline.id])).rows.map((t) => [t.name, t.id]));
+  const cues = (await db.query("SELECT * FROM production_audio_cues WHERE project_id = $1 ORDER BY id", [projectId])).rows;
+  const shotClips = new Map((await db.query("SELECT shot_id, start_ms FROM production_timeline_clips WHERE timeline_id = $1 AND kind = 'shot'", [timeline.id])).rows.map((c) => [c.shot_id, c.start_ms]));
+  const existing = new Map((await db.query("SELECT * FROM production_timeline_clips WHERE timeline_id = $1 AND cue_id IS NOT NULL", [timeline.id])).rows.map((c) => [c.cue_id, c]));
+  for (const cue of cues) {
+    const start = (cue.shot_id ? shotClips.get(cue.shot_id) ?? 0 : 0) + cue.offset_ms;
+    const track = tracks[cue.kind === "sfx" ? "A2" : "A3"];
+    const old = existing.get(cue.id);
+    if (!old) {
+      await db.query(
+        `INSERT INTO production_timeline_clips (timeline_id, track_id, kind, shot_id, cue_id, label, order_index, start_ms, duration_ms, planned_duration_ms) VALUES ($1,$2,$3,$4,$5,$6,0,$7,$8,$8)`,
+        [timeline.id, track, cue.kind, cue.shot_id, cue.id, cue.label, start, cue.duration_ms]
+      );
+    } else if (!old.edited) {
+      await db.query("UPDATE production_timeline_clips SET track_id = $2, kind = $3, shot_id = $4, label = $5, start_ms = $6, duration_ms = $7, planned_duration_ms = $7, updated_at = now() WHERE id = $1", [old.id, track, cue.kind, cue.shot_id, cue.label, start, cue.duration_ms]);
+    } else {
+      await db.query("UPDATE production_timeline_clips SET label = $2, planned_duration_ms = $3, updated_at = now() WHERE id = $1", [old.id, cue.label, cue.duration_ms]);
+    }
+  }
+  const gone = [...existing.keys()].filter((cid) => !cues.some((c) => c.id === cid));
+  if (gone.length) await db.query("DELETE FROM production_timeline_clips WHERE timeline_id = $1 AND cue_id = ANY($2)", [timeline.id, gone]);
+  await db.query("UPDATE production_timelines SET edit_revision = edit_revision + 1, updated_at = now() WHERE id = $1", [timeline.id]);
+  publish(projectId, { type: "timeline_changed", reason: "cues" });
+  return { clips: cues.length };
 }
 
 // ---------------------------------------------------------------------------
@@ -185,6 +219,7 @@ export async function getTimeline(db, projectId) {
   const approved = (kind, key, id) => gens.find((g) => g.kind === kind && g[key] === id && g.review === "approved" && g.status === "ready") ?? null;
   const pending = (kind, key, id) => gens.filter((g) => g.kind === kind && g[key] === id && g.status === "ready" && g.review === "pending").length;
   const byId = new Map(gens.map((g) => [g.id, g]));
+  const cuesById = new Map((await db.query("SELECT id, approved, media_id, prompt FROM production_audio_cues WHERE project_id = $1", [projectId])).rows.map((r) => [r.id, r]));
 
   const out = clips.map((c) => {
     const base = {
@@ -219,6 +254,15 @@ export async function getTimeline(db, projectId) {
         reviewNeeded: { audio: pending("audio", "element_id", c.element_id) }, flags: { sourceTooShort: Boolean(audio?.duration_ms && c.source_in_ms + c.duration_ms > audio.duration_ms) },
       };
     }
+    if (c.kind === "sfx" || c.kind === "music") {
+      const cue = cuesById.get(c.cue_id);
+      const ok = cue?.approved && cue?.media_id;
+      return {
+        ...base, cueId: c.cue_id, state: ok ? "audio" : "planned", sourceDurationMs: null,
+        media: ok ? { type: "audio", generationId: null, url: `/api/production/media/${cue.media_id}`, version: 1 } : null,
+        reviewNeeded: { audio: cue?.media_id && !cue.approved ? 1 : 0 }, flags: {}, prompt: cue?.prompt ?? "",
+      };
+    }
     return { ...base, state: "planned", media: null };
   });
   const totalMs = Math.max(0, ...out.filter((c) => !c.orphaned).map((c) => c.startMs + c.durationMs));
@@ -229,9 +273,12 @@ export async function getTimeline(db, projectId) {
     summary: {
       shots: out.filter((c) => c.kind === "shot" && !c.orphaned).length,
       placeholders: out.filter((c) => c.kind === "shot" && !c.orphaned && c.state === "planned").length,
-      firstFrames: out.filter((c) => c.kind === "shot" && c.state === "first_frame").length,
+      // every shot with an approved first frame (including those that have since got a video), so it matches the project header
+      firstFrames: out.filter((c) => c.kind === "shot" && !c.orphaned && c.frame).length,
       videos: out.filter((c) => c.kind === "shot" && c.state === "video").length,
       audio: out.filter((c) => c.kind === "dialogue" && c.state === "audio").length,
+      cues: out.filter((c) => (c.kind === "sfx" || c.kind === "music") && c.state === "audio").length,
+      cuesPlanned: out.filter((c) => (c.kind === "sfx" || c.kind === "music") && c.state === "planned").length,
       reviewNeeded: out.reduce((n, c) => n + Object.values(c.reviewNeeded ?? {}).reduce((a, b) => a + b, 0), 0),
     },
   };

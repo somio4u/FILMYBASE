@@ -38,6 +38,7 @@ import { onScreenplayApproved, registerBlueprintRoutes } from "./blueprint.js";
 import { registerPlanningRoutes } from "./planning.js";
 import { registerStudioRoutes } from "./studio.js";
 import { registerTimelineRoutes } from "./timeline.js";
+import { registerAudioCueRoutes } from "./audioCues.js";
 import { registerEventRoutes } from "./events.js";
 import cookieParser from "cookie-parser";
 import { createClient } from "@supabase/supabase-js";
@@ -19278,6 +19279,7 @@ registerPipelineRoutes(app, db, requireRole, {
   }),
 });
 registerSubmissionRoutes(app, db, requireRole, { store: productionMedia.store, serveMedia: productionMedia.serveMedia });
+registerAudioCueRoutes(app, db, requireRole, { store: productionMedia.store });
 
 // Schema self-heal runs before the server starts accepting traffic — worst
 // case (the database is briefly unreachable) it logs and the server still

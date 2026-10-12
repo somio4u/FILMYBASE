@@ -286,14 +286,53 @@ export async function branchDraft(db, parentDraftId, { label = null, kind = "num
     const name = kind === "numbered" ? `${baseTitle} — Draft ${number}` : `${baseTitle} — Alternative ${alts}`;
     const ref = parent.module === "film" ? await copyFilm(client, parent.project_ref, { title: name, actorUserId }) : await copyAiMovie(client, parent.project_ref, { title: name, actorUserId });
     const where = await detectStage(client, parent.module, ref);
+    // the screenplay version of the PARENT's production work this draft started from (AI Movie): provenance for later dependency checks
+    let sourceVersion = parent.source_screenplay_version;
+    if (parent.module === "ai_movie" && (await client.query("SELECT to_regclass('production_screenplay_versions') AS t")).rows[0].t) {
+      const v = await client.query("SELECT max(version) AS v FROM production_screenplay_versions WHERE project_id = $1", [parent.project_ref]);
+      if (v.rows[0]?.v) sourceVersion = v.rows[0].v;
+    }
     const row = (await client.query(
       `INSERT INTO project_drafts (group_id, module, project_ref, draft_number, kind, label, parent_draft_id, status, current_stage, resume_context, source_screenplay_version, created_by, note)
        VALUES ($1,$2,$3,$4,$5,$6,$7,'working',$8,$9,$10,$11,$12) RETURNING *`,
-      [parent.group_id, parent.module, ref, number, kind, label, parent.id, where.stage, JSON.stringify(parent.resume_context ?? {}), parent.source_screenplay_version, actorUserId, note]
+      [parent.group_id, parent.module, ref, number, kind, label, parent.id, where.stage, JSON.stringify(parent.resume_context ?? {}), sourceVersion, actorUserId, note]
     )).rows[0];
     await client.query("COMMIT");
     publish(0, { type: "draft_created", draftId: row.id, groupId: row.group_id });
     return row;
+  } catch (error) {
+    await client.query("ROLLBACK").catch(() => {});
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+
+// A brand-new story: an empty project row holding only the new idea. destination "same_project" makes it a numbered draft of THIS project
+// (so it appears on the dashboard); "new_project" makes it a project of its own. The chosen draft is not touched either way.
+export async function createBlank(db, draft, { destination, idea, actorUserId = null } = {}) {
+  const text = String(idea ?? "").trim();
+  if (!text) throw httpError("Write the new story idea first.", 400, "empty");
+  const title = text.slice(0, 60);
+  const client = await db.connect();
+  try {
+    await client.query("BEGIN");
+    await client.query("SELECT pg_advisory_xact_lock($1)", [800000 + draft.group_id]);
+    const ref = draft.module === "film"
+      ? (await client.query("INSERT INTO concepts (concept_text, storylines, title) VALUES ($1,'[]',$2) RETURNING id", [text, title])).rows[0].id
+      : (await client.query("INSERT INTO ai_movie_projects (title, pasted_text, created_by) VALUES ($1,$2,$3) RETURNING id", [title, text, actorUserId])).rows[0].id;
+    let row;
+    if (destination === "same_project") {
+      const n = Number((await client.query("SELECT COALESCE(MAX(draft_number),0)+1 AS n FROM project_drafts WHERE group_id = $1", [draft.group_id])).rows[0].n);
+      row = (await client.query(
+        `INSERT INTO project_drafts (group_id, module, project_ref, draft_number, kind, label, parent_draft_id, status, current_stage, created_by, note) VALUES ($1,$2,$3,$4,'numbered',$5,$6,'working','idea',$7,'A new story (not a revision)') RETURNING *`,
+        [draft.group_id, draft.module, ref, n, `New story: ${title}`, draft.id, actorUserId]
+      )).rows[0];
+    }
+    await client.query("COMMIT");
+    if (!row) row = await ensureDraftFor(db, draft.module, ref, { actorUserId });
+    return { draft: rowView(row), projectRef: ref, module: draft.module, destination };
   } catch (error) {
     await client.query("ROLLBACK").catch(() => {});
     throw error;

@@ -42,6 +42,7 @@ import { registerAudioCueRoutes } from "./audioCues.js";
 import { registerTimelineEditRoutes } from "./timelineEdit.js";
 import { registerShotPlanRoutes } from "./shotPlans.js";
 import { backfillDrafts, registerDraftRoutes } from "./drafts.js";
+import { failInterruptedRequests, registerDraftAgentRoutes } from "./draftAgent.js";
 import { buildReferenceBlock, findRelated as findRelatedSources, ideaWithReferences, registerWorkspaceRoutes } from "./workspaceContext.js";
 import { registerTimelineExportRoutes } from "./timelineExport.js";
 import { registerEventRoutes } from "./events.js";
@@ -19270,6 +19271,15 @@ registerTimelineEditRoutes(app, db, requireRole);
 // The Shot Optimization review runs through the Shot Cutter's own model route (Pro in Professional/Maximum) and the money guard.
 registerWorkspaceRoutes(app, db, requireRole);
 registerDraftRoutes(app, db, requireRole);
+// The Universal Auto Screenplay Agent. It reuses the project's own model routing (AI Movie: quality mode + money guard; Film: the same tiers).
+registerDraftAgentRoutes(app, db, requireRole, {
+  models: {
+    async json(draft, agentId, prompt, { maxOutputTokens = 8192, responseSchema } = {}) {
+      if (draft.module === "ai_movie") return (await aiMovieStory.ask.ask(draft.project_ref, agentId, { contents: prompt, responseSchema, maxOutputTokens })).data;
+      return callModelTier(modelFor(agentId, "professional").tier, { contents: prompt, responseSchema, maxOutputTokens });
+    },
+  },
+});
 registerShotPlanRoutes(app, db, requireRole, { getTextJson: async (projectId) => async (prompt) => (await aiMovieStory.ask.ask(projectId, "shot-cutter-complex", { contents: prompt, maxOutputTokens: 8192 })).data });
 registerTimelineExportRoutes(app, db, requireRole, { store: productionMedia.store });
 registerScreenplayRoutes(app, db, requireRole);
@@ -19306,7 +19316,7 @@ registerAudioCueRoutes(app, db, requireRole, { store: productionMedia.store });
 // starts, rather than blocking startup entirely.
 ensureAiMovieSchema()
   .then(() => ensureAllProductionSchemas(db))
-  .then(async (failures) => { try { const made = await backfillDrafts(db); if (made) console.log(`Draft Management: ${made} existing project(s) are now Draft 1 of their project.`); } catch (error) { console.error("Draft backfill failed:", error.message); } return failures; })
+  .then(async (failures) => { try { const made = await backfillDrafts(db); await failInterruptedRequests(db); if (made) console.log(`Draft Management: ${made} existing project(s) are now Draft 1 of their project.`); } catch (error) { console.error("Draft backfill failed:", error.message); } return failures; })
   .catch((error) => console.error("Schema setup failed:", error.message))
   .finally(() => {
   app.listen(PORT, () => {

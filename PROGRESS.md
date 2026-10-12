@@ -1625,3 +1625,6 @@ Plain version: every project is now a set of **drafts**. Opening a project shows
 - Keep-awake: the backend pings its own address every 4 minutes. It now also works when only Render's own address setting exists (no BACKEND_URL needed).
 - Auto-resume: when the backend starts (after a redeploy or sleep), any story run that was cut off while "running" is picked up again by itself from its last saved point. At most 3 automatic tries per run.
 - Note: every deploy restarts the backend, so a run in progress at that moment now continues by itself instead of stopping.
+
+## Buttons retry while the server wakes up
+- Approve, "Fix it with my note" and "Pick up where it broke" now retry automatically (up to about a minute) when the server is waking up or restarting, saying "The server is waking up — trying again…", instead of showing "Oops, something went wrong". Real server messages are still shown as they are.

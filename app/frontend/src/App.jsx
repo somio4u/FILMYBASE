@@ -2772,24 +2772,40 @@ function FloatingAgentWidget({ currentUser, t, onRunCompleted, onOpenProject, dr
   }
 
 
+  // The backend can be waking up or restarting (free hosting): retry a few times instead of showing an error.
+  // Returns { ok, status, data } or null if the server never answered.
+  async function postWithRetry(url, body) {
+    const waits = [0, 3000, 7000, 15000, 25000]
+    for (let i = 0; i < waits.length; i += 1) {
+      if (waits[i]) {
+        setErrorMessage('The server is waking up — trying again…')
+        await new Promise((resolve) => setTimeout(resolve, waits[i]))
+      }
+      try {
+        const response = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body ?? {}) })
+        const data = await response.json().catch(() => null)
+        // the app's own answers are JSON (success or a real message): stop here. A gateway page (not JSON) means it is restarting: try again
+        if (data) return { ok: response.ok, status: response.status, data }
+      } catch {
+        // network error: try again
+      }
+    }
+    return null
+  }
+
   async function handleResume() {
     if (!runId) return
     setIsResuming(true)
     setErrorMessage(null)
-    try {
-      const response = await fetch(`${BACKEND_URL}/api/auto-pipeline/${runId}/resume`, { method: 'POST' })
-      const data = await response.json()
-      if (!response.ok) {
-        setErrorMessage(data.error || t.genericError)
-        setIsResuming(false)
-        return
-      }
+    const result = await postWithRetry(`${BACKEND_URL}/api/auto-pipeline/${runId}/resume`)
+    if (!result) setErrorMessage(t.genericError)
+    else if (!result.ok) setErrorMessage(result.data.error || t.genericError)
+    else {
+      setErrorMessage(null)
       notifiedRef.current = false
       statusRef.current = null
       setStatus(null)
       setPollNonce((n) => n + 1)
-    } catch {
-      setErrorMessage(t.genericError)
     }
     setIsResuming(false)
   }
@@ -2799,22 +2815,15 @@ function FloatingAgentWidget({ currentUser, t, onRunCompleted, onOpenProject, dr
     if (!runId) return
     setIsSendingBible(true)
     setErrorMessage(null)
-    try {
-      const response = await fetch(`${BACKEND_URL}/api/auto-pipeline/${runId}/${action === 'approve' ? 'bible-approve' : 'bible-note'}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(action === 'note' ? { note: bibleNote } : {}),
-      })
-      const data = await response.json()
-      if (!response.ok) {
-        setErrorMessage(data.error || t.genericError)
-      } else {
-        if (action === 'note') setBibleNote('')
-        statusRef.current = null
-        setPollNonce((n) => n + 1)
-      }
-    } catch {
-      setErrorMessage(t.genericError)
+    const result = await postWithRetry(`${BACKEND_URL}/api/auto-pipeline/${runId}/${action === 'approve' ? 'bible-approve' : 'bible-note'}`, action === 'note' ? { note: bibleNote } : {})
+    if (!result) setErrorMessage(t.genericError)
+    else if (!result.ok && !/isn't waiting/.test(result.data.error ?? '')) setErrorMessage(result.data.error || t.genericError)
+    else {
+      // success, or an earlier try had already gone through (it is no longer waiting): just refresh
+      setErrorMessage(null)
+      if (action === 'note') setBibleNote('')
+      statusRef.current = null
+      setPollNonce((n) => n + 1)
     }
     setIsSendingBible(false)
   }

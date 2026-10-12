@@ -7,7 +7,7 @@ import express from "express";
 import pg from "pg";
 import { ensureAllProductionSchemas } from "../productionSchema.js";
 import { analyzeScreenplay } from "../screenplayAnalysis.js";
-import { branchDraft, compareDrafts, draftUnits, ensureDraftFor, getDraft, updateDraft } from "../drafts.js";
+import { branchDraft, compareDrafts, draftUnits, ensureDraftFor, getDashboard, getDraft, updateDraft } from "../drafts.js";
 import { applyChangeSet, approveFinal, approveSynopsis, cancelRequest, classifyPrompt, conform, failInterruptedRequests, getRequest, heuristicIntent, interpret, productionImpact, propose, registerDraftAgentRoutes, rejectChangeSet, requestSynopsisChanges, resolveTargets, retryRequest, revisionDetail, startAlternative, startRevision, undoChangeSet, whenIdle, readUnit } from "../draftAgent.js";
 import { createBlank } from "../drafts.js";
 import { fakePipeline } from "../draftAgentMock.js";
@@ -419,6 +419,37 @@ test("duplicates: pressing Create twice gives the ONE request in progress; clean
     } else await cancelRequest(db, ok[0].request.id);
     assert.equal(await unitHashes(module, ref()), before);
   }
+});
+
+test("offline until finished: a draft still being made is not listed as a draft; the agent's own work is shown step by step; later steps say 'not yet created'; opening the list removes older duplicate copies", async () => {
+  const d = await ensureDraftFor(db, "ai_movie", ai);
+  const models = mockModels();
+  const { request, draft } = await startRevision(db, models, d.id, { instruction: "Change the villain.", confirmed: true, actorUserId: 1 });
+  await whenIdle(request.id);
+  let dash = await getDashboard(db, "ai_movie", ai);
+  assert.ok(!dash.drafts.some((x) => x.id === draft.id), "a draft that is still being made is offline: not in the draft list");
+  assert.ok(dash.revisions.some((x) => x.id === request.id && x.offline === true), "it is shown in the 'being made' list instead");
+  assert.notEqual(dash.activeDraftId, draft.id);
+  let w = (await revisionDetail(db, request.id)).agentWork;
+  assert.equal(w.story.ready, true);
+  assert.deepEqual(w.steps.map((x) => x.state), ["not_yet", "not_yet", "not_yet", "not_yet", "not_yet"], "nothing past the story has been created");
+  assert.match(w.steps[0].note, /Not yet created/);
+  assert.ok(w.steps.every((x) => !x.text), "no older draft's content is shown for a step the agent has not made");
+  await approveSynopsis(db, models, request.id, { actorUserId: 1 }); await whenIdle(request.id);
+  w = (await revisionDetail(db, request.id)).agentWork;
+  assert.ok(w.steps.slice(0, 4).every((x) => x.state === "done" && x.score >= 8), "each finished step shows the judged score");
+  assert.match(w.steps[0].text, /new draft v/, "the step shows what the AGENT wrote, not the older draft");
+  dash = await getDashboard(db, "ai_movie", ai);
+  assert.ok(dash.drafts.some((x) => x.id === draft.id), "when it is finished writing it appears as a draft for review");
+  // duplicates: an older stray copy is removed when the list opens; the newest is kept
+  await cancelRequest(db, request.id);
+  const a = await branchDraft(db, d.id, { note: "stray" });
+  const b = await branchDraft(db, d.id, { note: "newest" });
+  for (const x of [a, b]) await db.query("UPDATE project_drafts SET status = 'pending_approval' WHERE id = $1", [x.id]);
+  for (const x of [a, b]) await db.query("INSERT INTO draft_revision_requests (group_id, module, parent_draft_id, draft_id, intent, instruction, status) VALUES ($1,'ai_movie',$2,$3,'NEW_DRAFT','x','awaiting_synopsis_approval')", [d.group_id, d.id, x.id]);
+  dash = await getDashboard(db, "ai_movie", ai);
+  assert.equal((await db.query("SELECT count(*)::int AS n FROM project_drafts WHERE id = $1", [a.id])).rows[0].n, 0, "the older duplicate was deleted");
+  assert.equal((await db.query("SELECT count(*)::int AS n FROM project_drafts WHERE id = $1", [b.id])).rows[0].n, 1, "the newest was kept");
 });
 
 test("new story: choose same project (a draft on the dashboard) or a new project; the current draft is untouched; both modules", async () => {

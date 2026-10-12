@@ -2734,6 +2734,7 @@ function FloatingAgentWidget({ currentUser, t, onRunCompleted, onOpenProject, dr
     window.dispatchEvent(new CustomEvent(ADU_EVENT, { detail: { active: true } }))
     setAduTab('project'); setIsOpen(true)
   }, [draftCtx?.openRequestId])
+  useEffect(() => { if (!isOpen) draftCtx?.onAduClosed?.() }, [isOpen]) // eslint-disable-line react-hooks/exhaustive-deps
 
   async function handleStart() {
     if (!concept.trim()) return
@@ -6375,6 +6376,7 @@ function App() {
   // Draft Management: the dashboard overlay, and which draft the open project is
   const [draftDashboard, setDraftDashboard] = useState(null) // { module, projectRef }
   const [currentDraft, setCurrentDraft] = useState(null) // { id, module, projectRef }
+  const [aduReviewDraft, setAduReviewDraft] = useState(null) // lets Adu show a revision from the Drafts screen when no draft is open
   const [aduRequestId, setAduRequestId] = useState(null) // asks Adu to open a revision that is waiting for review
   const [projectTitle, setProjectTitle] = useState(null)
   const [projectHistory, setProjectHistory] = useState([])
@@ -7030,7 +7032,7 @@ function App() {
     }
   }
 
-  const aduDraftCtx = { draft: currentDraft, getContext: agentContext, onOpenDraft: handleAgentOpen, onApplied: refreshOpenDraft, openRequestId: aduRequestId }
+  const aduDraftCtx = { draft: currentDraft ?? aduReviewDraft, onAduClosed: () => setAduReviewDraft(null), getContext: agentContext, onOpenDraft: handleAgentOpen, onApplied: refreshOpenDraft, openRequestId: aduRequestId }
 
   // Which draft is the open project? (Every existing project is Draft 1 automatically.)
   useEffect(() => {
@@ -11438,7 +11440,7 @@ function App() {
         <DictationContext.Provider value={{ t, dictationLanguage, onDictationLanguageChange: handleDictationLanguageChange }}>
           <FloatingAgentWidget currentUser={currentUser} t={t} onRunCompleted={() => loadProjectList()} draftCtx={aduDraftCtx} />
         </DictationContext.Provider>
-      {draftDashboard && <ErrorBoundary inline onClose={() => setDraftDashboard(null)}><Suspense fallback={null}><DraftDashboard module={draftDashboard.module} projectRef={draftDashboard.projectRef} backendUrl={BACKEND_URL} onContinue={continueDraft} onClose={() => setDraftDashboard(null)} onOpenDirect={openProjectDirect} onReviewRequest={(d) => { setDraftDashboard(null); setAduRequestId(d.openRequest?.id ?? null); setTimeout(() => setAduRequestId(null), 1500) }} /></Suspense></ErrorBoundary>}
+      {draftDashboard && <ErrorBoundary inline onClose={() => setDraftDashboard(null)}><Suspense fallback={null}><DraftDashboard module={draftDashboard.module} projectRef={draftDashboard.projectRef} backendUrl={BACKEND_URL} onContinue={continueDraft} onClose={() => setDraftDashboard(null)} onOpenDirect={openProjectDirect} onReviewRequest={(d) => { setDraftDashboard(null); if (!currentDraft && d.id) setAduReviewDraft({ id: d.id, module: d.module, projectRef: d.projectRef, title: 'Draft' }); setAduRequestId(d.openRequest?.id ?? null); setTimeout(() => setAduRequestId(null), 1500) }} /></Suspense></ErrorBoundary>}
         <div className="mobile-topbar">
           <button className="mobile-menu-button" onClick={() => setIsSidebarOpen(true)} aria-label={t.openMenuLabel}>
             ☰
@@ -12702,7 +12704,7 @@ function App() {
         onOpenProject={(id) => { setActiveAgent('story'); loadProject(id) }}
         draftCtx={aduDraftCtx}
       />
-      {draftDashboard && <ErrorBoundary inline onClose={() => setDraftDashboard(null)}><Suspense fallback={null}><DraftDashboard module={draftDashboard.module} projectRef={draftDashboard.projectRef} backendUrl={BACKEND_URL} onContinue={continueDraft} onClose={() => setDraftDashboard(null)} onOpenDirect={openProjectDirect} onReviewRequest={(d) => { setDraftDashboard(null); setAduRequestId(d.openRequest?.id ?? null); setTimeout(() => setAduRequestId(null), 1500) }} /></Suspense></ErrorBoundary>}
+      {draftDashboard && <ErrorBoundary inline onClose={() => setDraftDashboard(null)}><Suspense fallback={null}><DraftDashboard module={draftDashboard.module} projectRef={draftDashboard.projectRef} backendUrl={BACKEND_URL} onContinue={continueDraft} onClose={() => setDraftDashboard(null)} onOpenDirect={openProjectDirect} onReviewRequest={(d) => { setDraftDashboard(null); if (!currentDraft && d.id) setAduReviewDraft({ id: d.id, module: d.module, projectRef: d.projectRef, title: 'Draft' }); setAduRequestId(d.openRequest?.id ?? null); setTimeout(() => setAduRequestId(null), 1500) }} /></Suspense></ErrorBoundary>}
       <div className="mobile-topbar">
         <button className="mobile-menu-button" onClick={() => setIsSidebarOpen(true)} aria-label={t.openMenuLabel}>
           ☰

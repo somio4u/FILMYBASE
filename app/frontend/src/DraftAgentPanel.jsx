@@ -94,6 +94,41 @@ function Revision({ requestId, backendUrl, onOpenDraft, onClose, onChanged }) {
           {(r.proposal.critics?.open ?? []).length > 0 && <><h5>Open problems the critics still see</h5><ul>{r.proposal.critics.open.map((o, i) => <li key={i}>{txt(o)}</li>)}</ul></>}
         </div>
       )}
+      {r.proposal && (
+        <details className="da-story" open={status === 'awaiting_synopsis_approval'}>
+          <summary>The story the agent designed</summary>
+          {r.proposal.hiddenTruth && <><h5>Hidden truth</h5><p>{txt(r.proposal.hiddenTruth)}</p></>}
+          {(r.proposal.characters ?? []).length > 0 && <><h5>Characters</h5><ul>{r.proposal.characters.map((c, i) => <li key={i}><strong>{txt(c.name)}</strong>{c.role ? ` — ${txt(c.role)}` : ''}{c.want ? `. Wants: ${txt(c.want)}` : ''}</li>)}</ul></>}
+          {r.proposal.climax?.reversal && <><h5>Climax</h5><p>{txt(r.proposal.climax.reversal)}{r.proposal.climax.finalImage ? ` Final image: ${txt(r.proposal.climax.finalImage)}` : ''}</p></>}
+          {(r.proposal.blueprint ?? []).length > 0 && (
+            <><h5>{r.proposal.unitKind === 'episode' ? 'Episodes' : 'Sequences'} and their cliffhangers</h5>
+              <ol className="da-episodes">{r.proposal.blueprint.map((u) => (
+                <li key={u.number} value={u.number}>
+                  <strong>{txt(u.title)}</strong>
+                  {u.question && <div>Asks: {txt(u.question)}</div>}
+                  {(u.cliffhangerImage || u.endingHook) && <div>Ends on: {txt(u.cliffhangerImage || u.endingHook)}</div>}
+                  {u.burningQuestion && <div>Burning question: {txt(u.burningQuestion)}</div>}
+                  {(u.audienceTheories ?? []).length > 0 && <div>Viewers will guess: {u.audienceTheories.map(txt).join(' | ')}</div>}
+                </li>
+              ))}</ol></>
+          )}
+        </details>
+      )}
+      {data.agentWork && (
+        <div className="da-work" aria-label="What the agent has made so far">
+          <h4>What the agent has made so far</h4>
+          <ul>
+            <li><span className={`chip ${data.agentWork.story.ready ? 'modified' : ''}`}>{data.agentWork.story.ready ? (data.agentWork.story.approved ? 'approved' : 'ready') : 'working'}</span> Story / synopsis{data.agentWork.story.ready ? '' : ` — ${data.agentWork.story.note}`}</li>
+            {data.agentWork.steps.map((st) => (
+              <li key={st.key}>
+                <span className={`chip ${st.state === 'done' ? (st.reachedTarget === false ? 'removed' : 'modified') : ''}`}>{st.state === 'done' ? (st.score != null ? `${txt(st.score)}/10` : 'done') : st.state === 'working' ? 'writing…' : 'not yet'}</span> {st.label}
+                {st.state === 'not_yet' && <span className="dd-fine"> — {st.note}</span>}
+                {st.text && <details><summary>See what the agent wrote</summary><p className="da-synopsis">{st.text}</p></details>}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
       {status === 'awaiting_synopsis_approval' && (
         <div className="da-gate">
           <p><strong>Nothing has been written yet.</strong> Approving starts the normal story process (judges score every stage, weak ones are redone toward 8–9) and writes the new draft. {data.parentDraft?.title} is never changed.</p>

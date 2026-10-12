@@ -1641,3 +1641,10 @@ Plain version: every project is now a set of **drafts**. Opening a project shows
 
 ## White screen on phones (graphics memory)
 - On phones the panels no longer use live blur (backdrop-filter) and the animated background stays still while the Adu or Drafts panel is open and draws at most 15 frames a second. A long blurred panel (like the Story Bible) over a moving background can run a phone's graphics memory out, which shows as a plain white screen. Panels are now solid, which also makes the text easier to read.
+
+## Drafts: offline until finished, and each draft shows the agent's own work
+- A new draft the agent is still making is no longer listed as a draft. It appears in a "Being made — offline until the agent finishes writing" list (with its step and a Review button). When it has finished writing, it appears as a draft waiting for your approval.
+- Opening the Drafts list now removes older duplicate copies automatically (keeps the newest; never touches anything still working, your own drafts, or Draft 1).
+- The Review screen shows the story the agent designed (hidden truth, characters, each episode with its cliffhanger and burning question) and "What the agent has made so far": Synopsis, Characters, Story structure, Plot, Screenplay, each with its judged score and what the agent wrote, or "Not yet created — the screenplay writer is at an earlier stage". It never shows an older draft's content for a step the agent has not made.
+- Review now opens from the Drafts list even when no draft is open; on phones the Drafts overlay is solid.
+- Next: deploy (merge to main) once no story run is in progress.

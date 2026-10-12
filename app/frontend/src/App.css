@@ -7536,5 +7536,6 @@ button:not(:disabled):active {
     backdrop-filter: none !important;
     -webkit-backdrop-filter: none !important;
   }
+  .dd-overlay { background: rgba(8, 12, 26, 0.98) !important; }
   .floating-agent-panel { animation: none !important; box-shadow: 0 0 0 1px rgba(138, 180, 248, 0.15) !important; }
 }

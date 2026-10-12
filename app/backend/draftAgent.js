@@ -12,7 +12,7 @@
 //
 // A classifier's answer is only a recommendation. Nothing is changed, copied or paid for until the person confirms a specific action.
 
-import { branchDraft, createBlank, detectStage, draftUnits, diffUnits, fingerprintOf, getDraft, httpError, registerExternalDraft, saveResume, sceneText, updateDraft } from "./drafts.js";
+import { branchDraft, cleanupDuplicateRevisions, createBlank, detectStage, draftUnits, diffUnits, fingerprintOf, getDraft, httpError, registerExternalDraft, saveResume, sceneText, updateDraft } from "./drafts.js";
 import { flatten } from "./workspaceContext.js";
 import { analyzeScreenplay } from "./screenplayAnalysis.js";
 import { publish } from "./events.js";
@@ -522,9 +522,10 @@ export function proposalFromBible(bible, extra = {}) {
   const open = r ? Object.entries(r.reports ?? {}).flatMap(([k, rep]) => (rep.problems ?? []).filter((x) => x.severity !== "minor").map((x) => `[${x.severity}] ${k}: ${clip(flatten({ ...x, severity: undefined }), 220)}`)) : [];
   return {
     kind: "story_bible", title: clip(bible.promise?.title, 160), logline: clip(bible.promise?.logline, 600), centralQuestion: clip(bible.promise?.centralQuestion, 400),
-    characters: (bible.characters ?? []).slice(0, 12).map((c) => ({ name: c.name, role: clip(c.role, 80) })),
+    hiddenTruth: clip(bible.hiddenTruth?.summary, 700),
+    characters: (bible.characters ?? []).slice(0, 12).map((c) => ({ name: c.name, role: clip(c.role, 80), want: clip(c.want, 160), secret: clip(c.secret, 160) })),
     climax: { reversal: clip(bible.climax?.reversal, 400), heroChoice: clip(bible.climax?.heroChoice, 300), finalImage: clip(bible.climax?.finalImage, 300) },
-    unitKind: bible.units?.kind ?? "sequence", blueprint: (bible.blueprint ?? []).slice(0, 60).map((u) => ({ number: u.number, title: clip(u.title, 100) })),
+    unitKind: bible.units?.kind ?? "sequence", blueprint: (bible.blueprint ?? []).slice(0, 60).map((u) => ({ number: u.number, title: clip(u.title, 100), coldOpen: clip(u.coldOpen, 260), question: clip(u.question, 200), endingHook: clip(u.endingHook, 300), cliffhangerType: clip(u.cliffhangerType, 60), cliffhangerImage: clip(u.cliffhangerImage, 300), burningQuestion: clip(u.burningQuestion, 200), audienceTheories: (u.audienceTheories ?? []).slice(0, 4).map((t) => clip(t, 160)), nextEpisodePayoff: clip(u.nextEpisodePayoff, 240) })),
     critics: { scores: r?.scores ?? null, passed: Boolean(r?.passed), passScore: CRITIC_PASS, rounds: (r?.history ?? []).map((h) => Object.values(h.scores ?? {}).join(" / ")), open: open.slice(0, 10) },
     ...extra,
   };
@@ -696,36 +697,7 @@ async function openRequestFor(db, parentDraftId) {
   return (await db.query("SELECT * FROM draft_revision_requests WHERE parent_draft_id = $1 AND intent = 'NEW_DRAFT' AND status = ANY($2) ORDER BY id DESC LIMIT 1", [parentDraftId, OPEN_STATUSES])).rows[0] ?? null;
 }
 
-// "Clean up duplicates": for every draft that has several new drafts in progress, keep only the NEWEST and remove the rest
-// (their copies are deleted, but never an approved or locked draft, Draft 1, or anything that is not a pending copy).
-export async function cleanupDuplicateRevisions(db, module, projectRef, { dryRun = false, keep: keepMode = "newest" } = {}) {
-  const g = (await db.query("SELECT group_id FROM project_drafts WHERE module = $1 AND project_ref = $2 LIMIT 1", [module, String(projectRef)])).rows[0];
-  if (!g) return { kept: [], removed: [], skipped: [] };
-  const reqs = (await db.query("SELECT * FROM draft_revision_requests WHERE group_id = $1 AND intent = 'NEW_DRAFT' AND status = ANY($2) ORDER BY parent_draft_id, id", [g.group_id, [...OPEN_STATUSES, "failed"]])).rows;
-  const byParent = new Map();
-  for (const r of reqs) byParent.set(r.parent_draft_id, [...(byParent.get(r.parent_draft_id) ?? []), r]);
-  const out = { kept: [], removed: [], skipped: [] };
-  for (const list of byParent.values()) {
-    const keep = keepMode === "none" ? null : list[list.length - 1];
-    if (keep) out.kept.push({ requestId: keep.id, draftId: keep.draft_id });
-    for (const r of keepMode === "none" ? list : list.slice(0, -1)) {
-      // a request that is actively working (reading the draft or writing the script) is NEVER removed
-      if (["analyzing", "rewriting", "synopsis_approved"].includes(r.status)) { out.skipped.push({ requestId: r.id, draftId: r.draft_id, why: "it is still working, so it was kept" }); continue; }
-      const d = r.draft_id ? (await db.query("SELECT * FROM project_drafts WHERE id = $1", [r.draft_id])).rows[0] : null;
-      const removable = !d || (["pending_approval", "archived"].includes(d.status) && d.kind !== "alternative");
-      if (!removable) { out.skipped.push({ requestId: r.id, draftId: r.draft_id, why: "that draft was approved or locked, so it was kept" }); continue; }
-      out.removed.push({ requestId: r.id, draftId: r.draft_id, title: d ? (d.label ?? `Draft ${d.draft_number}`) : null });
-      if (dryRun) continue;
-      await db.query("UPDATE draft_revision_requests SET status = 'cancelled', updated_at = now() WHERE id = $1", [r.id]);
-      if (r.proposal?.pipelineRunId) await db.query("UPDATE auto_pipeline_runs SET status = 'failed', error = 'Cleaned up as a duplicate.' WHERE id = $1 AND status = 'awaiting_approval'", [r.proposal.pipelineRunId]).catch(() => {});
-      if (d) {
-        await db.query("DELETE FROM project_drafts WHERE id = $1", [d.id]);
-        if (d.module === "ai_movie" && d.project_ref && String(d.project_ref) !== String(projectRef)) await db.query("DELETE FROM ai_movie_projects WHERE id = $1", [d.project_ref]).catch(() => {});
-      }
-    }
-  }
-  return out;
-}
+export { cleanupDuplicateRevisions } from "./drafts.js";
 
 export async function retryRequest(db, models, requestId) {
   const r = await getRequest(db, requestId);
@@ -915,7 +887,33 @@ export async function revisionDetail(db, requestId) {
     out.comparison = { counts: diff.counts, rows: diff.rows.filter((x) => x.status !== "preserved") };
     out.draft = { id: d.id, title: d.label ?? `Draft ${d.draft_number}`, status: d.status };
   }
+  out.agentWork = await agentWork(db, r);
   return out;
+}
+
+// What the agent has made SO FAR for this new draft, step by step. A step the agent has not reached says so, and never shows an older draft's content.
+const WORK_STEPS = [["synopsis", "Synopsis"], ["characterArc", "Characters"], ["threeAct", "Story structure"], ["plot", "Plot"], ["screenplay", "Screenplay"]];
+const plain = (v, n = 900) => clip(flatten(v), n);
+async function agentWork(db, r) {
+  const done = new Set((r.decisions ?? []).filter((x) => x.status === "done").map((x) => String(x.key).replace("stage:", "")));
+  const step = (key) => (r.decisions ?? []).find((x) => x.key === `stage:${key}` && x.status === "done");
+  let backfill = null;
+  if (r.module === "ai_movie" && r.draft_id) {
+    const d = (await db.query("SELECT project_ref FROM project_drafts WHERE id = $1", [r.draft_id])).rows[0];
+    if (d) backfill = (await db.query("SELECT backfill FROM ai_movie_projects WHERE id = $1", [d.project_ref])).rows[0]?.backfill ?? null;
+  }
+  const storyReady = Boolean(r.proposal?.title);
+  const writing = ["rewriting", "synopsis_approved", "awaiting_final_approval", "completed"].includes(r.status);
+  let working = null;
+  const steps = WORK_STEPS.map(([key, label]) => {
+    const rec = step(key) ?? (key === "synopsis" && done.has("pitch-deck") ? { score: null } : null);
+    if (rec || (key === "screenplay" && done.has("screenplay"))) {
+      return { key, label, state: "done", score: rec?.score ?? null, reachedTarget: rec?.reachedTarget ?? null, text: backfill && key !== "screenplay" && backfill[key] ? plain(backfill[key]) : null };
+    }
+    if (!working && r.status === "rewriting") { working = key; return { key, label, state: "working" }; }
+    return { key, label, state: "not_yet", note: storyReady && !writing ? "Not yet created — waiting for your approval of the story." : "Not yet created — the screenplay writer is at an earlier stage." };
+  });
+  return { story: storyReady ? { ready: true, approved: Boolean(r.proposal?.approved) } : { ready: false, note: "The Story Brain is still designing the story." }, steps };
 }
 
 // ---------------------------------------------------------------------------

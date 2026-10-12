@@ -16,6 +16,7 @@ async function call(url, method = 'GET', body) {
 
 export const OPEN_LAST_KEY = 'filmmaking-app:openLastDraft'
 const STAGE_LABEL = { idea: 'Idea', synopsis: 'Synopsis', characters: 'Characters', characterArc: 'Character arc', structure: 'Structure', threeAct: 'Three-act structure', bitsheet: 'Beat sheet', plot: 'Plot', story: 'Story', screenplay: 'Screenplay' }
+const MAKING_LABEL = { analyzing: 'Designing the story…', awaiting_synopsis_approval: 'Story ready — needs your approval', synopsis_approved: 'Writing…', rewriting: 'Writing the script…', failed: 'Stopped — can be retried' }
 const STATUS_LABEL = { working: 'Working', pending_approval: 'Waiting for approval', approved: 'Approved', locked: 'Locked', archived: 'Archived' }
 const when = (v) => (v ? new Date(v).toLocaleString() : '—')
 
@@ -129,7 +130,7 @@ export default function DraftDashboard({ module, projectRef, backendUrl, onConti
           <div><dt>Edited</dt><dd>{when(d.updatedAt)}</dd></div>
         </dl>
         {d.projectTitle && <p className="dd-fine">{d.projectTitle}</p>}
-        {d.openRequest && !(dash.revisions ?? []).some((q) => q.id === d.openRequest.id) && <p className="dd-flag">Revision in progress: {String(d.openRequest.status ?? '').replace(/_/g, ' ')} <button type="button" className="dd-btn" onClick={() => onReviewRequest?.(d)}>Review revision</button></p>}
+        {d.openRequest && <p className="dd-flag">Revision in progress: {String(d.openRequest.status ?? '').replace(/_/g, ' ')} <button type="button" className="dd-btn" onClick={() => onReviewRequest?.(d)}>Review revision</button></p>}
         {d.note && <p className="dd-fine">{d.note}</p>}
         <div className="dd-actions">
           <button type="button" className="dd-btn primary" onClick={() => onContinue(d)}>Continue Draft</button>
@@ -159,9 +160,21 @@ export default function DraftDashboard({ module, projectRef, backendUrl, onConti
         {picked.length === 2 && <p><button type="button" className="dd-btn primary" onClick={() => setCompare(picked.map((id) => byId.get(id)))}>Compare {byId.get(picked[0])?.title} with {byId.get(picked[1])?.title}</button></p>}
         {picked.length < 2 && visible.length > 1 && <p className="dd-fine">Tick two drafts to compare them.</p>}
         {compare && <Compare a={compare[0]} b={compare[1]} backendUrl={backendUrl} onClose={() => setCompare(null)} />}
-        {(dash.revisions ?? []).length === 1 && (() => { const q = dash.revisions[0]; return <p className="dd-flag" data-request-id={q.id}>A new draft is being made (it will be saved in this list when finished): “{String(q.instruction ?? '').slice(0, 90)}” — {String(q.status ?? '').replace(/_/g, ' ')} <button type="button" className="dd-btn" onClick={() => onReviewRequest?.({ openRequest: q })}>Review revision</button></p> })()}
-        {(dash.revisions ?? []).length > 1 && (
-          <p className="dd-flag" data-testid="dup-warning">There are {dash.revisions.length} unfinished “new draft” copies here — probably duplicates. <button type="button" className="dd-btn primary" disabled={Boolean(busy)} onClick={cleanup}>Delete the duplicates</button></p>
+        {(dash.revisions ?? []).filter((q) => q.offline).length > 0 && (
+          <section className="dd-making" aria-label="Drafts being made">
+            <h3>Being made <span className="dd-fine">— offline until the agent finishes writing</span></h3>
+            <ul>
+              {dash.revisions.filter((q) => q.offline).map((q) => (
+                <li key={q.id} data-request-id={q.id}>
+                  <span className="chip">{MAKING_LABEL[q.status] ?? String(q.status ?? '').replace(/_/g, ' ')}</span> “{String(q.instruction ?? '').slice(0, 80)}”
+                  <button type="button" className="dd-btn primary" onClick={() => onReviewRequest?.({ openRequest: q, id: q.parentDraftId, module, projectRef })}>Review</button>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
+        {(dash.revisions ?? []).filter((q) => q.offline).length > 1 && (
+          <p className="dd-flag" data-testid="dup-warning">There are {dash.revisions.filter((q) => q.offline).length} copies being made — probably duplicates. <button type="button" className="dd-btn" disabled={Boolean(busy)} onClick={cleanup}>Delete the duplicates</button></p>
         )}
         <ul className="dd-cards">{visible.map((d) => <Card key={d.id} d={d} />)}</ul>
         {archived.length > 0 && <details className="dd-archived"><summary>Archived ({archived.length})</summary><ul className="dd-cards">{archived.map((d) => <Card key={d.id} d={d} />)}</ul></details>}

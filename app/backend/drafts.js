@@ -185,10 +185,49 @@ async function groupDrafts(db, groupId) {
 }
 
 // The Draft Dashboard for a project: every draft (and alternative) with lineage, status and where it stopped.
+const OPEN_REVISION_STATUSES = ["analyzing", "awaiting_synopsis_approval", "synopsis_approved", "rewriting", "awaiting_final_approval"];
+// A new draft that is still being made (not finished writing) stays "offline": it is not listed as a draft until it is ready for review.
+const MAKING_STATUSES = ["analyzing", "awaiting_synopsis_approval", "synopsis_approved", "rewriting", "failed"];
+
+// "Clean up duplicates": for every draft that has several new drafts in progress, keep only the NEWEST and remove the rest
+// (their copies are deleted, but never an approved or locked draft, Draft 1, or anything that is not a pending copy).
+export async function cleanupDuplicateRevisions(db, module, projectRef, { dryRun = false, keep: keepMode = "newest" } = {}) {
+  const g = (await db.query("SELECT group_id FROM project_drafts WHERE module = $1 AND project_ref = $2 LIMIT 1", [module, String(projectRef)])).rows[0];
+  if (!g) return { kept: [], removed: [], skipped: [] };
+  const reqs = (await db.query("SELECT * FROM draft_revision_requests WHERE group_id = $1 AND intent = 'NEW_DRAFT' AND status = ANY($2) ORDER BY parent_draft_id, id", [g.group_id, [...OPEN_REVISION_STATUSES, "failed"]])).rows;
+  const byParent = new Map();
+  for (const r of reqs) byParent.set(r.parent_draft_id, [...(byParent.get(r.parent_draft_id) ?? []), r]);
+  const out = { kept: [], removed: [], skipped: [] };
+  for (const list of byParent.values()) {
+    const keep = keepMode === "none" ? null : list[list.length - 1];
+    if (keep) out.kept.push({ requestId: keep.id, draftId: keep.draft_id });
+    for (const r of keepMode === "none" ? list : list.slice(0, -1)) {
+      // a request that is actively working (reading the draft or writing the script) is NEVER removed
+      if (["analyzing", "rewriting", "synopsis_approved"].includes(r.status)) { out.skipped.push({ requestId: r.id, draftId: r.draft_id, why: "it is still working, so it was kept" }); continue; }
+      const d = r.draft_id ? (await db.query("SELECT * FROM project_drafts WHERE id = $1", [r.draft_id])).rows[0] : null;
+      const removable = !d || (["pending_approval", "archived"].includes(d.status) && d.kind !== "alternative");
+      if (!removable) { out.skipped.push({ requestId: r.id, draftId: r.draft_id, why: "that draft was approved or locked, so it was kept" }); continue; }
+      out.removed.push({ requestId: r.id, draftId: r.draft_id, title: d ? (d.label ?? `Draft ${d.draft_number}`) : null });
+      if (dryRun) continue;
+      await db.query("UPDATE draft_revision_requests SET status = 'cancelled', updated_at = now() WHERE id = $1", [r.id]);
+      if (r.proposal?.pipelineRunId) await db.query("UPDATE auto_pipeline_runs SET status = 'failed', error = 'Cleaned up as a duplicate.' WHERE id = $1 AND status = 'awaiting_approval'", [r.proposal.pipelineRunId]).catch(() => {});
+      if (d) {
+        await db.query("DELETE FROM project_drafts WHERE id = $1", [d.id]);
+        if (d.module === "ai_movie" && d.project_ref && String(d.project_ref) !== String(projectRef)) await db.query("DELETE FROM ai_movie_projects WHERE id = $1", [d.project_ref]).catch(() => {});
+      }
+    }
+  }
+  return out;
+}
+
 export async function getDashboard(db, module, projectRef, { actorUserId = null } = {}) {
   const me = await ensureDraftFor(db, module, projectRef, { actorUserId });
   const group = (await db.query("SELECT * FROM project_draft_groups WHERE id = $1", [me.group_id])).rows[0];
-  const rows = await groupDrafts(db, me.group_id);
+  try { await cleanupDuplicateRevisions(db, module, projectRef, { keep: "newest" }); } catch { /* cleanup is a convenience; never block the list */ }
+  const allRows = await groupDrafts(db, me.group_id);
+  const making = (await db.query("SELECT id, status, instruction, draft_id, created_at, proposal, decisions FROM draft_revision_requests WHERE group_id = $1 AND intent = 'NEW_DRAFT' AND status = ANY($2) ORDER BY id DESC", [me.group_id, MAKING_STATUSES])).rows;
+  const offline = new Set(making.filter((q) => q.draft_id).map((q) => q.draft_id));
+  const rows = allRows.filter((r) => !offline.has(r.id));
   const drafts = [];
   for (const r of rows) {
     const live = await detectStage(db, r.module, r.project_ref);
@@ -199,9 +238,10 @@ export async function getDashboard(db, module, projectRef, { actorUserId = null 
       childCount: rows.filter((x) => x.parent_draft_id === r.id).length,
     });
   }
-  const revisions = (await db.query("SELECT id, status, instruction, draft_id, created_at FROM draft_revision_requests WHERE group_id = $1 AND status NOT IN ('completed','cancelled') ORDER BY id DESC", [me.group_id]).catch(() => ({ rows: [] }))).rows
-    .map((r) => ({ id: r.id, status: r.status, instruction: r.instruction, draftId: r.draft_id, createdAt: r.created_at }));
-  return { groupId: group.id, module, activeDraftId: group.active_draft_id, drafts, revisions, requestedProjectRef: projectRef };
+  const revisions = (await db.query("SELECT id, status, instruction, draft_id, parent_draft_id, created_at FROM draft_revision_requests WHERE group_id = $1 AND status NOT IN ('completed','cancelled') ORDER BY id DESC", [me.group_id])).rows
+    .map((r) => ({ id: r.id, status: r.status, instruction: r.instruction, draftId: r.draft_id, parentDraftId: r.parent_draft_id, createdAt: r.created_at, offline: MAKING_STATUSES.includes(r.status) }));
+  const activeDraftId = offline.has(group.active_draft_id) ? (rows.find((r) => r.kind === "numbered")?.id ?? rows[0]?.id ?? null) : group.active_draft_id;
+  return { groupId: group.id, module, activeDraftId, drafts, revisions, requestedProjectRef: projectRef };
 }
 
 export async function getDraft(db, draftId) {

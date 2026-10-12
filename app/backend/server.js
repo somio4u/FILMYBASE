@@ -34,6 +34,10 @@ import { assertWithinBudget, recordSpend } from "./pipelineSettings.js";
 import { ensureCinematicSchema, registerSpectacleRoutes, createShotCutterHook } from "./spectacleDirector.js";
 import { MODEL_TIERS, estimateCost, isKeyBeat, modelFor } from "./modelRouting.js";
 import { ensureAiMovieLanguageSchema, registerAiMovieLanguageRoutes } from "./aiMovieLanguage.js";
+import { onScreenplayApproved, registerBlueprintRoutes } from "./blueprint.js";
+import { registerPlanningRoutes } from "./planning.js";
+import { registerTimelineRoutes } from "./timeline.js";
+import { registerEventRoutes } from "./events.js";
 import cookieParser from "cookie-parser";
 import { createClient } from "@supabase/supabase-js";
 import {
@@ -6577,7 +6581,18 @@ app.post("/api/ai-movie/stages/:stage/approve", requireRole("admin"), async (req
     }
   }
 
-  res.json({ ok: true, assets });
+  // Approving the screenplay starts production planning: read it into production, record its version and open a
+  // draft Production Blueprint. Free (no AI call); best effort — approval itself must succeed regardless.
+  let blueprint = null;
+  if (stageKey === "screenplay") {
+    try {
+      blueprint = await onScreenplayApproved(db, projectId, { actorUserId: req.user?.id });
+    } catch (error) {
+      console.error("Production planning after screenplay approval failed (approval itself still succeeded):", error.message);
+    }
+  }
+
+  res.json({ ok: true, assets, blueprint });
 });
 
 app.get("/api/ai-movie/projects", requireRole("admin"), async (req, res) => {
@@ -19226,9 +19241,14 @@ registerSpectacleRoutes(app, db, requireRole, {
   requestStoryRevision: aiMovieStory.requestRevision,
 });
 
+// Live updates for the production screens (must come before the production routes). See events.js.
+registerEventRoutes(app, db, requireRole);
 // Production workflow routes (agent data -> Production Dossier). See production.js.
 registerProductionRoutes(app, db, requireRole);
 registerDesignTaskRoutes(app, db, requireRole);
+registerBlueprintRoutes(app, db, requireRole);
+registerPlanningRoutes(app, db, requireRole);
+registerTimelineRoutes(app, db, requireRole);
 registerScreenplayRoutes(app, db, requireRole);
 // Pipeline steps 2-8: shots, storyboard, AI pictures/voices/video, export.
 registerPipelineRoutes(app, db, requireRole, {

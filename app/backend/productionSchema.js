@@ -16,6 +16,8 @@ import { ensurePipelineSettingsSchema } from "./pipelineSettings.js";
 import { ensureShotSchema } from "./shots.js";
 import { ensureGenerationSchema, failStaleGenerations } from "./generations.js";
 import { ensureExportSchema, failStaleExports } from "./assemble.js";
+import { ensureBlueprintSchema } from "./blueprint.js";
+import { ensureTimelineSchema } from "./timeline.js";
 
 export async function ensureAllProductionSchemas(db, log = console.error) {
   const steps = [
@@ -28,6 +30,8 @@ export async function ensureAllProductionSchemas(db, log = console.error) {
     ["shots and storyboard", ensureShotSchema],
     ["generated pictures, voices and video", ensureGenerationSchema],
     ["exports", ensureExportSchema],
+    ["blueprint, prompts and screenplay versions", ensureBlueprintSchema],
+    ["timeline", ensureTimelineSchema],
     ["clean up interrupted work", async (db) => { await failStaleGenerations(db); await failStaleExports(db); }],
   ];
   const failures = [];

@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useContext, createContext, Fragment } from
 import { createPortal } from 'react-dom'
 import './App.css'
 import { AI_ACTIVITY_EVENT, AI_WARP_EVENT } from './AiBackground.jsx'
-import PipelineStage, { PIPELINE_STAGES } from './PipelineStage.jsx'
+import ProductionStudio, { PRODUCTION_WORKSPACES, LEGACY_VIEW } from './ProductionStudio.jsx'
 import AiMovieStudio, { AI_MOVIE_STUDIO_VIEWS, StageJudgeNote } from './AiMovieStudio.jsx'
 import ProductionDossier from './ProductionDossier.jsx'
 import DesignerWorkspace from './DesignerWorkspace.jsx'
@@ -6467,7 +6467,8 @@ function App() {
   // you go. null = not saved yet (a fresh, un-analyzed paste).
   const [aiMovieProjectId, setAiMovieProjectId] = useState(null)
   const [aiMovieProjectTitle, setAiMovieProjectTitle] = useState(null)
-  const [aiMovieView, setAiMovieView] = useState('editor') // 'editor' | 'allProjects' | 'reference' | 'dossier'
+  const [aiMovieView, setAiMovieView] = useState('editor') // 'editor' | 'allProjects' | 'reference' | a production workspace | a studio view (older names like 'dossier' or 'images' still work)
+  const productionView = PRODUCTION_WORKSPACES[aiMovieView] ? aiMovieView : LEGACY_VIEW[aiMovieView] ?? null
   const [isSeedingDossierTestProject, setIsSeedingDossierTestProject] = useState(false)
   const [aiMovieProjectList, setAiMovieProjectList] = useState([])
   const [isLoadingAiMovieProjects, setIsLoadingAiMovieProjects] = useState(false)
@@ -11319,47 +11320,19 @@ function App() {
                 <span className="agent-expand-icon">▸</span>
                 {t.masterProjectListLabel}
               </button>
-              {aiMovieProjectId && (
-                <button
-                  className={aiMovieView === 'reference' ? 'agent-header active' : 'agent-header'}
-                  onClick={handleAiMovieReferenceViewClick}
-                >
-                  <span className="agent-expand-icon">▸</span>
-                  {t.aiMovieReferenceHeading}
-                </button>
-              )}
-              {aiMovieProjectId && (
-                <button
-                  className={aiMovieView === 'storyBible' ? 'agent-header active' : 'agent-header'}
-                  onClick={() => { setAiMovieView((prev) => (prev === 'storyBible' ? 'editor' : 'storyBible')); setIsSidebarOpen(false) }}
-                >
-                  <span className="agent-expand-icon">▸</span>
-                  {AI_MOVIE_STUDIO_VIEWS.storyBible.title}
-                </button>
-              )}
-              {aiMovieProjectId && (
-                <button
-                  className={aiMovieView === 'dossier' ? 'agent-header active' : 'agent-header'}
-                  onClick={() => { handleAiMovieDossierViewClick(); setIsSidebarOpen(false) }}
-                >
-                  <span className="agent-expand-icon">▸</span>
-                  Production Dossier
-                </button>
-              )}
-              {aiMovieProjectId && Object.entries(PIPELINE_STAGES).map(([key, info]) => (
-                <button
-                  key={key}
-                  className={aiMovieView === key ? 'agent-header active' : 'agent-header'}
-                  onClick={() => { setAiMovieView((prev) => (prev === key ? 'editor' : key)); setIsSidebarOpen(false) }}
-                >
-                  <span className="agent-expand-icon">▸</span>
-                  {info.title}
-                </button>
-              ))}
+              {/* 1. Story & Screenplay: the Auto Storyteller, the story stages, the screenplay, the Cinematic Director, language */}
               <button className="agent-header active">
                 <span className="agent-expand-icon expanded">▸</span>
                 {t.storyAgentLabel}
               </button>
+              {aiMovieProjectId && (
+                <button
+                  className={aiMovieView === 'storyBible' ? 'agent-header agent-sub active' : 'agent-header agent-sub'}
+                  onClick={() => { setAiMovieView((prev) => (prev === 'storyBible' ? 'editor' : 'storyBible')); setIsSidebarOpen(false) }}
+                >
+                  {AI_MOVIE_STUDIO_VIEWS.storyBible.title}
+                </button>
+              )}
               {aiMovieBackfillResult?.story && (
                 <div className="stage-progress agent-substages">
                   {AI_MOVIE_STAGE_ORDER.map((stageKey) => {
@@ -11390,17 +11363,32 @@ function App() {
               {aiMovieProjectId && ['cinematic', 'language'].map((key) => (
                 <button
                   key={key}
-                  className={aiMovieView === key ? 'agent-header active' : 'agent-header'}
+                  className={aiMovieView === key ? 'agent-header agent-sub active' : 'agent-header agent-sub'}
                   onClick={() => { setAiMovieView((prev) => (prev === key ? 'editor' : key)); setIsSidebarOpen(false) }}
                 >
-                  <span className="agent-expand-icon">▸</span>
                   {AI_MOVIE_STUDIO_VIEWS[key].title}
                 </button>
               ))}
-              <button className="agent-header">
-                <span className="agent-expand-icon">▸</span>
-                {t.aiMovieProductionLabel}
-              </button>
+              {/* 2-7. The production workspaces, in the order the film is made. The old Dossier / Shot division / Storyboard / Image generation / Audio / Video / Assemble screens live inside them. */}
+              {aiMovieProjectId && Object.entries(PRODUCTION_WORKSPACES).map(([key, info]) => (
+                <button
+                  key={key}
+                  className={productionView === key ? 'agent-header active' : 'agent-header'}
+                  onClick={() => { setAiMovieView((prev) => (prev === key ? 'editor' : key)); setIsSidebarOpen(false) }}
+                >
+                  <span className="agent-expand-icon">▸</span>
+                  {info.title}
+                </button>
+              ))}
+              {aiMovieProjectId && (
+                <button
+                  className={aiMovieView === 'reference' ? 'agent-header agent-utility active' : 'agent-header agent-utility'}
+                  onClick={handleAiMovieReferenceViewClick}
+                >
+                  <span className="agent-expand-icon">▸</span>
+                  {t.aiMovieReferenceHeading}
+                </button>
+              )}
             </div>
           </div>
 
@@ -12415,9 +12403,9 @@ function App() {
             </div>
           )}
 
-          {aiMovieView === 'dossier' && (
+          {productionView && (
             <div className="concept-page concept-page-wide">
-              <ProductionDossier projectId={aiMovieProjectId} backendUrl={BACKEND_URL} />
+              <ProductionStudio workspace={productionView} projectId={aiMovieProjectId} backendUrl={BACKEND_URL} onNavigate={(view) => { setAiMovieView(view); window.scrollTo({ top: 0 }) }} />
             </div>
           )}
 
@@ -12427,11 +12415,6 @@ function App() {
             </div>
           )}
 
-          {Object.keys(PIPELINE_STAGES).includes(aiMovieView) && (
-            <div className="concept-page concept-page-wide">
-              <PipelineStage key={aiMovieView} stage={aiMovieView} projectId={aiMovieProjectId} backendUrl={BACKEND_URL} />
-            </div>
-          )}
 
           {aiMovieView === 'reference' && (
           <div className="concept-page">

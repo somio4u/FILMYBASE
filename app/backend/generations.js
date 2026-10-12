@@ -16,6 +16,8 @@ import os from "node:os";
 import path from "node:path";
 import { effectiveDetails } from "./production.js";
 import { assertWithinBudget, getSettings, priceTable, recordSpend, VOICES } from "./pipelineSettings.js";
+import { ensurePrompt, hashInputs } from "./prompts.js";
+import { publish } from "./events.js";
 
 const httpError = (message, status = 400, code = "bad_request") => Object.assign(new Error(message), { status, code });
 
@@ -116,6 +118,40 @@ export function speechText(element) {
   return `${how}${text}`;
 }
 
+// ---- prompt specs: the text AND the hash of the inputs it was written from (see prompts.js) ----
+// The Blueprint planner and the generators both use these, so a prompt planned in advance is exactly what gets sent.
+export const veoSecondsFor = (durationSec) => VEO_SECONDS.find((s) => s >= Math.round(Number(durationSec) || 4)) ?? VEO_SECONDS[VEO_SECONDS.length - 1];
+const ORDER = { character: 0, location: 1, prop: 2 };
+export const plannedRefNames = (shot) => [...shot.assets].filter((a) => a.kind in ORDER).sort((a, b) => ORDER[a.kind] - ORDER[b.kind]).slice(0, 4).map((a) => a.name);
+
+export function sheetSpec(asset, style) {
+  const details = describeDetails(effectiveDetails(asset));
+  return { purpose: "model_sheet", assetId: asset.id, text: assetPrompt(asset, style), params: { aspectRatio: "16:9" }, sourceHash: hashInputs({ k: "sheet", kind: asset.kind, name: asset.name, details, style }) };
+}
+export function frameSpec(shot, style, aspectRatio = "16:9") {
+  const names = plannedRefNames(shot);
+  return { purpose: "first_frame", shotId: shot.id, text: keyframePrompt(shot, style, names), params: { aspectRatio, refNames: names }, sourceHash: hashInputs({ k: "frame", d: shot.storyboardText || shot.description, f: shot.framing, a: shot.cameraAngle, m: shot.cameraMove, names, style, aspectRatio }) };
+}
+export function videoSpec(shot, style, aspectRatio = "16:9") {
+  const seconds = veoSecondsFor(shot.durationSec);
+  const text = `${videoPrompt(shot, style)} Target length: about ${seconds} seconds.`;
+  return { purpose: "video", shotId: shot.id, text, params: { seconds, plannedSeconds: shot.durationSec, aspectRatio }, sourceHash: hashInputs({ k: "video", d: shot.storyboardText || shot.description, m: shot.cameraMove, seconds, style }) };
+}
+export function audioSpec(element, voice) {
+  const text = speechText(element);
+  return { purpose: "audio", elementId: element.id, text, params: { voice, speaker: element.speaker, chars: text.length }, sourceHash: hashInputs({ k: "audio", text, voice, speaker: element.speaker }) };
+}
+
+// A speaker keeps one voice: the one chosen in settings, otherwise a steady pick from the list.
+export async function voiceForSpeaker(db, projectId, speaker) {
+  const settings = await getSettings(db, projectId);
+  const key = String(speaker ?? "").trim();
+  if (settings.voices[key]) return settings.voices[key];
+  const speakers = (await db.query("SELECT DISTINCT speaker FROM production_scene_elements WHERE project_id = $1 AND kind = 'dialogue' AND speaker IS NOT NULL ORDER BY speaker", [projectId])).rows.map((r) => r.speaker);
+  const index = Math.max(0, speakers.indexOf(key));
+  return VOICES[index % VOICES.length];
+}
+
 const kindForAsset = (assetKind) => (assetKind === "character" ? "character" : assetKind === "location" ? "environment" : "prop");
 
 export function estimateCost(kind, { chars = 0, seconds = 0 } = {}, prices = priceTable()) {
@@ -177,7 +213,7 @@ export function createGenerationService({ db, store, providers, env = process.en
 
   // Inserts the row, checks the money limit, and starts the work in the background.
   // Returns { row, done } — `done` resolves when the work has finished (tests wait on it).
-  async function start({ projectId, kind, assetId = null, shotId = null, elementId = null, prompt, params, estimate, actorUserId, run, label, subfolder, role, ext }) {
+  async function start({ projectId, kind, assetId = null, shotId = null, elementId = null, prompt, promptId = null, params, estimate, actorUserId, run, label, subfolder, role, ext }) {
     const targetWhere = "kind = $1 AND COALESCE(asset_id,0) = $2 AND COALESCE(shot_id,0) = $3 AND COALESCE(element_id,0) = $4";
     const targetParams = [kind, assetId ?? 0, shotId ?? 0, elementId ?? 0];
     if (await alreadyRunning(targetWhere, targetParams)) throw httpError("This is already being made. Wait for it to finish first.", 409, "already_running");
@@ -186,10 +222,12 @@ export function createGenerationService({ db, store, providers, env = process.en
     const providerName = "gemini";
     const model = kind === "audio" ? providers.models.speech : kind === "video" ? providers.models.video : providers.models.image;
     const row = (await db.query(
-        `INSERT INTO production_generations (project_id, kind, asset_id, shot_id, element_id, version, prompt, params, provider, model, cost_usd, created_by)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING *`,
-        [projectId, kind, assetId, shotId, elementId, version, prompt, JSON.stringify(params ?? {}), providerName, model, estimate, actorUserId ?? null]
+        `INSERT INTO production_generations (project_id, kind, asset_id, shot_id, element_id, version, prompt, prompt_id, params, provider, model, cost_usd, created_by)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING *`,
+        [projectId, kind, assetId, shotId, elementId, version, prompt, promptId, JSON.stringify(params ?? {}), providerName, model, estimate, actorUserId ?? null]
       )).rows[0];
+    const target = { kind, assetId, shotId, elementId, generationId: row.id };
+    publish(projectId, { type: "job_started", ...target });
     const done = enqueue(async () => {
       const started = Date.now();
       let tmpFile = null;
@@ -206,8 +244,10 @@ export function createGenerationService({ db, store, providers, env = process.en
           [media.id, made.durationMs ?? Date.now() - started, row.id]
         );
         await recordSpend(db, projectId, { kind, provider: providerName, units: params?.seconds ?? params?.chars ?? 1, costUsd: estimate, ref: `generation ${row.id}` });
+        publish(projectId, { type: "job_finished", status: "ready", ...target });
       } catch (error) {
         await db.query("UPDATE production_generations SET status = 'failed', error = $1, finished_at = now() WHERE id = $2", [String(error.message ?? error).slice(0, 800), row.id]);
+        publish(projectId, { type: "job_finished", status: "failed", ...target });
       } finally {
         if (tmpFile) fs.promises.rm(tmpFile, { force: true }).catch(() => {});
       }
@@ -222,11 +262,13 @@ export function createGenerationService({ db, store, providers, env = process.en
       if (!asset) throw httpError("Item not found.", 404, "not_found");
       const settings = await getSettings(db, projectId);
       const kind = kindForAsset(asset.kind);
-      const prompt = `${assetPrompt(asset, settings.stylePrompt)}${note ? ` Extra direction: ${String(note).slice(0, 500)}` : ""}`;
+      // The planned model-sheet prompt (written in the Blueprint, possibly edited by a person) is what gets sent.
+      const planned = await ensurePrompt(db, projectId, { ...sheetSpec(asset, settings.stylePrompt), actorUserId });
+      const prompt = `${planned.prompt.text}${note ? ` Extra direction: ${String(note).slice(0, 500)}` : ""}`;
       const aspect = "16:9"; // model sheets are wide so every view fits
       const version = await nextVersion("asset_id = $1", [assetId]);
       return start({
-        projectId, kind, assetId, prompt, params: { aspectRatio: aspect }, estimate: estimateCost(kind), actorUserId,
+        projectId, kind, assetId, prompt, promptId: planned.prompt.id, params: { aspectRatio: aspect }, estimate: estimateCost(kind), actorUserId,
         label: `${asset.code}_v${version}`, subfolder: `${asset.code} ${asset.name}`, role: kind, ext: ".png",
         run: () => providers.generateImage({ prompt, aspectRatio: aspect }),
       });
@@ -253,10 +295,13 @@ export function createGenerationService({ db, store, providers, env = process.en
       // characters first, then the place, then objects; the AI takes at most 4
       const order = { character: 0, location: 1, prop: 2 };
       const chosen = [...ready.refs].sort((a, b) => order[a.asset.kind] - order[b.asset.kind]).slice(0, 4);
-      const prompt = keyframePrompt(shot, settings.stylePrompt, chosen.map((c) => c.asset.name));
+      const planned = await ensurePrompt(db, projectId, { ...frameSpec(shot, settings.stylePrompt, settings.aspectRatio), actorUserId });
+      const chosenNames = chosen.map((c) => c.asset.name);
+      // The planned prompt names every item of the shot; if some reference is missing (allowed on request) the text names only the attached ones.
+      const prompt = planned.prompt.edited || JSON.stringify(chosenNames) === JSON.stringify(plannedRefNames(shot)) ? planned.prompt.text : keyframePrompt(shot, settings.stylePrompt, chosenNames);
       const version = await nextVersion("shot_id = $1 AND kind = 'keyframe'", [shot.id]);
       return start({
-        projectId, kind: "keyframe", shotId: shot.id, prompt, params: { aspectRatio: settings.aspectRatio, refs: chosen.map((c) => c.generation.id) }, estimate: estimateCost("keyframe"), actorUserId,
+        projectId, kind: "keyframe", shotId: shot.id, prompt, promptId: planned.prompt.id, params: { aspectRatio: settings.aspectRatio, refs: chosen.map((c) => c.generation.id) }, estimate: estimateCost("keyframe"), actorUserId,
         label: `${shot.code}_v${version}`, subfolder: `${shot.sceneCode}`, role: "keyframe", ext: ".png",
         run: async () => {
           const references = [];
@@ -268,12 +313,7 @@ export function createGenerationService({ db, store, providers, env = process.en
 
     // ---- step 6: voices ----
     async voiceFor(projectId, speaker) {
-      const settings = await getSettings(db, projectId);
-      const key = String(speaker ?? "").trim();
-      if (settings.voices[key]) return settings.voices[key];
-      const speakers = (await db.query("SELECT DISTINCT speaker FROM production_scene_elements WHERE project_id = $1 AND kind = 'dialogue' AND speaker IS NOT NULL ORDER BY speaker", [projectId])).rows.map((r) => r.speaker);
-      const index = Math.max(0, speakers.indexOf(key));
-      return VOICES[index % VOICES.length];
+      return voiceForSpeaker(db, projectId, speaker);
     },
 
     async generateVoice(projectId, elementId, { actorUserId = null } = {}) {
@@ -281,12 +321,13 @@ export function createGenerationService({ db, store, providers, env = process.en
         `SELECT e.*, s.code AS scene_code FROM production_scene_elements e JOIN production_scenes s ON s.id = e.scene_id WHERE e.id = $1 AND e.project_id = $2 AND e.kind = 'dialogue'`, [elementId, projectId]
       )).rows[0];
       if (!element) throw httpError("Dialogue line not found.", 404, "not_found");
-      const text = speechText(element);
-      if (!text.trim()) throw httpError("This line has no words to speak.");
       const voice = await this.voiceFor(projectId, element.speaker);
+      if (!speechText(element).trim()) throw httpError("This line has no words to speak.");
+      const planned = await ensurePrompt(db, projectId, { ...audioSpec(element, voice), actorUserId });
+      const text = planned.prompt.text;
       const version = await nextVersion("element_id = $1", [elementId]);
       return start({
-        projectId, kind: "audio", elementId, prompt: text, params: { voice, chars: text.length, speaker: element.speaker }, estimate: estimateCost("audio", { chars: text.length }), actorUserId,
+        projectId, kind: "audio", elementId, prompt: text, promptId: planned.prompt.id, params: { voice, chars: text.length, speaker: element.speaker }, estimate: estimateCost("audio", { chars: text.length }), actorUserId,
         label: `${element.code}_${String(element.speaker ?? "voice").slice(0, 20)}_v${version}`, subfolder: element.scene_code, role: "audio", ext: ".wav",
         run: () => providers.generateSpeech({ text, voice }),
       });
@@ -298,10 +339,11 @@ export function createGenerationService({ db, store, providers, env = process.en
       if (!keyframe?.media_id) throw httpError(`Shot ${shot.code} needs an approved picture first. Approve one of its pictures, then make video.`, 409, "not_ready");
       const settings = await getSettings(db, projectId);
       const seconds = durationSec ? pickVeoSeconds(durationSec) : pickVeoSeconds(shot.durationSec);
-      const prompt = videoPrompt(shot, settings.stylePrompt);
+      const planned = await ensurePrompt(db, projectId, { ...videoSpec(shot, settings.stylePrompt, settings.aspectRatio), actorUserId });
+      const prompt = durationSec && seconds !== planned.prompt.params?.seconds ? `${videoPrompt(shot, settings.stylePrompt)} Target length: about ${seconds} seconds.` : planned.prompt.text;
       const version = await nextVersion("shot_id = $1 AND kind = 'video'", [shot.id]);
       return start({
-        projectId, kind: "video", shotId: shot.id, prompt, params: { seconds, fromGeneration: keyframe.id, aspectRatio: settings.aspectRatio }, estimate: estimateCost("video", { seconds }), actorUserId,
+        projectId, kind: "video", shotId: shot.id, prompt, promptId: planned.prompt.id, params: { seconds, fromGeneration: keyframe.id, aspectRatio: settings.aspectRatio }, estimate: estimateCost("video", { seconds }), actorUserId,
         label: `${shot.code}_take${version}`, subfolder: shot.sceneCode, role: "video_take", ext: ".mp4",
         run: async () => {
           const image = await readMediaBuffer(keyframe.media_id);
@@ -328,6 +370,8 @@ export function createGenerationService({ db, store, providers, env = process.en
         }
         await client.query("UPDATE production_generations SET review = $1, review_note = $2 WHERE id = $3", [decision === "approve" ? "approved" : decision === "reject" ? "rejected" : "pending", String(note).slice(0, 500) || null, row.id]);
         await client.query("COMMIT");
+        // Live sync: whoever is watching the Timeline / studios refreshes just the slot this belongs to.
+        publish(projectId, { type: "media_review", decision, kind: row.kind, assetId: row.asset_id, shotId: row.shot_id, elementId: row.element_id, generationId: row.id });
         return (await service.list(projectId, { id: generationId }))[0];
       } catch (error) {
         await client.query("ROLLBACK").catch(() => {});

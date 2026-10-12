@@ -41,6 +41,7 @@ import { registerTimelineRoutes } from "./timeline.js";
 import { registerAudioCueRoutes } from "./audioCues.js";
 import { registerTimelineEditRoutes } from "./timelineEdit.js";
 import { registerShotPlanRoutes } from "./shotPlans.js";
+import { buildReferenceBlock, findRelated as findRelatedSources, ideaWithReferences, registerWorkspaceRoutes } from "./workspaceContext.js";
 import { registerTimelineExportRoutes } from "./timelineExport.js";
 import { registerEventRoutes } from "./events.js";
 import cookieParser from "cookie-parser";
@@ -157,6 +158,8 @@ async function ensureAiMovieSchema() {
     // The Story Brain's design (see storyBrain.js) lives on the run itself.
     `ALTER TABLE auto_pipeline_runs ADD COLUMN IF NOT EXISTS story_bible JSONB`,
     `ALTER TABLE auto_pipeline_runs ADD COLUMN IF NOT EXISTS story_bible_usage JSONB`,
+    `ALTER TABLE auto_pipeline_runs ADD COLUMN IF NOT EXISTS reference_context TEXT`,
+    `ALTER TABLE auto_pipeline_runs ADD COLUMN IF NOT EXISTS reference_sources JSONB`,
     // Which "Production only" login uploaded a production project (null for
     // everything the admin made) — that login sees only its own projects.
     `ALTER TABLE concepts ADD COLUMN IF NOT EXISTS owner_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL`,
@@ -18321,17 +18324,23 @@ app.post("/api/auto-pipeline/start", requireRole("admin"), async (req, res) => {
   const dialogueLanguage = ["en", "hi"].includes(rawDialogueLanguage) ? rawDialogueLanguage : "or";
 
   try {
+    // Read-only look through the rest of the app (see workspaceContext.js): projects the person picked, plus — if asked —
+    // related ones the agent finds itself. The new idea stays in charge; the material is for continuity and inspiration.
+    const chosen = (Array.isArray(req.body.references) ? req.body.references : []).filter((r) => ["film", "ai_movie"].includes(r?.kind) && Number(r?.id) > 0).map((r) => ({ kind: r.kind, id: Number(r.id), parts: Array.isArray(r.parts) ? r.parts : null, how: "chosen" }));
+    const found = req.body.autoReferences ? (await findRelatedSources(db, concept, { exclude: chosen })).map((r) => ({ kind: r.kind, id: r.id, how: "found by the agent" })) : [];
+    const reference = await buildReferenceBlock(db, [...chosen, ...found]);
+    const writerIdea = ideaWithReferences(concept, reference.text);
     const insertResult = await db.query(
-      "INSERT INTO auto_pipeline_runs (concept_text, format, status, progress_stage, created_by, dialogue_language) VALUES ($1, $2, 'running', 'starting', $3, $4) RETURNING id",
-      [concept, JSON.stringify(format), req.user.id, dialogueLanguage]
+      "INSERT INTO auto_pipeline_runs (concept_text, format, status, progress_stage, created_by, dialogue_language, reference_context, reference_sources) VALUES ($1, $2, 'running', 'starting', $3, $4, $5, $6) RETURNING id",
+      [concept, JSON.stringify(format), req.user.id, dialogueLanguage, reference.text || null, reference.used.length ? JSON.stringify(reference.used) : null]
     );
     const runId = insertResult.rows[0].id;
 
     // Films and web series are designed by the Story Brain first and wait
     // for the user's approval; vertical micro-dramas go straight to writing.
     // Deliberately not awaited — see runAutoPipeline's own comment.
-    if (usesStoryBrain(format)) runStoryBrainStage(runId, concept, format);
-    else runAutoPipeline(runId, concept, format, dialogueLanguage);
+    if (usesStoryBrain(format)) runStoryBrainStage(runId, writerIdea, format);
+    else runAutoPipeline(runId, writerIdea, format, dialogueLanguage, undefined, { ideaText: concept });
 
     res.json({ runId });
   } catch (error) {
@@ -18476,7 +18485,7 @@ app.post("/api/auto-pipeline/:id/resume", requireRole("admin"), async (req, res)
       await updateAutoPipelineRun(run.id, { status: "awaiting_approval", progress_stage: "story-bible", error: null });
     } else {
       await db.query("UPDATE auto_pipeline_runs SET status = 'running', error = NULL WHERE id = $1", [run.id]);
-      runStoryBrainStage(run.id, run.concept_text, run.format);
+      runStoryBrainStage(run.id, ideaWithReferences(run.concept_text, run.reference_context), run.format);
     }
     res.json({ runId: run.id });
     return;
@@ -18495,7 +18504,7 @@ app.post("/api/auto-pipeline/:id/resume", requireRole("admin"), async (req, res)
       ideaText: run.concept_text,
     });
   } else {
-    runAutoPipeline(run.id, run.concept_text, run.format, run.dialogue_language, run.concept_id);
+    runAutoPipeline(run.id, ideaWithReferences(run.concept_text, run.reference_context), run.format, run.dialogue_language, run.concept_id, { ideaText: run.concept_text });
   }
 
   res.json({ runId: run.id });
@@ -18606,7 +18615,7 @@ app.get("/api/auto-pipeline/runs", requireLogin, async (req, res) => {
 
 app.get("/api/auto-pipeline/:id/status", requireLogin, async (req, res) => {
   const result = await db.query(
-    "SELECT id, concept_text, format, status, progress_stage, review_notes, concept_id, scene_list_id, error, created_at, updated_at, story_bible, story_bible_usage FROM auto_pipeline_runs WHERE id = $1",
+    "SELECT id, concept_text, format, status, progress_stage, review_notes, concept_id, scene_list_id, error, created_at, updated_at, story_bible, story_bible_usage, reference_sources FROM auto_pipeline_runs WHERE id = $1",
     [req.params.id]
   );
   if (result.rows.length === 0) {
@@ -18628,6 +18637,7 @@ app.get("/api/auto-pipeline/:id/status", requireLogin, async (req, res) => {
     updatedAt: row.updated_at,
     storyBible: row.story_bible,
     storyBibleUsage: row.story_bible_usage,
+    referenceSources: row.reference_sources ?? [],
   });
 });
 
@@ -19257,6 +19267,7 @@ registerStudioRoutes(app, db, requireRole);
 registerTimelineRoutes(app, db, requireRole);
 registerTimelineEditRoutes(app, db, requireRole);
 // The Shot Optimization review runs through the Shot Cutter's own model route (Pro in Professional/Maximum) and the money guard.
+registerWorkspaceRoutes(app, db, requireRole);
 registerShotPlanRoutes(app, db, requireRole, { getTextJson: async (projectId) => async (prompt) => (await aiMovieStory.ask.ask(projectId, "shot-cutter-complex", { contents: prompt, maxOutputTokens: 8192 })).data });
 registerTimelineExportRoutes(app, db, requireRole, { store: productionMedia.store });
 registerScreenplayRoutes(app, db, requireRole);

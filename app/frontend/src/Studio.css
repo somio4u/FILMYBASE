@@ -64,3 +64,14 @@
 .studio-edit { display: flex; flex-direction: column; gap: 8px; }
 .studio-rec { background: var(--danger); color: #fff; }
 @media (max-width: 720px) { .studio-compare { grid-template-columns: 1fr; } .studio-title-row .studio-link { margin-left: 0; } }
+
+/* Auto Screenplay agent: material from the rest of the app */
+.ws-sources { border: 1px solid rgba(128,128,128,.3); border-radius: 10px; padding: 6px 10px; font-size: .85rem; }
+.ws-sources summary { cursor: pointer; font-weight: 600; }
+.ws-note { margin: 4px 0; opacity: .75; font-size: .78rem; }
+.ws-filter { width: 100%; box-sizing: border-box; margin: 4px 0; }
+.ws-list { list-style: none; margin: 0; padding: 0; max-height: 190px; overflow-y: auto; display: grid; gap: 4px; }
+.ws-list label { display: grid; grid-template-columns: auto 1fr; column-gap: 6px; align-items: start; cursor: pointer; }
+.ws-list small { grid-column: 2; opacity: .7; }
+.ws-type { opacity: .7; font-size: .75rem; } .ws-match { color: #2563eb; font-size: .75rem; }
+.ws-used { font-size: .78rem; opacity: .85; margin: 4px 0; }

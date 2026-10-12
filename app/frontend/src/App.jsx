@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom'
 import './App.css'
 import { AI_ACTIVITY_EVENT, AI_WARP_EVENT } from './AiBackground.jsx'
 import ProductionStudio, { PRODUCTION_WORKSPACES, LEGACY_VIEW } from './ProductionStudio.jsx'
+import WorkspaceSources, { UsedSources } from './WorkspaceSources.jsx'
 import AiMovieStudio, { AI_MOVIE_STUDIO_VIEWS, StageJudgeNote } from './AiMovieStudio.jsx'
 import ProductionDossier from './ProductionDossier.jsx'
 import DesignerWorkspace from './DesignerWorkspace.jsx'
@@ -2516,6 +2517,8 @@ function FloatingAgentWidget({ currentUser, t, onRunCompleted, onOpenProject }) 
   const hasDraggedRef = useRef(false)
 
   const [concept, setConcept] = useState('')
+  const [refAuto, setRefAuto] = useState(true) // let the agent look through the app for related projects
+  const [refPicked, setRefPicked] = useState([]) // projects the person ticked
   const [formatType, setFormatType] = useState('vertical')
   const [episodeCount, setEpisodeCount] = useState(60)
   const [episodeMinutes, setEpisodeMinutes] = useState(1.5)
@@ -2726,7 +2729,7 @@ function FloatingAgentWidget({ currentUser, t, onRunCompleted, onOpenProject }) 
       const response = await fetch(`${BACKEND_URL}/api/auto-pipeline/start`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ concept, format, dialogueLanguage }),
+        body: JSON.stringify({ concept, format, dialogueLanguage, autoReferences: refAuto, references: refPicked.map(({ kind, id }) => ({ kind, id })) }),
       })
       const data = await response.json()
       if (!response.ok) {
@@ -2802,6 +2805,7 @@ function FloatingAgentWidget({ currentUser, t, onRunCompleted, onOpenProject }) 
     setStatus(null)
     setErrorMessage(null)
     setConcept('')
+    setRefPicked([])
     runStartedAtRef.current = null
     try {
       localStorage.removeItem(AUTO_PIPELINE_RUN_ID_STORAGE_KEY)
@@ -2907,6 +2911,7 @@ function FloatingAgentWidget({ currentUser, t, onRunCompleted, onOpenProject }) 
                   value={concept}
                   onChange={(e) => setConcept(e.target.value)}
                 />
+                <WorkspaceSources backendUrl={BACKEND_URL} idea={concept} auto={refAuto} onAuto={setRefAuto} picked={refPicked} onPicked={setRefPicked} />
                 <select value={formatType} onChange={(e) => setFormatType(e.target.value)}>
                   <option value="vertical">{t.verticalDramaOption}</option>
                   <option value="series">{t.seriesOption}</option>
@@ -2943,6 +2948,7 @@ function FloatingAgentWidget({ currentUser, t, onRunCompleted, onOpenProject }) 
 
             {runId && status && (
               <>
+                <UsedSources sources={status.referenceSources} />
                 {status.status === 'running' && (
                   <div className="floating-agent-now">
                     <div className="floating-agent-progress-bar">

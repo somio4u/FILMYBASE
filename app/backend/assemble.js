@@ -17,7 +17,7 @@ import AdmZip from "adm-zip";
 import { getSettings } from "./pipelineSettings.js";
 
 const httpError = (message, status = 400, code = "bad_request") => Object.assign(new Error(message), { status, code });
-const SIZES = { "16:9": [1280, 720], "9:16": [720, 1280], "1:1": [1024, 1024], "4:3": [960, 720], "3:4": [720, 960] };
+export const SIZES = { "16:9": [1280, 720], "9:16": [720, 1280], "1:1": [1024, 1024], "4:3": [960, 720], "3:4": [720, 960] };
 const GAP_SECONDS = 0.3;
 const PACKAGE_MEDIA_LIMIT = 150 * 1024 * 1024;
 
@@ -36,6 +36,9 @@ export async function ensureExportSchema(db) {
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     finished_at TIMESTAMPTZ
   )`);
+  // exports made from a saved Timeline snapshot (see timelineExport.js) remember which one and what the checks found
+  await db.query("ALTER TABLE production_exports ADD COLUMN IF NOT EXISTS snapshot_id INTEGER");
+  await db.query("ALTER TABLE production_exports ADD COLUMN IF NOT EXISTS report JSONB");
 }
 
 export async function failStaleExports(db) {
@@ -64,7 +67,7 @@ export async function findFfmpeg(env = process.env) {
   return null;
 }
 
-function runFfmpeg(bin, args) {
+export function runFfmpeg(bin, args) {
   return new Promise((resolve, reject) => {
     const p = spawn(bin, ["-y", "-hide_banner", "-loglevel", "error", ...args], { stdio: ["ignore", "ignore", "pipe"] });
     let err = "";
@@ -263,6 +266,7 @@ export function createAssembler({ db, store, listShots, listGenerations, env = p
       )).rows.map((e) => ({
         id: e.id, sceneId: e.scene_id, sceneCode: e.scene_code, status: e.status, videoUrl: e.video_media_id ? `/api/production/media/${e.video_media_id}` : null,
         packageUrl: e.package_media_id ? `/api/production/media/${e.package_media_id}` : null, manifest: e.manifest, note: e.note, error: e.error, createdAt: e.created_at, finishedAt: e.finished_at,
+        snapshotId: e.snapshot_id ?? null, report: e.report ?? null,
       }));
     },
   };

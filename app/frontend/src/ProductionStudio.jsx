@@ -9,6 +9,7 @@ import TimelineView from './TimelineView.jsx'
 import ImageStudio from './ImageStudio.jsx'
 import { VideoStudio, AudioStudio } from './VideoAudioStudio.jsx'
 import PipelineStage from './PipelineStage.jsx'
+import ExportDelivery from './ExportDelivery.jsx'
 import { useLive } from './useLive.js'
 import './Production.css'
 
@@ -84,7 +85,15 @@ export default function ProductionStudio({ workspace, projectId, backendUrl, onN
       {workspace === 'imageStudio' && <ImageStudio projectId={projectId} backendUrl={backendUrl} />}
       {workspace === 'videoStudio' && <VideoStudio projectId={projectId} backendUrl={backendUrl} onNavigate={onNavigate} />}
       {workspace === 'audioStudio' && <AudioStudio projectId={projectId} backendUrl={backendUrl} />}
-      {workspace === 'export' && <PipelineStage stage="export" projectId={projectId} backendUrl={backendUrl} />}
+      {workspace === 'export' && (
+        <>
+          <ExportDelivery projectId={projectId} backendUrl={backendUrl} onNavigate={onNavigate} />
+          <details className="ps-classic">
+            <summary>Classic scene-by-scene export (older tool, kept as it was)</summary>
+            <PipelineStage stage="export" projectId={projectId} backendUrl={backendUrl} />
+          </details>
+        </>
+      )}
     </div>
   )
 }

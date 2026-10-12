@@ -64,7 +64,6 @@ export async function ensureTimelineSchema(db) {
       created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
       updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
     )`,
-    `CREATE UNIQUE INDEX IF NOT EXISTS production_timeline_clip_shot ON production_timeline_clips (timeline_id, shot_id) WHERE kind = 'shot' AND shot_id IS NOT NULL`,
     `CREATE UNIQUE INDEX IF NOT EXISTS production_timeline_clip_line ON production_timeline_clips (timeline_id, element_id) WHERE kind = 'dialogue' AND element_id IS NOT NULL`,
     `CREATE INDEX IF NOT EXISTS production_timeline_clips_idx ON production_timeline_clips (timeline_id, track_id, start_ms)`,
   ];
@@ -93,7 +92,7 @@ export async function syncTimelineFromBlueprint(db, projectId, blueprintVersion)
     const timeline = await ensureTimeline(client, projectId, blueprintVersion);
     await client.query("UPDATE production_timelines SET blueprint_version = $2, updated_at = now() WHERE id = $1", [timeline.id, blueprintVersion]);
     const tracks = Object.fromEntries((await client.query("SELECT id, name FROM production_timeline_tracks WHERE timeline_id = $1", [timeline.id])).rows.map((t) => [t.name, t.id]));
-    const existing = new Map((await client.query("SELECT * FROM production_timeline_clips WHERE timeline_id = $1 AND kind = 'shot'", [timeline.id])).rows.map((c) => [c.shot_id, c]));
+    const existing = new Map((await client.query("SELECT * FROM production_timeline_clips WHERE timeline_id = $1 AND kind = 'shot' AND part = 0", [timeline.id])).rows.map((c) => [c.shot_id, c]));
     const present = new Set();
     // If a person has edited any clip, existing clips keep their place and new shots are appended after the last clip;
     // otherwise the whole layout simply follows the Blueprint's order and durations.
@@ -123,12 +122,13 @@ export async function syncTimelineFromBlueprint(db, projectId, blueprintVersion)
         result.updated++;
       }
     }
+    // (a deleted shot leaves its clip with no shot id at all, so orphans are found by clip, not by shot)
     for (const [shotId, clip] of existing) {
       if (!present.has(shotId) && !clip.orphaned) { await client.query("UPDATE production_timeline_clips SET orphaned = TRUE, updated_at = now() WHERE id = $1", [clip.id]); result.orphaned++; }
     }
 
     // dialogue placeholders: a line starts with its shot, lines in one shot follow each other
-    const shotClips = new Map((await client.query("SELECT shot_id, start_ms, duration_ms FROM production_timeline_clips WHERE timeline_id = $1 AND kind = 'shot'", [timeline.id])).rows.map((c) => [c.shot_id, c]));
+    const shotClips = new Map((await client.query("SELECT shot_id, start_ms, duration_ms FROM production_timeline_clips WHERE timeline_id = $1 AND kind = 'shot' AND part = 0", [timeline.id])).rows.map((c) => [c.shot_id, c]));
     const lines = (await client.query("SELECT id, code, speaker, text_en, text_hi FROM production_scene_elements WHERE project_id = $1 AND kind = 'dialogue'", [projectId])).rows;
     const lineMeta = new Map(lines.map((l) => [l.id, l]));
     const existingLines = new Map((await client.query("SELECT * FROM production_timeline_clips WHERE timeline_id = $1 AND kind = 'dialogue'", [timeline.id])).rows.map((c) => [c.element_id, c]));
@@ -162,7 +162,10 @@ export async function syncTimelineFromBlueprint(db, projectId, blueprintVersion)
   } finally {
     client.release();
   }
-  if (committed) await syncCueClips(db, projectId);
+  if (committed) {
+    await db.query("DELETE FROM production_timeline_edits WHERE timeline_id = (SELECT id FROM production_timelines WHERE project_id = $1)", [projectId]).catch(() => {});
+    await syncCueClips(db, projectId);
+  }
   publish(projectId, { type: "timeline_changed", reason: "blueprint_approved", ...result });
   return result;
 }
@@ -174,7 +177,7 @@ export async function syncCueClips(db, projectId) {
   if (!timeline) return { clips: 0 };
   const tracks = Object.fromEntries((await db.query("SELECT id, name FROM production_timeline_tracks WHERE timeline_id = $1", [timeline.id])).rows.map((t) => [t.name, t.id]));
   const cues = (await db.query("SELECT * FROM production_audio_cues WHERE project_id = $1 ORDER BY id", [projectId])).rows;
-  const shotClips = new Map((await db.query("SELECT shot_id, start_ms FROM production_timeline_clips WHERE timeline_id = $1 AND kind = 'shot'", [timeline.id])).rows.map((c) => [c.shot_id, c.start_ms]));
+  const shotClips = new Map((await db.query("SELECT shot_id, start_ms FROM production_timeline_clips WHERE timeline_id = $1 AND kind = 'shot' AND part = 0", [timeline.id])).rows.map((c) => [c.shot_id, c.start_ms]));
   const existing = new Map((await db.query("SELECT * FROM production_timeline_clips WHERE timeline_id = $1 AND cue_id IS NOT NULL", [timeline.id])).rows.map((c) => [c.cue_id, c]));
   for (const cue of cues) {
     const start = (cue.shot_id ? shotClips.get(cue.shot_id) ?? 0 : 0) + cue.offset_ms;
@@ -194,6 +197,7 @@ export async function syncCueClips(db, projectId) {
   const gone = [...existing.keys()].filter((cid) => !cues.some((c) => c.id === cid));
   if (gone.length) await db.query("DELETE FROM production_timeline_clips WHERE timeline_id = $1 AND cue_id = ANY($2)", [timeline.id, gone]);
   await db.query("UPDATE production_timelines SET edit_revision = edit_revision + 1, updated_at = now() WHERE id = $1", [timeline.id]);
+  await db.query("DELETE FROM production_timeline_edits WHERE timeline_id = $1", [timeline.id]).catch(() => {}); // cues changed outside the editor: start a fresh undo history
   publish(projectId, { type: "timeline_changed", reason: "cues" });
   return { clips: cues.length };
 }
@@ -224,7 +228,8 @@ export async function getTimeline(db, projectId) {
   const out = clips.map((c) => {
     const base = {
       id: c.id, trackId: c.track_id, kind: c.kind, shotId: c.shot_id, elementId: c.element_id, label: c.label, startMs: c.start_ms, durationMs: c.duration_ms,
-      plannedDurationMs: c.planned_duration_ms, sourceInMs: c.source_in_ms, edited: c.edited, orphaned: c.orphaned,
+      plannedDurationMs: c.planned_duration_ms, sourceInMs: c.source_in_ms, edited: c.edited, orphaned: c.orphaned, part: c.part,
+      takeOverride: Boolean(c.media_generation_id),
     };
     if (c.kind === "shot") {
       const shot = shotById.get(c.shot_id);

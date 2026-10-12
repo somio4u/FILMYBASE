@@ -39,6 +39,8 @@ import { registerPlanningRoutes } from "./planning.js";
 import { registerStudioRoutes } from "./studio.js";
 import { registerTimelineRoutes } from "./timeline.js";
 import { registerAudioCueRoutes } from "./audioCues.js";
+import { registerTimelineEditRoutes } from "./timelineEdit.js";
+import { registerTimelineExportRoutes } from "./timelineExport.js";
 import { registerEventRoutes } from "./events.js";
 import cookieParser from "cookie-parser";
 import { createClient } from "@supabase/supabase-js";
@@ -19252,6 +19254,8 @@ registerBlueprintRoutes(app, db, requireRole);
 registerPlanningRoutes(app, db, requireRole);
 registerStudioRoutes(app, db, requireRole);
 registerTimelineRoutes(app, db, requireRole);
+registerTimelineEditRoutes(app, db, requireRole);
+registerTimelineExportRoutes(app, db, requireRole, { store: productionMedia.store });
 registerScreenplayRoutes(app, db, requireRole);
 // Pipeline steps 2-8: shots, storyboard, AI pictures/voices/video, export.
 registerPipelineRoutes(app, db, requireRole, {

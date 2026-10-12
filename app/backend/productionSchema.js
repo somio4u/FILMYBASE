@@ -19,6 +19,8 @@ import { ensureExportSchema, failStaleExports } from "./assemble.js";
 import { ensureBlueprintSchema } from "./blueprint.js";
 import { ensureTimelineSchema } from "./timeline.js";
 import { ensureAudioCueSchema } from "./audioCues.js";
+import { ensureTimelineEditSchema } from "./timelineEdit.js";
+import { ensureSnapshotSchema } from "./timelineExport.js";
 
 export async function ensureAllProductionSchemas(db, log = console.error) {
   const steps = [
@@ -35,6 +37,8 @@ export async function ensureAllProductionSchemas(db, log = console.error) {
     ["blueprint, prompts and screenplay versions", ensureBlueprintSchema],
     ["timeline", ensureTimelineSchema],
     ["sound effect and music cues", ensureAudioCueSchema],
+    ["timeline editing", ensureTimelineEditSchema],
+    ["timeline snapshots", ensureSnapshotSchema],
   ];
   const failures = [];
   for (const [name, step] of steps) {

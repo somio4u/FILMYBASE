@@ -5,6 +5,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLive } from './useLive.js'
+import TimelineEditBar from './TimelineEditBar.jsx'
 import './Production.css'
 
 async function call(url, method = 'GET', body) {
@@ -65,7 +66,7 @@ function Monitor({ clip, backendUrl }) {
   )
 }
 
-function Inspector({ clip, api, projectId, backendUrl, onNavigate }) {
+function Inspector({ clip, api, projectId, backendUrl, onNavigate, onEdit }) {
   const [tab, setTab] = useState('preview')
   const [details, setDetails] = useState(null)
   useEffect(() => { setDetails(null) }, [clip?.id])
@@ -125,6 +126,9 @@ function Inspector({ clip, api, projectId, backendUrl, onNavigate }) {
                 <li key={g.id}>
                   <strong>{g.kind} v{g.version}</strong> · {g.status === 'ready' ? (g.review === 'approved' ? 'approved' : g.review === 'rejected' ? 'rejected' : 'ready for review') : g.status}
                   {g.costUsd ? ` · $${g.costUsd.toFixed(2)}` : ''}{g.error ? ` · ${g.error}` : ''}
+                  {g.kind === 'video' && g.status === 'ready' && g.review !== 'rejected' && clip.kind === 'shot' && (
+                    <button type="button" className="dossier-small-button" onClick={() => onEdit?.({ type: 'take', clipId: clip.id, generationId: g.id })}>Play this take</button>
+                  )}
                 </li>
               ))}</ul>
             </details>
@@ -135,6 +139,7 @@ function Inspector({ clip, api, projectId, backendUrl, onNavigate }) {
   )
 }
 
+export { call }
 export default function TimelineView({ projectId, backendUrl, onNavigate }) {
   const api = `${backendUrl}/api/production`
   const [tl, setTl] = useState(null)
@@ -142,12 +147,25 @@ export default function TimelineView({ projectId, backendUrl, onNavigate }) {
   const [zoom, setZoom] = useState(24) // pixels per second
   const [playhead, setPlayhead] = useState(0)
   const scroller = useRef(null)
+  const [note, setNote] = useState(null)
   const load = useCallback(async () => {
     const r = await call(`${api}/${projectId}/timeline`)
     if (r.ok) setTl(r.data)
   }, [api, projectId])
   useEffect(() => { load() }, [load])
   const live = useLive(projectId, backendUrl, load)
+  async function editOp(op) {
+    const r = await call(`${api}/${projectId}/timeline/edit`, 'POST', { op, expectedRevision: tl?.editRevision })
+    setNote(r.ok ? { ok: true, text: `Done: ${r.data.label}.` } : { ok: false, text: r.data?.error ?? 'That did not work.' })
+    load()
+  }
+  async function muteSolo(track, patch) {
+    await editOp({ type: 'track', trackId: track.id, ...patch })
+  }
+  async function saveSnapshot() {
+    const r = await call(`${api}/${projectId}/timeline/snapshots`, 'POST', { label: '' })
+    setNote(r.ok ? { ok: true, text: `Saved timeline version ${r.data.snapshot.version}. Open Export & Delivery to render it.` } : { ok: false, text: r.data?.error ?? 'Could not save.' })
+  }
   const scale = zoom / 1000
   const clips = useMemo(() => (tl?.clips ?? []).filter((c) => !c.orphaned || c.media), [tl])
   const shotClips = useMemo(() => clips.filter((c) => c.kind === 'shot').sort((a, b) => a.startMs - b.startMs), [clips])
@@ -192,10 +210,14 @@ export default function TimelineView({ projectId, backendUrl, onNavigate }) {
         <span className={live ? 'tl-live on' : 'tl-live'} title={live ? 'Updating live' : 'Checking for changes every few seconds'}>{live ? '● Live' : '○ Refreshing'}</span>
         <label className="tl-zoom">Zoom <input type="range" min="6" max="120" value={zoom} onChange={(e) => setZoom(Number(e.target.value))} aria-label="Timeline zoom" /></label>
         <span className="tl-time" aria-label="Playhead time">{fmtTime(playhead)}</span>
+        <button type="button" className="dossier-small-button" onClick={saveSnapshot} title="Freeze this exact edit as a numbered version that can be exported">Save version</button>
+        <button type="button" className="dossier-small-button" onClick={() => onNavigate?.('export')}>Export…</button>
       </header>
+      <TimelineEditBar api={api} projectId={projectId} tl={tl} clip={clip} shotClips={shotClips} playhead={playhead} call={call} reload={load} />
+      {note && <p className={note.ok ? 'dossier-note' : 'dossier-error'} role={note.ok ? 'status' : 'alert'}>{note.text}</p>}
       <div className="tl-main">
         <Monitor clip={clip} backendUrl={backendUrl} />
-        <Inspector clip={clip} api={api} projectId={projectId} backendUrl={backendUrl} onNavigate={onNavigate} />
+        <Inspector clip={clip} api={api} projectId={projectId} backendUrl={backendUrl} onNavigate={onNavigate} onEdit={editOp} />
       </div>
       <div className="tl-scroll" ref={scroller} tabIndex={0} onKeyDown={onKey} role="group" aria-label="Timeline. Use the arrow keys to move between shots.">
         <div className="tl-canvas" style={{ width }}>
@@ -204,7 +226,15 @@ export default function TimelineView({ projectId, backendUrl, onNavigate }) {
           </div>
           {tl.tracks.map((track) => (
             <div key={track.id} className={`tl-track tl-track-${track.kind}`}>
-              <span className="tl-track-name" title={track.label}>{track.name}</span>
+              <span className="tl-track-name" title={track.label}>
+                {track.name}
+                {track.kind !== 'video' && (
+                  <span className="tl-track-ms">
+                    <button type="button" className={track.muted ? 'on' : ''} aria-pressed={track.muted} aria-label={`Mute ${track.label}`} title="Mute" onClick={() => muteSolo(track, { muted: !track.muted })}>M</button>
+                    <button type="button" className={track.solo ? 'on' : ''} aria-pressed={track.solo} aria-label={`Solo ${track.label}`} title="Solo" onClick={() => muteSolo(track, { solo: !track.solo })}>S</button>
+                  </span>
+                )}
+              </span>
               <div className="tl-lane" onClick={(e) => { if (e.target === e.currentTarget) selectAt((e.clientX - e.currentTarget.getBoundingClientRect().left) / scale) }}>
                 {clips.filter((c) => c.trackId === track.id).map((c) => <Clip key={c.id} c={c} scale={scale} selected={c.id === selected} onSelect={(id) => { setSelected(id); setPlayhead(c.startMs) }} backendUrl={backendUrl} />)}
               </div>

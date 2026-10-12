@@ -178,7 +178,7 @@ test("running the analysis again changes nothing: same scenes, same ids, no dupl
 test("when the screenplay changes, untouched dialogue keeps its id; a new line gets the next id; a deleted line goes; the scene's revision moves", async () => {
   const pid = await freshTestProject();
   await analyzeScreenplay(db, pid);
-  const idOf = async (needle) => (await db.query("SELECT code, id FROM production_scene_elements WHERE project_id = $1 AND kind = 'dialogue' AND text_hi LIKE $2", [pid, `%${needle}%`])).rows[0];
+  const idOf = async (needle) => (await db.query("SELECT code, id FROM production_scene_elements WHERE project_id = $1 AND kind = 'dialogue' AND text_hi LIKE $2 ORDER BY id DESC", [pid, `%${needle}%`])).rows[0];
   const kept = await idOf("भूत देख लिया क्या");
   const sceneRev = (await sceneByNumber(pid, 5));
   let text = (await db.query("SELECT pasted_text FROM ai_movie_projects WHERE id = $1", [pid])).rows[0].pasted_text;

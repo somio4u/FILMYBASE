@@ -1665,3 +1665,7 @@ Plain version: every project is now a set of **drafts**. Opening a project shows
 ## Episode synopses PDF + "where is my draft" controls
 - The story run panel in Adu now has **Download episode synopses (PDF)** (English by default; add ?lang=hi for Hindi). It lists every episode: the Story Bible's full synopsis + cliffhanger + burning question + audience theories, and the pitch deck's episode-by-episode text; a step not made yet says "Not yet created".
 - The panel also says where the story is saved as a draft (offline while written, finished, or stopped) with **Open so far** and **See in Drafts**. If a story run is not linked to the open project, **Save as a new draft of this project** links it by hand.
+
+## "Make it my draft now"
+- An unfinished new draft in "Being made" can be turned into a normal, visible draft at once (button "Make it my draft now" in Drafts and in the Adu story panel). If its project does not exist yet, a blank project holds its place; when the story's own project is written it replaces the blank one under the SAME draft, so the draft fills in as the agent writes.
+- A story run the user started that stops no longer ends the draft's tracking: it waits, and carries on when "Pick up where it broke" is pressed.

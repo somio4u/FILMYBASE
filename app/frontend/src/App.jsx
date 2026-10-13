@@ -2503,12 +2503,25 @@ function RunTools({ runId, status, draftCtx }) {
     } catch { setNote('That did not work. Try again in a moment.') }
     setBusy(false)
   }
+  async function makeOnline() {
+    if (!link?.requestId || busy) return
+    setBusy(true); setNote('')
+    try {
+      const response = await fetch(`${BACKEND_URL}/api/drafts/requests/${link.requestId}/make-draft`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' })
+      const data = await response.json().catch(() => ({}))
+      setNote(response.ok ? `Done — it is now ${data.title ?? 'a draft'} in this project's Drafts. It fills in as the agent writes.` : (data.error || 'That did not work.'))
+      const next = await fetch(`${BACKEND_URL}/api/drafts/run-link?runId=${runId}`).then((r) => (r.ok ? r.json() : null)).catch(() => null)
+      if (next) setLink(next)
+    } catch { setNote('That did not work. Try again in a moment.') }
+    setBusy(false)
+  }
   const hasStory = Boolean(status?.storyBible || status?.conceptId)
   return (
     <div className="floating-agent-section run-tools">
       {hasStory && <a className="cancel-button floating-agent-download" href={`${BACKEND_URL}/api/auto-pipeline/${runId}/synopses-pdf`} target="_blank" rel="noreferrer">Download episode synopses (PDF)</a>}
       {link?.linked ? (
         <p className="dd-fine">Saved as a draft of {link.parentTitle ? `the project of ${link.parentTitle}` : 'this project'}: {link.draft ? <strong>{link.draft.title}</strong> : 'being set up'} — {link.requestStatus === 'awaiting_final_approval' ? 'finished, waiting for your approval' : link.requestStatus === 'failed' ? 'stopped (open it in Drafts and press Retry)' : 'offline while it is written'}.
+          {!link.online && link.requestStatus !== 'awaiting_final_approval' && <> <button type="button" className="choose-button" onClick={makeOnline} disabled={busy}>{busy ? 'Working…' : 'Make it my draft now'}</button></>}
           {link.draft && <> <button type="button" className="cancel-button" onClick={() => draftCtx?.openLinked?.(link.draft)}>Open so far</button></>}
           {draftCtx?.openDrafts && <> <button type="button" className="cancel-button" onClick={() => draftCtx.openDrafts()}>See in Drafts</button></>}</p>
       ) : filmDraft && ['running', 'awaiting_approval', 'completed', 'failed'].includes(state) ? (

@@ -162,12 +162,13 @@ export default function DraftDashboard({ module, projectRef, backendUrl, onConti
         {compare && <Compare a={compare[0]} b={compare[1]} backendUrl={backendUrl} onClose={() => setCompare(null)} />}
         {(dash.revisions ?? []).filter((q) => q.offline).length > 0 && (
           <section className="dd-making" aria-label="Drafts being made">
-            <h3>Being made <span className="dd-fine">— offline until the agent finishes writing</span></h3>
+            <h3>Being made <span className="dd-fine">— offline until the agent finishes writing, or press “Make it my draft now”</span></h3>
             <ul>
               {dash.revisions.filter((q) => q.offline).map((q) => (
                 <li key={q.id} data-request-id={q.id}>
                   <span className="chip">{MAKING_LABEL[q.status] ?? String(q.status ?? '').replace(/_/g, ' ')}</span> “{String(q.instruction ?? '').slice(0, 80)}”
                   <button type="button" className="dd-btn primary" onClick={() => onReviewRequest?.({ openRequest: q, id: q.parentDraftId, module, projectRef })}>Review</button>
+                  <button type="button" className="dd-btn primary" disabled={Boolean(busy)} onClick={() => act('online', () => call(`${api}/requests/${q.id}/make-draft`, 'POST', {}))}>Make it my draft now</button>
                   {q.projectRef && q.status !== 'awaiting_synopsis_approval' && <button type="button" className="dd-btn" onClick={() => onContinue({ id: q.draftId, module, projectRef: q.projectRef, resumeContext: {}, currentStage: null })}>Open so far</button>}
                 </li>
               ))}

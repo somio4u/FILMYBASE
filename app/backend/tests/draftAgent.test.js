@@ -11,7 +11,7 @@ import { branchDraft, registerExternalDraft, compareDrafts, draftUnits, ensureDr
 import { applyChangeSet, approveFinal, approveSynopsis, cancelRequest, classifyPrompt, conform, failInterruptedRequests, getRequest, heuristicIntent, interpret, productionImpact, propose, registerDraftAgentRoutes, rejectChangeSet, requestSynopsisChanges, resolveTargets, retryRequest, revisionDetail, startAlternative, startRevision, undoChangeSet, whenIdle, readUnit } from "../draftAgent.js";
 import { createBlank } from "../drafts.js";
 import { fakePipeline } from "../draftAgentMock.js";
-import { setPollMs, cleanupDuplicateRevisions, resumeInterruptedRequests, startPlainDraft } from "../draftAgent.js";
+import { setPollMs, cleanupDuplicateRevisions, resumeInterruptedRequests, startPlainDraft, makeDraftOnline } from "../draftAgent.js";
 
 const db = new pg.Pool({ database: process.env.TEST_DB || "filmmaking_app_test", user: process.env.PGUSER || "root", host: process.env.PGHOST || "/var/run/postgresql" });
 const requireRole = () => (req, res, next) => ((req.user = { id: 1 }), next());
@@ -503,6 +503,33 @@ test("a story the user writes from inside a project becomes a new offline draft 
   assert.ok(r.draft_id, "its project is recorded as the new draft");
   const dash = await getDashboard(db, "film", film);
   assert.ok(dash.drafts.some((x) => x.id === r.draft_id), "finished: it appears as a draft of the project");
+  await cancelRequest(db, q.id).catch(() => {});
+});
+
+test("make it my draft now: an unfinished story becomes a visible draft at once, and the story's own project takes its place when it is written", async () => {
+  const d = await ensureDraftFor(db, "film", film);
+  const models = mockModels();
+  const pl = await models.pipeline.open(1);
+  const started = (await pl.call("POST", "/api/auto-pipeline/start", { concept: "Bishpan online test", format: { type: "film", runtimeMinutes: 120 }, references: [{ kind: "film", id: film }] })).json;
+  await pl.close();
+  const q = await startPlainDraft(db, models, { runId: started.runId, parentDraftId: d.id, instruction: "Bishpan online test", actorUserId: 1 });
+  await new Promise((r) => setTimeout(r, 300));
+  let dash = await getDashboard(db, "film", film);
+  assert.ok(dash.revisions.some((x) => x.id === q.id && x.offline), "offline while nothing is made");
+  const out = await makeDraftOnline(db, q.id, { actorUserId: 1 });
+  dash = await getDashboard(db, "film", film);
+  const card = dash.drafts.find((x) => x.id === out.draftId);
+  assert.ok(card, "it is now an ordinary visible draft");
+  assert.equal(dash.revisions.find((x) => x.id === q.id).offline, false);
+  const placeholder = out.projectRef;
+  assert.equal((await db.query("SELECT count(*)::int AS n FROM concepts WHERE id = $1", [placeholder])).rows[0].n, 1, "a blank project holds its place");
+  // the story is approved and written: its own project replaces the placeholder under the SAME draft
+  const pl2 = await models.pipeline.open(1); await pl2.call("POST", `/api/auto-pipeline/${started.runId}/bible-approve`, {}); await pl2.close();
+  await whenIdle(q.id);
+  const after = await getDraft(db, out.draftId);
+  assert.notEqual(String(after.project_ref), String(placeholder), "the draft now points at the story's own project");
+  assert.equal((await db.query("SELECT count(*)::int AS n FROM concepts WHERE id = $1", [placeholder])).rows[0].n, 0, "the empty placeholder is gone");
+  assert.equal((await db.query("SELECT count(*)::int AS n FROM project_drafts WHERE project_ref = $1 AND module = 'film'", [after.project_ref])).rows[0].n, 1, "one draft, not two");
   await cancelRequest(db, q.id).catch(() => {});
 });
 

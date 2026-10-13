@@ -225,7 +225,7 @@ export async function getDashboard(db, module, projectRef, { actorUserId = null 
   const group = (await db.query("SELECT * FROM project_draft_groups WHERE id = $1", [me.group_id])).rows[0];
   try { await cleanupDuplicateRevisions(db, module, projectRef, { keep: "newest" }); } catch { /* cleanup is a convenience; never block the list */ }
   const allRows = await groupDrafts(db, me.group_id);
-  const making = (await db.query("SELECT id, status, instruction, draft_id, created_at, proposal, decisions FROM draft_revision_requests WHERE group_id = $1 AND intent = 'NEW_DRAFT' AND status = ANY($2) ORDER BY id DESC", [me.group_id, MAKING_STATUSES])).rows;
+  const making = (await db.query("SELECT id, status, instruction, draft_id, created_at, proposal, decisions FROM draft_revision_requests WHERE group_id = $1 AND intent = 'NEW_DRAFT' AND status = ANY($2) AND COALESCE(context->>'online', 'false') <> 'true' ORDER BY id DESC", [me.group_id, MAKING_STATUSES])).rows;
   const offline = new Set(making.filter((q) => q.draft_id).map((q) => q.draft_id));
   const rows = allRows.filter((r) => !offline.has(r.id));
   const drafts = [];
@@ -238,8 +238,9 @@ export async function getDashboard(db, module, projectRef, { actorUserId = null 
       childCount: rows.filter((x) => x.parent_draft_id === r.id).length,
     });
   }
+  const online = new Set((await db.query("SELECT id FROM draft_revision_requests WHERE group_id = $1 AND COALESCE(context->>'online', 'false') = 'true'", [me.group_id])).rows.map((x) => x.id));
   const revisions = (await db.query("SELECT id, status, instruction, draft_id, parent_draft_id, created_at FROM draft_revision_requests WHERE group_id = $1 AND status NOT IN ('completed','cancelled') ORDER BY id DESC", [me.group_id])).rows
-    .map((r) => ({ id: r.id, status: r.status, instruction: r.instruction, draftId: r.draft_id, projectRef: r.draft_id ? (allRows.find((x) => x.id === r.draft_id)?.project_ref ?? null) : null, parentDraftId: r.parent_draft_id, createdAt: r.created_at, offline: MAKING_STATUSES.includes(r.status) }));
+    .map((r) => ({ id: r.id, status: r.status, instruction: r.instruction, draftId: r.draft_id, projectRef: r.draft_id ? (allRows.find((x) => x.id === r.draft_id)?.project_ref ?? null) : null, parentDraftId: r.parent_draft_id, createdAt: r.created_at, offline: MAKING_STATUSES.includes(r.status) && !online.has(r.id) }));
   const activeDraftId = offline.has(group.active_draft_id) ? (rows.find((r) => r.kind === "numbered")?.id ?? rows[0]?.id ?? null) : group.active_draft_id;
   return { groupId: group.id, module, activeDraftId, drafts, revisions, requestedProjectRef: projectRef };
 }

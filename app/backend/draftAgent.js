@@ -750,6 +750,26 @@ export async function startPlainDraft(db, models, { runId, parentDraftId, instru
   return requestView(row);
 }
 
+// "Make it my draft now": an unfinished new draft becomes a normal, visible draft of the project straight away. If its project does not
+// exist yet, a blank placeholder project holds the draft's place and the story's own project replaces it as soon as it is written.
+export async function makeDraftOnline(db, requestId, { actorUserId = null } = {}) {
+  const r = await getRequest(db, requestId);
+  if (r.intent !== "NEW_DRAFT" || ["completed", "cancelled"].includes(r.status)) throw httpError("This one cannot be made a draft.", 409, "wrong_state");
+  const parent = await getDraft(db, r.parent_draft_id);
+  let draftId = r.draft_id;
+  if (draftId) {
+    await db.query("UPDATE project_drafts SET status = CASE WHEN status = 'pending_approval' THEN 'working' ELSE status END, updated_at = now() WHERE id = $1", [draftId]);
+  } else {
+    const made = await createBlank(db, parent, { destination: "same_project", idea: r.instruction, actorUserId });
+    draftId = made.draft.id;
+    await db.query("UPDATE project_drafts SET label = $2 WHERE id = $1", [draftId, clip(r.instruction, 60)]);
+    await db.query("UPDATE draft_revision_requests SET draft_id = $2 WHERE id = $1", [r.id, draftId]);
+  }
+  await db.query("UPDATE draft_revision_requests SET context = COALESCE(context,'{}'::jsonb) || '{\"online\":true}'::jsonb, updated_at = now() WHERE id = $1", [r.id]);
+  const d = await getDraft(db, draftId);
+  return { draftId, module: d.module, projectRef: d.project_ref, title: d.label ?? `Draft ${d.draft_number}` };
+}
+
 export async function retryRequest(db, models, requestId) {
   const r = await getRequest(db, requestId);
   if (r.status !== "failed") throw httpError("Only a failed request can be retried.", 409, "not_failed");
@@ -897,6 +917,20 @@ async function rawRunFilm(db, pl, r, log, save) {
   // The new project exists as soon as the story process has made its first stage. Register it AT ONCE as the new draft (kept offline
   // while it is being written), so what the agent has made so far can be seen and opened, never the older draft's content.
   const register = async (conceptId) => {
+    // the user already made this an online draft (a blank placeholder project): the story's own project takes its place under the SAME draft
+    const now = await getRequest(db, r.id);
+    if (now.draft_id) {
+      const cur = await getDraft(db, now.draft_id);
+      if (String(cur.project_ref) !== String(conceptId)) {
+        const taken = (await db.query("SELECT id FROM project_drafts WHERE module = 'film' AND project_ref = $1 AND id <> $2", [conceptId, cur.id])).rows[0];
+        if (!taken) {
+          const old = cur.project_ref;
+          await db.query("UPDATE project_drafts SET project_ref = $2, updated_at = now() WHERE id = $1", [cur.id, conceptId]);
+          await db.query("DELETE FROM concepts WHERE id = $1 AND NOT EXISTS (SELECT 1 FROM pitch_decks WHERE concept_id = $1)", [old]).catch(() => {});
+        }
+      }
+      return cur;
+    }
     const existing = (await db.query("SELECT id FROM project_drafts WHERE module = 'film' AND project_ref = $1", [conceptId])).rows[0];
     const draft = existing ?? await registerExternalDraft(db, { parentDraftId: r.parent_draft_id, module: "film", projectRef: conceptId, note: `Revision: ${clip(r.instruction, 200)}`, actorUserId: r.created_by });
     await db.query("UPDATE draft_revision_requests SET draft_id = $2 WHERE id = $1", [r.id, draft.id]);
@@ -904,8 +938,9 @@ async function rawRunFilm(db, pl, r, log, save) {
   };
   const s = await waitFor(db, r.id, async () => {
     const st = must(await pl.call("GET", `/api/auto-pipeline/${runId}/status`), "Reading the run");
-    if (st.status === "failed") throw httpError(st.error ?? "The story process stopped.", 502, "pipeline_failed");
+    if (st.status === "failed" && !r.proposal.plain) throw httpError(st.error ?? "The story process stopped.", 502, "pipeline_failed");
     if (st.conceptId) await register(st.conceptId);
+    if (st.status === "failed") return null; // the user's own run: they press "Pick up where it broke" in the app, and this carries on
     return st.status === "completed" && st.conceptId ? st : null;
   }, { label: "the script" });
   await register(s.conceptId);
@@ -1076,11 +1111,11 @@ export function registerDraftAgentRoutes(app, db, requireRole, { models = null }
   app.get("/api/drafts/run-link", admin, wrap(async (req, res) => {
     const runId = id(req.query.runId);
     if (!runId) throw httpError("Say which story run.", 400, "bad_request");
-    const q = (await db.query("SELECT id, status, draft_id, parent_draft_id FROM draft_revision_requests WHERE (proposal->>'pipelineRunId')::int = $1 ORDER BY id DESC LIMIT 1", [runId]).catch(() => ({ rows: [] }))).rows[0];
+    const q = (await db.query("SELECT id, status, draft_id, parent_draft_id, context FROM draft_revision_requests WHERE (proposal->>'pipelineRunId')::int = $1 ORDER BY id DESC LIMIT 1", [runId]).catch(() => ({ rows: [] }))).rows[0];
     if (!q) return res.json({ linked: false });
     const d = q.draft_id ? (await db.query("SELECT id, module, project_ref, draft_number, label, status FROM project_drafts WHERE id = $1", [q.draft_id])).rows[0] : null;
     const parent = q.parent_draft_id ? (await db.query("SELECT label, draft_number FROM project_drafts WHERE id = $1", [q.parent_draft_id])).rows[0] : null;
-    res.json({ linked: true, requestId: q.id, requestStatus: q.status, parentTitle: parent ? (parent.label ?? `Draft ${parent.draft_number}`) : null, draft: d ? { id: d.id, module: d.module, projectRef: d.project_ref, title: d.label ?? `Draft ${d.draft_number}`, status: d.status } : null });
+    res.json({ linked: true, online: q.context?.online === true, requestId: q.id, requestStatus: q.status, parentTitle: parent ? (parent.label ?? `Draft ${parent.draft_number}`) : null, draft: d ? { id: d.id, module: d.module, projectRef: d.project_ref, title: d.label ?? `Draft ${d.draft_number}`, status: d.status } : null });
   }));
   // Save a story run as a new draft of the project (when it was not linked automatically)
   app.post("/api/drafts/link-run", admin, wrap(async (req, res) => {
@@ -1094,6 +1129,7 @@ export function registerDraftAgentRoutes(app, db, requireRole, { models = null }
     if (!out) throw httpError("Only Movie stories can be saved as a draft.", 409, "not_supported");
     res.status(201).json({ requestId: out.id });
   }));
+  app.post("/api/drafts/requests/:id/make-draft", admin, wrap(async (req, res) => res.json(await makeDraftOnline(db, id(req.params.id) ?? 0, { actorUserId: req.user?.id }))));
   app.post("/api/drafts/cleanup-duplicates", admin, wrap(async (req, res) => {
     const { module, projectRef } = req.body ?? {};
     if (!["film", "ai_movie"].includes(module) || !projectRef) throw httpError("Say which project to clean up.", 400, "bad_request");

@@ -7549,3 +7549,58 @@ button:not(:disabled):active {
 .adu-work-text { flex: 1 1 160px; min-width: 0; overflow-wrap: anywhere; }
 .adu-work-btn { border: 1px solid rgba(138, 180, 248, 0.6); background: transparent; color: #cfe0ff; border-radius: 999px; padding: 4px 12px; font-size: 0.85rem; cursor: pointer; }
 @media (prefers-reduced-motion: reduce) { .adu-work-dot { animation: none; } }
+
+/* ======================================================================
+   Display modes. Full = the designed look. Light = flat and still: no
+   animation, no blur, no shadows, no glow, no moving background.
+   ====================================================================== */
+.perf-toggle {
+  position: fixed; top: 6px; right: 6px; z-index: 100000;
+  padding: 5px 12px; border-radius: 999px; font-size: 0.78rem; font-weight: 600; line-height: 1.2;
+  background: rgba(20, 28, 60, 0.92); color: #cfe0ff; border: 1px solid rgba(138, 180, 248, 0.55); cursor: pointer;
+}
+html[data-perf="light"] .perf-toggle { background: #1b2250; border-color: #8ab4f8; }
+
+html[data-perf="light"] {
+  --glass-bg: #0f1428;
+  --glass-border: rgba(138, 180, 248, 0.3);
+  --glow-accent: none;
+  --shadow-soft: none;
+  --shadow-lift: none;
+  --accent-gradient: #3f64d0;
+  --accent-gradient-soft: rgba(138, 180, 248, 0.12);
+}
+html[data-perf="light"] body { background: #0b1020; }
+html[data-perf="light"] *,
+html[data-perf="light"] *::before,
+html[data-perf="light"] *::after {
+  animation: none !important;
+  transition: none !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  box-shadow: none !important;
+  text-shadow: none !important;
+  filter: none !important;
+  scroll-behavior: auto !important;
+  will-change: auto !important;
+}
+html[data-perf="light"] .ai-background { display: none !important; }
+/* headings that used a gradient fill stay readable as plain text */
+html[data-perf="light"] .login-form h1,
+html[data-perf="light"] .empty-state-greeting,
+html[data-perf="light"] .episode-title-name {
+  background: none !important;
+  -webkit-background-clip: border-box !important;
+  background-clip: border-box !important;
+  -webkit-text-fill-color: currentColor !important;
+  color: #dbe6ff !important;
+}
+/* every panel and overlay is solid */
+html[data-perf="light"] .dd-overlay { background: #080c1a !important; }
+html[data-perf="light"] .floating-agent-panel,
+html[data-perf="light"] .dd,
+html[data-perf="light"] .adu-work-bar { background: #0f1428 !important; }
+@media (prefers-reduced-motion: reduce) { .perf-toggle { transition: none; } }
+html[data-perf="light"] #root,
+html[data-perf="light"] #root > div,
+html[data-perf="light"] .app-shell { background-image: none !important; background-color: #0b1020 !important; }

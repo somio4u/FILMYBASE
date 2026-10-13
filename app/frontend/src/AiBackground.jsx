@@ -1,3 +1,4 @@
+import { usePerfMode } from './perfMode.js'
 import { useEffect, useRef } from 'react'
 
 // The animated "AI tunnel" behind the whole app: rings of glowing data
@@ -82,6 +83,12 @@ function buildRings(width, height) {
 }
 
 export default function AiBackground() {
+  const perf = usePerfMode()
+  if (perf === 'light') return null
+  return <AiBackgroundCanvas />
+}
+
+function AiBackgroundCanvas() {
   const canvasRef = useRef(null)
 
   useEffect(() => {

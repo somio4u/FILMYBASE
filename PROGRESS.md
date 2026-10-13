@@ -1680,3 +1680,6 @@ Plain version: every project is now a set of **drafts**. Opening a project shows
 - The Film sidebar list, "All projects", and the AI Movie list are now ordered by when each project was last worked on, newest first. Pinned projects stay on top, as you set them.
 - "Worked on" counts: creating the project, opening it (any of its drafts), changing a draft, Adu writing into it (a story run, also through its drafts), and a pitch deck being written.
 - Opening a project moves it to the top of the list straight away. Each project also reports `lastWorkedAt` from the server.
+
+## Light mode / Full mode
+- A switch at the top right ("Light mode" / "Full mode") on every screen. Full = the designed look. Light = flat and still: no animated background, no animation or transitions, no blur, shadows or glow, solid panels, plain dark background, Adu stands still. The choice is remembered on the device; the first time, phones and small or slow devices start in Light.

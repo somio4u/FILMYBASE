@@ -2700,6 +2700,7 @@ function FloatingAgentWidget({ currentUser, t, onRunCompleted, onOpenProject, dr
   }, [poseState])
 
   useEffect(() => {
+    if (document.documentElement.dataset.perf === 'light') return undefined // Light mode: Adu stands still
     const speed = poseState === 'working' ? 260 : poseState === 'done' ? 350 : 900
     const frameCount = currentFrames.length
     const interval = setInterval(() => setFrameIndex((i) => (i + 1) % frameCount), speed)

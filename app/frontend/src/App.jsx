@@ -7153,7 +7153,10 @@ function App() {
         const mine = d?.drafts?.find((x) => x.projectRef === ref)
         if (!cancelled && mine) {
           setCurrentDraft({ id: mine.id, module, projectRef: ref, title: mine.title, status: mine.status })
-          fetch(`${BACKEND_URL}/api/drafts/${mine.id}/resume`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: '{}' }).catch(() => {})
+          // opening a project makes it the most recently worked-on one: the list moves it to the top
+          fetch(`${BACKEND_URL}/api/drafts/${mine.id}/resume`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: '{}' })
+            .then(() => { if (!cancelled) { if (module === 'film') loadProjectList(); else loadAiMovieProjectList() } })
+            .catch(() => {})
         }
       })
       .catch(() => {})

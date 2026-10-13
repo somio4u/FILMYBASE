@@ -1675,3 +1675,8 @@ Plain version: every project is now a set of **drafts**. Opening a project shows
 - An always-visible bar "Adu is working on “<project>” — <stage>" (with Open Adu and Open project) shows on every screen, including the Film / AI Movie picker, whichever project is open. It checks every 8 seconds.
 - A story run now creates its project the moment it starts (a blank project named after the idea, in the project list). Its real title replaces the working title when the Story Bible has one, and every stage Adu finishes is written into that same project. A story started inside a project is that project's online draft from the first second.
 - Not covered yet: AI Movie draft copies already existed from the start; they only gained the one-at-a-time rule.
+
+## Project lists: most recently worked-on first
+- The Film sidebar list, "All projects", and the AI Movie list are now ordered by when each project was last worked on, newest first. Pinned projects stay on top, as you set them.
+- "Worked on" counts: creating the project, opening it (any of its drafts), changing a draft, Adu writing into it (a story run, also through its drafts), and a pitch deck being written.
+- Opening a project moves it to the top of the list straight away. Each project also reports `lastWorkedAt` from the server.

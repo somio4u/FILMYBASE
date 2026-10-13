@@ -7,12 +7,13 @@ import express from "express";
 import pg from "pg";
 import { ensureAllProductionSchemas } from "../productionSchema.js";
 import { analyzeScreenplay } from "../screenplayAnalysis.js";
-import { branchDraft, registerExternalDraft, compareDrafts, draftUnits, ensureDraftFor, getDashboard, getDraft, updateDraft } from "../drafts.js";
+import { saveResume, branchDraft, registerExternalDraft, compareDrafts, draftUnits, ensureDraftFor, getDashboard, getDraft, updateDraft } from "../drafts.js";
 import { applyChangeSet, approveFinal, approveSynopsis, cancelRequest, classifyPrompt, conform, failInterruptedRequests, getRequest, heuristicIntent, interpret, productionImpact, propose, registerDraftAgentRoutes, rejectChangeSet, requestSynopsisChanges, resolveTargets, retryRequest, revisionDetail, startAlternative, startRevision, undoChangeSet, whenIdle, readUnit } from "../draftAgent.js";
 import { createBlank } from "../drafts.js";
 import { fakePipeline } from "../draftAgentMock.js";
 import { setPollMs, cleanupDuplicateRevisions, resumeInterruptedRequests, startPlainDraft, makeDraftOnline } from "../draftAgent.js";
 import { getAduWork, busyMessage } from "../aduWork.js";
+import { orderByLastWorked } from "../projectActivity.js";
 
 const db = new pg.Pool({ database: process.env.TEST_DB || "filmmaking_app_test", user: process.env.PGUSER || "root", host: process.env.PGHOST || "/var/run/postgresql" });
 const requireRole = () => (req, res, next) => ((req.user = { id: 1 }), next());
@@ -562,6 +563,24 @@ test("one project at a time: Adu's current work is reported, and the project of 
   assert.equal(dash.revisions.find((x) => x.id === q.id).offline, false);
   await db.query("DELETE FROM auto_pipeline_runs"); // leave no run behind: other tests use run numbers of their own
   await cancelRequest(db, q.id).catch(() => {});
+});
+
+test("project lists: the most recently worked-on project is first, pinned stay on top, opening a project moves it up", async () => {
+  const mk = async (title, ageHours, pinned = false) => {
+    const c = (await db.query("INSERT INTO concepts (concept_text, storylines, title, pinned, created_at) VALUES ($1,'[]',$1,$2, now() - ($3 || ' hours')::interval) RETURNING id, pinned, created_at", [title, pinned, String(ageHours)])).rows[0];
+    const d = await ensureDraftFor(db, "film", c.id);
+    await db.query("UPDATE project_drafts SET updated_at = now() - ($2 || ' hours')::interval, last_opened_at = NULL WHERE id = $1", [d.id, String(ageHours)]);
+    return { ...c, draftId: d.id };
+  };
+  const a = await mk("Order A oldest", 30), b = await mk("Order B middle", 20), c = await mk("Order C newest", 10), pin = await mk("Order P pinned old", 90, true);
+  const rows = [a, b, c, pin].map((x) => ({ id: x.id, pinned: x.pinned, created_at: x.created_at }));
+  let out = await orderByLastWorked(db, "film", rows);
+  assert.deepEqual(out.rows.map((r) => r.id), [pin.id, c.id, b.id, a.id], "pinned first, then newest work first");
+  // you open the oldest project: it is now the one you last worked on
+  await saveResume(db, a.draftId, {});
+  out = await orderByLastWorked(db, "film", rows);
+  assert.deepEqual(out.rows.map((r) => r.id), [pin.id, a.id, c.id, b.id], "opening a project moves it to the top (after pinned)");
+  await db.query("DELETE FROM concepts WHERE title LIKE 'Order %'");
 });
 
 test("new story: choose same project (a draft on the dashboard) or a new project; the current draft is untouched; both modules", async () => {

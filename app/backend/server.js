@@ -43,6 +43,7 @@ import { registerTimelineEditRoutes } from "./timelineEdit.js";
 import { registerShotPlanRoutes } from "./shotPlans.js";
 import { backfillDrafts, registerDraftRoutes } from "./drafts.js";
 import { getAduWork, busyMessage } from "./aduWork.js";
+import { orderByLastWorked } from "./projectActivity.js";
 import { failInterruptedRequests, registerDraftAgentRoutes, setPollMs, startPlainDraft } from "./draftAgent.js";
 import { buildReferenceBlock, findRelated as findRelatedSources, ideaWithReferences, registerWorkspaceRoutes } from "./workspaceContext.js";
 import { registerTimelineExportRoutes } from "./timelineExport.js";
@@ -1840,14 +1841,17 @@ app.get("/api/concepts", requireLogin, async (req, res) => {
           [req.user.concept_id]
         );
 
+  // most recently worked-on project first (pinned ones stay on top)
+  const ordered = await orderByLastWorked(db, "film", result.rows);
   res.json(
-    result.rows.map((row) => ({
+    ordered.rows.map((row) => ({
       id: row.id,
       conceptText: row.concept_text,
       title: row.title,
       pinned: row.pinned,
       projectType: row.project_type,
       createdAt: row.created_at,
+      lastWorkedAt: ordered.worked.get(Number(row.id)) ? new Date(ordered.worked.get(Number(row.id))).toISOString() : row.created_at,
     }))
   );
 });
@@ -1881,8 +1885,9 @@ app.get("/api/projects/master-list", requireRole("admin"), async (req, res) => {
     assignedUsersByConceptId.get(row.concept_id).push({ name: row.name, role: row.role });
   });
 
+  const orderedProjects = await orderByLastWorked(db, "film", projectsResult.rows);
   res.json(
-    projectsResult.rows.map((row) => {
+    orderedProjects.rows.map((row) => {
       const assignedUsers = assignedUsersByConceptId.get(row.id) ?? [];
       return {
         id: row.id,
@@ -1890,6 +1895,7 @@ app.get("/api/projects/master-list", requireRole("admin"), async (req, res) => {
         projectType: row.project_type,
         pinned: row.pinned,
         createdAt: row.created_at,
+        lastWorkedAt: orderedProjects.worked.get(Number(row.id)) ? new Date(orderedProjects.worked.get(Number(row.id))).toISOString() : row.created_at,
         screenplayReady: row.screenplay_ready,
         assignedUsers,
         stage: row.screenplay_ready && assignedUsers.length > 0 ? "ongoing" : "in_development",
@@ -6614,8 +6620,10 @@ app.get("/api/ai-movie/projects", requireRole("admin"), async (req, res) => {
   const result = await db.query(
     `SELECT id, title, left(pasted_text, 200) AS pasted_text, detected_stage, updated_at FROM ai_movie_projects WHERE NOT EXISTS (SELECT 1 FROM project_drafts d JOIN project_drafts p ON p.id = d.parent_draft_id WHERE d.module = 'ai_movie' AND d.project_ref = ai_movie_projects.id AND EXISTS (SELECT 1 FROM ai_movie_projects pc WHERE pc.id = p.project_ref)) ORDER BY updated_at DESC`
   );
-  res.json(result.rows.map((row) => ({
+  const orderedAi = await orderByLastWorked(db, "ai_movie", result.rows, { pinnedOf: () => false, createdOf: (r) => r.updated_at });
+  res.json(orderedAi.rows.map((row) => ({
     id: row.id,
+    lastWorkedAt: orderedAi.worked.get(Number(row.id)) ? new Date(orderedAi.worked.get(Number(row.id))).toISOString() : row.updated_at,
     title: row.title,
     pastedText: row.pasted_text,
     detectedStage: row.detected_stage,

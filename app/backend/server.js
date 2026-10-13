@@ -42,6 +42,7 @@ import { registerAudioCueRoutes } from "./audioCues.js";
 import { registerTimelineEditRoutes } from "./timelineEdit.js";
 import { registerShotPlanRoutes } from "./shotPlans.js";
 import { backfillDrafts, registerDraftRoutes } from "./drafts.js";
+import { getAduWork, busyMessage } from "./aduWork.js";
 import { failInterruptedRequests, registerDraftAgentRoutes, setPollMs, startPlainDraft } from "./draftAgent.js";
 import { buildReferenceBlock, findRelated as findRelatedSources, ideaWithReferences, registerWorkspaceRoutes } from "./workspaceContext.js";
 import { registerTimelineExportRoutes } from "./timelineExport.js";
@@ -163,6 +164,8 @@ async function ensureAiMovieSchema() {
     `ALTER TABLE auto_pipeline_runs ADD COLUMN IF NOT EXISTS story_bible_usage JSONB`,
     `ALTER TABLE auto_pipeline_runs ADD COLUMN IF NOT EXISTS reference_context TEXT`,
     `ALTER TABLE auto_pipeline_runs ADD COLUMN IF NOT EXISTS reference_sources JSONB`,
+    // The project is created the moment Adu starts a story (a blank placeholder) and is filled in stage by stage.
+    `ALTER TABLE auto_pipeline_runs ADD COLUMN IF NOT EXISTS placeholder_concept_id INTEGER`,
     // Which "Production only" login uploaded a production project (null for
     // everything the admin made) — that login sees only its own projects.
     `ALTER TABLE concepts ADD COLUMN IF NOT EXISTS owner_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL`,
@@ -17753,12 +17756,16 @@ async function runAutoPipeline(runId, conceptText, format, dialogueLanguage, res
         }
       }
 
-      const conceptResult = await db.query(
-        "INSERT INTO concepts (concept_text, storylines, title) VALUES ($1, $2, $3) RETURNING id",
-        // The picked one first — Resume reads the first.
-        [ideaText, JSON.stringify([storyline, ...storylines.filter((s) => s !== storyline)]), storyline?.title?.en ?? null]
-      );
-      conceptId = conceptResult.rows[0].id;
+      // The picked one first — Resume reads the first.
+      const storylinesJson = JSON.stringify([storyline, ...storylines.filter((s) => s !== storyline)]);
+      const placeholderId = (await db.query("SELECT placeholder_concept_id FROM auto_pipeline_runs WHERE id = $1", [runId])).rows[0]?.placeholder_concept_id ?? null;
+      const placeholderRow = placeholderId ? (await db.query("UPDATE concepts SET concept_text = $2, storylines = $3, title = $4 WHERE id = $1 RETURNING id", [placeholderId, ideaText, storylinesJson, storyline?.title?.en ?? null])).rows[0] : null;
+      if (placeholderRow) {
+        conceptId = placeholderRow.id;
+      } else {
+        const conceptResult = await db.query("INSERT INTO concepts (concept_text, storylines, title) VALUES ($1, $2, $3) RETURNING id", [ideaText, storylinesJson, storyline?.title?.en ?? null]);
+        conceptId = conceptResult.rows[0].id;
+      }
       await updateAutoPipelineRun(runId, { concept_id: conceptId });
     }
 
@@ -18311,8 +18318,25 @@ async function runScreenplayAndQualityPass(runId, deck, sceneList, sceneListId, 
     }
 }
 
+// What Adu is working on right now (shown as a bar at the top of the app, whichever project is open)
+app.get("/api/adu/current", requireRole("admin"), async (req, res) => {
+  const work = await getAduWork(db, req.user.id);
+  res.json(work ? { active: true, ...work } : { active: false });
+});
+
+// Drop a story run that is only waiting for the user (never one that is actively writing): "start fresh" uses this.
+app.post("/api/auto-pipeline/:id/abandon", requireRole("admin"), async (req, res) => {
+  const run = (await db.query("SELECT id, status FROM auto_pipeline_runs WHERE id = $1", [req.params.id])).rows[0];
+  if (!run) { res.status(404).json({ error: "Run not found." }); return; }
+  if (run.status === "running") { res.status(409).json({ error: "Adu is writing this one right now — it cannot be dropped until he is waiting for you or has stopped." }); return; }
+  if (run.status === "awaiting_approval") await db.query("UPDATE auto_pipeline_runs SET status = 'failed', error = 'You started a new story instead.', updated_at = now() WHERE id = $1", [run.id]);
+  res.json({ ok: true });
+});
+
 app.post("/api/auto-pipeline/start", requireRole("admin"), async (req, res) => {
   const { concept, format: rawFormat, dialogueLanguage: rawDialogueLanguage } = req.body;
+  const busy = await getAduWork(db, req.user.id);
+  if (busy) { res.status(409).json({ error: busyMessage(busy), activeWork: busy }); return; }
 
   if (!concept?.trim()) {
     res.status(400).json({ error: "A concept is required." });
@@ -18339,6 +18363,10 @@ app.post("/api/auto-pipeline/start", requireRole("admin"), async (req, res) => {
       [concept, JSON.stringify(format), req.user.id, dialogueLanguage, reference.text || null, reference.used.length ? JSON.stringify(reference.used) : null]
     );
     const runId = insertResult.rows[0].id;
+    // The project exists from the very first second: a blank project named after the idea. Every stage Adu finishes is written
+    // into it, and its real title replaces the working one as soon as the story has one.
+    const placeholder = (await db.query("INSERT INTO concepts (concept_text, storylines, title) VALUES ($1, '[]', $2) RETURNING id", [concept, concept.trim().replace(/\s+/g, " ").slice(0, 60)])).rows[0].id;
+    await db.query("UPDATE auto_pipeline_runs SET placeholder_concept_id = $2 WHERE id = $1", [runId, placeholder]);
 
     // A story written from inside a project (with one of its drafts open) is a NEW DRAFT of that project: it is recorded as
     // soon as its project exists, offline while it is written, and appears in that project's Drafts when it is finished.
@@ -18394,6 +18422,10 @@ async function runStoryBrainJob(runId, job) {
       JSON.stringify(bible),
       JSON.stringify(totalUsage),
     ]);
+    // the project already exists (a blank one made at the start): give it the story's real title as soon as there is one
+    if (bible.promise?.title) {
+      await db.query("UPDATE concepts SET title = $2 WHERE id = (SELECT placeholder_concept_id FROM auto_pipeline_runs WHERE id = $1) AND concept_text IS NOT NULL", [runId, String(bible.promise.title).slice(0, 120)]).catch(() => {});
+    }
     const scores = Object.values(bible.review?.scores ?? {}).join(" / ");
     await appendAutoPipelineNote(
       runId,
@@ -18630,7 +18662,7 @@ app.get("/api/auto-pipeline/runs", requireLogin, async (req, res) => {
   // under the same login, and a different admin's in-progress run showing
   // up here would be adopted just the same way, which isn't what's wanted.
   const result = await db.query(
-    "SELECT id, concept_text, status, progress_stage, concept_id, created_at FROM auto_pipeline_runs WHERE created_by = $1 ORDER BY created_at DESC LIMIT 20",
+    "SELECT id, concept_text, status, progress_stage, concept_id, placeholder_concept_id, created_at FROM auto_pipeline_runs WHERE created_by = $1 ORDER BY created_at DESC LIMIT 20",
     [req.user.id]
   );
   res.json(
@@ -18640,6 +18672,7 @@ app.get("/api/auto-pipeline/runs", requireLogin, async (req, res) => {
       status: row.status,
       progressStage: row.progress_stage,
       conceptId: row.concept_id,
+    placeholderConceptId: row.placeholder_concept_id ?? null,
       createdAt: row.created_at,
     }))
   );
@@ -18647,7 +18680,7 @@ app.get("/api/auto-pipeline/runs", requireLogin, async (req, res) => {
 
 app.get("/api/auto-pipeline/:id/status", requireLogin, async (req, res) => {
   const result = await db.query(
-    "SELECT id, concept_text, format, status, progress_stage, review_notes, concept_id, scene_list_id, error, created_at, updated_at, story_bible, story_bible_usage, reference_sources FROM auto_pipeline_runs WHERE id = $1",
+    "SELECT id, concept_text, format, status, progress_stage, review_notes, concept_id, scene_list_id, error, created_at, updated_at, story_bible, story_bible_usage, reference_sources, placeholder_concept_id FROM auto_pipeline_runs WHERE id = $1",
     [req.params.id]
   );
   if (result.rows.length === 0) {
@@ -18670,6 +18703,7 @@ app.get("/api/auto-pipeline/:id/status", requireLogin, async (req, res) => {
     storyBible: row.story_bible,
     storyBibleUsage: row.story_bible_usage,
     referenceSources: row.reference_sources ?? [],
+    placeholderConceptId: row.placeholder_concept_id ?? null,
   });
 });
 

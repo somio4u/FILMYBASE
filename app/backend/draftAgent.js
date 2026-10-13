@@ -14,6 +14,7 @@
 
 import { branchDraft, cleanupDuplicateRevisions, createBlank, detectStage, draftUnits, diffUnits, fingerprintOf, getDraft, httpError, registerExternalDraft, saveResume, sceneText, updateDraft } from "./drafts.js";
 import { flatten } from "./workspaceContext.js";
+import { getAduWork, busyMessage } from "./aduWork.js";
 import { analyzeScreenplay } from "./screenplayAnalysis.js";
 import { publish } from "./events.js";
 
@@ -746,6 +747,15 @@ export async function startPlainDraft(db, models, { runId, parentDraftId, instru
     `INSERT INTO draft_revision_requests (group_id, module, parent_draft_id, draft_id, intent, instruction, source, constraints, context, status, proposal, created_by) VALUES ($1,'film',$2,NULL,'NEW_DRAFT',$3,'text','{}','{}','rewriting',$4,$5) RETURNING *`,
     [parent.group_id, parent.id, clip(instruction, 4000), JSON.stringify({ kind: "story_bible", pipelineRunId: runId, approved: true, plain: true }), actorUserId]
   )).rows[0];
+  // The new draft exists from the first second: the story's blank project (made when the run started) is registered as the online draft,
+  // and every stage Adu finishes is written into it.
+  const run = (await db.query("SELECT placeholder_concept_id FROM auto_pipeline_runs WHERE id = $1", [runId]).catch(() => ({ rows: [] }))).rows[0];
+  if (run?.placeholder_concept_id) {
+    const existing = (await db.query("SELECT id FROM project_drafts WHERE module = 'film' AND project_ref = $1", [run.placeholder_concept_id])).rows[0];
+    const draft = existing ?? await registerExternalDraft(db, { parentDraftId: parent.id, module: "film", projectRef: run.placeholder_concept_id, label: clip(instruction, 60), note: `Revision: ${clip(instruction, 200)}`, actorUserId });
+    await db.query("UPDATE project_drafts SET status = 'working' WHERE id = $1 AND status = 'pending_approval'", [draft.id]);
+    await db.query("UPDATE draft_revision_requests SET draft_id = $2, context = COALESCE(context,'{}'::jsonb) || '{\"online\":true}'::jsonb WHERE id = $1", [row.id, draft.id]);
+  }
   launch(db, row.id, () => rawRun(db, models, row.id));
   return requestView(row);
 }
@@ -1098,7 +1108,7 @@ export function registerDraftAgentRoutes(app, db, requireRole, { models = null }
   app.post("/api/drafts/change-sets/:id/reject", admin, wrap(async (req, res) => res.json({ changeSet: await rejectChangeSet(db, id(req.params.id) ?? 0) })));
   app.post("/api/drafts/change-sets/:id/undo", admin, wrap(async (req, res) => res.json({ changeSet: await undoChangeSet(db, id(req.params.id) ?? 0) })));
   app.post(`${base}/alternative`, admin, wrap(async (req, res) => res.status(201).json(await startAlternative(db, models, did(req), { instruction: req.body?.instruction, targetKeys: Array.isArray(req.body?.targetKeys) ? req.body.targetKeys : [], context: ctx(req), constraints: req.body?.constraints ?? {}, confirmed: req.body?.confirmed === true, actorUserId: req.user?.id }))));
-  app.post(`${base}/revision`, admin, wrap(async (req, res) => { const out = await startRevision(db, models, did(req), { instruction: req.body?.instruction, constraints: req.body?.constraints ?? {}, source: req.body?.source ?? "text", context: ctx(req), label: req.body?.label ?? null, confirmed: req.body?.confirmed === true, actorUserId: req.user?.id }); res.status(out.duplicate ? 200 : 202).json(out); }));
+  app.post(`${base}/revision`, admin, wrap(async (req, res) => { const busy = await getAduWork(db, req.user?.id); if (busy) throw httpError(busyMessage(busy), 409, "adu_busy"); const out = await startRevision(db, models, did(req), { instruction: req.body?.instruction, constraints: req.body?.constraints ?? {}, source: req.body?.source ?? "text", context: ctx(req), label: req.body?.label ?? null, confirmed: req.body?.confirmed === true, actorUserId: req.user?.id }); res.status(out.duplicate ? 200 : 202).json(out); }));
   app.post(`${base}/new-story`, admin, wrap(async (req, res) => {
     const draft = await getDraft(db, did(req));
     const dest = req.body?.destination;

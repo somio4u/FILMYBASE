@@ -2476,6 +2476,33 @@ function autoPipelineProgressPercent(stage) {
 // back as one downloadable PDF, without clicking through each stage
 // manually. Position is a per-viewer convenience (localStorage only); the
 // run itself lives server-side so a page refresh doesn't lose progress.
+// A bar that is always visible, whichever project is open: what Adu is working on right now (he works on one project at a time).
+function AduWorkBar({ currentUser, t, onOpenAdu, onOpenProject, appMode }) {
+  const [work, setWork] = useState(null)
+  useEffect(() => {
+    if (currentUser?.role !== 'admin') return undefined
+    let cancelled = false
+    const load = () => fetch(`${BACKEND_URL}/api/adu/current`).then((r) => (r.ok ? r.json() : null)).then((d) => { if (!cancelled) setWork(d?.active ? d : null) }).catch(() => {})
+    load()
+    const timer = setInterval(load, 8000)
+    const onFocus = () => load()
+    window.addEventListener('focus', onFocus)
+    return () => { cancelled = true; clearInterval(timer); window.removeEventListener('focus', onFocus) }
+  }, [currentUser?.username, currentUser?.role])
+  if (!work) return null
+  const names = t?.floatingAgentStageNames ?? {}
+  const stage = work.waitingForYou ? 'Waiting for your approval' : (names[work.stage] ?? String(work.stage ?? '').replace(/_/g, ' '))
+  const sameMode = appMode !== 'picker' && work.module === (appMode === 'ai' ? 'ai_movie' : 'film')
+  return (
+    <div className="adu-work-bar" role="status">
+      <span className="adu-work-dot" aria-hidden="true" />
+      <span className="adu-work-text"><strong>Adu is working on “{work.title}”</strong> — {stage}</span>
+      <button type="button" className="adu-work-btn" onClick={() => onOpenAdu?.(work)}>Open Adu</button>
+      {work.projectRef && sameMode && <button type="button" className="adu-work-btn" onClick={() => onOpenProject?.(work)}>Open project</button>}
+    </div>
+  )
+}
+
 // What a story run can do for the project: download its episode synopses, and show / set where it is saved as a draft.
 function RunTools({ runId, status, draftCtx }) {
   const [link, setLink] = useState(null)
@@ -2797,6 +2824,13 @@ function FloatingAgentWidget({ currentUser, t, onRunCompleted, onOpenProject, dr
     window.dispatchEvent(new CustomEvent(ADU_EVENT, { detail: { active: true } }))
     setAduTab('project'); setIsOpen(true)
   }, [draftCtx?.openRequestId])
+  // the "Adu is working on…" bar asks Adu to open on his current work
+  useEffect(() => {
+    if (!draftCtx?.openAduNonce) return
+    try { localStorage.setItem(ADU_ACTIVE_STORAGE_KEY, '1') } catch { /* per-browser convenience */ }
+    window.dispatchEvent(new CustomEvent(ADU_EVENT, { detail: { active: true } }))
+    setAduTab('new'); setIsOpen(true)
+  }, [draftCtx?.openAduNonce])
   useEffect(() => { if (!isOpen) draftCtx?.onAduClosed?.() }, [isOpen]) // eslint-disable-line react-hooks/exhaustive-deps
 
   async function handleStart() {
@@ -2903,7 +2937,13 @@ function FloatingAgentWidget({ currentUser, t, onRunCompleted, onOpenProject, dr
     setIsSendingBible(false)
   }
 
-  function handleStartNew() {
+  async function handleStartNew() {
+    // Adu works on one project at a time: a story that is only waiting for you can be dropped, one he is writing cannot
+    if (status?.status === 'running') { setErrorMessage('Adu is writing this one right now. Wait until he finishes or stops, then start a new story.'); return }
+    if (status?.status === 'awaiting_approval' && runId) {
+      if (!window.confirm('Adu is waiting for your approval of this story. Start a new story and drop this one?')) return
+      try { await fetch(`${BACKEND_URL}/api/auto-pipeline/${runId}/abandon`, { method: 'POST' }) } catch { /* the server will still refuse a second story until this one is dropped */ }
+    }
     setRunId(null)
     setStatus(null)
     setErrorMessage(null)
@@ -6444,6 +6484,7 @@ function App() {
   const [draftDashboard, setDraftDashboard] = useState(null) // { module, projectRef }
   const [currentDraft, setCurrentDraft] = useState(null) // { id, module, projectRef }
   const [aduReviewDraft, setAduReviewDraft] = useState(null) // lets Adu show a revision from the Drafts screen when no draft is open
+  const [aduOpenNonce, setAduOpenNonce] = useState(0) // the "Adu is working on…" bar asks Adu to open
   const [aduRequestId, setAduRequestId] = useState(null) // asks Adu to open a revision that is waiting for review
   const [projectTitle, setProjectTitle] = useState(null)
   const [projectHistory, setProjectHistory] = useState([])
@@ -7098,7 +7139,7 @@ function App() {
     }
   }
 
-  const aduDraftCtx = { openLinked: (d) => continueDraft({ id: d.id, module: d.module, projectRef: d.projectRef, resumeContext: {}, currentStage: null }), openDrafts: currentDraft ? () => setDraftDashboard({ module: currentDraft.module, projectRef: currentDraft.projectRef }) : null, draft: currentDraft ?? aduReviewDraft, onAduClosed: () => setAduReviewDraft(null), getContext: agentContext, onOpenDraft: handleAgentOpen, onApplied: refreshOpenDraft, openRequestId: aduRequestId }
+  const aduDraftCtx = { openAduNonce: aduOpenNonce, openLinked: (d) => continueDraft({ id: d.id, module: d.module, projectRef: d.projectRef, resumeContext: {}, currentStage: null }), openDrafts: currentDraft ? () => setDraftDashboard({ module: currentDraft.module, projectRef: currentDraft.projectRef }) : null, draft: currentDraft ?? aduReviewDraft, onAduClosed: () => setAduReviewDraft(null), getContext: agentContext, onOpenDraft: handleAgentOpen, onApplied: refreshOpenDraft, openRequestId: aduRequestId }
 
   // Which draft is the open project? (Every existing project is Draft 1 automatically.)
   useEffect(() => {
@@ -11487,6 +11528,7 @@ function App() {
             </button>
           ))}
         </div>
+        <AduWorkBar currentUser={currentUser} t={t} appMode="picker" onOpenAdu={(w) => { if (w.module === 'film') setAppMode('movie'); else handleChooseAiMovieMode(); setTimeout(() => setAduOpenNonce((v) => v + 1), 800) }} />
       </div>
     )
   }
@@ -11504,6 +11546,7 @@ function App() {
         {/* Adu works in AI Movie mode too ("activate adu" in any writing box). Opening a Film project from his panel is Film-side only. */}
         {/* its idea box has a mic button, which needs the dictation provider the Film-mode screen wraps everything in */}
         <DictationContext.Provider value={{ t, dictationLanguage, onDictationLanguageChange: handleDictationLanguageChange }}>
+          <AduWorkBar currentUser={currentUser} t={t} appMode={appMode} onOpenAdu={() => setAduOpenNonce((v) => v + 1)} onOpenProject={(w) => continueDraft({ module: w.module, projectRef: w.projectRef, resumeContext: {}, currentStage: null })} />
           <FloatingAgentWidget currentUser={currentUser} t={t} onRunCompleted={() => loadProjectList()} draftCtx={aduDraftCtx} />
         </DictationContext.Provider>
       {draftDashboard && <ErrorBoundary inline onClose={() => setDraftDashboard(null)}><Suspense fallback={null}><DraftDashboard module={draftDashboard.module} projectRef={draftDashboard.projectRef} backendUrl={BACKEND_URL} onContinue={continueDraft} onClose={() => setDraftDashboard(null)} onOpenDirect={openProjectDirect} onReviewRequest={(d) => { setDraftDashboard(null); if (!currentDraft && d.id) setAduReviewDraft({ id: d.id, module: d.module, projectRef: d.projectRef, title: 'Draft' }); setAduRequestId(d.openRequest?.id ?? null); setTimeout(() => setAduRequestId(null), 1500) }} /></Suspense></ErrorBoundary>}
@@ -12763,7 +12806,8 @@ function App() {
   return (
     <DictationContext.Provider value={{ t, dictationLanguage, onDictationLanguageChange: handleDictationLanguageChange }}>
     <div className="app-shell">
-      <FloatingAgentWidget
+      <AduWorkBar currentUser={currentUser} t={t} appMode={appMode} onOpenAdu={() => setAduOpenNonce((v) => v + 1)} onOpenProject={(w) => continueDraft({ module: w.module, projectRef: w.projectRef, resumeContext: {}, currentStage: null })} />
+          <FloatingAgentWidget
         currentUser={currentUser}
         t={t}
         onRunCompleted={() => loadProjectList()}

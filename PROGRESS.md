@@ -1669,3 +1669,9 @@ Plain version: every project is now a set of **drafts**. Opening a project shows
 ## "Make it my draft now"
 - An unfinished new draft in "Being made" can be turned into a normal, visible draft at once (button "Make it my draft now" in Drafts and in the Adu story panel). If its project does not exist yet, a blank project holds its place; when the story's own project is written it replaces the blank one under the SAME draft, so the draft fills in as the agent writes.
 - A story run the user started that stops no longer ends the draft's tracking: it waits, and carries on when "Pick up where it broke" is pressed.
+
+## One project at a time + the project exists from the first second
+- Adu now works on ONE project at a time (per login). While a story run is writing or waiting for approval, a second story (or a draft request) is refused with a plain message naming the project he is on. "Start fresh" drops a story that is only waiting for approval (after asking); one he is actively writing cannot be dropped. Work untouched for 24 hours stops counting, so nothing can block you forever.
+- An always-visible bar "Adu is working on “<project>” — <stage>" (with Open Adu and Open project) shows on every screen, including the Film / AI Movie picker, whichever project is open. It checks every 8 seconds.
+- A story run now creates its project the moment it starts (a blank project named after the idea, in the project list). Its real title replaces the working title when the Story Bible has one, and every stage Adu finishes is written into that same project. A story started inside a project is that project's online draft from the first second.
+- Not covered yet: AI Movie draft copies already existed from the start; they only gained the one-at-a-time rule.

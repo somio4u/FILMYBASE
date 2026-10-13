@@ -12,6 +12,7 @@ import { applyChangeSet, approveFinal, approveSynopsis, cancelRequest, classifyP
 import { createBlank } from "../drafts.js";
 import { fakePipeline } from "../draftAgentMock.js";
 import { setPollMs, cleanupDuplicateRevisions, resumeInterruptedRequests, startPlainDraft, makeDraftOnline } from "../draftAgent.js";
+import { getAduWork, busyMessage } from "../aduWork.js";
 
 const db = new pg.Pool({ database: process.env.TEST_DB || "filmmaking_app_test", user: process.env.PGUSER || "root", host: process.env.PGHOST || "/var/run/postgresql" });
 const requireRole = () => (req, res, next) => ((req.user = { id: 1 }), next());
@@ -530,6 +531,36 @@ test("make it my draft now: an unfinished story becomes a visible draft at once,
   assert.notEqual(String(after.project_ref), String(placeholder), "the draft now points at the story's own project");
   assert.equal((await db.query("SELECT count(*)::int AS n FROM concepts WHERE id = $1", [placeholder])).rows[0].n, 0, "the empty placeholder is gone");
   assert.equal((await db.query("SELECT count(*)::int AS n FROM project_drafts WHERE project_ref = $1 AND module = 'film'", [after.project_ref])).rows[0].n, 1, "one draft, not two");
+  await cancelRequest(db, q.id).catch(() => {});
+});
+
+test("one project at a time: Adu's current work is reported, and the project of a story run is a draft from the first second", async () => {
+  await db.query("CREATE TABLE IF NOT EXISTS auto_pipeline_runs (id SERIAL PRIMARY KEY, concept_text TEXT, format JSONB, status TEXT, progress_stage TEXT, concept_id INTEGER, placeholder_concept_id INTEGER, created_by INTEGER, error TEXT, story_bible JSONB, review_notes JSONB DEFAULT '[]', created_at TIMESTAMPTZ DEFAULT now(), updated_at TIMESTAMPTZ DEFAULT now())");
+  await db.query("UPDATE draft_revision_requests SET status = 'cancelled' WHERE status NOT IN ('completed','cancelled')");
+  await db.query("DELETE FROM auto_pipeline_runs");
+  assert.equal(await getAduWork(db, 1), null, "idle");
+  // an AI Movie draft being made is Adu's current work
+  const da = await ensureDraftFor(db, "ai_movie", ai);
+  const m = mockModels();
+  const { request } = await startRevision(db, m, da.id, { instruction: "Change the villain.", confirmed: true, actorUserId: 1 });
+  let work = await getAduWork(db, 1);
+  assert.equal(work.kind, "draft_request"); assert.equal(work.requestId, request.id);
+  assert.match(busyMessage(work), /one project at a time/);
+  await whenIdle(request.id); await cancelRequest(db, request.id);
+  assert.equal(await getAduWork(db, 1), null, "cancelled work is no longer current");
+  // a story run: its blank project exists from the start and is the online draft of the open project
+  const d = await ensureDraftFor(db, "film", film);
+  const ph = (await db.query("INSERT INTO concepts (concept_text, storylines, title) VALUES ('Bishpan placeholder','[]','Bishpan placeholder') RETURNING id")).rows[0].id;
+  const run = (await db.query("INSERT INTO auto_pipeline_runs (concept_text, status, progress_stage, placeholder_concept_id, created_by) VALUES ('Bishpan placeholder','running','story-brain',$1,1) RETURNING id", [ph])).rows[0].id;
+  work = await getAduWork(db, 1);
+  assert.equal(work.kind, "story_run"); assert.equal(work.runId, run); assert.equal(work.projectRef, ph); assert.equal(work.module, "film");
+  const q = await startPlainDraft(db, m, { runId: run, parentDraftId: d.id, instruction: "Bishpan placeholder", actorUserId: 1 });
+  const dash = await getDashboard(db, "film", film);
+  const card = dash.drafts.find((x) => String(x.projectRef) === String(ph));
+  assert.ok(card, "the story's project is a visible draft from the first second");
+  assert.equal(card.status, "working");
+  assert.equal(dash.revisions.find((x) => x.id === q.id).offline, false);
+  await db.query("DELETE FROM auto_pipeline_runs"); // leave no run behind: other tests use run numbers of their own
   await cancelRequest(db, q.id).catch(() => {});
 });
 

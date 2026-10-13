@@ -7541,3 +7541,11 @@ button:not(:disabled):active {
 }
 .floating-agent-tab-badge { display: block; font-size: 0.72em; color: #ffd27a; font-weight: 600; }
 .story-bible-synopsis { margin: 4px 0; line-height: 1.5; }
+
+/* the always-visible "Adu is working on…" bar */
+.adu-work-bar { position: fixed; z-index: 900; left: 12px; right: 96px; bottom: 12px; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 8px 12px; border-radius: 14px; background: rgba(20, 28, 60, 0.97); border: 1px solid rgba(138, 180, 248, 0.45); color: #e8ecff; font-size: 0.88rem; box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35); }
+.adu-work-dot { width: 10px; height: 10px; border-radius: 50%; background: #6dd58c; box-shadow: 0 0 0 0 rgba(109, 213, 140, 0.7); animation: aduWorkPulse 1.6s infinite; }
+@keyframes aduWorkPulse { 70% { box-shadow: 0 0 0 8px rgba(109, 213, 140, 0); } 100% { box-shadow: 0 0 0 0 rgba(109, 213, 140, 0); } }
+.adu-work-text { flex: 1 1 160px; min-width: 0; overflow-wrap: anywhere; }
+.adu-work-btn { border: 1px solid rgba(138, 180, 248, 0.6); background: transparent; color: #cfe0ff; border-radius: 999px; padding: 4px 12px; font-size: 0.85rem; cursor: pointer; }
+@media (prefers-reduced-motion: reduce) { .adu-work-dot { animation: none; } }

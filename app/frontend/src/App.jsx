@@ -13766,13 +13766,15 @@ function App() {
 
           {characterSheet.id && (
             <p>
-              <a
+              <DownloadChoiceButton
+                t={t}
+                label={t.castingPptButton ?? 'Download Casting PPT'}
                 className="export-button"
-                data-testid="casting-ppt-link"
-                href={`${BACKEND_URL}/api/character-sheet/${characterSheet.id}/export-casting-ppt?lang=${language}`}
-              >
-                {t.castingPptButton ?? 'Download Casting PPT'}
-              </a>
+                pdfUrl={`${BACKEND_URL}/api/character-sheet/${characterSheet.id}/export-casting-ppt?lang=en`}
+                excelUrl={`${BACKEND_URL}/api/character-sheet/${characterSheet.id}/export-casting-ppt?lang=or`}
+                pdfLabel="English"
+                excelLabel="ଓଡ଼ିଆ (Odia)"
+              />
             </p>
           )}
 

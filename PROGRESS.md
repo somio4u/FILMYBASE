@@ -1713,3 +1713,7 @@ Plain version: every project is now a set of **drafts**. Opening a project shows
 ## Casting PPT (Characters stage)
 - [x] Under the character sheet there is now a **Casting PPT** download. Slide 1: film title + "Casting PPT". Then one slide per character in the character sheet: age, look, relation, what they want, flaw on the left; three dashed photo boxes on the right with Name / Age / Notes lines under each. Works in English, Hindi, Odia.
 - Note: it includes every character in the sheet (the sheet only holds the major ones). Layout checked by rendering a sample slide; not yet tried against a real project.
+
+## Casting PPT (Characters stage)
+- [x] Under the character sheet there is a **Download Casting PPT** button; clicking it offers **English** or **Odia**. Slide 1: "THE CAST" + film title. Then one slide per character in the sheet: top ~45% = tag, name, age, short description, Look / Wants / Needs / Flaw / Inner conflict / Arc, and a Virtues strip; bottom ~55% = three big photo cards with only a Name line.
+- Note: in the Odia file everything is Odia except "Look" and "Relation to the hero" — the character sheet only stores those two in English. Layout checked by rendering sample slides, not yet on a real project.

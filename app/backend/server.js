@@ -9359,7 +9359,7 @@ app.get("/api/character-sheet/latest", requireLogin, async (req, res) => {
 });
 
 app.get("/api/character-sheet/:id/export-casting-ppt", requireLogin, async (req, res) => {
-  const lang = ["or", "hi"].includes(req.query.lang) ? req.query.lang : "en";
+  const lang = req.query.lang === "or" ? "or" : "en";
   try {
     const result = await db.query(
       "SELECT cs.content, pd.content AS deck FROM character_sheets cs JOIN pitch_decks pd ON pd.id = cs.pitch_deck_id WHERE cs.id = $1",
@@ -9370,11 +9370,11 @@ app.get("/api/character-sheet/:id/export-casting-ppt", requireLogin, async (req,
       return;
     }
     const { content, deck } = result.rows[0];
-    const title = deck?.title?.en || "Casting";
-    const buffer = await buildCastingPpt({ title, characters: content.characters ?? [] });
+    const title = (lang === "or" && deck?.title?.or) || deck?.title?.en || "Casting";
+    const buffer = await buildCastingPpt({ title, characters: content.characters ?? [], lang });
     const safe = (deck?.title?.en || "casting").replace(/[^a-z0-9]+/gi, "-");
     res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.presentationml.presentation");
-    res.setHeader("Content-Disposition", `attachment; filename="${safe}-casting-${lang}-${formatExportTimestamp()}.pptx"`);
+    res.setHeader("Content-Disposition", `attachment; filename="${safe}-casting-${lang === "or" ? "odia" : "english"}-${formatExportTimestamp()}.pptx"`);
     res.send(buffer);
   } catch (error) {
     console.error("Casting PPT export failed:", error.message);

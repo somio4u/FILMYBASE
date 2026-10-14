@@ -24,4 +24,12 @@ test("casting PPT: cover + one slide per character, with 3 photo placeholders ea
   assert.match(slide2, /Tall, dark, intense eyes/);
   assert.equal((slide2.match(/PHOTO · drop here/g) ?? []).length, 3);
   assert.match(slide2, /SOUMYA/);
+
+  const odia = await buildCastingPpt({ title: "ମହାକାଳୀ", characters, lang: "or" });
+  writeFileSync(file, odia);
+  const odiaSlide2 = execSync(`unzip -p ${file} ppt/slides/slide2.xml`).toString();
+  assert.match(odiaSlide2, /ଯୁବ ପୂଜକ/);
+  assert.match(odiaSlide2, /ଫଟୋ · ଏଠି ଲଗାନ୍ତୁ/);
+  assert.doesNotMatch(odiaSlide2, /PHOTO · drop here/);
+  assert.match(execSync(`unzip -p ${file} ppt/slides/slide1.xml`).toString(), /କାଷ୍ଟିଂ ପ୍ରେଜେଣ୍ଟେସନ୍/);
 });

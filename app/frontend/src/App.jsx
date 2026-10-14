@@ -3194,6 +3194,7 @@ function FloatingAgentWidget({ currentUser, t, onRunCompleted, onOpenProject, dr
                   value={concept}
                   onChange={(e) => setConcept(e.target.value)}
                 />
+                <PdfUploadButton backendUrl={BACKEND_URL} text={concept} onText={setConcept} />
                 <WorkspaceSources backendUrl={BACKEND_URL} idea={concept} auto={refAuto} onAuto={setRefAuto} picked={refPicked} onPicked={setRefPicked} />
                 <select value={formatType} onChange={(e) => setFormatType(e.target.value)}>
                   <option value="vertical">{t.verticalDramaOption}</option>
@@ -5648,6 +5649,92 @@ function MicInput({ value, onChange, className, wrapClassName, ...rest }) {
         onResult={(text) => onChange({ target: { value: value && value.trim() ? `${value.trim()} ${text}` : text } })}
       />
     </span>
+  )
+}
+
+// "Upload PDF instead": Adu reads the PDF's PAGES (not its garbled text layer),
+// skips page numbers/headers, and puts the story text into the box for review.
+// Also warns when the text already pasted looks garbled by a PDF copy.
+function looksGarbled(text) {
+  const t = String(text || '')
+  const indic = (t.match(/[\u0B00-\u0BFF\u0900-\u097F]/g) || []).length
+  if (indic < 50) return false
+  const boxes = (t.match(/[\u25CC\uFFFD]/g) || []).length
+  const latin1 = (t.match(/[\u00B0-\u00FF]/g) || []).length
+  const strayMarks = (t.match(/(?:^|\s)[\u0B3E-\u0B4D\u093E-\u094D]/gmu) || []).length
+  return boxes > 3 || latin1 > 10 || strayMarks > 15
+}
+
+function PdfUploadButton({ backendUrl, text, onText }) {
+  const inputRef = useRef(null)
+  const [busy, setBusy] = useState(false)
+  const [progress, setProgress] = useState('')
+  const [error, setError] = useState('')
+  const [note, setNote] = useState(null)
+
+  async function handleFile(event) {
+    const file = event.target.files?.[0]
+    event.target.value = ''
+    if (!file) return
+    if (text && text.trim() && !window.confirm('Adu will read the PDF and replace what is in the box. Continue?')) return
+    setBusy(true)
+    setError('')
+    setNote(null)
+    setProgress('Uploading the PDF…')
+    try {
+      const body = new FormData()
+      body.append('file', file)
+      const start = await fetch(`${backendUrl}/api/story-from-pdf`, { method: 'POST', body })
+      const started = await start.json().catch(() => ({}))
+      if (!start.ok) throw new Error(started.error || 'Could not upload the PDF.')
+      const deadline = Date.now() + 45 * 60 * 1000
+      while (Date.now() < deadline) {
+        await new Promise((resolve) => setTimeout(resolve, 4000))
+        let job = null
+        try {
+          const res = await fetch(`${backendUrl}/api/story-from-pdf/${started.jobId}`)
+          job = await res.json().catch(() => ({}))
+          if (res.status === 404) throw new Error(job.error || 'This reading was lost. Please upload again.')
+        } catch (pollError) {
+          if (/lost|upload again/i.test(pollError.message)) throw pollError
+          setProgress('Waiting for the connection…')
+          continue
+        }
+        if (job.status === 'failed') throw new Error(job.error || 'Adu could not read this PDF.')
+        if (job.status === 'done') {
+          onText(job.result.text, job.result)
+          setNote(job.result)
+          return
+        }
+        setProgress(`${job.progress || 'Reading'}… (this takes a few minutes, you can wait here)`)
+      }
+      throw new Error('Reading took too long. Please try a smaller PDF.')
+    } catch (e) {
+      setError(e.message)
+    } finally {
+      setBusy(false)
+      setProgress('')
+    }
+  }
+
+  return (
+    <div className="pdf-upload">
+      <input ref={inputRef} type="file" accept="application/pdf,.pdf" onChange={handleFile} style={{ display: 'none' }} />
+      {looksGarbled(text) && !busy && (
+        <p className="feedback-note">This text looks broken (letters got garbled when it was copied from a PDF). Upload the PDF instead so Adu can read the pages. / कॉपी में अक्षर टूटे दिख रहे हैं — PDF upload करो।</p>
+      )}
+      <button type="button" className="cancel-button" onClick={() => inputRef.current?.click()} disabled={busy}>
+        {busy ? 'Adu is reading the PDF…' : '📄 Upload PDF instead — Adu reads the pages'}
+      </button>
+      {busy && progress && <p className="floating-agent-stage-line"><span className="floating-agent-spinner" aria-hidden="true" /><span>{progress}</span></p>}
+      {error && <p className="feedback-note">{error}</p>}
+      {note && (
+        <p className="floating-agent-note">
+          {note.summary}{note.title ? ` Title: ${note.title}.` : ''} Please read the text once, then continue.
+          {note.warnings?.length > 0 && <> <strong>Check:</strong> {note.warnings.join(' ')}</>}
+        </p>
+      )}
+    </div>
   )
 }
 
@@ -13465,6 +13552,7 @@ function App() {
                   onResult={(text) => setConcept((prev) => (prev.trim() ? `${prev.trim()} ${text}` : text))}
                 />
               </div>
+              <PdfUploadButton backendUrl={BACKEND_URL} text={concept} onText={setConcept} />
               <div className="skip-ahead-controls">
                 <button
                   className="choose-button"
@@ -13501,6 +13589,7 @@ function App() {
                   onResult={(text) => setSkipPastedText((prev) => (prev.trim() ? `${prev.trim()} ${text}` : text))}
                 />
               </div>
+              <PdfUploadButton backendUrl={BACKEND_URL} text={skipPastedText} onText={setSkipPastedText} />
               <div className="skip-ahead-controls">
                 {formatType !== 'film' && <span className="skip-ahead-runtime-label">Paste all episodes in this one box. Start each one with a heading like “Episode 1”, “Episode 2”…</span>}
                 <button

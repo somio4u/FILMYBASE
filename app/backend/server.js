@@ -29,7 +29,8 @@ import { createProviders } from "./providers.js";
 import { setupProductionMedia } from "./productionMedia.js";
 import { registerDesignTaskRoutes } from "./designTasks.js";
 import { registerSubmissionRoutes, designerGatekeeper, DESIGNER_ROLE } from "./designSubmissions.js";
-import { BIBLE_PASS_SCORE, designStoryBible, generateBrainJson, reviseBibleWithNote, storyBibleToMarkdown } from "./storyBrain.js";
+import { readStoryFromPdf } from "./pdfReader.js";
+import { BIBLE_PASS_SCORE, brainAsker, newUsage, designStoryBible, generateBrainJson, reviseBibleWithNote, storyBibleToMarkdown } from "./storyBrain.js";
 import { ensureAiMovieStorySchema, getProjectModes, judgedStage, registerAiMovieStoryRoutes } from "./aiMovieStory.js";
 import { assertWithinBudget, recordSpend } from "./pipelineSettings.js";
 import { ensureCinematicSchema, registerSpectacleRoutes, createShotCutterHook } from "./spectacleDirector.js";
@@ -18445,6 +18446,44 @@ app.get("/api/adu/current", requireRole("admin"), async (req, res) => {
 
 // STOP a story that Adu is writing right now. What he has written so far is kept; he ends at his next step (within a minute or so),
 // and "Pick up where it broke" resumes it from the last finished stage.
+// READ A STORY FROM A PDF (pdfReader.js). Reading takes minutes, so the upload
+// starts a background job and the app asks "how far?" every few seconds. Jobs
+// live in memory only: a server restart loses them and the user just uploads again.
+const pdfReadJobs = new Map();
+const pdfUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 25 * 1024 * 1024 } });
+
+app.post("/api/story-from-pdf", requireRole("admin"), pdfUpload.single("file"), (req, res) => {
+  if (!req.file) {
+    res.status(400).json({ error: "Choose a PDF file first." });
+    return;
+  }
+  const buffer = req.file.buffer;
+  if (buffer.subarray(0, 5).toString("latin1") !== "%PDF-") {
+    res.status(400).json({ error: "This does not look like a PDF file." });
+    return;
+  }
+  for (const [id, job] of pdfReadJobs) if (Date.now() - job.startedAt > 60 * 60 * 1000) pdfReadJobs.delete(id);
+  const id = crypto.randomUUID();
+  const job = { id, status: "reading", progress: "Starting", startedAt: Date.now(), };
+  pdfReadJobs.set(id, job);
+  readStoryFromPdf(buffer, { ask: brainAsker(newUsage(), (label) => { job.progress = label; }), onProgress: (label) => { job.progress = label; } })
+    .then((result) => Object.assign(job, { status: "done", progress: "Done", result }))
+    .catch((error) => {
+      console.error("PDF reading failed:", error.message);
+      Object.assign(job, { status: "failed", error: error.status ? error.message : `Adu could not read this PDF (${String(error.message).slice(0, 160)}). Please try again.` });
+    });
+  res.json({ jobId: id });
+});
+
+app.get("/api/story-from-pdf/:jobId", requireRole("admin"), (req, res) => {
+  const job = pdfReadJobs.get(req.params.jobId);
+  if (!job) {
+    res.status(404).json({ error: "This PDF reading was lost (the server restarted). Please upload the PDF again." });
+    return;
+  }
+  res.json({ status: job.status, progress: job.progress, error: job.error ?? null, result: job.status === "done" ? job.result : null });
+});
+
 app.post("/api/auto-pipeline/:id/stop", requireRole("admin"), async (req, res) => {
   const run = (await db.query("SELECT id, status FROM auto_pipeline_runs WHERE id = $1", [req.params.id])).rows[0];
   if (!run) { res.status(404).json({ error: "Run not found." }); return; }

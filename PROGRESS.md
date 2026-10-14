@@ -1717,3 +1717,9 @@ Plain version: every project is now a set of **drafts**. Opening a project shows
 ## Casting PPT (Characters stage)
 - [x] Under the character sheet there is a **Download Casting PPT** button; clicking it offers **English** or **Odia**. Slide 1: "THE CAST" + film title. Then one slide per character in the sheet: top ~45% = tag, name, age, short description, Look / Wants / Needs / Flaw / Inner conflict / Arc, and a Virtues strip; bottom ~55% = three big photo cards with only a Name line.
 - Note: in the Odia file everything is Odia except "Look" and "Relation to the hero" — the character sheet only stores those two in English. Layout checked by rendering sample slides, not yet on a real project.
+
+## Upload PDF — Adu reads the pages (not deployed yet)
+- [x] An **"Upload PDF instead"** button now sits under the story box in Adu's window, the Idea form and the Synopsis / Bit Sheet / Scene One-Liner forms. Adu is shown the PDF pages (so broken copy-paste fonts don't matter), copies the story page-batch by page-batch (8 pages at a time), leaves out page numbers / running headers / watermarks / cover, and fills the box so you can read it before continuing. A short note says how many pages and episode headings were found.
+- [x] If the pasted text already looks garbled (broken Odia/Hindi letters), a hint suggests uploading the PDF.
+- Limits: PDF up to about 18 MB. Reading takes a few minutes; if the server restarts meanwhile, upload again.
+- **Honest note:** tested with a scripted fake AI and a mocked browser run. It has NOT yet been run against the real Gemini on a real PDF — please try one and tell me what you see.

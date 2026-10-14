@@ -63,7 +63,7 @@ class BrainCallError extends Error {
 async function callModelOnce({ model, location }, { systemInstruction, contents, responseSchema, maxOutputTokens }) {
   const { url, headers } = await endpointFor(model, location);
   const body = {
-    contents: [{ role: "user", parts: [{ text: contents }] }],
+    contents: [{ role: "user", parts: Array.isArray(contents) ? contents : [{ text: contents }] }],
     generationConfig: {
       maxOutputTokens,
       responseMimeType: "application/json",

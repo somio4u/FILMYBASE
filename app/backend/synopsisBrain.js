@@ -9,6 +9,7 @@ import {
   STORY_BRAIN_SYSTEM, OBJ, LIST, S, TRUTH_SCHEMA, CLIMAX_SCHEMA, BLUEPRINT_SCHEMA,
   formatUnits, newUsage, usageSummary, brainAsker, runCritics,
 } from "./storyBrain.js";
+import { cleanPastedStory, damageSignals } from "./pasteClean.js";
 
 const DIGITS = { "०": "0", "१": "1", "२": "2", "३": "3", "४": "4", "५": "5", "६": "6", "७": "7", "८": "8", "९": "9", "୦": "0", "୧": "1", "୨": "2", "୩": "3", "୪": "4", "୫": "5", "୬": "6", "୭": "7", "୮": "8", "୯": "9" };
 const toNumber = (s) => Number(String(s).replace(/[०-९୦-୯]/g, (d) => DIGITS[d] ?? d));
@@ -79,7 +80,10 @@ export const LOCK_RULES = `This is the user's OWN story. You are reading and che
 export async function designBibleFromSynopsis(synopsis, format, { onProgress = () => {}, ask: askIn = null } = {}) {
   const usage = newUsage();
   const ask = askIn ?? brainAsker(usage, onProgress);
-  const text = String(synopsis ?? "").trim();
+  // read the paste first: the story stays, what came from the PDF it was copied from (page headers, page numbers, cut lines) goes
+  const cleaned = cleanPastedStory(synopsis);
+  const text = cleaned.text.trim();
+  const damage = damageSignals(synopsis);
   if (text.length < 200) throw Object.assign(new Error("The synopsis is too short. Paste the complete synopsis of all the episodes, or turn the switch off to let Adu design the story."), { status: 400 });
   let parts = splitEpisodes(text);
   if (!parts) parts = await splitWithModel(text, formatUnits(format).count, ask);
@@ -94,7 +98,7 @@ export async function designBibleFromSynopsis(synopsis, format, { onProgress = (
     STORY_BRAIN_SYSTEM,
   );
   const bible = {
-    idea: text, format, units, synopsisMode: true, lockedSynopsis: text,
+    idea: text, format, units, synopsisMode: true, lockedSynopsis: text, pasteCleanup: cleaned.report, pasteDamaged: damage.damaged,
     promise: read.promise, hiddenTruth: read.hiddenTruth, namesInOdia: read.namesInOdia, characters: read.characters,
     villainPlan: read.villainPlan, facts: read.facts, climax: read.climax, setupsPayoffs: read.setupsPayoffs,
     // the story of every episode is the user's own text, word for word

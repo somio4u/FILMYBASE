@@ -1703,3 +1703,9 @@ Plain version: every project is now a set of **drafts**. Opening a project shows
 - The PDF used only the built-in Times fonts, which have no Odia or Hindi letters, so Odia episodes came out as random symbols. Now every word is drawn in a font that has its letters (Noto Sans Oriya, Noto Sans Devanagari, Times for English), so Odia, Hindi and English can share a line. Words are laid out one by one, so nothing overlaps.
 - The download has language links: Odia, Hindi, English (the story's own text is used wherever a language is missing).
 - Note: a PDF already downloaded with the old fonts cannot be repaired (the letters were lost). Download it again after the fix.
+
+## Stop / Resume Adu + cleaner pasted text (not deployed yet)
+- [x] **Stop Adu button**: while Adu is writing a story, a "Stop Adu" button appears. Pressing it (after a confirm) halts the work at once; what was written so far is kept. The run then shows "Pick up where it broke" (resume) and "Start fresh" (redo).
+- [x] **Pasted text is cleaned first**: page headers, page numbers, running titles and wrapped lines from PDF copies are filtered out, and some broken Odia/Hindi vowel order is repaired, before Adu uses the text. The synopses PDF is tidied the same way.
+- [ ] Next: **Upload PDF** so Adu reads the PDF pages directly (not built yet; needs a real-AI test).
+- Note: tests for Stop use scripted fake models; the Stop button has not been tried in a browser yet.

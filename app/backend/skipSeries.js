@@ -6,6 +6,7 @@
 //   scenelist  -> + characters, structure and bit sheet (made up to match), and a scene list with the user's scenes per episode
 // Everything that talks to the AI is passed in as `models`, so this file can be tested with a scripted model.
 import { splitEpisodes } from "./synopsisBrain.js";
+import { cleanPastedStory, damageSignals } from "./pasteClean.js";
 
 const BATCH = 5;
 const STAGE_NAME = { synopsis: "synopsis", bitsheet: "Bit Sheet", scenelist: "scene one-liners" };
@@ -23,7 +24,10 @@ function fail(message, status = 400) { return Object.assign(new Error(message), 
 // models: { overview, episodes, characterSheet, threeAct, bitSheet, bits, scenes, finishSceneList }
 export async function buildSeriesSkip({ stage, text, format: rawFormat, models, onProgress = () => {} }) {
   if (!["synopsis", "bitsheet", "scenelist"].includes(stage)) throw fail("Unknown start stage.");
-  const source = String(text ?? "").trim();
+  if (!String(text ?? "").trim()) throw fail(`Paste your ${STAGE_NAME[stage]} first.`);
+  // read the paste first: keep the story, drop what came from the PDF it was copied from
+  const cleaned = cleanPastedStory(text);
+  const source = cleaned.text.trim();
   if (!source) throw fail(`Paste your ${STAGE_NAME[stage]} first.`);
   const parts = splitEpisodes(source);
   if (!parts) throw fail("I could not find the episodes. Paste all episodes in this one box, and start each one with a heading like “Episode 1”, “Episode 2” (or “एपिसोड १”).");
@@ -41,7 +45,7 @@ export async function buildSeriesSkip({ stage, text, format: rawFormat, models, 
     episodes.push(...got);
   }
   const deck = { title: overview.storylineTitle, logline: overview.storylineLogline, premise: overview.premise, toneGenre: overview.toneGenre, targetAudience: overview.targetAudience, majorCharacters: overview.majorCharacters, format, episodes };
-  const built = { stage, format, note, parts, concept: overview.concept, storyline: { title: overview.storylineTitle, logline: overview.storylineLogline, summary: overview.storylineSummary }, deck };
+  const built = { stage, format, note, cleanup: cleaned.report.summary, damaged: damageSignals(text).damaged, parts, concept: overview.concept, storyline: { title: overview.storylineTitle, logline: overview.storylineLogline, summary: overview.storylineSummary }, deck };
   if (stage === "synopsis") return built;
 
   onProgress("Characters");

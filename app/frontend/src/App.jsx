@@ -2942,6 +2942,17 @@ function FloatingAgentWidget({ currentUser, t, onRunCompleted, onOpenProject, dr
 
   // The backend can be waking up or restarting (free hosting): retry a few times instead of showing an error.
   // Returns { ok, status, data } or null if the server never answered.
+  // STOP Adu while he is writing: what he has written is kept; "Pick up where it broke" resumes it
+  const [isStopping, setIsStopping] = useState(false)
+  async function handleStop() {
+    if (!runId || isStopping) return
+    if (!window.confirm('Stop Adu now? What he has written so far is kept, and you can resume it or start a new story.')) return
+    setIsStopping(true); setErrorMessage(null)
+    const result = await postWithRetry(`${BACKEND_URL}/api/auto-pipeline/${runId}/stop`)
+    if (!result || !result.ok) setErrorMessage(describeFailure('stop', result))
+    else { notifiedRef.current = false; statusRef.current = null; setPollNonce((n) => n + 1) }
+    setIsStopping(false)
+  }
   // Accept / Reject on Adu's suggested changes to the user's own synopsis
   async function decideSynopsis(payload) {
     if (!runId || isSendingBible) return
@@ -3230,6 +3241,10 @@ function FloatingAgentWidget({ currentUser, t, onRunCompleted, onOpenProject, dr
                       <span>{t.floatingAgentStageNames[status.progressStage] ?? status.progressStage}</span>
                       {elapsedSeconds !== null && <span className="floating-agent-elapsed">{t.aiMovieShortDuration(elapsedSeconds / 60)}</span>}
                     </p>
+                    <div className="floating-agent-row">
+                      <button type="button" className="cancel-button" onClick={handleStop} disabled={isStopping}>{isStopping ? 'Stopping…' : 'Stop Adu'}</button>
+                    </div>
+                    {errorMessage && <p className="feedback-note">{errorMessage}</p>}
                   </div>
                 )}
 

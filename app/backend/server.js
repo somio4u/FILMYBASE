@@ -43,9 +43,11 @@ import { registerTimelineEditRoutes } from "./timelineEdit.js";
 import { registerShotPlanRoutes } from "./shotPlans.js";
 import { backfillDrafts, registerDraftRoutes } from "./drafts.js";
 import { getAduWork, busyMessage } from "./aduWork.js";
+import { RunStopped, assertRunActive, inRunContext, stopRunJobs } from "./runControl.js";
 import { orderByLastWorked } from "./projectActivity.js";
 import { buildSeriesSkip, saveSeriesSkip, seriesFormatFrom } from "./skipSeries.js";
 import { registerScriptFonts, writeScripted } from "./scriptPdf.js";
+import { cleanPastedStory, learnBoilerplate } from "./pasteClean.js";
 import { designBibleFromSynopsis, applyDecisions as applySynopsisDecisions, finalizeSynopsisBible, decorateSynopsisBible, lockedSynopsisIdea } from "./synopsisBrain.js";
 import { failInterruptedRequests, registerDraftAgentRoutes, setPollMs, startPlainDraft } from "./draftAgent.js";
 import { buildReferenceBlock, findRelated as findRelatedSources, ideaWithReferences, registerWorkspaceRoutes } from "./workspaceContext.js";
@@ -293,6 +295,7 @@ function friendlyGeminiErrorMessage(rawMessage) {
 
 async function generateContentWithRetry(params, { retries = 4, fallbackDelayMs = 2000 } = {}) {
   for (let attempt = 0; ; attempt++) {
+    assertRunActive();
     try {
       return await withTimeout(ai.models.generateContent(params), GEMINI_CALL_TIMEOUT_MS);
     } catch (error) {
@@ -319,6 +322,7 @@ const MAX_GEMINI_OUTPUT_TOKENS = 65536;
 // judge saw the idea and the writers saw just the picked storyline, so the
 // writers drifted (seen for real: the Pujari's SON became his grandson).
 const userIdeaContext = new AsyncLocalStorage();
+
 
 // Which AI Movie project the current request (and anything it starts in the background) belongs to.
 // Set once by the middleware before the AI Movie routes. It lets a call tagged with an `agent` hint pick its
@@ -358,6 +362,7 @@ function castListText(characterSheet) {
 const SCENE_LIST_STRONG_MODEL_NAME = "gemini-3.1-pro-preview";
 
 async function generateJsonContent(params, { jsonRetries = 3 } = {}) {
+  assertRunActive();
   const userIdea = userIdeaContext.getStore();
   if (userIdea && typeof params.contents === "string") {
     params = {
@@ -7458,7 +7463,7 @@ async function handleSkipSeries(stage, req, res) {
   try {
     const built = await buildSeriesSkip({ stage, text: req.body.pastedText, format: raw, models: skipSeriesModels });
     const conceptId = await saveSeriesSkip(db, built, { setTitle: setConceptTitleIfMissing });
-    res.json({ conceptId, note: built.note, episodes: built.parts.length });
+    res.json({ conceptId, note: [built.note, built.cleanup !== "Your paste needed no cleaning." ? built.cleanup : null].filter(Boolean).join(" "), episodes: built.parts.length, damaged: built.damaged });
   } catch (error) {
     console.error("Series start-from failed:", error.message);
     res.status(error.status ?? 502).json({ error: error.message });
@@ -17597,6 +17602,7 @@ function assertEpisodeCount(actualLength, expectedLength, stageName) {
 const AUTO_PIPELINE_JSONB_FIELDS = new Set(["format", "review_notes"]);
 
 async function updateAutoPipelineRun(runId, fields) {
+  assertRunActive();
   const keys = Object.keys(fields);
   if (keys.length === 0) return;
   const setClauses = keys.map((key, i) => `${key} = $${i + 2}`).join(", ");
@@ -17607,6 +17613,7 @@ async function updateAutoPipelineRun(runId, fields) {
 // Atomic append (not read-modify-write) since the screenplay stage runs
 // several episodes concurrently, any of which might append a note at once.
 async function appendAutoPipelineNote(runId, stage, note) {
+  assertRunActive();
   await db.query(
     "UPDATE auto_pipeline_runs SET review_notes = review_notes || $2::jsonb, updated_at = now() WHERE id = $1",
     [runId, JSON.stringify([{ stage, note, at: new Date().toISOString() }])]
@@ -17619,6 +17626,7 @@ async function appendAutoPipelineNote(runId, stage, note) {
 // updates. This is what the stale-run reaper below relies on to tell a
 // merely-slow run from a genuinely dead one.
 async function touchAutoPipelineRun(runId) {
+  assertRunActive();
   await db.query("UPDATE auto_pipeline_runs SET updated_at = now() WHERE id = $1", [runId]);
 }
 
@@ -17731,7 +17739,11 @@ function bitSheetBeatCountIssue(bitSheet, deck) {
   return tooMany(bitSheet.bits?.length ?? 0, deck.format?.runtimeMinutes, "The film");
 }
 
-async function runAutoPipeline(runId, conceptText, format, dialogueLanguage, resumeFromConceptId, { storyBible = null, ideaText = conceptText } = {}) {
+function runAutoPipeline(runId, ...args) {
+  return inRunContext(runId, () => runAutoPipelineInner(runId, ...args));
+}
+
+async function runAutoPipelineInner(runId, conceptText, format, dialogueLanguage, resumeFromConceptId, { storyBible = null, ideaText = conceptText } = {}) {
   // Every story stage is judged against the user's own idea (shown at the
   // top of the draft) and the must-fix checks.
   const withIdea = (text) => `THE USER'S ORIGINAL IDEA (the story must stay true to it):\n${conceptText}\n\n${text}`;
@@ -18007,6 +18019,7 @@ async function runAutoPipeline(runId, conceptText, format, dialogueLanguage, res
     );
     await updateAutoPipelineRun(runId, { status: "completed", progress_stage: "done" });
   } catch (error) {
+    if (error instanceof RunStopped) { console.log(`Auto-pipeline ${runId}: stopped by the user.`); return; }
     console.error("Auto-pipeline run failed:", runId, error);
     await updateAutoPipelineRun(runId, { status: "failed", error: friendlyGeminiErrorMessage(error.message) }).catch(() => {});
   }
@@ -18405,6 +18418,18 @@ app.get("/api/adu/current", requireRole("admin"), async (req, res) => {
   res.json(work ? { active: true, ...work } : { active: false });
 });
 
+// STOP a story that Adu is writing right now. What he has written so far is kept; he ends at his next step (within a minute or so),
+// and "Pick up where it broke" resumes it from the last finished stage.
+app.post("/api/auto-pipeline/:id/stop", requireRole("admin"), async (req, res) => {
+  const run = (await db.query("SELECT id, status FROM auto_pipeline_runs WHERE id = $1", [req.params.id])).rows[0];
+  if (!run) { res.status(404).json({ error: "Run not found." }); return; }
+  if (run.status !== "running") { res.status(409).json({ error: run.status === "awaiting_approval" ? "Adu is not writing right now: he is waiting for you. Use Start fresh to drop this story." : "Adu is not running this story." }); return; }
+  stopRunJobs(run.id);
+  await db.query("UPDATE auto_pipeline_runs SET status = 'failed', error = $2, updated_at = now() WHERE id = $1", [run.id, "You stopped this story. What Adu wrote so far is kept. Press “Pick up where it broke” to continue it, or start a new story."]);
+  console.log(`Auto-pipeline ${run.id}: stop requested by ${req.user?.username ?? "the user"}.`);
+  res.json({ ok: true });
+});
+
 // Drop a story run that is only waiting for the user (never one that is actively writing): "start fresh" uses this.
 app.post("/api/auto-pipeline/:id/abandon", requireRole("admin"), async (req, res) => {
   const run = (await db.query("SELECT id, status FROM auto_pipeline_runs WHERE id = $1", [req.params.id])).rows[0];
@@ -18483,13 +18508,17 @@ function usesStoryBrain(format) {
 
 // Runs one Brain job for a run (designing the Bible, or revising it with
 // the user's note), keeping the run alive and its feed up to date.
-async function runStoryBrainJob(runId, job) {
+function runStoryBrainJob(runId, job) {
+  return inRunContext(runId, () => runStoryBrainJobInner(runId, job));
+}
+
+async function runStoryBrainJobInner(runId, job) {
   await updateAutoPipelineRun(runId, { progress_stage: "story-brain" });
   // A Pro-model call can take minutes; the heartbeat stops the stale-run
   // reaper from mistaking a long think for a dead run.
   const heartbeat = setInterval(() => touchAutoPipelineRun(runId).catch(() => {}), 60 * 1000);
   try {
-    const onProgress = (label) => appendAutoPipelineNote(runId, "story-brain", `Story Brain: ${label}…`).catch(() => {});
+    const onProgress = (label) => { assertRunActive(); appendAutoPipelineNote(runId, "story-brain", `Story Brain: ${label}…`).catch(() => {}); };
     const { bible, usage } = await job(onProgress);
     const previous = (await db.query("SELECT story_bible_usage FROM auto_pipeline_runs WHERE id = $1", [runId])).rows[0]?.story_bible_usage;
     const totalUsage = previous
@@ -18520,6 +18549,7 @@ async function runStoryBrainJob(runId, job) {
     );
     await updateAutoPipelineRun(runId, { status: "awaiting_approval", progress_stage: "story-bible" });
   } catch (error) {
+    if (error instanceof RunStopped) { console.log(`Story Brain for run ${runId}: stopped by the user.`); return; }
     console.error(`Story Brain failed for run ${runId}:`, error.message);
     await updateAutoPipelineRun(runId, { status: "failed", error: `The Story Brain stopped: ${friendlyGeminiErrorMessage(error.message)}` }).catch(() => {});
   } finally {
@@ -19086,6 +19116,10 @@ app.get("/api/auto-pipeline/:id/synopses-pdf", requireLogin, async (req, res) =>
   const units = Array.isArray(bible?.blueprint) ? bible.blueprint : [];
   const deckEpisodes = Array.isArray(deck?.episodes) ? deck.episodes : [];
   const count = Math.max(units.length, deckEpisodes.length);
+  // stories pasted from a PDF may still carry its page headers and page numbers: learn them from ALL the episodes together, remove them from each
+  const everyText = [...units.map((u) => u.synopsis), ...deckEpisodes.map((e) => pick(e?.synopsis))].filter(Boolean).join("\n\n");
+  const boilerplate = learnBoilerplate(everyText);
+  const tidy = (text) => cleanPastedStory(text, { patterns: boilerplate }).text;
   const title = pick(deck?.title) || bible?.promise?.title || "Story";
   try {
     const doc = new PDFDocument({ size: "A4", margin: 56, bufferPages: true, info: { Title: `${title} — Episode synopses` } });
@@ -19103,8 +19137,8 @@ app.get("/api/auto-pipeline/:id/synopses-pdf", requireLogin, async (req, res) =>
       const e = deckEpisodes[i] ?? null;
       writeScripted(doc, `Episode ${i + 1}: ${pick(e?.title) || u?.title || ""}`, { size: 14, weight: "bold", color: "#7a1010" });
       doc.moveDown(0.2);
-      if (u?.synopsis) { writeScripted(doc, u.synopsis, { size: 11.5 }); doc.moveDown(0.3); }
-      if (e?.synopsis) { writeScripted(doc, pick(e.synopsis), { size: 11.5 }); doc.moveDown(0.3); }
+      if (u?.synopsis) { writeScripted(doc, tidy(u.synopsis), { size: 11.5 }); doc.moveDown(0.3); }
+      if (e?.synopsis) { writeScripted(doc, tidy(pick(e.synopsis)), { size: 11.5 }); doc.moveDown(0.3); }
       if (!u?.synopsis && !e?.synopsis) writeScripted(doc, "Not yet created.", { size: 11, weight: "italic" });
       const end = u?.cliffhangerImage || u?.endingHook || pick(e?.hook);
       if (end) writeScripted(doc, [{ text: "Cliffhanger: ", weight: "bold" }, { text: end, weight: "italic" }], { size: 11 });

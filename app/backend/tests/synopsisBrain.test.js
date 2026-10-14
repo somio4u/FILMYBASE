@@ -115,3 +115,16 @@ test("every later stage gets the locked synopsis: the user's words with only acc
   assert.ok(!text.includes("The wind rises and the lights go out."), "the rejected change is nowhere");
   assert.ok(text.indexOf("EPISODE 1") < text.indexOf("EPISODE 2") && text.indexOf("EPISODE 2") < text.indexOf("EPISODE 3"));
 });
+
+test("a paste copied from a PDF is READ first: page headers and page numbers never reach the story, and Adu says what he removed", async () => {
+  const HEADER = (n) => `DETAILED EPISODE SYNOPSIS / 1999-2026 ${n} MAHA KALI / SEASON 01`;
+  const noisy = [1, 2, 3].map((n) => `Episode ${n}: Title ${n}\n${BODY(n).replace("reaches Rambhadipur", `reaches ${HEADER(n * 3)} Rambhadipur`)}\n${n * 3}\nE P I S O D E 0 ${n} / 0 3\n\n`).join("");
+  const { ask } = scriptedAsk();
+  const { bible } = await designBibleFromSynopsis(noisy, { type: "series" }, { ask });
+  for (const u of bible.blueprint) {
+    assert.ok(!/DETAILED EPISODE SYNOPSIS|MAHA KALI|SEASON 01|E P I S O D E/.test(u.synopsis), `episode ${u.number} has no page header in it`);
+    assert.ok(!/\n?\b\d+\s*$/.test(u.synopsis.replace(/part \d+\.$/, "")), "no page number left at the end");
+  }
+  assert.equal(bible.blueprint[1].synopsis, BODY(2), "the story itself is exactly the user's words");
+  assert.equal(bible.pasteCleanup.changed, true); assert.match(bible.pasteCleanup.summary, /removed \d+ repeated page header/);
+});

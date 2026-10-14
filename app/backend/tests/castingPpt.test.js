@@ -20,7 +20,7 @@ test("casting PPT: cover + one slide per character, with 3 photo placeholders ea
   const slides = execSync(`unzip -l ${file}`).toString().match(/ppt\/slides\/slide\d+\.xml/g);
   assert.equal(slides.length, 3);
   const slide2 = execSync(`unzip -p ${file} ppt/slides/slide2.xml`).toString();
-  assert.match(slide2, /Soumya/);
+  assert.match(slide2, /SOUMYA/);
   assert.match(slide2, /Tall, dark, intense eyes/);
   assert.equal((slide2.match(/>PHOTO</g) ?? []).length, 3);
   assert.match(slide2, /SOUMYA/);

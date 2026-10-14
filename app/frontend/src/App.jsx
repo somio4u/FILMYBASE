@@ -2606,6 +2606,15 @@ function FloatingAgentWidget({ currentUser, t, onRunCompleted, onOpenProject, dr
   const aduX = Math.min(Math.max(4, position.x), window.innerWidth - aduWidth - 4)
   const aduY = Math.min(Math.max(4, position.y), window.innerHeight - aduHeight - 4)
   const [isOpen, setIsOpen] = useState(false)
+  // a big window for reading and checking: the panel can expand to nearly the whole screen (remembered on this device)
+  const [aduExpanded, setAduExpandedState] = useState(() => { try { return localStorage.getItem('filmybase.aduExpanded') === '1' } catch { return false } })
+  const setAduExpanded = (value) => { setAduExpandedState(value); try { localStorage.setItem('filmybase.aduExpanded', value ? '1' : '0') } catch { /* per-device convenience */ } }
+  useEffect(() => {
+    if (!isOpen || !aduExpanded) return undefined
+    const onKey = (event) => { if (event.key === 'Escape') setAduExpanded(false) }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [isOpen, aduExpanded]) // eslint-disable-line react-hooks/exhaustive-deps
   // Adu is also the Auto Screenplay Agent for the open project: one tab for the project's drafts, one for writing a brand-new story
   const [aduTab, setAduTab] = useState(null) // null = follow whether a project is open
   const aduSelectionRef = useRef('')
@@ -3049,10 +3058,13 @@ function FloatingAgentWidget({ currentUser, t, onRunCompleted, onOpenProject, dr
         ) : null
         if (tab === 'project') {
           return (
-            <div className="floating-agent-panel" style={panelStyle}>
+            <>
+            {aduExpanded && <div className="adu-backdrop" onClick={() => setAduExpanded(false)} aria-hidden="true" />}
+            <div className={`floating-agent-panel${aduExpanded ? ' is-expanded' : ''}`} style={panelStyle}>
               <div className="floating-agent-header">
                 <img src={currentFrames[frameIndex] ?? currentFrames[0]} alt="" className={`floating-agent-header-character floating-agent-pose-${poseState}`} draggable="false" />
                 <div className="floating-agent-header-text"><strong>{t.floatingAgentTitle}</strong><span className="floating-agent-concept">Works on the project that is open</span></div>
+                <button type="button" className="floating-agent-expand" onClick={() => setAduExpanded(!aduExpanded)} aria-pressed={aduExpanded} title={aduExpanded ? 'Back to the small window' : 'Open in a big window'}>{aduExpanded ? 'Collapse' : 'Expand'}</button>
                 <button type="button" className="floating-agent-close" onClick={() => setIsOpen(false)} aria-label="Close">×</button>
               </div>
               {tabs}
@@ -3061,11 +3073,14 @@ function FloatingAgentWidget({ currentUser, t, onRunCompleted, onOpenProject, dr
                   initialRequestId={draftCtx.openRequestId ?? null} onClose={() => setIsOpen(false)} onOpenDraft={(what, extra) => { if (what !== 'dashboard' && what !== 'compare') setIsOpen(false); draftCtx.onOpenDraft?.(what, extra) }} onApplied={draftCtx.onApplied} /></Suspense></ErrorBoundary>
               </div>
             </div>
+          </>
           )
         }
 
         return (
-          <div className={`floating-agent-panel${status?.status ? ` is-${status.status}` : ''}`} style={panelStyle}>
+          <>
+          {aduExpanded && <div className="adu-backdrop" onClick={() => setAduExpanded(false)} aria-hidden="true" />}
+          <div className={`floating-agent-panel${status?.status ? ` is-${status.status}` : ''}${aduExpanded ? ' is-expanded' : ''}`} style={panelStyle}>
             <div className="floating-agent-header">
               <img src={currentFrames[frameIndex] ?? currentFrames[0]} alt="" className={`floating-agent-header-character floating-agent-pose-${poseState}`} draggable="false" />
               <div className="floating-agent-header-text">
@@ -3073,7 +3088,8 @@ function FloatingAgentWidget({ currentUser, t, onRunCompleted, onOpenProject, dr
                 {runId && status?.conceptText && <span className="floating-agent-concept">{status.conceptText}</span>}
               </div>
               {statusLabel && <span className={`floating-agent-status-pill is-${status.status}`}>{statusLabel}</span>}
-              <button type="button" className="floating-agent-close" onClick={() => setIsOpen(false)} aria-label="Close">×</button>
+              <button type="button" className="floating-agent-expand" onClick={() => setAduExpanded(!aduExpanded)} aria-pressed={aduExpanded} title={aduExpanded ? 'Back to the small window' : 'Open in a big window'}>{aduExpanded ? 'Collapse' : 'Expand'}</button>
+                <button type="button" className="floating-agent-close" onClick={() => setIsOpen(false)} aria-label="Close">×</button>
             </div>
             {tabs}
 
@@ -3254,6 +3270,7 @@ function FloatingAgentWidget({ currentUser, t, onRunCompleted, onOpenProject, dr
             {runId && !status && !errorMessage && <p className="sidebar-section-note">{t.loadingLabel}</p>}
             {runId && errorMessage && <p className="feedback-note">{errorMessage}</p>}
           </div>
+        </>
         )
       })()}
     </>

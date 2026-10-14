@@ -1723,3 +1723,10 @@ Plain version: every project is now a set of **drafts**. Opening a project shows
 - [x] If the pasted text already looks garbled (broken Odia/Hindi letters), a hint suggests uploading the PDF.
 - Limits: PDF up to about 18 MB. Reading takes a few minutes; if the server restarts meanwhile, upload again.
 - **Honest note:** tested with a scripted fake AI and a mocked browser run. It has NOT yet been run against the real Gemini on a real PDF — please try one and tell me what you see.
+
+## Casting PPT v2 — full cast list, sections, trimmed details
+- [x] In the Characters stage there is now a **Casting PPT** panel: paste your list of major characters (rank, name, screen time, importance — e.g. the 12 of Mahakali). Adu writes the casting details for every one, **even those without a character sheet**, using the story (and the sheet where it exists). The list is saved on the character sheet.
+- [x] Characters are grouped into sections — Protagonist, Heroines, Villains, Sidekicks, Key supporting — and the director can move anyone to another section with a drop-down.
+- [x] The PPT: cover → for each section a title slide → one slide per character (age, short description, look, importance, relation, short arc, rank/screen time/score strip; three photo cards with a name line). Wants / needs / flaw / inner & outer conflict / virtues are gone. English and Odia downloads.
+- Without a pasted list the PPT still works from the character sheet alone.
+- **Honest note:** the AI step that writes the details for the 12 names has only been tested with a scripted fake AI. Please try it on Mahakali and tell me what you see. In the Odia file "Look/Relation" of sheet-only characters stay English.

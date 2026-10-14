@@ -5738,6 +5738,99 @@ function PdfUploadButton({ backendUrl, text, onText }) {
   )
 }
 
+// CASTING PANEL: paste the list of major characters, Adu fills in each one's casting details
+// (even those with no character sheet yet), the director can move people between sections,
+// then downloads the Casting PPT in English or Odia.
+const CASTING_SECTIONS = [
+  ['protagonist', 'Protagonist'], ['heroine', 'Heroines'], ['villain', 'Villains'], ['sidekick', 'Sidekicks'], ['supporting', 'Key supporting'],
+]
+
+function CastingPanel({ t, backendUrl, sheet }) {
+  const [listText, setListText] = useState(sheet.casting?.listText || '')
+  const [cast, setCast] = useState(sheet.casting?.cast || null)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+
+  async function build() {
+    setBusy(true)
+    setError('')
+    try {
+      const res = await fetch(`${backendUrl}/api/character-sheet/${sheet.id}/casting-list`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ listText }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(data.error || 'Could not build the casting list.')
+      setCast(data.cast)
+    } catch (e) {
+      setError(e.message)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function move(name, group) {
+    const before = cast
+    setCast(cast.map((c) => (c.name === name ? { ...c, group } : c)))
+    try {
+      const res = await fetch(`${backendUrl}/api/character-sheet/${sheet.id}/casting-groups`, {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ groups: { [name]: group } }),
+      })
+      if (!res.ok) throw new Error('Could not save the change.')
+    } catch (e) {
+      setCast(before)
+      setError(e.message)
+    }
+  }
+
+  return (
+    <div className="casting-panel">
+      <h3>🎬 Casting PPT</h3>
+      <p><small>Paste your list of major characters (one per line: rank, name, screen time, importance). Adu writes the casting details for every one — even those without a character sheet — and groups them. You can move anyone to another section.</small></p>
+      <MicTextarea
+        className="feedback-textarea"
+        value={listText}
+        onChange={(e) => setListText(e.target.value)}
+        placeholder={'1\tSoumya (ସୌମ୍ୟ)\tVery High\t10/10\n2\tSulagna (ସୁଲଗ୍ନା)\tVery High\t9.5/10'}
+      />
+      <button type="button" className="choose-button" onClick={build} disabled={busy || !listText.trim()}>
+        {busy ? 'Adu is writing the casting details…' : cast ? 'Rebuild casting list' : 'Build casting list'}
+      </button>
+      {busy && <p className="floating-agent-stage-line"><span className="floating-agent-spinner" aria-hidden="true" /><span>This takes about a minute…</span></p>}
+      {error && <p className="feedback-note">{error}</p>}
+      {cast && (
+        <div className="casting-groups">
+          {CASTING_SECTIONS.map(([key, label]) => {
+            const members = cast.filter((c) => c.group === key)
+            if (!members.length) return null
+            return (
+              <div key={key} className="casting-group">
+                <strong>{label} ({members.length})</strong>
+                {members.map((c) => (
+                  <div key={c.name} className="casting-row">
+                    <span>{c.rank}. {c.name}{c.odiaName ? ` (${c.odiaName})` : ''}{c.fromSheet ? '' : ' · new'}</span>
+                    <select value={c.group} onChange={(e) => move(c.name, e.target.value)}>
+                      {CASTING_SECTIONS.map(([k, l]) => <option key={k} value={k}>{l}</option>)}
+                    </select>
+                  </div>
+                ))}
+              </div>
+            )
+          })}
+        </div>
+      )}
+      <DownloadChoiceButton
+        t={t}
+        label={cast ? `🎬 Download Casting PPT (${cast.length} characters)` : (t.castingPptButton ?? 'Download Casting PPT')}
+        className="export-button"
+        pdfUrl={`${backendUrl}/api/character-sheet/${sheet.id}/export-casting-ppt?lang=en`}
+        excelUrl={`${backendUrl}/api/character-sheet/${sheet.id}/export-casting-ppt?lang=or`}
+        pdfLabel="English"
+        excelLabel="ଓଡ଼ିଆ (Odia)"
+      />
+    </div>
+  )
+}
+
 function MicTextarea({ value, onChange, className, wrapClassName, ...rest }) {
   const { t, dictationLanguage, onDictationLanguageChange } = useDictationContext()
   return (
@@ -13853,19 +13946,7 @@ function App() {
             </p>
           )}
 
-          {characterSheet.id && (
-            <p>
-              <DownloadChoiceButton
-                t={t}
-                label={t.castingPptButton ?? 'Download Casting PPT'}
-                className="export-button"
-                pdfUrl={`${BACKEND_URL}/api/character-sheet/${characterSheet.id}/export-casting-ppt?lang=en`}
-                excelUrl={`${BACKEND_URL}/api/character-sheet/${characterSheet.id}/export-casting-ppt?lang=or`}
-                pdfLabel="English"
-                excelLabel="ଓଡ଼ିଆ (Odia)"
-              />
-            </p>
-          )}
+          {characterSheet.id && <CastingPanel key={characterSheet.id} t={t} backendUrl={BACKEND_URL} sheet={characterSheet} />}
 
           <div className="approval-section">
             {characterSheet.status === 'approved' ? (

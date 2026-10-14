@@ -8,6 +8,7 @@ import PDFDocument from "pdfkit";
 import ExcelJS from "exceljs";
 import PptxGenJS from "pptxgenjs";
 import { buildCastingPpt } from "./castingPpt.js";
+import { GROUPS as CASTING_GROUPS, buildCast, castFromSheet } from "./castingCast.js";
 import { Document, Packer, Paragraph, TextRun, AlignmentType, HeadingLevel } from "docx";
 import path from "path";
 import fs from "fs";
@@ -9359,20 +9360,65 @@ app.get("/api/character-sheet/latest", requireLogin, async (req, res) => {
   res.json({ id: row.id, pitchDeckId: row.pitch_deck_id, status: row.status, feedback: row.feedback, ...row.content });
 });
 
-app.get("/api/character-sheet/:id/export-casting-ppt", requireLogin, async (req, res) => {
-  const lang = req.query.lang === "or" ? "or" : "en";
+// CASTING LIST: the director pastes their list of major characters (more than the
+// character sheet holds); the AI writes the casting-slide details for each and
+// the list is saved on the character sheet row (content.casting).
+async function loadSheetWithDeck(id) {
+  const result = await db.query(
+    "SELECT cs.id, cs.content, pd.content AS deck FROM character_sheets cs JOIN pitch_decks pd ON pd.id = cs.pitch_deck_id WHERE cs.id = $1",
+    [id]
+  );
+  return result.rows[0] ?? null;
+}
+
+app.post("/api/character-sheet/:id/casting-list", requireRole("admin"), async (req, res) => {
   try {
-    const result = await db.query(
-      "SELECT cs.content, pd.content AS deck FROM character_sheets cs JOIN pitch_decks pd ON pd.id = cs.pitch_deck_id WHERE cs.id = $1",
-      [req.params.id]
-    );
-    if (result.rows.length === 0) {
+    const row = await loadSheetWithDeck(req.params.id);
+    if (!row) {
       res.status(404).json({ error: "Character sheet not found" });
       return;
     }
-    const { content, deck } = result.rows[0];
+    const ask = (contents, responseSchema, systemInstruction) =>
+      generateJsonContent({
+        model: STORY_WRITER_MODEL_NAME,
+        contents,
+        config: { systemInstruction, responseMimeType: "application/json", responseSchema },
+      });
+    const cast = await buildCast({ listText: req.body?.listText, sheetCharacters: row.content.characters ?? [], deck: row.deck, ask });
+    const content = { ...row.content, casting: { cast, listText: String(req.body.listText).slice(0, 20000) } };
+    await db.query("UPDATE character_sheets SET content = $1 WHERE id = $2", [JSON.stringify(content), row.id]);
+    res.json({ cast });
+  } catch (error) {
+    console.error("Casting list failed:", error.message);
+    res.status(error.status ?? 502).json({ error: error.status ? error.message : `Adu could not build the casting list (${String(error.message).slice(0, 160)}). Please try again.` });
+  }
+});
+
+// Move people between sections: { groups: { "Soumya": "protagonist", ... } }
+app.put("/api/character-sheet/:id/casting-groups", requireRole("admin"), async (req, res) => {
+  const row = await loadSheetWithDeck(req.params.id);
+  if (!row?.content?.casting?.cast) {
+    res.status(404).json({ error: "No casting list yet." });
+    return;
+  }
+  const groups = req.body?.groups ?? {};
+  const cast = row.content.casting.cast.map((c) => (CASTING_GROUPS.includes(groups[c.name]) ? { ...c, group: groups[c.name] } : c));
+  await db.query("UPDATE character_sheets SET content = $1 WHERE id = $2", [JSON.stringify({ ...row.content, casting: { ...row.content.casting, cast } }), row.id]);
+  res.json({ cast });
+});
+
+app.get("/api/character-sheet/:id/export-casting-ppt", requireLogin, async (req, res) => {
+  const lang = req.query.lang === "or" ? "or" : "en";
+  try {
+    const row = await loadSheetWithDeck(req.params.id);
+    if (!row) {
+      res.status(404).json({ error: "Character sheet not found" });
+      return;
+    }
+    const { content, deck } = row;
     const title = (lang === "or" && deck?.title?.or) || deck?.title?.en || "Casting";
-    const buffer = await buildCastingPpt({ title, characters: content.characters ?? [], lang });
+    const cast = content.casting?.cast?.length ? content.casting.cast : castFromSheet(content.characters ?? []);
+    const buffer = await buildCastingPpt({ title, cast, lang });
     const safe = (deck?.title?.en || "casting").replace(/[^a-z0-9]+/gi, "-");
     res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.presentationml.presentation");
     res.setHeader("Content-Disposition", `attachment; filename="${safe}-casting-${lang === "or" ? "odia" : "english"}-${formatExportTimestamp()}.pptx"`);
@@ -9422,6 +9468,7 @@ app.post("/api/character-sheet/:id/request-changes", requireRole("admin"), async
     const deck = pitchDeckResult.rows[0].content;
 
     const revisedContent = await generateCharacterSheetContent(deck, { feedback, previous });
+    if (previous?.casting) revisedContent.casting = previous.casting; // the director's casting list survives a revision
 
     const insertResult = await db.query(
       "INSERT INTO character_sheets (pitch_deck_id, content) VALUES ($1, $2) RETURNING id, status, feedback",

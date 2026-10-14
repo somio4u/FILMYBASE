@@ -44,6 +44,7 @@ import { registerShotPlanRoutes } from "./shotPlans.js";
 import { backfillDrafts, registerDraftRoutes } from "./drafts.js";
 import { getAduWork, busyMessage } from "./aduWork.js";
 import { orderByLastWorked } from "./projectActivity.js";
+import { buildSeriesSkip, saveSeriesSkip, seriesFormatFrom } from "./skipSeries.js";
 import { designBibleFromSynopsis, applyDecisions as applySynopsisDecisions, finalizeSynopsisBible, decorateSynopsisBible, lockedSynopsisIdea } from "./synopsisBrain.js";
 import { failInterruptedRequests, registerDraftAgentRoutes, setPollMs, startPlainDraft } from "./draftAgent.js";
 import { buildReferenceBlock, findRelated as findRelatedSources, ideaWithReferences, registerWorkspaceRoutes } from "./workspaceContext.js";
@@ -7401,7 +7402,71 @@ async function generateSkipToSynopsis(pastedText, runtimeMinutes) {
   return sanitizeBilingualContent(JSON.parse(response.text));
 }
 
+// ---- Start from Synopsis / Bit Sheet / Scene One-Liners for a WEB SERIES or VERTICAL DRAMA (see skipSeries.js) ----
+const SKIP_SERIES_KIND = (format) => (format.type === "vertical" ? "vertical micro-drama" : "web series");
+const skipSeriesEpisodesText = (parts) => parts.map((p, i) => `--- EPISODE ${p.number}${p.title ? `: ${p.title}` : ""} ---\n${p.text}`).join("\n\n");
+const skipSeriesModels = {
+  async overview({ stage, text, format }) {
+    const parsed = await generateJsonContent({
+      model: STORY_WRITER_MODEL_NAME,
+      contents: `${SKIP_AHEAD_INSTRUCTION}\n\nThis is a ${SKIP_SERIES_KIND(format)} of ${format.episodeCount} episodes, each about ${format.episodeMinutes} minutes.\n\nThe user's pasted ${stage === "synopsis" ? "synopsis" : stage === "bitsheet" ? "Bit Sheet" : "scene one-liner"} text, ALL episodes:\n${text}\n\nProvide: a short one-to-two sentence English-only "concept" summarizing the core idea (in plain text), the series title, logline and summary, the premise, tone/genre, target audience and the major characters. Describe ONLY what the user wrote; do not change or add to their story.`,
+      config: {
+        systemInstruction: STORY_AGENT_SYSTEM_PROMPT, responseMimeType: "application/json", maxOutputTokens: 6144,
+        responseSchema: { type: Type.OBJECT, properties: { concept: { type: Type.STRING }, storylineTitle: BILINGUAL_TEXT_SCHEMA, storylineLogline: BILINGUAL_TEXT_SCHEMA, storylineSummary: BILINGUAL_TEXT_SCHEMA, premise: BILINGUAL_TEXT_SCHEMA, toneGenre: BILINGUAL_TEXT_SCHEMA, targetAudience: BILINGUAL_TEXT_SCHEMA, majorCharacters: { type: Type.ARRAY, items: CHARACTER_SCHEMA } }, required: ["concept", "storylineTitle", "storylineLogline", "storylineSummary", "premise", "toneGenre", "targetAudience", "majorCharacters"] },
+      },
+    });
+    return sanitizeBilingualContent(parsed);
+  },
+  async episodes({ stage, parts, startIndex, format }) {
+    const parsed = await generateJsonContent({
+      model: STORY_WRITER_MODEL_NAME,
+      contents: `This is a ${SKIP_SERIES_KIND(format)} of ${format.episodeCount} episodes. Here are the user's own pasted ${stage === "synopsis" ? "synopses" : stage === "bitsheet" ? "bits" : "scene one-liners"} for episodes ${startIndex + 1}-${startIndex + parts.length}:\n\n${skipSeriesEpisodesText(parts)}\n\nFor EACH of these ${parts.length} episodes, in order, return: its title (the user's own title if they gave one), a faithful SYNOPSIS of what the user wrote for THAT episode (the same events in the same order, nothing invented, complete), and the hook (how the episode ends). Return exactly ${parts.length} episodes.`,
+      config: { systemInstruction: STORY_AGENT_SYSTEM_PROMPT, responseMimeType: "application/json", responseSchema: { type: Type.OBJECT, properties: { episodes: { type: Type.ARRAY, items: { type: Type.OBJECT, properties: { title: BILINGUAL_TEXT_SCHEMA, synopsis: BILINGUAL_TEXT_SCHEMA, hook: BILINGUAL_TEXT_SCHEMA }, required: ["title", "synopsis", "hook"] } } }, required: ["episodes"] } },
+    });
+    return sanitizeBilingualContent(parsed).episodes;
+  },
+  characterSheet: (deck) => generateCharacterSheetContent(deck),
+  threeAct: (deck, characterSheet) => generateThreeActContent(deck, characterSheet),
+  bitSheet: (threeAct, deck) => generateBitSheetContent(threeAct, deck),
+  async bits({ parts, startIndex, format }) {
+    const parsed = await generateJsonContent({
+      model: STORY_WRITER_MODEL_NAME,
+      contents: `This is a ${SKIP_SERIES_KIND(format)}. Here are the user's own pasted Bit Sheet (plot points) for episodes ${startIndex + 1}-${startIndex + parts.length}:\n\n${skipSeriesEpisodesText(parts)}\n\nRestate EACH episode's bits in the app's bit format, keeping the user's bits, their order and their meaning. Do not invent new beats. Return exactly ${parts.length} episodes, each with its bits (actNumber 1-3, beatType, title, description).`,
+      config: { systemInstruction: BIT_SHEET_SYSTEM_PROMPT, responseMimeType: "application/json", responseSchema: { type: Type.OBJECT, properties: { episodeBits: { type: Type.ARRAY, items: { type: Type.OBJECT, properties: { bits: { type: Type.ARRAY, items: BIT_SCHEMA } }, required: ["bits"] } } }, required: ["episodeBits"] } },
+    });
+    return sanitizeBilingualContent(parsed).episodeBits;
+  },
+  async scenes({ parts, startIndex, format }) {
+    const parsed = await generateJsonContent({
+      model: STORY_WRITER_MODEL_NAME,
+      contents: `This is a ${SKIP_SERIES_KIND(format)} with episodes of about ${format.episodeMinutes} minutes. Here are the user's own pasted scene one-liners for episodes ${startIndex + 1}-${startIndex + parts.length}:\n\n${skipSeriesEpisodesText(parts)}\n\nRestate EACH episode's scenes in the app's scene format, keeping the user's scenes, their order and their meaning. Do not invent new scenes. Return exactly ${parts.length} episodes, each with its scenes.`,
+      config: { systemInstruction: SCENE_SYSTEM_PROMPT, responseMimeType: "application/json", responseSchema: { type: Type.OBJECT, properties: { episodeScenes: { type: Type.ARRAY, items: { type: Type.OBJECT, properties: { scenes: { type: Type.ARRAY, items: SCENE_SCHEMA } }, required: ["scenes"] } } }, required: ["episodeScenes"] } },
+    });
+    return sanitizeBilingualContent(parsed).episodeScenes;
+  },
+  async finishSceneList(content, format) {
+    const withTotals = annotateSceneListTotals(content, true, format.episodeMinutes ?? null, null);
+    return content.controllingIdea ? { ...withTotals, controllingIdea: content.controllingIdea } : withTotals;
+  },
+};
+
+// One handler for the three series start-from routes. Returns true when it handled the request (a series or vertical format).
+async function handleSkipSeries(stage, req, res) {
+  const raw = req.body?.format;
+  if (raw?.type !== "series" && raw?.type !== "vertical") return false;
+  try {
+    const built = await buildSeriesSkip({ stage, text: req.body.pastedText, format: raw, models: skipSeriesModels });
+    const conceptId = await saveSeriesSkip(db, built, { setTitle: setConceptTitleIfMissing });
+    res.json({ conceptId, note: built.note, episodes: built.parts.length });
+  } catch (error) {
+    console.error("Series start-from failed:", error.message);
+    res.status(error.status ?? 502).json({ error: error.message });
+  }
+  return true;
+}
+
 app.post("/api/skip-to-synopsis", requireRole("admin"), async (req, res) => {
+  if (await handleSkipSeries("synopsis", req, res)) return;
   const { pastedText, runtimeMinutes } = req.body;
   const minutes = Number(runtimeMinutes) > 0 ? Number(runtimeMinutes) : 90;
 
@@ -7495,6 +7560,7 @@ async function generateSkipToBitSheet(pastedText, runtimeMinutes) {
 }
 
 app.post("/api/skip-to-bitsheet", requireRole("admin"), async (req, res) => {
+  if (await handleSkipSeries("bitsheet", req, res)) return;
   const { pastedText, runtimeMinutes } = req.body;
   const minutes = Number(runtimeMinutes) > 0 ? Number(runtimeMinutes) : 90;
 
@@ -7614,6 +7680,7 @@ async function generateSkipToSceneList(pastedText, runtimeMinutes) {
 }
 
 app.post("/api/skip-to-scenelist", requireRole("admin"), async (req, res) => {
+  if (await handleSkipSeries("scenelist", req, res)) return;
   const { pastedText, runtimeMinutes } = req.body;
   const minutes = Number(runtimeMinutes) > 0 ? Number(runtimeMinutes) : 90;
 

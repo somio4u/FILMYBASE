@@ -1691,3 +1691,10 @@ Plain version: every project is now a set of **drafts**. Opening a project shows
 - In synopsis mode "Fix it with my note" is turned off (Adu does not rewrite the user's story).
 - Adu's panel has Expand / Collapse: a big window (the whole screen on a phone, Esc to close). The synopsis review opens expanded by itself.
 - Not done: an automatic "is this scene faithful to the synopsis" check beyond the judges' own rule; quality on a real story still needs a real run.
+
+## Start from Synopsis / Bit Sheet / Scene One-Liners now supports Web series and Vertical drama
+- The Film / Web series / Vertical drama choice (with episodes and minutes per episode) is now shown on all three start-from stages, not only on Idea. The old "Films only for now" note is gone.
+- The user pastes ALL episodes in one box, each starting with a heading ("Episode 1", "एपिसोड २"...). Adu splits them; the pasted episodes decide the episode count (he says so if it differs from the form).
+- Synopsis: a pitch deck with one synopsis per episode. Bit Sheet: + characters and three-act structure made to match + the user's bits per episode. Scene One-Liners: + characters, structure and bit sheet made to match + the user's scenes per episode. Saved in the same series shape the rest of the app uses, with the same statuses the Film start-from paths use.
+- Film keeps working exactly as before.
+- Plain messages when there are no episode headings or the AI returns the wrong number of episodes. Not run against the real AI yet.

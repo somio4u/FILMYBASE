@@ -283,7 +283,7 @@ const LABELS = {
     skipRuntimeLabel: 'Roughly how long is it? (minutes)',
     skipContinueButton: "Let's go",
     skipContinueButtonLoading: 'On it…',
-    skipQuotaNote: "Heads up: this quietly makes up short, matching earlier stages so the rest of the app works normally — it uses a few extra AI calls (worth knowing, since the free tier has a daily limit). Films only for now.",
+    skipQuotaNote: "Heads up: this quietly makes up short, matching earlier stages so the rest of the app works normally — it uses a few extra AI calls (worth knowing, since the free tier has a daily limit).",
     instruction: 'Type your movie idea below, then hit "Give me an idea".',
     placeholder: 'e.g. A fisherman on the Odisha coast finds a boat that comes back from the sea empty every full moon...',
     generate: 'Generate',
@@ -9072,7 +9072,7 @@ function App() {
       const response = await fetch(`${BACKEND_URL}${endpoint}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ pastedText: skipPastedText, runtimeMinutes: skipRuntimeMinutes }),
+        body: JSON.stringify({ pastedText: skipPastedText, runtimeMinutes: buildFormatObject().runtimeMinutes ?? skipRuntimeMinutes, format: buildFormatObject() }),
       })
       const data = await response.json()
 
@@ -13324,7 +13324,7 @@ function App() {
       <>
       {movieShows('idea') && !storylines && !(conceptId && projectType === 'story') && (
         <div className="empty-state">
-          {startStage === 'idea' && (
+          {(
             <div className="format-picker">
               <h4 className="format-picker-title">{t.formatQuestion}</h4>
               <div className="format-picker-row">
@@ -13480,16 +13480,7 @@ function App() {
                 />
               </div>
               <div className="skip-ahead-controls">
-                <label className="skip-ahead-runtime-label">
-                  {t.skipRuntimeLabel}
-                  <input
-                    type="number"
-                    min="1"
-                    className="skip-ahead-runtime-input"
-                    value={skipRuntimeMinutes}
-                    onChange={(e) => setSkipRuntimeMinutes(e.target.value)}
-                  />
-                </label>
+                {formatType !== 'film' && <span className="skip-ahead-runtime-label">Paste all episodes in this one box. Start each one with a heading like “Episode 1”, “Episode 2”…</span>}
                 <button
                   className="choose-button"
                   onClick={handleSkipAheadSubmit}

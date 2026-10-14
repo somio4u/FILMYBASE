@@ -44,6 +44,7 @@ import { registerShotPlanRoutes } from "./shotPlans.js";
 import { backfillDrafts, registerDraftRoutes } from "./drafts.js";
 import { getAduWork, busyMessage } from "./aduWork.js";
 import { orderByLastWorked } from "./projectActivity.js";
+import { designBibleFromSynopsis, applyDecisions as applySynopsisDecisions, finalizeSynopsisBible, decorateSynopsisBible, lockedSynopsisIdea } from "./synopsisBrain.js";
 import { failInterruptedRequests, registerDraftAgentRoutes, setPollMs, startPlainDraft } from "./draftAgent.js";
 import { buildReferenceBlock, findRelated as findRelatedSources, ideaWithReferences, registerWorkspaceRoutes } from "./workspaceContext.js";
 import { registerTimelineExportRoutes } from "./timelineExport.js";
@@ -1775,6 +1776,10 @@ function storyBibleEssentialsText(bible) {
 // What every writer and judge of an approved-Bible run sees as "the user's
 // idea": the whole approved design, so nothing drifts from it.
 function bibleAsIdea(ideaText, bible) {
+  if (bible?.synopsisMode) {
+    // The user wrote the whole story. Every stage and every judge sees this, so any departure from it is a problem to fix.
+    return `${lockedSynopsisIdea(bible)}\n\n${storyBibleToMarkdown({ ...bible, pitchRoom: null, review: null })}`;
+  }
   return `THE APPROVED STORY BIBLE — the user approved this design. Follow it exactly: the story, every character (names, ages, relationships), the facts sheet and world rules, the setups and payoffs, the clues, each ${bible.units?.kind ?? "episode"}'s blueprint and the climax. Never invent a different story or change a fixed fact; add only the detail the stage needs.
 
 THE USER'S ORIGINAL IDEA:
@@ -18386,7 +18391,10 @@ app.post("/api/auto-pipeline/start", requireRole("admin"), async (req, res) => {
     // Films and web series are designed by the Story Brain first and wait
     // for the user's approval; vertical micro-dramas go straight to writing.
     // Deliberately not awaited — see runAutoPipeline's own comment.
-    if (usesStoryBrain(format)) runStoryBrainStage(runId, writerIdea, format);
+    if (req.body.synopsisMode === true && usesStoryBrain(format)) {
+      // the user's own synopsis: the Brain reads and rates it instead of designing a new story
+      runStoryBrainJob(runId, (onProgress) => designBibleFromSynopsis(concept, format, { onProgress }));
+    } else if (usesStoryBrain(format)) runStoryBrainStage(runId, writerIdea, format);
     else runAutoPipeline(runId, writerIdea, format, dialogueLanguage, undefined, { ideaText: concept });
 
     res.json({ runId });
@@ -18471,6 +18479,11 @@ async function awaitingRun(req, res) {
 app.post("/api/auto-pipeline/:id/bible-approve", requireRole("admin"), async (req, res) => {
   const run = await awaitingRun(req, res);
   if (!run) return;
+  if (run.story_bible?.synopsisMode) {
+    // only the changes the user accepted are kept; the rest never reach the story
+    run.story_bible = finalizeSynopsisBible(run.story_bible);
+    await db.query("UPDATE auto_pipeline_runs SET story_bible = $2 WHERE id = $1", [run.id, JSON.stringify(run.story_bible)]);
+  }
   await appendAutoPipelineNote(run.id, "story-brain", "You approved the Story Bible — writing the script from it.");
   await updateAutoPipelineRun(run.id, { status: "running", progress_stage: "storylines" });
   // Deliberately not awaited — see runAutoPipeline's own comment.
@@ -18481,6 +18494,18 @@ app.post("/api/auto-pipeline/:id/bible-approve", requireRole("admin"), async (re
   res.json({ runId: run.id });
 });
 
+// Accept / Reject Adu's suggested changes to the user's own synopsis. { decisions: { s1: "accept", s2: "reject" } } or { all: "accept" | "reject" }
+app.post("/api/auto-pipeline/:id/synopsis-decisions", requireRole("admin"), async (req, res) => {
+  const run = await awaitingRun(req, res);
+  if (!run) return;
+  if (!run.story_bible?.synopsisMode) { res.status(400).json({ error: "This story is not in synopsis mode." }); return; }
+  const all = ["accept", "reject"].includes(req.body?.all) ? req.body.all : null;
+  const decisions = req.body?.decisions && typeof req.body.decisions === "object" ? req.body.decisions : {};
+  const updated = applySynopsisDecisions(run.story_bible, { decisions, all });
+  await db.query("UPDATE auto_pipeline_runs SET story_bible = $2, updated_at = now() WHERE id = $1", [run.id, JSON.stringify(updated)]);
+  res.json({ storyBible: decorateSynopsisBible(updated) });
+});
+
 app.post("/api/auto-pipeline/:id/bible-note", requireRole("admin"), async (req, res) => {
   const note = String(req.body?.note ?? "").trim();
   if (!note) {
@@ -18489,6 +18514,10 @@ app.post("/api/auto-pipeline/:id/bible-note", requireRole("admin"), async (req, 
   }
   const run = await awaitingRun(req, res);
   if (!run) return;
+  if (run.story_bible?.synopsisMode) {
+    res.status(400).json({ error: "This story is your own synopsis, so Adu does not rewrite it from a note. Use Accept / Reject on his suggestions, or fix your synopsis and start again." });
+    return;
+  }
   await appendAutoPipelineNote(run.id, "story-brain", `Your note: ${note}`);
   await updateAutoPipelineRun(run.id, { status: "running" });
   runStoryBrainJob(run.id, (onProgress) => reviseBibleWithNote(run.story_bible, note, { onProgress }));
@@ -18708,7 +18737,7 @@ app.get("/api/auto-pipeline/:id/status", requireLogin, async (req, res) => {
     error: row.error,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
-    storyBible: row.story_bible,
+    storyBible: decorateSynopsisBible(row.story_bible),
     storyBibleUsage: row.story_bible_usage,
     referenceSources: row.reference_sources ?? [],
     placeholderConceptId: row.placeholder_concept_id ?? null,

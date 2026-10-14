@@ -2388,6 +2388,60 @@ function runUsesStoryBrain(format) {
 }
 
 // The one-page summary of a Story Bible the user approves (or gives a note on).
+// SYNOPSIS MODE review: the user's own synopsis, episode by episode. Black = their words, exactly. Red = a change (accepted, or proposed and waiting).
+function SynopsisReview({ bible, busy, onDecide }) {
+  const suggestions = bible.synopsisReview?.suggestions ?? []
+  const scores = bible.synopsisReview?.episodeScores ?? []
+  const pending = suggestions.filter((x) => x.status === 'pending').length
+  const kind = bible.units?.kind === 'sequence' ? 'Sequence' : 'Episode'
+  return (
+    <div className="synopsis-review">
+      <p className="synopsis-legend"><span className="syn-same-sample">Black</span> = your synopsis, exactly as you wrote it · <span className="syn-changed-sample">Red</span> = a change (accepted, or suggested and waiting for your answer)</p>
+      {bible.review?.scores && (
+        <p className="dd-fine">Critics: {Object.entries(bible.review.scores).map(([k, v]) => `${({ storyDoctor: 'Story doctor', audienceCritic: 'Audience critic', cultureExpert: 'Odisha culture expert' })[k] ?? k} ${v}/10`).join(' · ')}</p>
+      )}
+      <div className="synopsis-actions">
+        <button type="button" className="choose-button" disabled={busy || pending === 0} onClick={() => onDecide({ all: 'accept' })}>Accept all changes</button>
+        <button type="button" className="cancel-button" disabled={busy || pending === 0} onClick={() => onDecide({ all: 'reject' })}>Reject all</button>
+        <span className="dd-fine">{suggestions.length === 0 ? 'Adu has no changes to suggest.' : `${pending} waiting for your answer`}</span>
+      </div>
+      {(bible.blueprint ?? []).map((u) => {
+        const mine = suggestions.filter((x) => x.unit === u.number)
+        const score = scores.find((x) => x.unit === u.number)
+        return (
+          <section key={u.number} className="synopsis-episode">
+            <h4>{kind} {u.number}: {u.title}{score ? <span className="synopsis-score"> {score.score}/10</span> : null}</h4>
+            {score?.note && <p className="dd-fine">{score.note}</p>}
+            <div className="synopsis-paper">
+              {(u.parts ?? [{ kind: 'same', text: u.synopsis }]).map((part, i) => (
+                part.kind === 'same'
+                  ? <span key={i} className="syn-same">{part.text}</span>
+                  : <span key={i} className={part.kind === 'changed' ? 'syn-changed' : 'syn-proposed'}>{part.was && part.kind === 'proposed' ? <del className="syn-was">{part.was}</del> : null}{part.was && part.kind === 'proposed' ? ' ' : ''}{part.text}</span>
+              ))}
+            </div>
+            {mine.map((x) => (
+              <div key={x.id} className={`synopsis-suggestion is-${x.status}`}>
+                <p><strong>{x.severity === 'major' ? 'Important: ' : ''}{x.why}</strong></p>
+                <p className="dd-fine">Your words: “{x.original}”</p>
+                <p className="syn-changed">Change to: “{x.replacement}”</p>
+                {x.status === 'pending' ? (
+                  <div className="synopsis-actions">
+                    <button type="button" className="choose-button" disabled={busy} onClick={() => onDecide({ decisions: { [x.id]: 'accept' } })}>Accept</button>
+                    <button type="button" className="cancel-button" disabled={busy} onClick={() => onDecide({ decisions: { [x.id]: 'reject' } })}>Reject</button>
+                  </div>
+                ) : (
+                  <p className="dd-fine">{x.status === 'accepted' ? 'Accepted — it will be in the story.' : 'Rejected — your words stay.'} <button type="button" className="cancel-button" disabled={busy} onClick={() => onDecide({ decisions: { [x.id]: x.status === 'accepted' ? 'reject' : 'accept' } })}>Change my answer</button></p>
+                )}
+              </div>
+            ))}
+          </section>
+        )
+      })}
+      <p className="dd-fine">Anything you do not accept is left out. Press Approve when you are happy: Adu then writes the one-liners, scenes and the screenplay from this synopsis.</p>
+    </div>
+  )
+}
+
 function StoryBibleSummary({ bible, t }) {
   const p = bible.promise ?? {}
   const units = bible.blueprint ?? []
@@ -2628,6 +2682,7 @@ function FloatingAgentWidget({ currentUser, t, onRunCompleted, onOpenProject, dr
   const [refAuto, setRefAuto] = useState(true) // let the agent look through the app for related projects
   const [refPicked, setRefPicked] = useState([]) // projects the person ticked
   const [formatType, setFormatType] = useState('vertical')
+  const [synopsisMode, setSynopsisMode] = useState(false) // "I am giving the complete synopsis — keep my story flow"
   const [episodeCount, setEpisodeCount] = useState(60)
   const [episodeMinutes, setEpisodeMinutes] = useState(1.5)
   const [filmMinutes, setFilmMinutes] = useState(120)
@@ -2856,7 +2911,7 @@ function FloatingAgentWidget({ currentUser, t, onRunCompleted, onOpenProject, dr
       const response = await fetch(`${BACKEND_URL}/api/auto-pipeline/start`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ concept, format, dialogueLanguage, autoReferences: refAuto, references: refPicked.map(({ kind, id }) => ({ kind, id })), parentDraftId: draftCtx?.draft?.module === 'film' ? draftCtx.draft.id : undefined }),
+        body: JSON.stringify({ concept, format, dialogueLanguage, autoReferences: refAuto, references: refPicked.map(({ kind, id }) => ({ kind, id })), parentDraftId: draftCtx?.draft?.module === 'film' ? draftCtx.draft.id : undefined, synopsisMode: synopsisMode && formatType !== 'vertical' }),
       })
       const data = await response.json()
       if (!response.ok) {
@@ -2882,6 +2937,23 @@ function FloatingAgentWidget({ currentUser, t, onRunCompleted, onOpenProject, dr
 
   // The backend can be waking up or restarting (free hosting): retry a few times instead of showing an error.
   // Returns { ok, status, data } or null if the server never answered.
+  // Accept / Reject on Adu's suggested changes to the user's own synopsis
+  async function decideSynopsis(payload) {
+    if (!runId || isSendingBible) return
+    setIsSendingBible(true); setErrorMessage(null)
+    const result = await postWithRetry(`${BACKEND_URL}/api/auto-pipeline/${runId}/synopsis-decisions`, payload)
+    if (!result || !result.ok) setErrorMessage(describeFailure('answer', result))
+    else setStatus((previous) => (previous ? { ...previous, storyBible: result.data.storyBible } : previous))
+    setIsSendingBible(false)
+  }
+  // the review is long: open the big window by itself the first time it appears (the user can collapse it)
+  const autoExpandedRef = useRef(null)
+  useEffect(() => {
+    if (!isOpen || !runId || status?.status !== 'awaiting_approval' || !status?.storyBible?.synopsisMode) return
+    if (autoExpandedRef.current === runId) return
+    autoExpandedRef.current = runId
+    setAduExpanded(true)
+  }, [isOpen, runId, status?.status, status?.storyBible?.synopsisMode]) // eslint-disable-line react-hooks/exhaustive-deps
   const lastProblemRef = useRef('')
   async function postWithRetry(url, body) {
     const waits = [0, 3000, 7000, 15000, 25000]
@@ -3095,8 +3167,12 @@ function FloatingAgentWidget({ currentUser, t, onRunCompleted, onOpenProject, dr
 
             {!runId && (
               <div className="floating-agent-form">
+                <label className="synopsis-switch">
+                  <input type="checkbox" checked={synopsisMode && formatType !== 'vertical'} disabled={formatType === 'vertical'} onChange={() => setSynopsisMode((v) => !v)} />
+                  <span><strong>I'm giving the complete synopsis — keep my story flow</strong> <small>(मैं पूरा synopsis दे रहा हूँ — मेरा story flow रखो)</small>{formatType === 'vertical' && <small> Choose Film or Web series to use this.</small>}</span>
+                </label>
                 <MicTextarea
-                  placeholder={t.floatingAgentConceptPlaceholder}
+                  placeholder={synopsisMode && formatType !== 'vertical' ? 'Paste your complete synopsis here. Start each episode with a heading like “Episode 1”, “एपिसोड 2”…' : t.floatingAgentConceptPlaceholder}
                   value={concept}
                   onChange={(e) => setConcept(e.target.value)}
                 />
@@ -3154,8 +3230,10 @@ function FloatingAgentWidget({ currentUser, t, onRunCompleted, onOpenProject, dr
 
                 {(status.status === 'awaiting_approval' || status.status === 'approved') && status.storyBible && (
                   <div className="floating-agent-done story-bible-block">
-                    <p className="floating-agent-done-title">{status.status === 'approved' ? t.bibleApprovedLabel : t.bibleReadyLabel}</p>
-                    <StoryBibleSummary bible={status.storyBible} t={t} />
+                    <p className="floating-agent-done-title">{status.status === 'approved' ? t.bibleApprovedLabel : (status.storyBible?.synopsisMode ? 'Adu has checked your synopsis. Accept or reject his suggested changes, then approve.' : t.bibleReadyLabel)}</p>
+                    {status.storyBible.synopsisMode
+                      ? <SynopsisReview bible={status.storyBible} busy={isSendingBible || status.status !== 'awaiting_approval'} onDecide={decideSynopsis} />
+                      : <StoryBibleSummary bible={status.storyBible} t={t} />}
                     <a className="cancel-button floating-agent-download" href={`${BACKEND_URL}/api/auto-pipeline/${runId}/story-bible`} target="_blank" rel="noreferrer">
                       {t.bibleOpenFullButton}
                     </a>
@@ -3164,10 +3242,14 @@ function FloatingAgentWidget({ currentUser, t, onRunCompleted, onOpenProject, dr
                         <button type="button" className="choose-button" onClick={() => handleBibleAction('approve')} disabled={isSendingBible}>
                           {t.bibleApproveButton}
                         </button>
-                        <MicTextarea placeholder={t.bibleNotePlaceholder} value={bibleNote} onChange={(e) => setBibleNote(e.target.value)} />
-                        <button type="button" className="cancel-button" onClick={() => handleBibleAction('note')} disabled={isSendingBible || !bibleNote.trim()}>
-                          {isSendingBible ? t.bibleSending : t.bibleSendNoteButton}
-                        </button>
+                        {!status.storyBible.synopsisMode && (
+                          <>
+                            <MicTextarea placeholder={t.bibleNotePlaceholder} value={bibleNote} onChange={(e) => setBibleNote(e.target.value)} />
+                            <button type="button" className="cancel-button" onClick={() => handleBibleAction('note')} disabled={isSendingBible || !bibleNote.trim()}>
+                              {isSendingBible ? t.bibleSending : t.bibleSendNoteButton}
+                            </button>
+                          </>
+                        )}
                       </>
                     )}
                     {errorMessage && <p className="feedback-note">{errorMessage}</p>}

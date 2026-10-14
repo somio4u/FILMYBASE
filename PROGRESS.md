@@ -1683,3 +1683,11 @@ Plain version: every project is now a set of **drafts**. Opening a project shows
 
 ## Light mode / Full mode
 - A switch at the top right ("Light mode" / "Full mode") on every screen. Full = the designed look. Light = flat and still: no animated background, no animation or transitions, no blur, shadows or glow, solid panels, plain dark background, Adu stands still. The choice is remembered on the device; the first time, phones and small or slow devices start in Light.
+
+## Synopsis mode (keep my story flow) + big Adu window
+- Adu's "Write a new story" form has a switch: "I'm giving the complete synopsis — keep my story flow". When on, Adu does NOT design a new story. He splits the user's synopsis into episodes (headings like Episode 1 / एपिसोड १ / ଏପିସୋଡ୍ ୧), builds the Story Bible around it, and rates it (critics' scores and a score + note per episode).
+- He then proposes small changes, each quoting the exact words it would replace. The review screen shows the user's synopsis in BLACK on a white page and every change in RED (the old words crossed out). Each suggestion has Accept / Reject, plus Accept all / Reject all.
+- Only accepted changes reach the story. On Approve everything not accepted is dropped. Every later stage (storylines, pitch deck, characters, beats, scene one-liners, screenplay) and every judge gets the locked synopsis with the rule "the same events, order, deaths, twists and episode endings; a contradiction is a blocking problem".
+- In synopsis mode "Fix it with my note" is turned off (Adu does not rewrite the user's story).
+- Adu's panel has Expand / Collapse: a big window (the whole screen on a phone, Esc to close). The synopsis review opens expanded by itself.
+- Not done: an automatic "is this scene faithful to the synopsis" check beyond the judges' own rule; quality on a real story still needs a real run.

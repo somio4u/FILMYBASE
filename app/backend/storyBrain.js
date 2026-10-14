@@ -678,3 +678,6 @@ export function storyBibleToMarkdown(bible, usage) {
   if (usage) lines.push(`*Made with ${usage.models.join(", ")} — ${usage.calls} calls, ${usage.promptTokens} input / ${usage.outputTokens} output / ${usage.thinkingTokens} thinking tokens.*`);
   return lines.join("\n");
 }
+
+// Pieces the synopsis mode (synopsisBrain.js) builds on.
+export { STORY_BRAIN_SYSTEM, OBJ, LIST, S, TRUTH_SCHEMA, CLIMAX_SCHEMA, BLUEPRINT_SCHEMA, formatUnits, newUsage, usageSummary, brainAsker, CRITICS, runCritics };

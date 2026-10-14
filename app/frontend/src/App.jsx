@@ -863,6 +863,7 @@ const LABELS = {
     generateCharacterSheetButton: 'Build the characters',
     generatingCharacterSheetLabel: 'Hang on, building the characters…',
     characterSheetHeading: 'Character Sheet',
+    castingPptButton: '🎬 Download Casting PPT (photo placeholders for each character)',
     approveCharacterSheetButton: 'Approve',
     characterSheetApprovedBadge: '✅ Characters locked in',
     characterSheetFeedbackPlaceholder: 'What should I change? e.g. "Give the antagonist a stronger reason to believe he\'s right" or "Deepen the daughter\'s inner conflict"',
@@ -1681,6 +1682,7 @@ const LABELS = {
     generateCharacterSheetButton: 'ଚରିତ୍ର ବନେଇଦେ',
     generatingCharacterSheetLabel: 'ଟିକେ ରହ ଭାଇ, ଚରିତ୍ର ବନଉଛି…',
     characterSheetHeading: 'ଚରିତ୍ର ସିଟ୍',
+    castingPptButton: '🎬 କାଷ୍ଟିଂ PPT ଡାଉନଲୋଡ୍ (ପ୍ରତି ଚରିତ୍ରର ଫଟୋ ସ୍ଥାନ ସହ)',
     approveCharacterSheetButton: 'ଅପ୍ରୁଭ୍ କର',
     characterSheetApprovedBadge: '✅ ଚରିତ୍ର ଅପ୍ରୁଭ୍ ହେଇଗଲା',
     characterSheetFeedbackPlaceholder: 'କଣ ବଦଳେଇବି କହ? ଯେମିତି: "ଭିଲେନ୍ ନିଜକୁ ଠିକ୍ ଭାବିବାର କାରଣ ଆହୁରି ଜୋରଦାର କର" କିମ୍ବା "ଝିଅର ମନ ଭିତରର ଲଢ଼େଇ ଆହୁରି ଗଭୀର କର"',
@@ -13759,6 +13761,18 @@ function App() {
           {characterSheet.previousFeedback && (
             <p className="feedback-note">
               <strong>{t.changesRequestedBadge}</strong> "{characterSheet.previousFeedback}"
+            </p>
+          )}
+
+          {characterSheet.id && (
+            <p>
+              <a
+                className="export-button"
+                data-testid="casting-ppt-link"
+                href={`${BACKEND_URL}/api/character-sheet/${characterSheet.id}/export-casting-ppt?lang=${language}`}
+              >
+                {t.castingPptButton ?? 'Download Casting PPT'}
+              </a>
             </p>
           )}
 

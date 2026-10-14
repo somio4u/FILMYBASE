@@ -7,6 +7,7 @@ import { Pool } from "pg";
 import PDFDocument from "pdfkit";
 import ExcelJS from "exceljs";
 import PptxGenJS from "pptxgenjs";
+import { buildCastingPpt } from "./castingPpt.js";
 import { Document, Packer, Paragraph, TextRun, AlignmentType, HeadingLevel } from "docx";
 import path from "path";
 import fs from "fs";
@@ -9355,6 +9356,30 @@ app.get("/api/character-sheet/latest", requireLogin, async (req, res) => {
 
   const row = result.rows[0];
   res.json({ id: row.id, pitchDeckId: row.pitch_deck_id, status: row.status, feedback: row.feedback, ...row.content });
+});
+
+app.get("/api/character-sheet/:id/export-casting-ppt", requireLogin, async (req, res) => {
+  const lang = ["or", "hi"].includes(req.query.lang) ? req.query.lang : "en";
+  try {
+    const result = await db.query(
+      "SELECT cs.content, pd.content AS deck FROM character_sheets cs JOIN pitch_decks pd ON pd.id = cs.pitch_deck_id WHERE cs.id = $1",
+      [req.params.id]
+    );
+    if (result.rows.length === 0) {
+      res.status(404).json({ error: "Character sheet not found" });
+      return;
+    }
+    const { content, deck } = result.rows[0];
+    const title = deck?.title?.en || "Casting";
+    const buffer = await buildCastingPpt({ title, characters: content.characters ?? [] });
+    const safe = (deck?.title?.en || "casting").replace(/[^a-z0-9]+/gi, "-");
+    res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.presentationml.presentation");
+    res.setHeader("Content-Disposition", `attachment; filename="${safe}-casting-${lang}-${formatExportTimestamp()}.pptx"`);
+    res.send(buffer);
+  } catch (error) {
+    console.error("Casting PPT export failed:", error.message);
+    if (!res.headersSent) res.status(500).json({ error: error.message });
+  }
 });
 
 app.post("/api/character-sheet/:id/approve", requireRole("admin"), async (req, res) => {

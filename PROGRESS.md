@@ -1709,3 +1709,7 @@ Plain version: every project is now a set of **drafts**. Opening a project shows
 - [x] **Pasted text is cleaned first**: page headers, page numbers, running titles and wrapped lines from PDF copies are filtered out, and some broken Odia/Hindi vowel order is repaired, before Adu uses the text. The synopses PDF is tidied the same way.
 - [ ] Next: **Upload PDF** so Adu reads the PDF pages directly (not built yet; needs a real-AI test).
 - Note: tests for Stop use scripted fake models; the Stop button has not been tried in a browser yet.
+
+## Casting PPT (Characters stage)
+- [x] Under the character sheet there is now a **Casting PPT** download. Slide 1: film title + "Casting PPT". Then one slide per character in the character sheet: age, look, relation, what they want, flaw on the left; three dashed photo boxes on the right with Name / Age / Notes lines under each. Works in English, Hindi, Odia.
+- Note: it includes every character in the sheet (the sheet only holds the major ones). Layout checked by rendering a sample slide; not yet tried against a real project.

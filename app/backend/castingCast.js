@@ -132,3 +132,94 @@ export function castFromSheet(characters = []) {
     fromSheet: true,
   }));
 }
+
+// ---------------------------------------------------------------------------
+// FINDING CHARACTERS FROM THE SCRIPT. One click: the AI reads the story (pitch
+// deck, story bible, scene one-liners) and lists the characters that matter,
+// highest priority first, skipping those already in the PPT. The director adds
+// them one by one.
+// ---------------------------------------------------------------------------
+const SCREEN_TIMES = ["Very High", "High", "Medium–High", "Medium", "Limited", "Limited / Flashbacks"];
+
+// every scene one-liner in the scene list, wherever it sits in the structure
+function collectOneLiners(node, out = []) {
+  if (Array.isArray(node)) node.forEach((n) => collectOneLiners(n, out));
+  else if (node && typeof node === "object") {
+    if (node.oneLiner?.en) out.push(`${node.location?.en ? `${node.location.en}: ` : ""}${node.oneLiner.en}`);
+    else Object.values(node).forEach((n) => collectOneLiners(n, out));
+  }
+  return out;
+}
+
+export function gatherScriptEvidence({ deck, bible = null, sceneListContent = null }) {
+  const parts = [storyContext(deck)];
+  if (bible?.characters) parts.push(`STORY BIBLE — characters:\n${JSON.stringify(bible.characters).slice(0, 9000)}`);
+  const scenes = sceneListContent ? collectOneLiners(sceneListContent) : [];
+  if (scenes.length) parts.push(`SCENES (in order):\n${scenes.map((s, i) => `${i + 1}. ${s}`).join("\n").slice(0, 16000)}`);
+  return parts.join("\n\n");
+}
+
+const FIND_SCHEMA = {
+  type: "OBJECT",
+  properties: {
+    characters: {
+      type: "ARRAY",
+      items: {
+        ...CAST_SCHEMA.properties.cast.items,
+        properties: {
+          ...CAST_SCHEMA.properties.cast.items.properties,
+          odiaName: { type: "STRING", description: "The name written in Odia script." },
+          screenTime: { type: "STRING", enum: SCREEN_TIMES },
+          score: { type: "NUMBER", description: "Story importance 0-10." },
+        },
+        required: [...CAST_SCHEMA.properties.cast.items.required, "odiaName", "screenTime", "score"],
+      },
+    },
+  },
+  required: ["characters"],
+};
+
+const FIND_SYSTEM = `${CAST_SYSTEM}
+
+YOUR TASK NOW: read the whole story material and list every character that matters to casting, in ORDER OF PRIORITY (highest story importance and screen time first). Use each character's name exactly as the script spells it (English letters) and also give it in Odia script. Include flashback figures and short but pivotal roles; leave out unnamed extras and crowd. Do NOT list anyone from the "already in the PPT" list. Give at most 15.`;
+
+export async function findCharacters({ evidence, sheetCharacters = [], existing = [], ask }) {
+  const known = new Set(existing.map(norm));
+  const sheetLines = sheetCharacters.map((c) => `- ${c.name} (${c.archetype}), age ${c.age}: ${c.role?.en ?? ""}`).join("\n");
+  const result = await ask(
+    `${evidence}\n\nCHARACTER SHEET ENTRIES THAT ALREADY EXIST (keep facts consistent):\n${sheetLines || "(none)"}\n\nALREADY IN THE PPT (do not list these): ${existing.join(", ") || "(none)"}`,
+    FIND_SCHEMA,
+    FIND_SYSTEM,
+  );
+  const seen = new Set();
+  return (result.characters ?? [])
+    .filter((c) => c?.name && !known.has(norm(c.name)) && !seen.has(norm(c.name)) && seen.add(norm(c.name)))
+    .map((c, i) => {
+      const sheet = matchSheet({ name: c.name, odiaName: c.odiaName }, sheetCharacters);
+      return sanitizeCastEntry({ ...c, rank: i + 1, score: c.score != null ? `${c.score}/10` : "", age: sheet?.age || c.age, fromSheet: Boolean(sheet) });
+    });
+}
+
+// Whatever comes from the browser or the AI is cut down to the fields a slide uses.
+const str = (v, max = 400) => String(v ?? "").slice(0, max);
+const bi = (v) => ({ en: str(v?.en), or: str(v?.or) });
+export function sanitizeCastEntry(c) {
+  return {
+    rank: Number.isFinite(Number(c.rank)) ? Number(c.rank) : 0,
+    name: str(c.name, 80).trim(),
+    odiaName: str(c.odiaName, 80),
+    screenTime: str(c.screenTime, 40),
+    score: str(c.score, 10),
+    group: GROUPS.includes(c.group) ? c.group : "supporting",
+    age: str(c.age, 20),
+    look: bi(c.look), about: bi(c.about), importance: bi(c.importance), relation: bi(c.relation), arc: bi(c.arc),
+    fromSheet: Boolean(c.fromSheet),
+  };
+}
+
+// The PPT list after adding one person (no duplicates by name).
+export function addToCast(cast, entry) {
+  const clean = sanitizeCastEntry(entry);
+  if (!clean.name) return cast;
+  return cast.some((c) => norm(c.name) === norm(clean.name)) ? cast : [...cast, clean];
+}

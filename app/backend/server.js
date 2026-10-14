@@ -8,7 +8,7 @@ import PDFDocument from "pdfkit";
 import ExcelJS from "exceljs";
 import PptxGenJS from "pptxgenjs";
 import { buildCastingPpt } from "./castingPpt.js";
-import { GROUPS as CASTING_GROUPS, buildCast, castFromSheet } from "./castingCast.js";
+import { GROUPS as CASTING_GROUPS, addToCast, buildCast, castFromSheet, findCharacters, gatherScriptEvidence } from "./castingCast.js";
 import { Document, Packer, Paragraph, TextRun, AlignmentType, HeadingLevel } from "docx";
 import path from "path";
 import fs from "fs";
@@ -9365,11 +9365,76 @@ app.get("/api/character-sheet/latest", requireLogin, async (req, res) => {
 // the list is saved on the character sheet row (content.casting).
 async function loadSheetWithDeck(id) {
   const result = await db.query(
-    "SELECT cs.id, cs.content, pd.content AS deck FROM character_sheets cs JOIN pitch_decks pd ON pd.id = cs.pitch_deck_id WHERE cs.id = $1",
+    "SELECT cs.id, cs.content, pd.content AS deck, pd.concept_id FROM character_sheets cs JOIN pitch_decks pd ON pd.id = cs.pitch_deck_id WHERE cs.id = $1",
     [id]
   );
   return result.rows[0] ?? null;
 }
+
+// The people already in the PPT: the saved list, or (before anything was added) the character sheet.
+const castOf = (content) => (content.casting?.cast?.length ? content.casting.cast : castFromSheet(content.characters ?? []));
+async function saveCast(row, cast) {
+  await db.query("UPDATE character_sheets SET content = $1 WHERE id = $2", [JSON.stringify({ ...row.content, casting: { ...(row.content.casting ?? {}), cast } }), row.id]);
+}
+const askCastingAi = (contents, responseSchema, systemInstruction) =>
+  generateJsonContent({ model: STORY_WRITER_MODEL_NAME, contents, config: { systemInstruction, responseMimeType: "application/json", responseSchema } });
+
+app.get("/api/character-sheet/:id/casting", requireLogin, async (req, res) => {
+  const row = await loadSheetWithDeck(req.params.id);
+  if (!row) {
+    res.status(404).json({ error: "Character sheet not found" });
+    return;
+  }
+  res.json({ cast: castOf(row.content) });
+});
+
+// One click: Adu reads the script and lists who else matters, highest priority first.
+app.post("/api/character-sheet/:id/find-characters", requireRole("admin"), async (req, res) => {
+  try {
+    const row = await loadSheetWithDeck(req.params.id);
+    if (!row) {
+      res.status(404).json({ error: "Character sheet not found" });
+      return;
+    }
+    const bible = row.concept_id == null ? null : (await db.query("SELECT story_bible FROM auto_pipeline_runs WHERE concept_id = $1 AND story_bible IS NOT NULL ORDER BY id DESC LIMIT 1", [row.concept_id])).rows[0]?.story_bible ?? null;
+    const sceneListContent = row.concept_id == null ? null : (await db.query("SELECT content FROM scene_lists WHERE concept_id = $1 ORDER BY created_at DESC LIMIT 1", [row.concept_id])).rows[0]?.content ?? null;
+    const existing = castOf(row.content).map((c) => c.name);
+    const candidates = await findCharacters({
+      evidence: gatherScriptEvidence({ deck: row.deck, bible, sceneListContent }),
+      sheetCharacters: row.content.characters ?? [],
+      existing,
+      ask: askCastingAi,
+    });
+    res.json({ candidates });
+  } catch (error) {
+    console.error("Find characters failed:", error.message);
+    res.status(error.status ?? 502).json({ error: `Adu could not analyze the script (${String(error.message).slice(0, 160)}). Please try again.` });
+  }
+});
+
+app.post("/api/character-sheet/:id/casting-add", requireRole("admin"), async (req, res) => {
+  const row = await loadSheetWithDeck(req.params.id);
+  if (!row) {
+    res.status(404).json({ error: "Character sheet not found" });
+    return;
+  }
+  const incoming = Array.isArray(req.body?.characters) ? req.body.characters : [req.body?.character];
+  let cast = castOf(row.content);
+  for (const entry of incoming.filter(Boolean).slice(0, 30)) cast = addToCast(cast, entry);
+  await saveCast(row, cast);
+  res.json({ cast });
+});
+
+app.post("/api/character-sheet/:id/casting-remove", requireRole("admin"), async (req, res) => {
+  const row = await loadSheetWithDeck(req.params.id);
+  if (!row) {
+    res.status(404).json({ error: "Character sheet not found" });
+    return;
+  }
+  const cast = castOf(row.content).filter((c) => c.name !== req.body?.name);
+  await saveCast(row, cast);
+  res.json({ cast });
+});
 
 app.post("/api/character-sheet/:id/casting-list", requireRole("admin"), async (req, res) => {
   try {
@@ -9397,13 +9462,13 @@ app.post("/api/character-sheet/:id/casting-list", requireRole("admin"), async (r
 // Move people between sections: { groups: { "Soumya": "protagonist", ... } }
 app.put("/api/character-sheet/:id/casting-groups", requireRole("admin"), async (req, res) => {
   const row = await loadSheetWithDeck(req.params.id);
-  if (!row?.content?.casting?.cast) {
-    res.status(404).json({ error: "No casting list yet." });
+  if (!row) {
+    res.status(404).json({ error: "Character sheet not found" });
     return;
   }
   const groups = req.body?.groups ?? {};
-  const cast = row.content.casting.cast.map((c) => (CASTING_GROUPS.includes(groups[c.name]) ? { ...c, group: groups[c.name] } : c));
-  await db.query("UPDATE character_sheets SET content = $1 WHERE id = $2", [JSON.stringify({ ...row.content, casting: { ...row.content.casting, cast } }), row.id]);
+  const cast = castOf(row.content).map((c) => (CASTING_GROUPS.includes(groups[c.name]) ? { ...c, group: groups[c.name] } : c));
+  await saveCast(row, cast);
   res.json({ cast });
 });
 
@@ -9417,7 +9482,7 @@ app.get("/api/character-sheet/:id/export-casting-ppt", requireLogin, async (req,
     }
     const { content, deck } = row;
     const title = (lang === "or" && deck?.title?.or) || deck?.title?.en || "Casting";
-    const cast = content.casting?.cast?.length ? content.casting.cast : castFromSheet(content.characters ?? []);
+    const cast = castOf(content);
     const buffer = await buildCastingPpt({ title, cast, lang });
     const safe = (deck?.title?.en || "casting").replace(/[^a-z0-9]+/gi, "-");
     res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.presentationml.presentation");

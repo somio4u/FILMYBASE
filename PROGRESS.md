@@ -1730,3 +1730,9 @@ Plain version: every project is now a set of **drafts**. Opening a project shows
 - [x] The PPT: cover → for each section a title slide → one slide per character (age, short description, look, importance, relation, short arc, rank/screen time/score strip; three photo cards with a name line). Wants / needs / flaw / inner & outer conflict / virtues are gone. English and Odia downloads.
 - Without a pasted list the PPT still works from the character sheet alone.
 - **Honest note:** the AI step that writes the details for the 12 names has only been tested with a scripted fake AI. Please try it on Mahakali and tell me what you see. In the Odia file "Look/Relation" of sheet-only characters stay English.
+
+## Casting PPT v3 — "Find important characters" button (not deployed yet)
+- [x] The Casting panel now shows the characters in the PPT (starts with the character sheet's people), grouped by section with a drop-down to move anyone and ✕ to take out.
+- [x] **"🔍 Find other important characters from the script"**: one click, Adu reads the pitch deck, story bible and scene one-liners and lists who else matters, highest priority first (with screen time and importance score). Each has **"＋ Add to PPT"**, plus "Add all". Added people are saved and appear in the Download (English / Odia).
+- [x] Pasting your own list is still possible, tucked under "Or paste my own list".
+- Honest note: the AI part (finding the characters) is only tested with a scripted fake AI; the add/remove/move/download routes were run on a real database. Please try it on Mahakali.

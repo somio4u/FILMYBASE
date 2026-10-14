@@ -50,3 +50,29 @@ test("builds an entry for EVERY listed character, using the sheet's age for thos
 test("an empty list gives a plain message", async () => {
   await assert.rejects(buildCast({ listText: "Rank\tCharacter\n  \n", ask: async () => ({}) }), (e) => e.status === 400 || /could not find/.test(e.message));
 });
+
+import { findCharacters, gatherScriptEvidence, addToCast, castFromSheet } from "../castingCast.js";
+
+test("finding characters: skips those already in the PPT, keeps priority order, dedupes, fills sheet age", async () => {
+  const bi2 = (x) => ({ en: x, or: `${x}-or` });
+  const mk = (name, group, score) => ({ name, odiaName: `${name}-od`, group, age: "40", look: bi2("l"), about: bi2("a"), importance: bi2("i"), relation: bi2("r"), arc: bi2("arc"), screenTime: "High", score });
+  let asked = "";
+  const ask = async (contents) => { asked = contents; return { characters: [mk("Soumya", "protagonist", 10), mk("Madhab", "sidekick", 8.5), mk("madhab", "sidekick", 8), mk("Meera", "supporting", 8)] }; };
+  const evidence = gatherScriptEvidence({ deck: { title: { en: "Mahakali" } }, bible: { characters: [{ name: "Madhab" }] }, sceneListContent: { acts: [{ scenes: [{ location: { en: "Temple" }, oneLiner: { en: "Madhab sees the idol" } }] }] } });
+  assert.match(evidence, /1\. Temple: Madhab sees the idol/);
+  const out = await findCharacters({ evidence, sheetCharacters: [{ name: "Madhab", age: "29", archetype: "ally" }], existing: ["Soumya"], ask });
+  assert.deepEqual(out.map((c) => c.name), ["Madhab", "Meera"]); // Soumya skipped, duplicate dropped
+  assert.equal(out[0].age, "29");
+  assert.equal(out[0].rank, 1);
+  assert.equal(out[0].score, "8.5/10");
+  assert.match(asked, /ALREADY IN THE PPT \(do not list these\): Soumya/);
+});
+
+test("adding to the PPT list: no duplicates, bad group becomes supporting, junk fields are dropped", () => {
+  const seed = castFromSheet([{ name: "Soumya", archetype: "hero", age: "24" }]);
+  const added = addToCast(seed, { name: "Meera", group: "wizard", age: "35", evil: "x", look: { en: "tall", or: "" } });
+  assert.equal(added.length, 2);
+  assert.equal(added[1].group, "supporting");
+  assert.equal(added[1].evil, undefined);
+  assert.equal(addToCast(added, { name: "MEERA" }).length, 2);
+});

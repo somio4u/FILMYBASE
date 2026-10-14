@@ -5738,33 +5738,65 @@ function PdfUploadButton({ backendUrl, text, onText }) {
   )
 }
 
-// CASTING PANEL: paste the list of major characters, Adu fills in each one's casting details
-// (even those with no character sheet yet), the director can move people between sections,
-// then downloads the Casting PPT in English or Odia.
+// CASTING PANEL: the people in the Casting PPT, a one-click "find important characters from the
+// script" (Adu lists them by priority, you add the ones you want), and the English/Odia download.
 const CASTING_SECTIONS = [
   ['protagonist', 'Protagonist'], ['heroine', 'Heroines'], ['villain', 'Villains'], ['sidekick', 'Sidekicks'], ['supporting', 'Key supporting'],
 ]
 
 function CastingPanel({ t, backendUrl, sheet }) {
-  const [listText, setListText] = useState(sheet.casting?.listText || '')
-  const [cast, setCast] = useState(sheet.casting?.cast || null)
-  const [busy, setBusy] = useState(false)
+  const base = `${backendUrl}/api/character-sheet/${sheet.id}`
+  const [cast, setCast] = useState(null)
+  const [candidates, setCandidates] = useState(null)
+  const [finding, setFinding] = useState(false)
   const [error, setError] = useState('')
+  const [listText, setListText] = useState(sheet.casting?.listText || '')
+  const [buildingList, setBuildingList] = useState(false)
 
-  async function build() {
-    setBusy(true)
+  async function call(path, method, body) {
+    const res = await fetch(`${base}/${path}`, { method, headers: { 'Content-Type': 'application/json' }, body: body ? JSON.stringify(body) : undefined })
+    const data = await res.json().catch(() => ({}))
+    if (!res.ok) throw new Error(data.error || 'Something went wrong. Please try again.')
+    return data
+  }
+
+  useEffect(() => {
+    let alive = true
+    call('casting', 'GET').then((d) => alive && setCast(d.cast)).catch((e) => alive && setError(e.message))
+    return () => { alive = false }
+  }, [sheet.id])
+
+  async function find() {
+    setFinding(true)
     setError('')
     try {
-      const res = await fetch(`${backendUrl}/api/character-sheet/${sheet.id}/casting-list`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ listText }),
-      })
-      const data = await res.json().catch(() => ({}))
-      if (!res.ok) throw new Error(data.error || 'Could not build the casting list.')
-      setCast(data.cast)
+      const data = await call('find-characters', 'POST')
+      setCandidates(data.candidates)
     } catch (e) {
       setError(e.message)
     } finally {
-      setBusy(false)
+      setFinding(false)
+    }
+  }
+
+  async function add(list) {
+    setError('')
+    try {
+      const data = await call('casting-add', 'POST', { characters: list })
+      setCast(data.cast)
+      const added = new Set(list.map((c) => c.name))
+      setCandidates((cur) => cur && cur.filter((c) => !added.has(c.name)))
+    } catch (e) {
+      setError(e.message)
+    }
+  }
+
+  async function remove(name) {
+    setError('')
+    try {
+      setCast((await call('casting-remove', 'POST', { name })).cast)
+    } catch (e) {
+      setError(e.message)
     }
   }
 
@@ -5772,31 +5804,31 @@ function CastingPanel({ t, backendUrl, sheet }) {
     const before = cast
     setCast(cast.map((c) => (c.name === name ? { ...c, group } : c)))
     try {
-      const res = await fetch(`${backendUrl}/api/character-sheet/${sheet.id}/casting-groups`, {
-        method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ groups: { [name]: group } }),
-      })
-      if (!res.ok) throw new Error('Could not save the change.')
+      await call('casting-groups', 'PUT', { groups: { [name]: group } })
     } catch (e) {
       setCast(before)
       setError(e.message)
     }
   }
 
+  async function buildFromList() {
+    setBuildingList(true)
+    setError('')
+    try {
+      setCast((await call('casting-list', 'POST', { listText })).cast)
+    } catch (e) {
+      setError(e.message)
+    } finally {
+      setBuildingList(false)
+    }
+  }
+
+  const labelOf = (key) => CASTING_SECTIONS.find(([k]) => k === key)?.[1] ?? key
+
   return (
     <div className="casting-panel">
-      <h3>🎬 Casting PPT</h3>
-      <p><small>Paste your list of major characters (one per line: rank, name, screen time, importance). Adu writes the casting details for every one — even those without a character sheet — and groups them. You can move anyone to another section.</small></p>
-      <MicTextarea
-        className="feedback-textarea"
-        value={listText}
-        onChange={(e) => setListText(e.target.value)}
-        placeholder={'1\tSoumya (ସୌମ୍ୟ)\tVery High\t10/10\n2\tSulagna (ସୁଲଗ୍ନା)\tVery High\t9.5/10'}
-      />
-      <button type="button" className="choose-button" onClick={build} disabled={busy || !listText.trim()}>
-        {busy ? 'Adu is writing the casting details…' : cast ? 'Rebuild casting list' : 'Build casting list'}
-      </button>
-      {busy && <p className="floating-agent-stage-line"><span className="floating-agent-spinner" aria-hidden="true" /><span>This takes about a minute…</span></p>}
-      {error && <p className="feedback-note">{error}</p>}
+      <h3>🎬 Casting PPT {cast ? `(${cast.length} characters in it)` : ''}</h3>
+
       {cast && (
         <div className="casting-groups">
           {CASTING_SECTIONS.map(([key, label]) => {
@@ -5807,10 +5839,11 @@ function CastingPanel({ t, backendUrl, sheet }) {
                 <strong>{label} ({members.length})</strong>
                 {members.map((c) => (
                   <div key={c.name} className="casting-row">
-                    <span>{c.rank}. {c.name}{c.odiaName ? ` (${c.odiaName})` : ''}{c.fromSheet ? '' : ' · new'}</span>
+                    <span>{c.name}{c.odiaName ? ` (${c.odiaName})` : ''}</span>
                     <select value={c.group} onChange={(e) => move(c.name, e.target.value)}>
                       {CASTING_SECTIONS.map(([k, l]) => <option key={k} value={k}>{l}</option>)}
                     </select>
+                    <button type="button" className="cancel-button" onClick={() => remove(c.name)} title="Take out of the PPT">✕</button>
                   </div>
                 ))}
               </div>
@@ -5818,15 +5851,57 @@ function CastingPanel({ t, backendUrl, sheet }) {
           })}
         </div>
       )}
+
+      <button type="button" className="choose-button" onClick={find} disabled={finding}>
+        {finding ? 'Adu is reading the script…' : '🔍 Find other important characters from the script'}
+      </button>
+      {finding && <p className="floating-agent-stage-line"><span className="floating-agent-spinner" aria-hidden="true" /><span>Looking through the story, scenes and characters — about a minute…</span></p>}
+      {error && <p className="feedback-note">{error}</p>}
+
+      {candidates && (
+        <div className="casting-candidates">
+          {candidates.length === 0 ? (
+            <p>Adu found no more important characters beyond the ones already in the PPT.</p>
+          ) : (
+            <>
+              <p><strong>Adu found {candidates.length} more, most important first:</strong></p>
+              {candidates.map((c) => (
+                <div key={c.name} className="casting-row">
+                  <span>
+                    <strong>{c.rank}. {c.name}{c.odiaName ? ` (${c.odiaName})` : ''}</strong> — {labelOf(c.group)} · screen time {c.screenTime || '?'} · importance {c.score || '?'}
+                    {c.importance?.en ? <><br /><small>{c.importance.en}</small></> : null}
+                  </span>
+                  <button type="button" className="choose-button" onClick={() => add([c])}>＋ Add to PPT</button>
+                </div>
+              ))}
+              {candidates.length > 1 && <button type="button" className="cancel-button" onClick={() => add(candidates)}>Add all {candidates.length}</button>}
+            </>
+          )}
+        </div>
+      )}
+
       <DownloadChoiceButton
         t={t}
-        label={cast ? `🎬 Download Casting PPT (${cast.length} characters)` : (t.castingPptButton ?? 'Download Casting PPT')}
+        label={`🎬 Download Casting PPT${cast ? ` (${cast.length} characters)` : ''}`}
         className="export-button"
-        pdfUrl={`${backendUrl}/api/character-sheet/${sheet.id}/export-casting-ppt?lang=en`}
-        excelUrl={`${backendUrl}/api/character-sheet/${sheet.id}/export-casting-ppt?lang=or`}
+        pdfUrl={`${base}/export-casting-ppt?lang=en`}
+        excelUrl={`${base}/export-casting-ppt?lang=or`}
         pdfLabel="English"
         excelLabel="ଓଡ଼ିଆ (Odia)"
       />
+
+      <details>
+        <summary><small>Or paste my own list of characters</small></summary>
+        <MicTextarea
+          className="feedback-textarea"
+          value={listText}
+          onChange={(e) => setListText(e.target.value)}
+          placeholder={'1\tSoumya (ସୌମ୍ୟ)\tVery High\t10/10\n2\tSulagna (ସୁଲଗ୍ନା)\tVery High\t9.5/10'}
+        />
+        <button type="button" className="cancel-button" onClick={buildFromList} disabled={buildingList || !listText.trim()}>
+          {buildingList ? 'Adu is writing the casting details…' : 'Use this list (replaces the PPT list)'}
+        </button>
+      </details>
     </div>
   )
 }

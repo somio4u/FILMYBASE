@@ -8,6 +8,7 @@ import PDFDocument from "pdfkit";
 import ExcelJS from "exceljs";
 import PptxGenJS from "pptxgenjs";
 import { buildCastingPpt } from "./castingPpt.js";
+import { buildScreenplayPlainText, countScenes } from "./screenplayText.js";
 import { GROUPS as CASTING_GROUPS, addToCast, buildCast, castFromSheet, findCharacters, gatherScriptEvidence } from "./castingCast.js";
 import { Document, Packer, Paragraph, TextRun, AlignmentType, HeadingLevel } from "docx";
 import path from "path";
@@ -19267,6 +19268,46 @@ async function fetchSceneListScreenplayData(sceneListId, targetLang) {
 // The screenplay view's download buttons: one episode (?episode=0-based
 // index) or, with no episode, the whole script — always in the language
 // each scene was written in. PDF by default, Word with ?format=docx.
+// FILM -> AI PRODUCTION. When a Film screenplay is complete, "Send for AI Production" copies it into the
+// AI Movies module as a LOCKED screenplay (every stage up to Screenplay approved). The app then runs
+// "Proceed" on it (/api/ai-movie/backfill), where Adu reads the screenplay and sets up the story behind it
+// and the artists/characters, settings/environments and props. Sending the same finished screenplay twice
+// reuses the AI Movie project made the first time.
+app.post("/api/scene-lists/:id/send-to-ai-production", requireRole("admin"), async (req, res) => {
+  if (!/^\d+$/.test(req.params.id)) {
+    res.status(400).json({ error: "Invalid scene list id." });
+    return;
+  }
+  try {
+    const data = await fetchSceneListScreenplayData(req.params.id, null);
+    if (data.error) {
+      res.status(data.status).json({ error: data.error });
+      return;
+    }
+    const total = countScenes(data.sceneList);
+    const written = [...data.scenesByEpisode.values()].reduce((n, rows) => n + rows.length, 0);
+    if (total === 0 || written < total) {
+      res.status(400).json({ error: `Finish the screenplay first: ${written} of ${total} scenes are written.` });
+      return;
+    }
+    const pastedText = buildScreenplayPlainText(data);
+    const title = data.deck?.title?.en ?? null;
+    const existing = (await db.query("SELECT id, backfill FROM ai_movie_projects WHERE pasted_text = $1 AND created_by = $2 ORDER BY id DESC LIMIT 1", [pastedText, req.user.id])).rows[0];
+    if (existing) {
+      res.json({ projectId: existing.id, title, alreadyAnalyzed: Boolean(existing.backfill && Object.keys(existing.backfill).length > 0), pastedText });
+      return;
+    }
+    const inserted = await db.query(
+      "INSERT INTO ai_movie_projects (title, pasted_text, detected_stage, stage_status, created_by) VALUES ($1, $2, 'screenplay', $3, $4) RETURNING id",
+      [title, pastedText, JSON.stringify(approvedStageStatusUpTo(AI_MOVIE_DETECTED_STAGE_COVERED_INDEX.screenplay)), req.user.id]
+    );
+    res.json({ projectId: inserted.rows[0].id, title, alreadyAnalyzed: false, pastedText });
+  } catch (error) {
+    console.error("Send to AI production failed:", error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 app.get("/api/scene-lists/:id/screenplay-pdf", requireLogin, async (req, res) => {
   if (!/^\d+$/.test(req.params.id)) {
     res.status(400).json({ error: "Invalid scene list id." });

@@ -7061,6 +7061,8 @@ function App() {
   // up yet — no other sidebar item here does anything.
   const [aiMovieAnalyzeInput, setAiMovieAnalyzeInput] = useState('')
   const [aiMovieAnalyzeStage, setAiMovieAnalyzeStage] = useState(null)
+  const [isSendingToAiProduction, setIsSendingToAiProduction] = useState(false)
+  const [sendToAiProductionError, setSendToAiProductionError] = useState('')
   const [isAnalyzingAiMovie, setIsAnalyzingAiMovie] = useState(false)
   const [aiMovieAnalyzeError, setAiMovieAnalyzeError] = useState(null)
 
@@ -7856,6 +7858,24 @@ function App() {
 
     setIsAnalyzingAiMovie(false)
     return analyzed
+  }
+
+  // Film -> AI Production: the finished Film screenplay is copied into AI Movies as a locked screenplay,
+  // then Adu analyses it (story behind it, artists/characters, environments, props).
+  async function handleSendForAiProduction(sceneListId) {
+    setIsSendingToAiProduction(true)
+    setSendToAiProductionError('')
+    try {
+      const response = await fetch(`${BACKEND_URL}/api/scene-lists/${sceneListId}/send-to-ai-production`, { method: 'POST' })
+      const data = await response.json().catch(() => ({}))
+      if (!response.ok) throw new Error(data.error || t.genericError)
+      setAppMode('ai')
+      await loadAiMovieProject(data.projectId)
+      if (!data.alreadyAnalyzed) await handleAiMovieProceedClick({ text: data.pastedText, stage: 'screenplay', projectId: data.projectId })
+    } catch (e) {
+      setSendToAiProductionError(e.message)
+    }
+    setIsSendingToAiProduction(false)
   }
 
   // "Import screenplay (PDF / Word)": the text is a finished screenplay, so skip the question
@@ -14394,7 +14414,24 @@ function App() {
               return totalScenes > 0 && draftedScenes < totalScenes ? (
                 <p className="screenplay-progress">{t.screenplayProgressLabel(draftedScenes, totalScenes)}</p>
               ) : totalScenes > 0 ? (
-                <p className="screenplay-complete-banner">{t.screenplayCompleteBanner}</p>
+                <>
+                  <p className="screenplay-complete-banner">{t.screenplayCompleteBanner}</p>
+                  <div className="screenplay-send-options">
+                    <p><strong>What next? Send this locked screenplay to:</strong></p>
+                    <div className="approval-buttons">
+                      <button type="button" className="choose-button" onClick={() => { setActiveAgent('production'); setIsSidebarOpen(false) }}>
+                        🎬 Send to Production (real shoot)
+                      </button>
+                      {currentUser?.role === 'admin' && (
+                        <button type="button" className="choose-button" onClick={() => handleSendForAiProduction(sceneList.id)} disabled={isSendingToAiProduction}>
+                          {isSendingToAiProduction ? 'Sending to AI Production…' : '🤖 Send for AI Production'}
+                        </button>
+                      )}
+                    </div>
+                    <p><small>AI Production starts with this screenplay locked. Adu then analyses it — the artists/characters, settings and environments, props — in the AI Movies section.</small></p>
+                    {sendToAiProductionError && <p className="feedback-note">{sendToAiProductionError}</p>}
+                  </div>
+                </>
               ) : null
             })()}
 

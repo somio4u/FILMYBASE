@@ -1736,3 +1736,9 @@ Plain version: every project is now a set of **drafts**. Opening a project shows
 - [x] **"🔍 Find other important characters from the script"**: one click, Adu reads the pitch deck, story bible and scene one-liners and lists who else matters, highest priority first (with screen time and importance score). Each has **"＋ Add to PPT"**, plus "Add all". Added people are saved and appear in the Download (English / Odia).
 - [x] Pasting your own list is still possible, tucked under "Or paste my own list".
 - Honest note: the AI part (finding the characters) is only tested with a scripted fake AI; the add/remove/move/download routes were run on a real database. Please try it on Mahakali.
+
+## AI Movies — Import screenplay (PDF / Word) (not deployed yet)
+- [x] In AI Movies (the page where you paste material), a new button **"📄 Import screenplay (PDF / Word) — start from the Screenplay stage"** sits above the paste box. Pick a PDF, Word (.docx/.doc), .txt, .fdx or .fountain file.
+- [x] **PDF:** Adu reads the pages themselves (8 pages at a time), copying scene headings, action, character names and dialogue exactly as laid out and leaving out page numbers/headers. **Word / text:** read right away.
+- [x] Then the app does the rest by itself: saves it as the project's screenplay (no "which stage is this?" question), and Adu fills the stages behind it (story, synopsis, characters, plot) so the project starts at the Screenplay stage.
+- Honest note: the screenplay-reading and stage-building AI steps were tested with scripted fake AI / mocked browser calls, not the real Gemini on a real screenplay. Please try with your screenplay and tell me what you see.

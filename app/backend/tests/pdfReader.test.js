@@ -56,3 +56,15 @@ test("a repeated running header the model let through is removed by the paste cl
   assert.doesNotMatch(out.text, /MAHAKALI SCRIPT PAGE/);
   assert.match(out.text, /courtyard number 6/);
 });
+
+test("screenplay kind: asks for the screenplay layout and keeps repeated character names, scene headings and short lines as they are", async () => {
+  const script = [
+    "1. INT. TEMPLE - NIGHT", "Soumya lights the lamp.", "SOUMYA", "Where is the idol?", "BALARAM", "Gone.",
+    "2. INT. TEMPLE - DAY", "Soumya runs in.", "SOUMYA", "Stop him!", "BALARAM", "Too late.",
+    "3. EXT. VILLAGE - DAY", "SOUMYA", "Help!", "BALARAM", "No.",
+  ].join("\n");
+  const { ask, calls } = scripted({ pageCount: 8, batches: [script] });
+  const out = await readStoryFromPdf(PDF, { ask, kind: "screenplay" });
+  assert.match(calls[1].contents[1].text, /This is a SCREENPLAY/);
+  assert.equal(out.text, script); // nothing removed or re-flowed
+});

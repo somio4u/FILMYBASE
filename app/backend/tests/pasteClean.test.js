@@ -64,3 +64,9 @@ test("learnBoilerplate needs a repeat: one stray all-caps phrase is kept", () =>
   assert.deepEqual(learnBoilerplate("The hero meets DETAILED EPISODE SYNOPSIS 1 once."), []);
   assert.equal(summarize({ headers: [], pageNumbers: 0, joinedLines: 0, repairedLetters: 0 }), "Your paste needed no cleaning.");
 });
+
+test("rejoin:false and boilerplate:false leave a screenplay's lines alone", () => {
+  const script = ["EPISODE 1/3", "SOUMYA", "Where is the idol that was here this morning", "BALARAM", "Gone", "EPISODE 2/3", "SOUMYA", "Stop him", "EPISODE 3/3", "SOUMYA", "Help"].join("\n");
+  const kept = cleanPastedStory(script, { rejoin: false, boilerplate: false }).text;
+  assert.equal(kept.split("\n").length, 11);
+});

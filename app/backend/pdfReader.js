@@ -27,7 +27,10 @@ const PAGES_SCHEMA = OBJ({
   unreadable: LIST(S("Page number plus what could not be read."), "Anything on these pages too blurred or damaged to read. Empty if all fine."),
 });
 
-export async function readStoryFromPdf(pdfBuffer, { ask, onProgress = () => {}, perBatch = PAGES_PER_BATCH } = {}) {
+// kind "screenplay": the pages are a screenplay, so scene headings, character names, dialogue and
+// action lines are copied exactly as laid out, one per line, and the text is not re-flowed.
+export async function readStoryFromPdf(pdfBuffer, { ask, onProgress = () => {}, perBatch = PAGES_PER_BATCH, kind = "story" } = {}) {
+  const isScreenplay = kind === "screenplay";
   if (!pdfBuffer?.length) throw Object.assign(new Error("The PDF is empty."), { status: 400 });
   if (pdfBuffer.length > MAX_PDF_BYTES) throw Object.assign(new Error("This PDF is too big to read in one go (limit about 18 MB). Split it into two PDFs, or save it at a smaller size, and upload again."), { status: 400 });
   if (pdfBuffer.subarray(0, 5).toString("latin1") !== "%PDF-") throw Object.assign(new Error("This does not look like a PDF file."), { status: 400 });
@@ -53,7 +56,7 @@ export async function readStoryFromPdf(pdfBuffer, { ask, onProgress = () => {}, 
     onProgress(`Reading pages ${from}–${to} of ${pages}`);
     const result = await ask(
       `Reading pages ${from}-${to} of ${pages}`,
-      [pdfPart, { text: `Copy out the STORY TEXT printed on pages ${from} to ${to} of this PDF, in reading order, word for word, in the script it is printed in. Keep paragraph breaks. Keep each episode heading ("Episode 3" etc.) on its own line. LEAVE OUT everything that is not story: ${skip}. A sentence that continues onto the next page is copied as one sentence. Do not copy anything from pages outside ${from}-${to}. Do not summarise, translate or fix the writing.${i > 0 ? " If page " + from + " begins in the middle of a sentence from the previous page, still copy it from its first printed word." : ""}` }],
+      [pdfPart, { text: `Copy out the STORY TEXT printed on pages ${from} to ${to} of this PDF, in reading order, word for word, in the script it is printed in. Keep paragraph breaks. Keep each episode heading ("Episode 3" etc.) on its own line. LEAVE OUT everything that is not story: ${skip}. A sentence that continues onto the next page is copied as one sentence. Do not copy anything from pages outside ${from}-${to}. Do not summarise, translate or fix the writing.${isScreenplay ? " This is a SCREENPLAY: keep every scene heading (INT./EXT. …), every action line, every character name and every line of dialogue and parenthetical on its own line exactly as laid out, and keep scene numbers." : ""}${i > 0 ? " If page " + from + " begins in the middle of a sentence from the previous page, still copy it from its first printed word." : ""}` }],
       PAGES_SCHEMA,
       READER_SYSTEM,
     );
@@ -62,7 +65,7 @@ export async function readStoryFromPdf(pdfBuffer, { ask, onProgress = () => {}, 
   }
 
   // headers/footers the model let through are caught by the usual paste cleaner
-  const cleaned = cleanPastedStory(chunks.filter(Boolean).join("\n\n"));
+  const cleaned = cleanPastedStory(chunks.filter(Boolean).join(isScreenplay ? "\n" : "\n\n"), isScreenplay ? { rejoin: false, boilerplate: false } : {});
   const text = cleaned.text.trim();
   if (text.length < 50) throw Object.assign(new Error("I could not read any story text from this PDF. If it is a photo or scan, try a clearer copy."), { status: 422 });
 

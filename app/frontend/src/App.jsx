@@ -5655,6 +5655,81 @@ function MicInput({ value, onChange, className, wrapClassName, ...rest }) {
 // "Upload PDF instead": Adu reads the PDF's PAGES (not its garbled text layer),
 // skips page numbers/headers, and puts the story text into the box for review.
 // Also warns when the text already pasted looks garbled by a PDF copy.
+// Waits for a background "Adu reads this PDF" job; returns its result or throws a plain message.
+async function waitForPdfJob(backendUrl, jobId, onProgress) {
+  const deadline = Date.now() + 45 * 60 * 1000
+  while (Date.now() < deadline) {
+    await new Promise((resolve) => setTimeout(resolve, 4000))
+    let job = null
+    try {
+      const res = await fetch(`${backendUrl}/api/story-from-pdf/${jobId}`)
+      job = await res.json().catch(() => ({}))
+      if (res.status === 404) throw new Error(job.error || 'This reading was lost. Please upload again.')
+    } catch (pollError) {
+      if (/lost|upload again/i.test(pollError.message)) throw pollError
+      onProgress('Waiting for the connection…')
+      continue
+    }
+    if (job.status === 'failed') throw new Error(job.error || 'Adu could not read this PDF.')
+    if (job.status === 'done') return job.result
+    onProgress(`${job.progress || 'Reading'}… (this takes a few minutes, you can wait here)`)
+  }
+  throw new Error('Reading took too long. Please try a smaller file.')
+}
+
+// AI MOVIES: "Import screenplay (PDF / Word)". A PDF is read page by page by Adu, a Word file is read
+// at once; the text then goes to onText, which starts the project at its Screenplay stage.
+function ScreenplayImportButton({ backendUrl, onText, disabled }) {
+  const inputRef = useRef(null)
+  const [busy, setBusy] = useState(false)
+  const [progress, setProgress] = useState('')
+  const [error, setError] = useState('')
+  const [note, setNote] = useState('')
+
+  async function handleFile(event) {
+    const file = event.target.files?.[0]
+    event.target.value = ''
+    if (!file) return
+    setBusy(true)
+    setError('')
+    setNote('')
+    setProgress('Uploading the file…')
+    try {
+      const body = new FormData()
+      body.append('file', file)
+      const res = await fetch(`${backendUrl}/api/ai-movie/import-screenplay-file`, { method: 'POST', body })
+      const started = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(started.error || 'Could not upload the file.')
+      let text = started.text
+      if (started.jobId) {
+        const result = await waitForPdfJob(backendUrl, started.jobId, setProgress)
+        text = result.text
+        setNote(result.summary || '')
+        if (result.warnings?.length) setNote(`${result.summary || ''} Check: ${result.warnings.join(' ')}`)
+      }
+      setProgress('Setting up your project from the screenplay…')
+      await onText(text)
+    } catch (e) {
+      setError(e.message)
+    } finally {
+      setBusy(false)
+      setProgress('')
+    }
+  }
+
+  return (
+    <div className="pdf-upload">
+      <input ref={inputRef} type="file" accept=".pdf,.docx,.doc,.txt,.fdx,.fountain,application/pdf" onChange={handleFile} style={{ display: 'none' }} />
+      <button type="button" className="choose-button" onClick={() => inputRef.current?.click()} disabled={busy || disabled}>
+        {busy ? 'Adu is importing the screenplay…' : '📄 Import screenplay (PDF / Word) — start from the Screenplay stage'}
+      </button>
+      {busy && progress && <p className="floating-agent-stage-line"><span className="floating-agent-spinner" aria-hidden="true" /><span>{progress}</span></p>}
+      {error && <p className="feedback-note">{error}</p>}
+      {note && !busy && <p className="floating-agent-note">{note}</p>}
+    </div>
+  )
+}
+
 function looksGarbled(text) {
   const t = String(text || '')
   const indic = (t.match(/[\u0B00-\u0BFF\u0900-\u097F]/g) || []).length
@@ -5687,28 +5762,9 @@ function PdfUploadButton({ backendUrl, text, onText }) {
       const start = await fetch(`${backendUrl}/api/story-from-pdf`, { method: 'POST', body })
       const started = await start.json().catch(() => ({}))
       if (!start.ok) throw new Error(started.error || 'Could not upload the PDF.')
-      const deadline = Date.now() + 45 * 60 * 1000
-      while (Date.now() < deadline) {
-        await new Promise((resolve) => setTimeout(resolve, 4000))
-        let job = null
-        try {
-          const res = await fetch(`${backendUrl}/api/story-from-pdf/${started.jobId}`)
-          job = await res.json().catch(() => ({}))
-          if (res.status === 404) throw new Error(job.error || 'This reading was lost. Please upload again.')
-        } catch (pollError) {
-          if (/lost|upload again/i.test(pollError.message)) throw pollError
-          setProgress('Waiting for the connection…')
-          continue
-        }
-        if (job.status === 'failed') throw new Error(job.error || 'Adu could not read this PDF.')
-        if (job.status === 'done') {
-          onText(job.result.text, job.result)
-          setNote(job.result)
-          return
-        }
-        setProgress(`${job.progress || 'Reading'}… (this takes a few minutes, you can wait here)`)
-      }
-      throw new Error('Reading took too long. Please try a smaller PDF.')
+      const result = await waitForPdfJob(backendUrl, started.jobId, (message) => setProgress(message))
+      onText(result.text, result)
+      setNote(result)
     } catch (e) {
       setError(e.message)
     } finally {
@@ -7766,7 +7822,10 @@ function App() {
     localStorage.removeItem(CURRENT_CONCEPT_STORAGE_KEY)
   }
 
-  async function handleAnalyzeAiMovieClick() {
+  // `override` ({ text, forceStage }) is used by "Import screenplay"; a plain click passes the click event instead.
+  async function handleAnalyzeAiMovieClick(override) {
+    const text = typeof override?.text === 'string' ? override.text : aiMovieAnalyzeInput
+    let analyzed = null
     setIsAnalyzingAiMovie(true)
     setAiMovieAnalyzeError(null)
     setAiMovieAnalyzeStage(null)
@@ -7779,13 +7838,14 @@ function App() {
       const response = await fetch(`${BACKEND_URL}/api/ai-movie/analyze-stage`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ pastedText: aiMovieAnalyzeInput, projectId: aiMovieProjectId }),
+        body: JSON.stringify({ pastedText: text, projectId: aiMovieProjectId, forceStage: override?.forceStage }),
       })
       const data = await response.json()
 
       if (!response.ok) {
         setAiMovieAnalyzeError(data.error || t.genericError)
       } else {
+        analyzed = data
         setAiMovieAnalyzeStage(data.stage)
         setAiMovieProjectId(data.projectId)
         localStorage.setItem(CURRENT_AI_MOVIE_PROJECT_STORAGE_KEY, String(data.projectId))
@@ -7795,19 +7855,32 @@ function App() {
     }
 
     setIsAnalyzingAiMovie(false)
+    return analyzed
   }
 
-  async function handleAiMovieProceedClick() {
+  // "Import screenplay (PDF / Word)": the text is a finished screenplay, so skip the question
+  // "which stage is this?", save it as the project, and let Adu fill the stages behind it.
+  async function handleImportedScreenplay(text) {
+    setAiMovieAnalyzeInput(text)
+    const analyzed = await handleAnalyzeAiMovieClick({ text, forceStage: 'screenplay' })
+    if (!analyzed) throw new Error('Could not save the screenplay. Please try again.')
+    await handleAiMovieProceedClick({ text, stage: 'screenplay', projectId: analyzed.projectId })
+  }
+
+  async function handleAiMovieProceedClick(override) {
+    const text = typeof override?.text === 'string' ? override.text : aiMovieAnalyzeInput
+    const stage = override?.stage ?? aiMovieAnalyzeStage
+    const projectId = override?.projectId ?? aiMovieProjectId
     setAiMovieBackfillError(null)
     setAiMovieBackfillNote(null)
     setAiMovieBackfillResult(null)
     setAiMovieAssets(null)
 
-    if (aiMovieAnalyzeStage === 'other') {
+    if (stage === 'other') {
       setAiMovieBackfillNote(t.aiMovieBackfillNoteOther)
       return
     }
-    if (aiMovieAnalyzeStage === 'concept' || aiMovieAnalyzeStage === 'story') {
+    if (stage === 'concept' || stage === 'story') {
       setAiMovieBackfillNote(t.aiMovieBackfillNoteEarliest)
       return
     }
@@ -7818,7 +7891,7 @@ function App() {
       const response = await fetch(`${BACKEND_URL}/api/ai-movie/backfill`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ pastedText: aiMovieAnalyzeInput, stage: aiMovieAnalyzeStage, projectId: aiMovieProjectId }),
+        body: JSON.stringify({ pastedText: text, stage, projectId }),
       })
       const data = await response.json()
 
@@ -12137,6 +12210,7 @@ function App() {
             {!aiMovieBackfillResult?.story && (
             <div className="format-picker">
               <p className="sidebar-section-note">{t.aiMovieAnalyzeIntro}</p>
+              <ScreenplayImportButton backendUrl={BACKEND_URL} onText={handleImportedScreenplay} disabled={isAnalyzingAiMovie || isBackfillingAiMovie} />
               <textarea
                 className="skip-ahead-textarea"
                 value={aiMovieAnalyzeInput}

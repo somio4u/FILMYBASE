@@ -3349,7 +3349,7 @@ app.use("/api/ai-movie", (req, res, next) => {
 });
 
 app.post("/api/ai-movie/analyze-stage", requireRole("admin"), async (req, res) => {
-  const { pastedText, projectId } = req.body;
+  const { pastedText, projectId, forceStage } = req.body;
 
   if (!pastedText || !pastedText.trim()) {
     res.status(400).json({ error: "Paste some text first." });
@@ -3357,7 +3357,8 @@ app.post("/api/ai-movie/analyze-stage", requireRole("admin"), async (req, res) =
   }
 
   try {
-    const result = await analyzeAiMovieStage(pastedText);
+    // An imported screenplay file is a screenplay by definition: no need to ask the AI which stage it is.
+    const result = forceStage === "screenplay" ? { stage: "screenplay" } : await analyzeAiMovieStage(pastedText);
 
     // Persist as we go, same as every other stage of this app — a fresh
     // paste creates its own project row (returned so the frontend can keep
@@ -18564,27 +18565,60 @@ app.get("/api/adu/current", requireRole("admin"), async (req, res) => {
 const pdfReadJobs = new Map();
 const pdfUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 25 * 1024 * 1024 } });
 
-app.post("/api/story-from-pdf", requireRole("admin"), pdfUpload.single("file"), (req, res) => {
-  if (!req.file) {
-    res.status(400).json({ error: "Choose a PDF file first." });
-    return;
-  }
-  const buffer = req.file.buffer;
-  if (buffer.subarray(0, 5).toString("latin1") !== "%PDF-") {
-    res.status(400).json({ error: "This does not look like a PDF file." });
-    return;
-  }
+// Starts the background read; returns the job id. `kind` is "story" or "screenplay".
+function startPdfReadJob(buffer, kind) {
   for (const [id, job] of pdfReadJobs) if (Date.now() - job.startedAt > 60 * 60 * 1000) pdfReadJobs.delete(id);
   const id = crypto.randomUUID();
-  const job = { id, status: "reading", progress: "Starting", startedAt: Date.now(), };
+  const job = { id, status: "reading", progress: "Starting", startedAt: Date.now() };
   pdfReadJobs.set(id, job);
-  readStoryFromPdf(buffer, { ask: brainAsker(newUsage(), (label) => { job.progress = label; }), onProgress: (label) => { job.progress = label; } })
+  readStoryFromPdf(buffer, { kind, ask: brainAsker(newUsage(), (label) => { job.progress = label; }), onProgress: (label) => { job.progress = label; } })
     .then((result) => Object.assign(job, { status: "done", progress: "Done", result }))
     .catch((error) => {
       console.error("PDF reading failed:", error.message);
       Object.assign(job, { status: "failed", error: error.status ? error.message : `Adu could not read this PDF (${String(error.message).slice(0, 160)}). Please try again.` });
     });
-  res.json({ jobId: id });
+  return id;
+}
+
+app.post("/api/story-from-pdf", requireRole("admin"), pdfUpload.single("file"), (req, res) => {
+  if (!req.file) {
+    res.status(400).json({ error: "Choose a PDF file first." });
+    return;
+  }
+  if (req.file.buffer.subarray(0, 5).toString("latin1") !== "%PDF-") {
+    res.status(400).json({ error: "This does not look like a PDF file." });
+    return;
+  }
+  res.json({ jobId: startPdfReadJob(req.file.buffer, "story") });
+});
+
+// AI MOVIES: import a finished screenplay file. A PDF is read page by page by Adu (starts a job, same
+// polling as above); Word/text/Final Draft files are read right away. The app then runs the existing
+// analyze + proceed steps so the project starts at its Screenplay stage.
+app.post("/api/ai-movie/import-screenplay-file", requireRole("admin"), pdfUpload.single("file"), async (req, res) => {
+  if (!req.file) {
+    res.status(400).json({ error: "Choose a PDF or Word file first." });
+    return;
+  }
+  const ext = path.extname(req.file.originalname).toLowerCase();
+  try {
+    if (ext === ".pdf") {
+      if (req.file.buffer.subarray(0, 5).toString("latin1") !== "%PDF-") {
+        res.status(400).json({ error: "This does not look like a PDF file." });
+        return;
+      }
+      res.json({ jobId: startPdfReadJob(req.file.buffer, "screenplay") });
+      return;
+    }
+    const text = (await extractTextFromUploadedScreenplay(req.file)).trim();
+    if (!text) {
+      res.status(400).json({ error: "I couldn't find any readable text in that file." });
+      return;
+    }
+    res.json({ text, title: path.basename(req.file.originalname, ext) });
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
 });
 
 app.get("/api/story-from-pdf/:jobId", requireRole("admin"), (req, res) => {

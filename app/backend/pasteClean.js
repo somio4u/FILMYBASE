@@ -111,12 +111,14 @@ function rejoinLines(text) {
 }
 
 // Cleans a pasted story. `patterns` can be passed to reuse what was learned from a bigger text (e.g. all episodes together).
-export function cleanPastedStory(input, { patterns = null } = {}) {
+// For a screenplay, `rejoin: false` and `boilerplate: false` keep its lines exactly as they are
+// (character names, dialogue, scene numbers repeat by nature and must not be taken for page headers).
+export function cleanPastedStory(input, { patterns = null, rejoin = true, boilerplate = true } = {}) {
   const original = String(input ?? "");
   let text = normalizeChars(original);
   const report = { headers: [], pageNumbers: 0, joinedLines: 0, repairedLetters: 0, removedCharacters: 0 };
   text = collapseLetterSpaced(text);
-  const learned = patterns ?? learnBoilerplate(text);
+  const learned = patterns ?? (boilerplate ? learnBoilerplate(text) : []);
   for (const p of learned) {
     p.regex.lastIndex = 0;
     const hits = text.match(p.regex)?.length ?? 0;
@@ -127,7 +129,7 @@ export function cleanPastedStory(input, { patterns = null } = {}) {
   text = kept.join("\n");
   const repaired = repairVisualOrder(text);
   text = repaired.text; report.repairedLetters = repaired.fixed;
-  const joined = rejoinLines(text);
+  const joined = rejoin ? rejoinLines(text) : { text, joined: 0 };
   text = joined.text; report.joinedLines = joined.joined;
   report.removedCharacters = Math.max(0, original.length - text.length);
   report.changed = report.headers.length > 0 || report.pageNumbers > 0 || report.repairedLetters > 0 || report.joinedLines > 0;

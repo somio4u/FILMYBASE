@@ -1698,3 +1698,8 @@ Plain version: every project is now a set of **drafts**. Opening a project shows
 - Synopsis: a pitch deck with one synopsis per episode. Bit Sheet: + characters and three-act structure made to match + the user's bits per episode. Scene One-Liners: + characters, structure and bit sheet made to match + the user's scenes per episode. Saved in the same series shape the rest of the app uses, with the same statuses the Film start-from paths use.
 - Film keeps working exactly as before.
 - Plain messages when there are no episode headings or the AI returns the wrong number of episodes. Not run against the real AI yet.
+
+## Episode synopses PDF: Odia and Hindi now readable
+- The PDF used only the built-in Times fonts, which have no Odia or Hindi letters, so Odia episodes came out as random symbols. Now every word is drawn in a font that has its letters (Noto Sans Oriya, Noto Sans Devanagari, Times for English), so Odia, Hindi and English can share a line. Words are laid out one by one, so nothing overlaps.
+- The download has language links: Odia, Hindi, English (the story's own text is used wherever a language is missing).
+- Note: a PDF already downloaded with the old fonts cannot be repaired (the letters were lost). Download it again after the fix.

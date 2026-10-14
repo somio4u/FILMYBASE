@@ -45,6 +45,7 @@ import { backfillDrafts, registerDraftRoutes } from "./drafts.js";
 import { getAduWork, busyMessage } from "./aduWork.js";
 import { orderByLastWorked } from "./projectActivity.js";
 import { buildSeriesSkip, saveSeriesSkip, seriesFormatFrom } from "./skipSeries.js";
+import { registerScriptFonts, writeScripted } from "./scriptPdf.js";
 import { designBibleFromSynopsis, applyDecisions as applySynopsisDecisions, finalizeSynopsisBible, decorateSynopsisBible, lockedSynopsisIdea } from "./synopsisBrain.js";
 import { failInterruptedRequests, registerDraftAgentRoutes, setPollMs, startPlainDraft } from "./draftAgent.js";
 import { buildReferenceBlock, findRelated as findRelatedSources, ideaWithReferences, registerWorkspaceRoutes } from "./workspaceContext.js";
@@ -19074,42 +19075,41 @@ app.get("/api/scene-lists/:id/screenplay-pdf", requireLogin, async (req, res) =>
 app.get("/api/auto-pipeline/:id/synopses-pdf", requireLogin, async (req, res) => {
   const run = (await db.query("SELECT id, concept_text, story_bible, concept_id, status FROM auto_pipeline_runs WHERE id = $1", [req.params.id])).rows[0];
   if (!run) { res.status(404).json({ error: "Run not found." }); return; }
-  const lang = req.query.lang === "hi" ? "hi" : "en";
+  // which language's version to prefer: Odia, Hindi or English. Whatever the story is written in is drawn in a font that has its letters.
+  const lang = ["or", "hi", "en"].includes(req.query.lang) ? req.query.lang : "en";
   const deck = run.concept_id ? (await db.query("SELECT content FROM pitch_decks WHERE concept_id = $1 ORDER BY id DESC LIMIT 1", [run.concept_id])).rows[0]?.content ?? null : null;
-  const pick = (v) => (v && typeof v === "object" ? (v[lang] ?? v.en ?? Object.values(v)[0] ?? "") : String(v ?? ""));
+  const pick = (v) => {
+    if (v && typeof v === "object") return String(v[lang] || v.en || v.or || v.hi || Object.values(v).find(Boolean) || "");
+    return String(v ?? "");
+  };
   const bible = run.story_bible ?? null;
   const units = Array.isArray(bible?.blueprint) ? bible.blueprint : [];
   const deckEpisodes = Array.isArray(deck?.episodes) ? deck.episodes : [];
   const count = Math.max(units.length, deckEpisodes.length);
   const title = pick(deck?.title) || bible?.promise?.title || "Story";
   try {
-    const doc = new PDFDocument({ size: "A4", margin: 56, bufferPages: true });
-    doc.registerFont("hindiRegular", FONTS.hindiRegular);
-    doc.registerFont("hindiBold", FONTS.hindiBold);
-    const body = lang === "hi" ? "hindiRegular" : "Times-Roman";
-    const bold = lang === "hi" ? "hindiBold" : "Times-Bold";
-    const italic = lang === "hi" ? "hindiRegular" : "Times-Italic";
+    const doc = new PDFDocument({ size: "A4", margin: 56, bufferPages: true, info: { Title: `${title} — Episode synopses` } });
+    registerScriptFonts(doc, FONTS);
     res.setHeader("Content-Type", "application/pdf");
     res.setHeader("Content-Disposition", `attachment; filename="episode-synopses-${run.id}.pdf"`);
     doc.pipe(res);
-    doc.font(bold).fontSize(22).text(`${title} — Episode synopses`, { align: "center" });
-    doc.moveDown(0.3).font(italic).fontSize(11).fillColor("#555").text(pick(deck?.logline) || bible?.promise?.logline || "", { align: "center" }).fillColor("#000");
+    writeScripted(doc, `${title} — Episode synopses`, { size: 22, weight: "bold", align: "center" });
+    doc.moveDown(0.3);
+    writeScripted(doc, pick(deck?.logline) || bible?.promise?.logline || "", { size: 11, weight: "italic", color: "#555", align: "center" });
     doc.moveDown(1);
-    if (count === 0) {
-      doc.font(body).fontSize(12).text("Not yet created — the screenplay writer is at an earlier stage (the story is still being designed).");
-    }
+    if (count === 0) writeScripted(doc, "Not yet created — the screenplay writer is at an earlier stage (the story is still being designed).", { size: 12 });
     for (let i = 0; i < count; i += 1) {
       const u = units[i] ?? null;
       const e = deckEpisodes[i] ?? null;
-      doc.font(bold).fontSize(14).fillColor("#7a1010").text(`Episode ${i + 1}: ${pick(e?.title) || u?.title || ""}`).fillColor("#000");
+      writeScripted(doc, `Episode ${i + 1}: ${pick(e?.title) || u?.title || ""}`, { size: 14, weight: "bold", color: "#7a1010" });
       doc.moveDown(0.2);
-      if (u?.synopsis) { doc.font(body).fontSize(11.5).text(u.synopsis, { align: "justify" }); doc.moveDown(0.3); }
-      if (e?.synopsis) { doc.font(body).fontSize(11.5).text(pick(e.synopsis), { align: "justify" }); doc.moveDown(0.3); }
-      if (!u?.synopsis && !e?.synopsis) doc.font(italic).fontSize(11).text("Not yet created.");
+      if (u?.synopsis) { writeScripted(doc, u.synopsis, { size: 11.5 }); doc.moveDown(0.3); }
+      if (e?.synopsis) { writeScripted(doc, pick(e.synopsis), { size: 11.5 }); doc.moveDown(0.3); }
+      if (!u?.synopsis && !e?.synopsis) writeScripted(doc, "Not yet created.", { size: 11, weight: "italic" });
       const end = u?.cliffhangerImage || u?.endingHook || pick(e?.hook);
-      if (end) { doc.font(bold).fontSize(11).text("Cliffhanger: ", { continued: true }).font(italic).text(end); }
-      if (u?.burningQuestion) doc.font(bold).fontSize(11).text("Burning question: ", { continued: true }).font(italic).text(u.burningQuestion);
-      if (Array.isArray(u?.audienceTheories) && u.audienceTheories.length) doc.font(bold).fontSize(11).text("Viewers will guess: ", { continued: true }).font(italic).text(u.audienceTheories.join("  |  "));
+      if (end) writeScripted(doc, [{ text: "Cliffhanger: ", weight: "bold" }, { text: end, weight: "italic" }], { size: 11 });
+      if (u?.burningQuestion) writeScripted(doc, [{ text: "Burning question: ", weight: "bold" }, { text: u.burningQuestion, weight: "italic" }], { size: 11 });
+      if (Array.isArray(u?.audienceTheories) && u.audienceTheories.length) writeScripted(doc, [{ text: "Viewers will guess: ", weight: "bold" }, { text: u.audienceTheories.join("  |  "), weight: "italic" }], { size: 11 });
       doc.moveDown(0.9);
     }
     doc.end();

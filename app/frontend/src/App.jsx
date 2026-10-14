@@ -2599,7 +2599,12 @@ function RunTools({ runId, status, draftCtx }) {
   const hasStory = Boolean(status?.storyBible || status?.conceptId)
   return (
     <div className="floating-agent-section run-tools">
-      {hasStory && <a className="cancel-button floating-agent-download" href={`${BACKEND_URL}/api/auto-pipeline/${runId}/synopses-pdf`} target="_blank" rel="noreferrer">Download episode synopses (PDF)</a>}
+      {hasStory && (
+        <>
+          <a className="cancel-button floating-agent-download" href={`${BACKEND_URL}/api/auto-pipeline/${runId}/synopses-pdf`} target="_blank" rel="noreferrer">Download episode synopses (PDF)</a>
+          <p className="dd-fine">Same PDF in a language: <a href={`${BACKEND_URL}/api/auto-pipeline/${runId}/synopses-pdf?lang=or`} target="_blank" rel="noreferrer">ଓଡ଼ିଆ</a> · <a href={`${BACKEND_URL}/api/auto-pipeline/${runId}/synopses-pdf?lang=hi`} target="_blank" rel="noreferrer">हिंदी</a> · <a href={`${BACKEND_URL}/api/auto-pipeline/${runId}/synopses-pdf?lang=en`} target="_blank" rel="noreferrer">English</a></p>
+        </>
+      )}
       {link?.linked ? (
         <p className="dd-fine">Saved as a draft of {link.parentTitle ? `the project of ${link.parentTitle}` : 'this project'}: {link.draft ? <strong>{link.draft.title}</strong> : 'being set up'} — {link.requestStatus === 'awaiting_final_approval' ? 'finished, waiting for your approval' : link.requestStatus === 'failed' ? 'stopped (open it in Drafts and press Retry)' : 'offline while it is written'}.
           {!link.online && link.requestStatus !== 'awaiting_final_approval' && <> <button type="button" className="choose-button" onClick={makeOnline} disabled={busy}>{busy ? 'Working…' : 'Make it my draft now'}</button></>}

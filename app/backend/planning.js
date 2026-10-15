@@ -15,6 +15,7 @@ import { editPrompt, ensurePrompt, hashInputs, promptHistory, promptView } from 
 import { getSettings, spendSummary } from "./pipelineSettings.js";
 import { syncTimelineFromBlueprint } from "./timeline.js";
 import { publish } from "./events.js";
+import { buildPromptsPdf } from "./promptsPdf.js";
 
 // What every prompt SHOULD say right now, from the project's current facts.
 export async function computeSpecs(db, projectId) {
@@ -253,6 +254,25 @@ export function registerPlanningRoutes(app, db, requireRole) {
       blueprint: blueprint && { version: blueprint.version, status: blueprint.status, screenplayVersion: blueprint.screenplay_version, approvedAt: blueprint.approved_at },
       screenplayVersion: version?.version ?? null, staleness: await blueprintStaleness(db, projectId), validation,
     });
+  }));
+
+  // The PDF of every image command (characters, environments, properties, shots). Prompts that are not planned yet are
+  // planned first (free: no model is called).
+  app.get("/api/production/:projectId/image-prompts.pdf", admin, wrap(async (req, res) => {
+    const projectId = await project(req);
+    let status = await promptStatus(db, projectId);
+    if (status.missing.length > 0 || status.stale.length > 0) {
+      await planPrompts(db, projectId, { actorUserId: req.user?.id });
+      status = await promptStatus(db, projectId);
+    }
+    const promptFor = (purpose, col, id) => status.current.find((p) => p.purpose === purpose && p[col] === id)?.text ?? "";
+    const assets = status.assets.map((a) => ({ kind: a.kind, name: a.name, code: a.code, prompt: promptFor("model_sheet", "asset_id", a.id) }));
+    const shots = status.shots.map((s) => ({ sceneCode: s.sceneCode, sceneHeading: s.heading, shotCode: s.code, description: s.description, prompt: promptFor("first_frame", "shot_id", s.id) }));
+    const title = (await db.query("SELECT title FROM ai_movie_projects WHERE id = $1", [projectId])).rows[0]?.title || "AI Movie";
+    const buffer = await buildPromptsPdf({ title, assets, shots });
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", `attachment; filename="${title.replace(/[^a-z0-9]+/gi, "-")}-image-commands.pdf"`);
+    res.send(buffer);
   }));
 
   app.post("/api/production/:projectId/blueprint/prompts/plan", admin, wrap(async (req, res) => {

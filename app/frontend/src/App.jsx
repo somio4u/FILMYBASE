@@ -7138,9 +7138,9 @@ function App() {
   const [aiMovieProjectId, setAiMovieProjectId] = useState(null)
   const [aiMovieProjectTitle, setAiMovieProjectTitle] = useState(null)
   const [aiMovieView, setAiMovieView] = useState('editor') // 'editor' | 'allProjects' | 'reference' | a production workspace | a studio view (older names like 'dossier' or 'images' still work)
-  // The Production Blueprint is planned and approved by Adu himself now, so it has no screen: old links open the Image Studio.
+  // The Production Blueprint is planned and approved by Adu himself now, so it has no screen: old links open the Storyboard Designer (where its shot division now lives).
   const rawProductionView = PRODUCTION_WORKSPACES[aiMovieView] ? aiMovieView : LEGACY_VIEW[aiMovieView] ?? null
-  const productionView = rawProductionView === 'blueprint' ? 'imageStudio' : rawProductionView
+  const productionView = rawProductionView === 'blueprint' ? 'storyboardDesigner' : rawProductionView
   const [isSeedingDossierTestProject, setIsSeedingDossierTestProject] = useState(false)
   const [aiMovieProjectList, setAiMovieProjectList] = useState([])
   const [isLoadingAiMovieProjects, setIsLoadingAiMovieProjects] = useState(false)

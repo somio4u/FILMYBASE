@@ -230,6 +230,9 @@ export default function ImageStudio({ projectId, backendUrl }) {
   ], [])
   return (
     <div className="is">
+      <p className="pipe-toolbar">
+        <a className="dossier-small-button studio-link" href={`${api}/${projectId}/image-prompts.pdf`} target="_blank" rel="noreferrer">📄 Download all image commands (PDF) — characters, environments, properties, shots</a>
+      </p>
       <nav className="dossier-tabs is-tabs" aria-label="Image Studio areas">
         {tabs.map((t) => <button key={t.key} type="button" className={tab === t.key ? 'dossier-tab active' : 'dossier-tab'} aria-current={tab === t.key ? 'page' : undefined} onClick={() => setTab(t.key)}>{t.label}</button>)}
       </nav>

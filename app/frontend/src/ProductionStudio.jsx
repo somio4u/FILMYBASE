@@ -14,6 +14,7 @@ import { useLive } from './useLive.js'
 import './Production.css'
 
 export const PRODUCTION_WORKSPACES = {
+  storyboardDesigner: { title: 'Storyboard Designer', intro: 'Takes only the locked screenplay and turns it into the storyboard: every scene is divided into shots. Nothing else happens here — the pictures come next, in the Image Studio.' },
   blueprint: { title: 'Production Blueprint', intro: 'Plan everything before anything is generated: assets, shots with lengths, and every prompt. Approving it creates the Timeline.' },
   imageStudio: { title: 'Image Studio', intro: 'Characters, Environments, Properties and Shot Frames: generate, compare and approve the pictures the film is made from.' },
   videoStudio: { title: 'Video Studio', intro: 'Make video from each approved first frame, compare the takes and approve one.' },
@@ -22,7 +23,7 @@ export const PRODUCTION_WORKSPACES = {
   export: { title: 'Export & Delivery', intro: 'Render the rough cut and the edit package from the timeline.' },
 }
 // The older screen names keep working (saved state, links): they open the new workspace that contains them.
-export const LEGACY_VIEW = { shots: 'blueprint', storyboard: 'blueprint', images: 'imageStudio', video: 'videoStudio', audio: 'audioStudio', dossier: 'blueprint' }
+export const LEGACY_VIEW = { shots: 'storyboardDesigner', storyboard: 'storyboardDesigner', images: 'imageStudio', video: 'videoStudio', audio: 'audioStudio', dossier: 'storyboardDesigner' }
 
 const usd = (n) => `$${Number(n ?? 0).toFixed(2)}`
 
@@ -80,6 +81,7 @@ export default function ProductionStudio({ workspace, projectId, backendUrl, onN
     <div className="dossier ps" key={`${workspace}-${projectId}`}>
       <header className="dossier-header"><div><h2>{info.title}</h2><p className="dossier-fine-print">{info.intro}</p></div></header>
       <ProjectHeader projectId={projectId} backendUrl={backendUrl} />
+      {workspace === 'storyboardDesigner' && <PipelineStage stage="shots" projectId={projectId} backendUrl={backendUrl} />}
       {workspace === 'blueprint' && <Blueprint projectId={projectId} backendUrl={backendUrl} onNavigate={onNavigate} />}
       {workspace === 'timeline' && <TimelineView projectId={projectId} backendUrl={backendUrl} onNavigate={onNavigate} />}
       {workspace === 'imageStudio' && <ImageStudio projectId={projectId} backendUrl={backendUrl} />}

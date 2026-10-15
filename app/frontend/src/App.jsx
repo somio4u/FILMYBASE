@@ -5654,7 +5654,7 @@ function MicInput({ value, onChange, className, wrapClassName, ...rest }) {
 
 // AUTO PRODUCTION status: once the screenplay is locked, Adu plans production by himself (cinematic
 // directions, shots, prompts, Blueprint). This strip says where he is, and offers "Run again" if he stopped.
-function AutoProductionStatus({ backendUrl, projectId }) {
+function AutoProductionStatus({ backendUrl, projectId, onOpenStoryboard }) {
   const [job, setJob] = useState(null)
   const [again, setAgain] = useState(false)
 
@@ -5668,6 +5668,7 @@ function AutoProductionStatus({ backendUrl, projectId }) {
         const data = await res.json().catch(() => ({}))
         if (alive && res.ok) setJob(data.job)
         if (alive && (!data.job || data.job.status === 'running')) timer = setTimeout(poll, 5000)
+        else if (alive && data.job.status === 'waiting_for_you') timer = setTimeout(poll, 8000)
       } catch {
         if (alive) timer = setTimeout(poll, 10000)
       }
@@ -5691,6 +5692,12 @@ function AutoProductionStatus({ backendUrl, projectId }) {
         </p>
       )}
       {job.status === 'done' && <p>✅ {job.message || 'The production plan is ready.'}</p>}
+      {job.status === 'waiting_for_you' && (
+        <>
+          <p><strong>👉 Your turn:</strong> {job.message}</p>
+          {onOpenStoryboard && <button type="button" className="choose-button" onClick={onOpenStoryboard}>Open the Storyboard Designer</button>}
+        </>
+      )}
       {(job.status === 'needs_attention' || job.status === 'failed') && (
         <>
           <p className="feedback-note">⚠️ {job.message}</p>
@@ -12270,7 +12277,7 @@ function App() {
 
           {aiMovieView === 'editor' && (
           <div className="concept-page empty-state ai-movie-editor">
-            {aiMovieProjectId && <AutoProductionStatus backendUrl={BACKEND_URL} projectId={aiMovieProjectId} />}
+            {aiMovieProjectId && <AutoProductionStatus backendUrl={BACKEND_URL} projectId={aiMovieProjectId} onOpenStoryboard={() => setAiMovieView('storyboardDesigner')} />}
             {!aiMovieBackfillResult?.story && (
             <div className="format-picker">
               <p className="sidebar-section-note">{t.aiMovieAnalyzeIntro}</p>
@@ -13230,7 +13237,7 @@ function App() {
 
           {productionView && (
             <div className="concept-page concept-page-wide">
-              <AutoProductionStatus backendUrl={BACKEND_URL} projectId={aiMovieProjectId} />
+              <AutoProductionStatus backendUrl={BACKEND_URL} projectId={aiMovieProjectId} onOpenStoryboard={() => setAiMovieView('storyboardDesigner')} />
               <ProductionStudio workspace={productionView} projectId={aiMovieProjectId} backendUrl={BACKEND_URL} onNavigate={(view) => { setAiMovieView(view); window.scrollTo({ top: 0 }) }} />
             </div>
           )}

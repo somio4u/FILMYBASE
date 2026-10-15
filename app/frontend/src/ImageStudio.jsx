@@ -139,13 +139,14 @@ function Library({ type, api, projectId, backendUrl }) {
 
 function ShotFrames({ api, projectId, backendUrl }) {
   const [scenes, setScenes] = useState(null)
+  const [waiting, setWaiting] = useState(null)
   const [sceneId, setSceneId] = useState(null)
   const [data, setData] = useState(null)
   const [busy, setBusy] = useState(false)
   const [message, setMessage] = useState(null)
   const loadScenes = useCallback(async () => {
     const r = await call(`${api}/${projectId}/studio/frames/scenes`)
-    if (r.ok) setScenes(r.data.scenes)
+    if (r.ok) { setScenes(r.data.scenes); setWaiting(r.data.waiting ?? null) }
   }, [api, projectId])
   const loadSlots = useCallback(async () => {
     if (!sceneId) return
@@ -172,7 +173,16 @@ function ShotFrames({ api, projectId, backendUrl }) {
     if (!r.ok) setMessage({ tone: 'bad', text: r.data.error }); else refresh()
   }
   if (!scenes) return <p className="dossier-note">Loading…</p>
-  if (scenes.length === 0) return <p className="dossier-note">No shots are planned yet. Plan and approve the Blueprint first.</p>
+  if (scenes.length === 0) {
+    return (
+      <p className="dossier-note">
+        {waiting?.shots > 0
+          ? `The shot division is not approved yet (${waiting.shots} shot${waiting.shots === 1 ? '' : 's'} in ${waiting.scenes} scene${waiting.scenes === 1 ? '' : 's'} waiting). Open the Storyboard Designer, check the shots and approve each scene — its shots appear here as soon as you approve it.`
+          : 'No shots yet. The Storyboard Designer makes them from the locked screenplay; approve them there and they appear here.'}
+      </p>
+    )
+  }
+  if (waiting?.shots > 0) { /* some scenes are approved and shown below; the rest are still waiting in the Storyboard Designer */ }
   const readyIds = (data?.slots ?? []).filter((s) => s.readiness.ok && s.state !== 'approved' && !s.running && !s.latestReady).map((s) => s.dbId)
   return (
     <div className="is-frames">

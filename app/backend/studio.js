@@ -68,10 +68,15 @@ export async function assetLibrary(db, projectId, type) {
   return { type, assets: out, counts: { inProject: out.length, approved, missing, running: out.filter((a) => a.running).length, estimateMissingUsd: Math.round(missing * estimateCost("character") * 100) / 100 } };
 }
 
+// The Image Studio only shows shots whose shot division the director approved in the Storyboard Designer.
+// Until then a scene does not appear here at all; `waiting` says how many are still to be approved there.
+const approvedShot = (s) => s.shot_status === "approved";
+
 export async function frameScenes(db, projectId) {
   const manifest = await buildShotManifest(db, projectId);
   const byScene = new Map();
-  for (const s of manifest.shots) {
+  const waiting = { shots: manifest.shots.filter((s) => !approvedShot(s)).length, scenes: new Set(manifest.shots.filter((s) => !approvedShot(s)).map((s) => s.scene_id)).size };
+  for (const s of manifest.shots.filter(approvedShot)) {
     const scene = byScene.get(s.scene_id) ?? { code: s.scene_id, dbId: s.scene_db_id, number: s.scene_number, shots: 0, approved: 0, ready: 0, blocked: 0, generating: 0, review: 0 };
     scene.shots++;
     if (s.image.state === "approved") scene.approved++;
@@ -82,7 +87,7 @@ export async function frameScenes(db, projectId) {
     byScene.set(s.scene_id, scene);
   }
   const headings = new Map((await db.query("SELECT code, heading FROM production_scenes WHERE project_id = $1 AND in_latest", [projectId])).rows.map((r) => [r.code, r.heading]));
-  return { scenes: [...byScene.values()].map((s) => ({ ...s, heading: headings.get(s.code) ?? "" })) };
+  return { scenes: [...byScene.values()].map((s) => ({ ...s, heading: headings.get(s.code) ?? "" })), waiting };
 }
 
 export async function frameSlots(db, projectId, sceneDbId) {
@@ -90,7 +95,7 @@ export async function frameSlots(db, projectId, sceneDbId) {
   const status = await promptStatus(db, projectId);
   const hashFor = new Map(status.specs.map((s) => [keyOf(s.purpose, s.assetId, s.shotId, s.elementId), s.sourceHash]));
   const current = new Map(status.current.map((p) => [keyOf(p.purpose, p.asset_id, p.shot_id, p.element_id), p]));
-  const shots = manifest.shots.filter((s) => s.scene_db_id === sceneDbId);
+  const shots = manifest.shots.filter((s) => s.scene_db_id === sceneDbId && approvedShot(s));
   if (shots.length === 0) return { slots: [], counts: { shots: 0, approved: 0, readyToMake: 0, blocked: 0, estimateUsd: 0 } };
   const gens = await loadGenerations(db, projectId, ["keyframe"], "AND g.shot_id = ANY($3)", [shots.map((s) => s.db_id)]);
   const assetByCode = new Map(manifest.assets.map((a) => [a.asset_id, a]));

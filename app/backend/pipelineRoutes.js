@@ -6,7 +6,7 @@ import { getSettings, saveSettings, spendSummary, VOICES } from "./pipelineSetti
 import { createGenerationService, KINDS } from "./generations.js";
 import { createAssembler } from "./assemble.js";
 
-export function registerPipelineRoutes(app, db, requireRole, { store, providers, cinematic = null }) {
+export function registerPipelineRoutes(app, db, requireRole, { store, providers, cinematic = null, onShotsApproved = null }) {
   const gens = createGenerationService({ db, store, providers });
   const assembler = createAssembler({ db, store, listShots, listGenerations: (projectId, filter) => gens.list(projectId, filter) });
   const id = (value) => (/^\d+$/.test(String(value)) && Number(value) > 0 ? Number(value) : null);
@@ -91,6 +91,11 @@ export function registerPipelineRoutes(app, db, requireRole, { store, providers,
     const projectId = need(id(req.params.projectId), "project");
     const sceneId = need(id(req.params.sceneId), "scene");
     const result = await approveShots(db, projectId, sceneId, { approved: req.body?.approved !== false });
+    // When the director has approved the LAST scene's shots, Adu carries on with the rest of the production plan.
+    if (req.body?.approved !== false && onShotsApproved) {
+      const all = await listShots(db, projectId);
+      if (all.length > 0 && all.every((shot) => shot.shotStatus === "approved")) Promise.resolve(onShotsApproved(projectId, req)).catch((error) => console.error("Auto production could not continue after the shots were approved:", error.message));
+    }
     res.json({ ...result, shots: await listShots(db, projectId, { sceneId }) });
   }));
 

@@ -3,11 +3,13 @@
 //   1. read the locked screenplay into production,
 //   2. the Cinematic Director writes directions for every scene (after approval it only gives directions; it
 //      never rewrites the screenplay) and they are approved and sent to the shot cutter,
-//   3. every scene is cut into shots and the shots approved,
+//   3. every scene is cut into shots (the director approves them in the Storyboard Designer),
 //   4. the prompts are planned,
 //   5. the Production Blueprint is checked and approved, which creates the Timeline.
 // The money limit still applies (any paid step stops cleanly when it is reached). If the Blueprint check finds
 // a problem it cannot fix itself, the job stops and says exactly what.
+// The SHOT DIVISION is the one thing Adu never approves himself: after cutting, he waits ("waiting_for_you") until the
+// director has approved every scene in the Storyboard Designer; approving the last scene starts him again.
 // The steps talk to the app only through `api(method, path, body)` and `listScenes`, so the whole sequence can be
 // tested with a scripted `api`.
 
@@ -17,7 +19,7 @@ export const AUTO_STEPS = [
   "Reading the locked screenplay",
   "Cinematic Director: directions for every scene",
   "Approving the directions",
-  "Cutting scenes into shots",
+  "Cutting scenes into shots (then waiting for your approval)",
   "Planning the prompts",
   "Checking and approving the Production Blueprint",
 ];
@@ -73,7 +75,11 @@ export async function runAutoProduction({ projectId, api, listScenes, setJob, sl
     const divided = await api("POST", `${production}/scenes/${scenes[i]}/divide`, { mode: "auto" });
     if (moneyStop(divided)) return stop("needs_attention", `The money limit was reached while cutting shots (scene ${i + 1} of ${scenes.length}). Raise the limit and press “Run again”.`);
     if (!divided.ok && divided.data?.code !== "exists") return stop("failed", `Adu could not cut scene ${i + 1} into shots: ${divided.data?.error ?? divided.status}`);
-    await api("POST", `${production}/scenes/${scenes[i]}/shots/approve`, {});
+  }
+  const shotList = await api("GET", `${production}/shots`);
+  const pending = (shotList.data?.shots ?? []).filter((s) => s.shotStatus !== "approved");
+  if (!shotList.ok || pending.length > 0) {
+    return stop("waiting_for_you", `Adu has cut every scene into shots. Please check them in the Storyboard Designer and approve each scene${pending.length ? ` (${pending.length} shot${pending.length === 1 ? "" : "s"} still waiting)` : ""}. When the last scene is approved, Adu finishes the rest by himself.`);
   }
 
   // 5. prompts

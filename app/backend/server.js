@@ -19875,6 +19875,12 @@ registerScreenplayRoutes(app, db, requireRole);
 // Pipeline steps 2-8: shots, storyboard, AI pictures/voices/video, export.
 registerPipelineRoutes(app, db, requireRole, {
   cinematic: { shotCutterFor: (projectId, sceneId) => shotCutterHook(projectId, sceneId) },
+  // Adu waits for the shot division to be approved; approving the last scene lets him finish. Only projects where he is
+  // actually waiting are touched — approving shots in an older project never starts paid work by surprise.
+  onShotsApproved: async (projectId, req) => {
+    const row = (await db.query("SELECT auto_production_job FROM ai_movie_projects WHERE id = $1", [projectId])).rows[0];
+    if (row?.auto_production_job?.status === "waiting_for_you") await startAutoProduction(projectId, req.headers.cookie);
+  },
   store: productionMedia.store,
   providers: createProviders({
     env: process.env,

@@ -247,10 +247,10 @@ function ShotEditor({ shot, api, projectId, onChanged, setMessage, view = 'divis
               : { storyboardText: shot.storyboardText })}>Edit</button>
             {view === 'division' && (
               <>
-                <button type="button" className="dossier-small-button" disabled={locked} onClick={() => act(call(`${api}/${projectId}/scenes/${shot.sceneId}/shots`, 'POST', { afterShotId: shot.id, description: 'New shot' }))}>Add a shot after</button>
-                <button type="button" className="dossier-small-button" onClick={() => act(call(`${api}/${projectId}/shots/${shot.id}/split`, 'POST', {}))}>Split</button>
-                <button type="button" className="dossier-small-button" onClick={() => act(call(`${api}/${projectId}/shots/${shot.id}/merge-next`, 'POST', {}))}>Merge with next</button>
-                <button type="button" className="dossier-small-button" onClick={() => { if (window.confirm(`Remove shot ${shot.number}?`)) act(call(`${api}/${projectId}/shots/${shot.id}`, 'DELETE')) }}>Remove</button>
+                <button type="button" className="dossier-small-button" disabled={locked} onClick={() => act(call(`${api}/${projectId}/scenes/${shot.sceneId}/shots`, 'POST', { afterShotId: shot.id, description: 'New shot' }))}>➕ Add shot after this one</button>
+                <button type="button" className="dossier-small-button" onClick={() => act(call(`${api}/${projectId}/shots/${shot.id}/split`, 'POST', {}))}>✂ Split shot</button>
+                <button type="button" className="dossier-small-button" onClick={() => act(call(`${api}/${projectId}/shots/${shot.id}/merge-next`, 'POST', {}))}>🔗 Combine with next shot</button>
+                <button type="button" className="dossier-small-button" onClick={() => { if (window.confirm(`Remove shot ${shot.number}?`)) act(call(`${api}/${projectId}/shots/${shot.id}`, 'DELETE')) }}>🗑 Remove shot</button>
               </>
             )}
           </div>
@@ -377,7 +377,7 @@ export function ShotDivisionPanel({ projectId, api, sceneId, onSceneChange, onCh
             <div className="pipe-card-buttons">
               <button type="button" className="dossier-small-button" disabled={busy} onClick={() => autoDivide([openScene.id])}>{sceneShots.length ? 'Cut this scene again' : 'Cut this scene'}</button>
               <button type="button" className="dossier-small-button" disabled={busy || sceneShots.length === 0} onClick={() => approveMany([openScene.id], statusOf(openScene.id) !== 'approved')}>{statusOf(openScene.id) === 'approved' ? 'Un-approve' : 'Approve this scene'}</button>
-              <button type="button" className="dossier-small-button" disabled={busy} onClick={async () => { const r = await call(`${api}/${projectId}/scenes/${openScene.id}/shots`, 'POST', { description: 'New shot' }); if (!r.ok) setMessage({ tone: 'bad', text: r.data.error }); changed() }}>Add a shot at the end</button>
+              <button type="button" className="dossier-small-button" disabled={busy} onClick={async () => { const r = await call(`${api}/${projectId}/scenes/${openScene.id}/shots`, 'POST', { description: 'New shot' }); if (!r.ok) setMessage({ tone: 'bad', text: r.data.error }); changed() }}>➕ Add shot at the end of the scene</button>
             </div>
           </div>
           <p className="dossier-fine-print">Edit, add, split, merge or remove shots until the scene is cut the way you want, then approve it. Any change after approving asks for approval again. Pictures can only be made for approved scenes.</p>

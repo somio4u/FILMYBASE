@@ -1814,3 +1814,8 @@ Plain version: every project is now a set of **drafts**. Opening a project shows
 - [x] **Big bug fixed on the way:** character and prop descriptions stored as { en, hi } were silently dropped from commands (e.g. Rohan's "lean man of 24 in a green t-shirt"). They now appear.
 - Pictures already made are unchanged ("Make another version" to redo with the logo).
 - Honest note: tested with tests, a real server, the PDF and a browser. NOT tested with the real Gemini: brand detection, and whether the image model reproduces the logo faithfully.
+
+## First shot picture must use the made characters, props and environment (not deployed yet)
+- [x] **Problem:** a shot picture was drawn with invented people, a jeep and a place instead of the pictures already made. Causes: a shot was linked only to items the *scene* had linked, so a character or prop named in the shot text but missed by the scene links got no reference; and the command did not forbid inventing.
+- [x] **Fix:** a shot now also links any project item its text (or the AI's list) names; the shot command says "build the frame ONLY from the attached pictures, do not invent other main characters, vehicles, buildings or locations"; a shot with NO linked item is refused (with a clear message) instead of being invented, unless "Go ahead even if a reference picture is missing" is ticked.
+- Shots already divided keep their old links: use the shot's edit option to link the right items, or make the shot division again. Honest note: tested with unit tests only, not a real picture.

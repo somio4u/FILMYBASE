@@ -128,7 +128,7 @@ export function keyframePrompt(shot, styleIn, refNames) {
   const brand = referenceSentence(shotReferences(shot, brandRefs));
   const people = shotRule(shot.assets, castOrigin);
   const camera = [shot.framing, shot.cameraAngle, shot.cameraMove && shot.cameraMove !== "Static" ? `(camera: ${shot.cameraMove})` : null].filter(Boolean).join(", ");
-  const refs = refNames.length ? ` The attached pictures are model sheets (several views of each item). Use them to keep the exact same face, clothes, object design and place layout for: ${refNames.join(", ")}. Draw ONLY the single requested frame, never a sheet, and do not copy the sheet layout.` : "";
+  const refs = refNames.length ? ` The attached pictures are model sheets (several views of each item). Use them to keep the exact same face, clothes, object design and place layout for: ${refNames.join(", ")}. Build the frame ONLY from these attached pictures: the people must be exactly these people, the place exactly this place and the objects exactly these objects. Do not invent other main characters, vehicles, buildings or locations that are not in the attached pictures or the description. Draw ONLY the single requested frame, never a sheet, and do not copy the sheet layout.` : "";
   return `A single film frame (keyframe). Camera: ${camera || "natural framing"}. ${shot.storyboardText || shot.description}${people ? ` ${people}` : ""}${brand}${style ? ` VISUAL STYLE (follow it strictly): ${style}.` : ""}${refs} ${isPhotographic(style) ? "Cinematic, natural film lighting, photographic detail." : "Cinematic composition and lighting, in the visual style above."} ${NO_TEXT}`;
 }
 
@@ -386,6 +386,9 @@ export function createGenerationService({ db, store, providers, env = process.en
     async generateKeyframe(projectId, shot, { actorUserId = null, allowMissing = false } = {}) {
       const settings = await getSettings(db, projectId);
       const ready = await this.checkKeyframeReady(projectId, shot);
+      if (ready.ok && !(shot.assets ?? []).some((a) => ["character", "location", "prop"].includes(a.kind)) && !allowMissing) {
+        throw httpError(`Shot ${shot.code} has no character, environment or prop linked to it, so the picture would be invented. Link them to the shot first (or tick "Go ahead even if a reference picture is missing").`, 409, "not_ready");
+      }
       if (!ready.ok && (!allowMissing || shot.shotStatus !== "approved")) throw httpError(ready.reason, 409, "not_ready");
       // characters first, then the place, then objects; the AI takes at most 4
       const order = { character: 0, location: 1, prop: 2 };

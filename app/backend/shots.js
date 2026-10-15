@@ -248,12 +248,15 @@ async function sceneContext(client, projectId, sceneId) {
   const assets = (await client.query(
     `SELECT a.id, a.kind, a.code, a.name, a.aliases FROM production_scene_assets sa JOIN production_assets a ON a.id = sa.asset_id WHERE sa.scene_id = $1 ORDER BY a.kind, a.code`, [sceneId]
   )).rows.map((a) => ({ ...a, aliases: a.aliases ?? [] }));
-  return { scene, elements, assets };
+  // every other item of the project: a shot may name one the scene links missed (see assetsForShot)
+  const others = (await client.query("SELECT id, kind, code, name, aliases FROM production_assets WHERE project_id = $1 AND grouped_into IS NULL AND id <> ALL($2::int[])", [projectId, assets.map((a) => a.id)])).rows
+    .map((a) => ({ ...a, aliases: a.aliases ?? [] }));
+  return { scene, elements, assets, others };
 }
 
 // Which dossier items are in this shot: named in its description, speaking in
 // it, plus the scene's place. `names` are extra names the AI listed.
-export function assetsForShot(shot, elements, sceneAssets) {
+export function assetsForShot(shot, elements, sceneAssets, others = []) {
   const text = normalizeForMatch(shot.description);
   const speakers = elements.filter((e) => shot.dialogueIds.includes(e.id) && e.speaker).map((e) => normalizeForMatch(e.speaker).replace(/^the /, ""));
   const aiNames = (shot.names ?? []).map((n) => normalizeForMatch(n)).filter(Boolean);
@@ -273,10 +276,16 @@ export function assetsForShot(shot, elements, sceneAssets) {
     const loc = sceneAssets.find((a) => a.kind === "location");
     if (loc) ids.add(loc.id);
   }
+  // an item the scene links missed, but the shot names plainly (its text or the AI's list), is still the project's item: never let the picture invent one
+  for (const a of others) {
+    const phrases = phrasesOf(a);
+    if (a.kind === "location" && locationAdded) continue;
+    if (phrases.some((ph) => contains(text, ph)) || aiNames.some((n) => phrases.includes(n))) ids.add(a.id);
+  }
   return [...ids];
 }
 
-async function insertShots(client, projectId, scene, elements, assets, shots, startOrder = 0) {
+async function insertShots(client, projectId, scene, elements, assets, shots, startOrder = 0, others = []) {
   let counter = await nextShotCode(client, projectId);
   const out = [];
   for (let i = 0; i < shots.length; i++) {
@@ -293,7 +302,7 @@ async function insertShots(client, projectId, scene, elements, assets, shots, st
       await client.query("UPDATE production_shots SET purpose = $2, is_signature = $3, continuous_with_prev = $4 WHERE id = $1", [row.id, s.purpose ?? null, Boolean(s.signature), Boolean(s.continuousWithPrevious)]).catch(() => {});
     }
     for (const id of s.dialogueIds ?? []) await client.query("INSERT INTO production_shot_dialogue (shot_id, element_id) VALUES ($1,$2) ON CONFLICT DO NOTHING", [row.id, id]);
-    for (const assetId of assetsForShot({ ...s, dialogueIds: s.dialogueIds ?? [] }, elements, assets)) {
+    for (const assetId of assetsForShot({ ...s, dialogueIds: s.dialogueIds ?? [] }, elements, assets, others)) {
       await client.query("INSERT INTO production_shot_assets (shot_id, asset_id) VALUES ($1,$2) ON CONFLICT DO NOTHING", [row.id, assetId]);
     }
     out.push(row);
@@ -352,7 +361,7 @@ export async function divideScene(db, projectId, sceneId, { mode = "auto", repla
 
     await client.query("BEGIN");
     if (existing.length > 0) await client.query("DELETE FROM production_shots WHERE scene_id = $1", [sceneId]);
-    const rows = await insertShots(client, projectId, ctx.scene, ctx.elements, ctx.assets, shots);
+    const rows = await insertShots(client, projectId, ctx.scene, ctx.elements, ctx.assets, shots, 0, ctx.others);
     await client.query(
       "INSERT INTO production_audit_events (project_id, actor_user_id, action, entity, entity_id, detail) VALUES ($1,$2,'scene_divided','scene',$3,$4)",
       [projectId, actorUserId, String(sceneId), JSON.stringify({ mode: used, shots: rows.length, replaced: existing.length })]
@@ -490,7 +499,7 @@ export async function addShot(db, projectId, sceneId, { afterShotId = null, desc
       position = after.order_index + 1;
       await client.query("UPDATE production_shots SET order_index = order_index + 1 WHERE scene_id = $1 AND order_index >= $2", [sceneId, position]);
     }
-    const [row] = await insertShots(client, projectId, ctx.scene, ctx.elements, ctx.assets, [{ framing, description: text.slice(0, 1500), durationSec, dialogueIds: [], source: "manual" }], position);
+    const [row] = await insertShots(client, projectId, ctx.scene, ctx.elements, ctx.assets, [{ framing, description: text.slice(0, 1500), durationSec, dialogueIds: [], source: "manual" }], position, ctx.others);
     await renumber(client, sceneId);
     await reopenScene(client, sceneId);
     await client.query("COMMIT");

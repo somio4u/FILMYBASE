@@ -377,7 +377,12 @@ export async function listShots(db, projectId, { sceneId = null } = {}) {
   if (rows.length === 0) return [];
   const ids = rows.map((r) => r.id);
   const assets = (await db.query(
-    `SELECT sa.shot_id, a.id, a.code, a.name, a.kind FROM production_shot_assets sa JOIN production_assets a ON a.id = sa.asset_id WHERE sa.shot_id = ANY($1) ORDER BY a.kind, a.code`, [ids]
+    `SELECT * FROM (
+       SELECT DISTINCT ON (sa.shot_id, COALESCE(g.id, a.id)) sa.shot_id, COALESCE(g.id, a.id) AS id, COALESCE(g.code, a.code) AS code,
+              COALESCE(g.name, a.name) AS name, a.kind AS kind, g.group_members AS members
+       FROM production_shot_assets sa JOIN production_assets a ON a.id = sa.asset_id LEFT JOIN production_assets g ON g.id = a.grouped_into
+       WHERE sa.shot_id = ANY($1) ORDER BY sa.shot_id, COALESCE(g.id, a.id)
+     ) t ORDER BY kind, code`, [ids]
   )).rows;
   const dialogue = (await db.query(
     `SELECT sd.shot_id, e.id, e.code, e.speaker, e.text_en, e.text_hi, e.parenthetical FROM production_shot_dialogue sd JOIN production_scene_elements e ON e.id = sd.element_id
@@ -391,7 +396,7 @@ export async function listShots(db, projectId, { sceneId = null } = {}) {
       id: r.id, code: r.code, sceneId: r.scene_id, sceneCode: r.scene_code, sceneNumber: r.scene_number, number: `${r.scene_number}.${n}`, heading: r.heading,
       framing: r.framing, cameraAngle: r.camera_angle, cameraMove: r.camera_move, description: r.description, durationSec: Number(r.duration_sec),
       source: r.source, sourceLabel: r.source_label, storyboardText: r.storyboard_text, storyboardStatus: r.storyboard_status, shotStatus: r.shot_status, edited: r.edited, revision: r.revision,
-      assets: assets.filter((a) => a.shot_id === r.id).map(({ id, code, name, kind }) => ({ id, code, name, kind })),
+      assets: assets.filter((a) => a.shot_id === r.id).map(({ id, code, name, kind, members }) => ({ id, code, name, kind, ...(members ? { members } : {}) })),
       dialogue: dialogue.filter((d) => d.shot_id === r.id).map((d) => ({ id: d.id, code: d.code, speaker: d.speaker, parenthetical: d.parenthetical, text: d.text_en || d.text_hi })),
     };
   });

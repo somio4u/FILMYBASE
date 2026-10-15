@@ -7,6 +7,11 @@ import { createGenerationService, KINDS } from "./generations.js";
 import { createAssembler } from "./assemble.js";
 import { planPrompts } from "./planning.js";
 import { VISUAL_STYLES } from "./visualStyles.js";
+import { combineProps, previewPropGroups, splitProps, DEFAULT_PROPS_PER_PICTURE } from "./propGroups.js";
+import { priceTable } from "./pipelineSettings.js";
+import { publish } from "./events.js";
+import multer from "multer";
+import { importPictures } from "./pictureImport.js";
 
 export function registerPipelineRoutes(app, db, requireRole, { store, providers, cinematic = null, onShotsApproved = null }) {
   const gens = createGenerationService({ db, store, providers });
@@ -55,6 +60,40 @@ export function registerPipelineRoutes(app, db, requireRole, { store, providers,
       try { await planPrompts(db, projectId, { actorUserId: req.user?.id }); promptsRefreshed = true; } catch (error) { console.error("Prompts could not be refreshed after the style changed:", error.message); }
     }
     res.json({ settings, spend: await spendSummary(db, projectId), promptsRefreshed });
+  }));
+
+  // ---- pictures made OUTSIDE the app (see pictureNames.js / pictureImport.js) ----
+  const pictureUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 40 * 1024 * 1024, files: 300 } });
+  app.post("/api/production/:projectId/import-pictures", admin, pictureUpload.array("files", 300), wrap(async (req, res) => {
+    const projectId = need(id(req.params.projectId), "project");
+    await projectExists(projectId);
+    if (!req.files?.length) throw Object.assign(new Error("Choose the pictures (or a .zip of them) first."), { status: 400 });
+    const files = req.files.map((f) => ({ name: Buffer.from(f.originalname, "latin1").toString("utf8"), bytes: f.buffer }));
+    res.json(await importPictures({ db, gens, projectId, files, actorUserId: req.user?.id, autoApprove: req.body?.autoApprove === "true" }));
+  }));
+
+  // ---- small props share one picture (propGroups.js) ----
+  app.get("/api/production/:projectId/props/combine-preview", admin, wrap(async (req, res) => {
+    const projectId = need(id(req.params.projectId), "project");
+    await projectExists(projectId);
+    res.json(await previewPropGroups(db, projectId, Number(req.query.perImage) || DEFAULT_PROPS_PER_PICTURE, { pricePerPicture: priceTable().image }));
+  }));
+  app.post("/api/production/:projectId/props/combine", admin, wrap(async (req, res) => {
+    const projectId = need(id(req.params.projectId), "project");
+    await projectExists(projectId);
+    const result = await combineProps(db, projectId, { perImage: Number(req.body?.perImage) || DEFAULT_PROPS_PER_PICTURE });
+    // the new sheets need their commands (free, no AI call)
+    try { await planPrompts(db, projectId, { actorUserId: req.user?.id }); } catch (error) { console.error("Prompts could not be planned after combining props:", error.message); }
+    publish(projectId, { type: "assets_changed" });
+    res.json(result);
+  }));
+  app.post("/api/production/:projectId/props/split", admin, wrap(async (req, res) => {
+    const projectId = need(id(req.params.projectId), "project");
+    await projectExists(projectId);
+    const result = await splitProps(db, projectId);
+    try { await planPrompts(db, projectId, { actorUserId: req.user?.id }); } catch (error) { console.error("Prompts could not be planned after splitting props:", error.message); }
+    publish(projectId, { type: "assets_changed" });
+    res.json(result);
   }));
 
   // ---- step 2: shots ----

@@ -4,6 +4,7 @@
 // are one click away here, and every version is kept.
 
 import StylePicker from './StylePicker.jsx'
+import { ImportPictures, PropCombiner } from './ImageTools.jsx'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { PromptCard } from './Blueprint.jsx'
 import { useLive } from './useLive.js'
@@ -236,6 +237,7 @@ function ShotFrames({ api, projectId, backendUrl }) {
 export default function ImageStudio({ projectId, backendUrl }) {
   const api = `${backendUrl}/api/production`
   const [tab, setTab] = useState('character')
+  const [refresh, setRefresh] = useState(0)
   const tabs = useMemo(() => [
     { key: 'character', label: 'Characters' }, { key: 'environment', label: 'Environments' }, { key: 'property', label: 'Properties' }, { key: 'frames', label: 'Shot Frames' },
   ], [])
@@ -245,10 +247,12 @@ export default function ImageStudio({ projectId, backendUrl }) {
       <p className="pipe-toolbar">
         <a className="dossier-small-button studio-link" href={`${api}/${projectId}/image-prompts.pdf`} target="_blank" rel="noreferrer">📄 Download all image commands (PDF) — characters, environments, properties, shots</a>
       </p>
+      <ImportPictures api={api} projectId={projectId} onImported={() => setRefresh((n) => n + 1)} />
       <nav className="dossier-tabs is-tabs" aria-label="Image Studio areas">
         {tabs.map((t) => <button key={t.key} type="button" className={tab === t.key ? 'dossier-tab active' : 'dossier-tab'} aria-current={tab === t.key ? 'page' : undefined} onClick={() => setTab(t.key)}>{t.label}</button>)}
       </nav>
-      {tab === 'frames' ? <ShotFrames api={api} projectId={projectId} backendUrl={backendUrl} /> : <Library key={tab} type={tab} api={api} projectId={projectId} backendUrl={backendUrl} />}
+      {tab === 'property' && <PropCombiner api={api} projectId={projectId} />}
+      {tab === 'frames' ? <ShotFrames key={refresh} api={api} projectId={projectId} backendUrl={backendUrl} /> : <Library key={`${tab}-${refresh}`} type={tab} api={api} projectId={projectId} backendUrl={backendUrl} />}
     </div>
   )
 }

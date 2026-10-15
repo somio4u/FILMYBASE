@@ -160,7 +160,7 @@ export async function buildShotManifest(db, projectId) {
   const blueprint = await latestBlueprint(db, projectId);
   const shots = await listShots(db, projectId);
   const assetRows = (await db.query(
-    "SELECT id, code, name, kind FROM production_assets WHERE project_id = $1 AND in_latest_import ORDER BY kind, code", [projectId]
+    "SELECT id, code, name, kind FROM production_assets WHERE project_id = $1 AND in_latest_import AND grouped_into IS NULL ORDER BY kind, code", [projectId]
   )).rows;
   const gens = (await db.query(
     `SELECT id, kind, asset_id, shot_id, element_id, status, review, version, media_id, duration_ms, params, prompt_id, cost_usd, error

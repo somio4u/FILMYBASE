@@ -16,13 +16,14 @@ import { getSettings, spendSummary } from "./pipelineSettings.js";
 import { syncTimelineFromBlueprint } from "./timeline.js";
 import { publish } from "./events.js";
 import { buildPromptsPdf } from "./promptsPdf.js";
+import { assetFileName, shotFileName } from "./pictureNames.js";
 
 // What every prompt SHOULD say right now, from the project's current facts.
 export async function computeSpecs(db, projectId) {
   const settings = await getSettings(db, projectId);
   const style = settings.stylePrompt;
   const shots = await listShots(db, projectId);
-  const assets = (await db.query("SELECT * FROM production_assets WHERE project_id = $1 AND in_latest_import ORDER BY kind, code", [projectId])).rows;
+  const assets = (await db.query("SELECT * FROM production_assets WHERE project_id = $1 AND in_latest_import AND grouped_into IS NULL ORDER BY kind, code", [projectId])).rows;
   const used = new Set(shots.flatMap((s) => s.assets.map((a) => a.id)));
   const lines = (await db.query(
     `SELECT e.* FROM production_scene_elements e JOIN production_scenes s ON s.id = e.scene_id WHERE e.project_id = $1 AND e.kind = 'dialogue' AND s.in_latest ORDER BY s.order_index, e.order_index`, [projectId]
@@ -266,10 +267,13 @@ export function registerPlanningRoutes(app, db, requireRole) {
       status = await promptStatus(db, projectId);
     }
     const promptFor = (purpose, col, id) => status.current.find((p) => p.purpose === purpose && p[col] === id)?.text ?? "";
-    const assets = status.assets.map((a) => ({ kind: a.kind, name: a.name, code: a.code, prompt: promptFor("model_sheet", "asset_id", a.id) }));
-    const shots = status.shots.map((s) => ({ sceneCode: s.sceneCode, sceneHeading: s.heading, shotCode: s.code, description: s.description, prompt: promptFor("first_frame", "shot_id", s.id) }));
+    const assets = status.assets.map((a) => ({ kind: a.kind, name: a.name, code: a.code, prompt: promptFor("model_sheet", "asset_id", a.id), fileName: assetFileName(a), members: a.group_members ?? null }));
+    // only shots whose shot division the director approved (those are the only ones whose pictures can be imported back)
+    const waitingShots = status.shots.filter((s) => s.shotStatus !== "approved").length;
+    const shots = status.shots.filter((s) => s.shotStatus === "approved").map((s) => ({ sceneCode: s.sceneCode, sceneHeading: s.heading, shotCode: s.code, description: s.description, prompt: promptFor("first_frame", "shot_id", s.id), fileName: shotFileName(s) }));
+    const settings = await getSettings(db, projectId);
     const title = (await db.query("SELECT title FROM ai_movie_projects WHERE id = $1", [projectId])).rows[0]?.title || "AI Movie";
-    const buffer = await buildPromptsPdf({ title, assets, shots });
+    const buffer = await buildPromptsPdf({ title, assets, shots, waitingShots, aspectRatio: settings.aspectRatio, style: settings.stylePrompt });
     res.setHeader("Content-Type", "application/pdf");
     res.setHeader("Content-Disposition", `attachment; filename="${title.replace(/[^a-z0-9]+/gi, "-")}-image-commands.pdf"`);
     res.send(buffer);

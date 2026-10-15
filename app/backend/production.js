@@ -77,6 +77,9 @@ export async function ensureProductionSchema(db) {
       created_at TIMESTAMPTZ NOT NULL DEFAULT now()
     )`,
     `ALTER TABLE production_issues ADD COLUMN IF NOT EXISTS resolution_note TEXT`,
+    // small props that share ONE picture (see propGroups.js)
+    `ALTER TABLE production_assets ADD COLUMN IF NOT EXISTS grouped_into INTEGER`,
+    `ALTER TABLE production_assets ADD COLUMN IF NOT EXISTS group_members JSONB`,
     `CREATE INDEX IF NOT EXISTS production_issues_project_idx ON production_issues (project_id, status)`,
     `CREATE TABLE IF NOT EXISTS production_audit_events (
       id SERIAL PRIMARY KEY,
@@ -411,7 +414,7 @@ export async function ingestAgentOutput(db, projectId, { actorUserId = null } = 
     // Assets we already had that this output no longer lists: keep them (the
     // agent can drop things between runs), but say so.
     for (const a of existingRows) {
-      if (!touchedIds.has(a.id)) {
+      if (!touchedIds.has(a.id) && !a.group_members) { // a combined props sheet is made here, never by the agent: it stays
         await client.query("UPDATE production_assets SET in_latest_import = FALSE WHERE id = $1", [a.id]);
       }
     }

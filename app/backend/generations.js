@@ -12,6 +12,7 @@
 // Drive folder through the media store.
 
 import { isPhotographic } from "./visualStyles.js";
+import { memberLabel } from "./propGroups.js";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -20,6 +21,7 @@ import { assertWithinBudget, getSettings, priceTable, recordSpend, VOICES } from
 import { ensurePrompt, hashInputs } from "./prompts.js";
 import { publish } from "./events.js";
 import { unitShotView } from "./generationUnits.js";
+import { listShots } from "./shots.js";
 
 const httpError = (message, status = 400, code = "bad_request") => Object.assign(new Error(message), { status, code });
 
@@ -100,6 +102,10 @@ export function assetPrompt(asset, style) {
   if (asset.kind === "location") {
     return `Environment model sheet for the place "${asset.name}" for a film. ${details}.${look} ${SHEET_LAYOUT} Include: a wide establishing view of the whole space; views from two or three other camera positions; a close view of the most important detail or furniture; and the same space in its typical lighting (and a second lighting mood if the details mention one). Same architecture, layout, colours and objects in every view. No people. ${NO_TEXT}`;
   }
+  if (asset.group_members?.length) {
+    const rows = asset.group_members.map((m) => `position ${m.position}: ${m.name}${m.description ? ` — ${m.description}` : ""}`).join("; ");
+    return `Props sheet for a film: ${asset.group_members.length} small objects shown TOGETHER in ONE image. ${rows}.${look} ${SHEET_LAYOUT} Arrange the objects in a tidy grid, numbered by position from left to right, top to bottom, exactly in the order listed above (position 1 is the top-left). Show each object once, large and clearly separated from the others, seen from a three-quarter front view at a believable relative size, with a plain light-grey background and no text or numbers drawn in the picture. ${NO_TEXT}`;
+  }
   return `Prop model sheet for the object "${asset.name}" for a film. ${details}.${look} ${SHEET_LAYOUT} Include: a front view, a side view, a back view, a top view, a three-quarter hero view, a close-up of its most important detail or texture, and a small view of it being held or placed in a normal setting to show its size. Same object, material, colour and wear in every view. ${NO_TEXT}`;
 }
 
@@ -124,11 +130,13 @@ export function speechText(element) {
 // The Blueprint planner and the generators both use these, so a prompt planned in advance is exactly what gets sent.
 export const veoSecondsFor = (durationSec) => VEO_SECONDS.find((s) => s >= Math.round(Number(durationSec) || 4)) ?? VEO_SECONDS[VEO_SECONDS.length - 1];
 const ORDER = { character: 0, location: 1, prop: 2 };
-export const plannedRefNames = (shot) => [...shot.assets].filter((a) => a.kind in ORDER).sort((a, b) => ORDER[a.kind] - ORDER[b.kind]).slice(0, 4).map((a) => a.name);
+// How a shot's command names an item: a combined props sheet is named by the positions of the props it holds that this shot uses.
+export const refLabel = (asset, shot) => (asset.members ? memberLabel({ name: asset.name, members: asset.members }, shot.storyboardText || shot.description) : asset.name);
+export const plannedRefNames = (shot) => [...shot.assets].filter((a) => a.kind in ORDER).sort((a, b) => ORDER[a.kind] - ORDER[b.kind]).slice(0, 4).map((a) => refLabel(a, shot));
 
 export function sheetSpec(asset, style) {
   const details = describeDetails(effectiveDetails(asset));
-  return { purpose: "model_sheet", assetId: asset.id, text: assetPrompt(asset, style), params: { aspectRatio: "16:9" }, sourceHash: hashInputs({ k: "sheet", kind: asset.kind, name: asset.name, details, style }) };
+  return { purpose: "model_sheet", assetId: asset.id, text: assetPrompt(asset, style), params: { aspectRatio: "16:9" }, sourceHash: hashInputs({ k: "sheet", kind: asset.kind, name: asset.name, details, style, g: asset.group_members ?? null }) };
 }
 export function frameSpec(shot, style, aspectRatio = "16:9") {
   const names = plannedRefNames(shot);
@@ -195,6 +203,11 @@ export function createGenerationService({ db, store, providers, env = process.en
     const parts = [];
     for await (const chunk of opened.stream) parts.push(chunk);
     return { bytes: Buffer.concat(parts), mime: opened.row.mime };
+  }
+
+  async function listShotsForImport(shotId) {
+    const projectId = (await db.query("SELECT project_id FROM production_shots WHERE id = $1", [shotId])).rows[0]?.project_id;
+    return projectId ? (await listShots(db, projectId)).find((s) => s.id === shotId) ?? null : null;
   }
 
   async function approvedRef(assetId) {
@@ -284,6 +297,50 @@ export function createGenerationService({ db, store, providers, env = process.en
       });
     },
 
+    // ---- pictures made OUTSIDE the app (the "image commands" PDF -> another tool -> back here) ----
+    // The picture becomes a normal result of its target: version N, waiting for review (or approved at once if asked), cost 0.
+    async importPicture(projectId, { assetId = null, shotId = null, bytes, mime, ext, originalName, actorUserId = null, autoApprove = false }) {
+      const settings = await getSettings(db, projectId);
+      let kind, label, subfolder, role, promptText, promptId = null, targetWhere, targetParams;
+      if (assetId) {
+        const asset = (await db.query("SELECT * FROM production_assets WHERE id = $1 AND project_id = $2", [assetId, projectId])).rows[0];
+        if (!asset) throw httpError("Item not found.", 404, "not_found");
+        kind = kindForAsset(asset.kind);
+        const planned = await ensurePrompt(db, projectId, { ...sheetSpec(asset, settings.stylePrompt), actorUserId });
+        promptText = planned.prompt.text; promptId = planned.prompt.id;
+        role = kind; subfolder = `${asset.code} ${asset.name}`;
+        targetWhere = "kind = $1 AND COALESCE(asset_id,0) = $2 AND COALESCE(shot_id,0) = 0 AND COALESCE(element_id,0) = 0";
+        targetParams = [kind, assetId];
+        label = `${asset.code}_v${await nextVersion(targetWhere, targetParams)}_imported`;
+      } else {
+        const shot = (await listShotsForImport(shotId)) ?? null;
+        if (!shot) throw httpError("Shot not found.", 404, "not_found");
+        if (shot.shotStatus !== "approved") throw httpError(`The shot division of scene ${shot.sceneNumber} is not approved yet (shot ${shot.code}).`, 409, "not_approved");
+        kind = "keyframe";
+        const planned = await ensurePrompt(db, projectId, { ...frameSpec(shot, settings.stylePrompt, settings.aspectRatio), actorUserId });
+        promptText = planned.prompt.text; promptId = planned.prompt.id;
+        role = "keyframe"; subfolder = `${shot.sceneCode}`;
+        targetWhere = "kind = 'keyframe' AND COALESCE(asset_id,0) = 0 AND COALESCE(shot_id,0) = $1 AND COALESCE(element_id,0) = 0";
+        targetParams = [shotId];
+        label = `${shot.code}_v${await nextVersion(targetWhere, targetParams)}_imported`;
+      }
+      const version = await nextVersion(targetWhere, targetParams);
+      const tmpFile = path.join(tmpDir, `import-${Date.now()}-${Math.random().toString(36).slice(2)}${ext}`);
+      await fs.promises.writeFile(tmpFile, bytes);
+      try {
+        const media = await store.putMedia({ projectId, role, filePath: tmpFile, originalName: originalName || `${label}${ext}`, label, subfolder, createdBy: actorUserId ?? null, dimensions: {} });
+        const row = (await db.query(
+          `INSERT INTO production_generations (project_id, kind, asset_id, shot_id, version, status, prompt, prompt_id, params, media_id, provider, model, cost_usd, created_by, finished_at)
+           VALUES ($1,$2,$3,$4,$5,'ready',$6,$7,$8,$9,'imported','imported',0,$10, now()) RETURNING *`,
+          [projectId, kind, assetId, shotId, version, promptText, promptId, JSON.stringify({ imported: true, originalName: originalName ?? null, refs: [] }), media.id, actorUserId ?? null]
+        )).rows[0];
+        publish(projectId, { type: "job_finished", status: "ready", kind, assetId, shotId, generationId: row.id });
+        return autoApprove ? service.review(projectId, row.id, { decision: "approve", note: "Imported and approved" }) : (await service.list(projectId, { id: row.id }))[0];
+      } finally {
+        fs.promises.rm(tmpFile, { force: true }).catch(() => {});
+      }
+    },
+
     // ---- step 5: a picture per shot, from the approved references ----
     async checkKeyframeReady(projectId, shot) {
       if (shot.shotStatus !== "approved") return { ok: false, reason: `Approve the shot division for scene ${shot.sceneNumber} first (shot ${shot.code}).`, missing: [] };
@@ -306,7 +363,7 @@ export function createGenerationService({ db, store, providers, env = process.en
       const order = { character: 0, location: 1, prop: 2 };
       const chosen = [...ready.refs].sort((a, b) => order[a.asset.kind] - order[b.asset.kind]).slice(0, 4);
       const planned = await ensurePrompt(db, projectId, { ...frameSpec(shot, settings.stylePrompt, settings.aspectRatio), actorUserId });
-      const chosenNames = chosen.map((c) => c.asset.name);
+      const chosenNames = chosen.map((c) => refLabel(c.asset, shot));
       // The planned prompt names every item of the shot; if some reference is missing (allowed on request) the text names only the attached ones.
       const prompt = planned.prompt.edited || JSON.stringify(chosenNames) === JSON.stringify(plannedRefNames(shot)) ? planned.prompt.text : keyframePrompt(shot, settings.stylePrompt, chosenNames);
       const version = await nextVersion("shot_id = $1 AND kind = 'keyframe'", [shot.id]);
@@ -428,7 +485,7 @@ export function createGenerationService({ db, store, providers, env = process.en
       const assets = (await db.query(
         `SELECT a.kind, count(*)::int AS total,
            count(*) FILTER (WHERE EXISTS (SELECT 1 FROM production_generations g WHERE g.asset_id = a.id AND g.review = 'approved'))::int AS approved
-         FROM production_assets a WHERE a.project_id = $1 AND a.in_latest_import GROUP BY a.kind`, [projectId]
+         FROM production_assets a WHERE a.project_id = $1 AND a.in_latest_import AND a.grouped_into IS NULL GROUP BY a.kind`, [projectId]
       )).rows;
       const per = (kind) => {
         const r = assets.find((x) => x.kind === kind);

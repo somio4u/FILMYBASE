@@ -5652,6 +5652,56 @@ function MicInput({ value, onChange, className, wrapClassName, ...rest }) {
   )
 }
 
+// AUTO PRODUCTION status: once the screenplay is locked, Adu plans production by himself (cinematic
+// directions, shots, prompts, Blueprint). This strip says where he is, and offers "Run again" if he stopped.
+function AutoProductionStatus({ backendUrl, projectId }) {
+  const [job, setJob] = useState(null)
+  const [again, setAgain] = useState(false)
+
+  useEffect(() => {
+    if (!projectId) return undefined
+    let alive = true
+    let timer = null
+    async function poll() {
+      try {
+        const res = await fetch(`${backendUrl}/api/ai-movie/projects/${projectId}/auto-production`)
+        const data = await res.json().catch(() => ({}))
+        if (alive && res.ok) setJob(data.job)
+        if (alive && (!data.job || data.job.status === 'running')) timer = setTimeout(poll, 5000)
+      } catch {
+        if (alive) timer = setTimeout(poll, 10000)
+      }
+    }
+    poll()
+    return () => { alive = false; if (timer) clearTimeout(timer) }
+  }, [backendUrl, projectId, again])
+
+  async function runAgain() {
+    try { await fetch(`${backendUrl}/api/ai-movie/projects/${projectId}/auto-production`, { method: 'POST' }) } catch { /* the strip keeps polling */ }
+    setAgain((v) => !v)
+  }
+
+  if (!job) return null
+  return (
+    <div className={`auto-production-status is-${job.status}`} role="status">
+      {job.status === 'running' && (
+        <p className="floating-agent-stage-line">
+          <span className="floating-agent-spinner" aria-hidden="true" />
+          <span><strong>Adu is preparing production by himself</strong> — step {job.step ?? 1} of {job.steps ?? 6}: {job.label}{job.detail ? ` (${job.detail})` : ''}</span>
+        </p>
+      )}
+      {job.status === 'done' && <p>✅ {job.message || 'The production plan is ready.'}</p>}
+      {(job.status === 'needs_attention' || job.status === 'failed') && (
+        <>
+          <p className="feedback-note">⚠️ {job.message}</p>
+          <button type="button" className="choose-button" onClick={runAgain}>Run again</button>
+        </>
+      )}
+      {job.warnings?.length > 0 && job.status !== 'running' && <p><small>{job.warnings.join(' ')}</small></p>}
+    </div>
+  )
+}
+
 // "Upload PDF instead": Adu reads the PDF's PAGES (not its garbled text layer),
 // skips page numbers/headers, and puts the story text into the box for review.
 // Also warns when the text already pasted looks garbled by a PDF copy.
@@ -7088,7 +7138,9 @@ function App() {
   const [aiMovieProjectId, setAiMovieProjectId] = useState(null)
   const [aiMovieProjectTitle, setAiMovieProjectTitle] = useState(null)
   const [aiMovieView, setAiMovieView] = useState('editor') // 'editor' | 'allProjects' | 'reference' | a production workspace | a studio view (older names like 'dossier' or 'images' still work)
-  const productionView = PRODUCTION_WORKSPACES[aiMovieView] ? aiMovieView : LEGACY_VIEW[aiMovieView] ?? null
+  // The Production Blueprint is planned and approved by Adu himself now, so it has no screen: old links open the Image Studio.
+  const rawProductionView = PRODUCTION_WORKSPACES[aiMovieView] ? aiMovieView : LEGACY_VIEW[aiMovieView] ?? null
+  const productionView = rawProductionView === 'blueprint' ? 'imageStudio' : rawProductionView
   const [isSeedingDossierTestProject, setIsSeedingDossierTestProject] = useState(false)
   const [aiMovieProjectList, setAiMovieProjectList] = useState([])
   const [isLoadingAiMovieProjects, setIsLoadingAiMovieProjects] = useState(false)
@@ -12140,17 +12192,8 @@ function App() {
                   })}
                 </div>
               )}
-              {aiMovieProjectId && ['cinematic', 'language'].map((key) => (
-                <button
-                  key={key}
-                  className={aiMovieView === key ? 'agent-header agent-sub active' : 'agent-header agent-sub'}
-                  onClick={() => { setAiMovieView((prev) => (prev === key ? 'editor' : key)); setIsSidebarOpen(false) }}
-                >
-                  {AI_MOVIE_STUDIO_VIEWS[key].title}
-                </button>
-              ))}
               {/* 2-7. The production workspaces, in the order the film is made. The old Dossier / Shot division / Storyboard / Image generation / Audio / Video / Assemble screens live inside them. */}
-              {aiMovieProjectId && Object.entries(PRODUCTION_WORKSPACES).map(([key, info]) => (
+              {aiMovieProjectId && Object.entries(PRODUCTION_WORKSPACES).filter(([key]) => key !== 'blueprint').map(([key, info]) => (
                 <button
                   key={key}
                   className={productionView === key ? 'agent-header active' : 'agent-header'}
@@ -12227,6 +12270,7 @@ function App() {
 
           {aiMovieView === 'editor' && (
           <div className="concept-page empty-state ai-movie-editor">
+            {aiMovieProjectId && <AutoProductionStatus backendUrl={BACKEND_URL} projectId={aiMovieProjectId} />}
             {!aiMovieBackfillResult?.story && (
             <div className="format-picker">
               <p className="sidebar-section-note">{t.aiMovieAnalyzeIntro}</p>
@@ -13186,6 +13230,7 @@ function App() {
 
           {productionView && (
             <div className="concept-page concept-page-wide">
+              <AutoProductionStatus backendUrl={BACKEND_URL} projectId={aiMovieProjectId} />
               <ProductionStudio workspace={productionView} projectId={aiMovieProjectId} backendUrl={BACKEND_URL} onNavigate={(view) => { setAiMovieView(view); window.scrollTo({ top: 0 }) }} />
             </div>
           )}

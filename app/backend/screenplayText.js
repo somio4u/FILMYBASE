@@ -9,7 +9,8 @@ export function countScenes(sceneList) {
 }
 
 function sceneToText(scene, number, elements) {
-  const lines = [`${number}. ${scene.intExt ?? "INT"}. ${text(scene.location).toUpperCase() || "LOCATION"} - ${scene.timeOfDay ?? "DAY"}`];
+  // "SCENE 3 — INT. PLACE — NIGHT": the form Production reads scene numbers from
+  const lines = [`SCENE ${number} — ${scene.intExt ?? "INT"}. ${text(scene.location).toUpperCase() || "LOCATION"} — ${scene.timeOfDay ?? "DAY"}`];
   for (const element of elements ?? []) {
     const body = text(element.text).trim();
     if (element.type === "dialogue") {

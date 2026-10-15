@@ -8,6 +8,7 @@ import PDFDocument from "pdfkit";
 import ExcelJS from "exceljs";
 import PptxGenJS from "pptxgenjs";
 import { buildCastingPpt } from "./castingPpt.js";
+import { runAutoProduction } from "./autoProduction.js";
 import { buildScreenplayPlainText, countScenes } from "./screenplayText.js";
 import { GROUPS as CASTING_GROUPS, addToCast, buildCast, castFromSheet, findCharacters, gatherScriptEvidence } from "./castingCast.js";
 import { Document, Packer, Paragraph, TextRun, AlignmentType, HeadingLevel } from "docx";
@@ -169,6 +170,7 @@ async function ensureAiMovieSchema() {
       updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
     )`,
     `ALTER TABLE ai_movie_projects ADD COLUMN IF NOT EXISTS stage_status JSONB NOT NULL DEFAULT '{}'`,
+    `ALTER TABLE ai_movie_projects ADD COLUMN IF NOT EXISTS auto_production_job JSONB`,
     // The Story Brain's design (see storyBrain.js) lives on the run itself.
     `ALTER TABLE auto_pipeline_runs ADD COLUMN IF NOT EXISTS story_bible JSONB`,
     `ALTER TABLE auto_pipeline_runs ADD COLUMN IF NOT EXISTS story_bible_usage JSONB`,
@@ -3792,6 +3794,7 @@ app.post("/api/ai-movie/backfill", requireRole("admin"), async (req, res) => {
         [JSON.stringify(backfill), JSON.stringify(assets), JSON.stringify(stageStatus), title, projectId]
       );
       syncProductionQuietly(db, projectId);
+      if (stageStatus.screenplay?.status === "approved") startAutoProduction(projectId, req.headers.cookie).catch((error) => console.error("Auto production could not start:", error.message));
     }
 
     res.json({ backfill, assets, stageStatus });
@@ -6566,6 +6569,60 @@ app.post("/api/ai-movie/stages/screenplay/beats/:beatIndex/scenes/:sceneIndex/di
   }
 });
 
+// AUTO PRODUCTION (autoProduction.js): when an AI Movie's screenplay is locked, the cinematic directions, shot
+// cutting, prompt planning and Blueprint approval run by themselves, in the background, using the same routes the
+// old screens used (called on this server with the user's own session). Progress is saved on the project.
+const autoProductionRunning = new Set();
+
+async function startAutoProduction(projectId, cookie, { force = false } = {}) {
+  const id = Number(projectId);
+  if (!Number.isInteger(id) || autoProductionRunning.has(id)) return false;
+  const row = (await db.query("SELECT auto_production_job FROM ai_movie_projects WHERE id = $1", [id])).rows[0];
+  if (!row) return false;
+  const job = row.auto_production_job;
+  const fresh = job?.updatedAt && Date.now() - Date.parse(job.updatedAt) < 15 * 60 * 1000;
+  if (!force && job && (job.status === "done" || (job.status === "running" && fresh))) return false;
+
+  autoProductionRunning.add(id);
+  const setJob = (patch) => db.query(
+    "UPDATE ai_movie_projects SET auto_production_job = COALESCE(auto_production_job, '{}'::jsonb) || $2::jsonb WHERE id = $1",
+    [id, JSON.stringify({ ...patch, updatedAt: new Date().toISOString() })]
+  );
+  await setJob({ status: "running", startedAt: new Date().toISOString(), message: null, warnings: [], step: 0, label: "Starting" });
+  const api = async (method, path, body) => {
+    try {
+      const response = await fetch(`http://127.0.0.1:${PORT}${path}`, {
+        method,
+        headers: { cookie: cookie ?? "", "Content-Type": "application/json" },
+        body: method === "GET" ? undefined : JSON.stringify(body ?? {}),
+      });
+      return { ok: response.ok, status: response.status, data: await response.json().catch(() => ({})) };
+    } catch (error) {
+      return { ok: false, status: 0, data: { error: error.message } };
+    }
+  };
+  const listScenes = async () => (await db.query("SELECT id FROM production_scenes WHERE project_id = $1 AND in_latest ORDER BY order_index", [id])).rows.map((r) => r.id);
+  runAutoProduction({ projectId: id, api, listScenes, setJob })
+    .catch((error) => { console.error("Auto production failed:", error); return setJob({ status: "failed", message: `Adu stopped: ${String(error.message).slice(0, 200)}` }); })
+    .finally(() => autoProductionRunning.delete(id));
+  return true;
+}
+
+app.get("/api/ai-movie/projects/:id/auto-production", requireRole("admin"), async (req, res) => {
+  const row = (await db.query("SELECT auto_production_job FROM ai_movie_projects WHERE id = $1", [req.params.id])).rows[0];
+  if (!row) {
+    res.status(404).json({ error: "Project not found." });
+    return;
+  }
+  res.json({ job: row.auto_production_job ?? null });
+});
+
+// "Run again" — also what continues a job that stopped for the money limit.
+app.post("/api/ai-movie/projects/:id/auto-production", requireRole("admin"), async (req, res) => {
+  const started = await startAutoProduction(req.params.id, req.headers.cookie, { force: true });
+  res.json({ started });
+});
+
 app.post("/api/ai-movie/stages/:stage/approve", requireRole("admin"), async (req, res) => {
   const stageKey = req.params.stage;
   const { projectId } = req.body;
@@ -6628,6 +6685,7 @@ app.post("/api/ai-movie/stages/:stage/approve", requireRole("admin"), async (req
     } catch (error) {
       console.error("Production planning after screenplay approval failed (approval itself still succeeded):", error.message);
     }
+    startAutoProduction(projectId, req.headers.cookie).catch((error) => console.error("Auto production could not start:", error.message));
   }
 
   res.json({ ok: true, assets, blueprint });

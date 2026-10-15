@@ -15,7 +15,7 @@ test("film screenplay becomes plain screenplay text", () => {
   const sceneList = { scenes: [scene("Temple"), scene("Village")] };
   const out = buildScreenplayPlainText({ deck, sceneList, scenesByEpisode: new Map([[null, [row(0, els)]]]) });
   assert.match(out, /^Mahakali\n\nA priest vs a landlord\./);
-  assert.match(out, /1\. INT\. TEMPLE - NIGHT\nSoumya lights the lamp\.\nSOUMYA\n\(softly\)\nWhere is the idol\?\nCUT TO:/);
+  assert.match(out, /SCENE 1 — INT\. TEMPLE — NIGHT\nSoumya lights the lamp\.\nSOUMYA\n\(softly\)\nWhere is the idol\?\nCUT TO:/);
   assert.doesNotMatch(out, /VILLAGE/); // a scene not yet written is left out
   assert.equal(countScenes(sceneList), 2);
 });
@@ -32,4 +32,17 @@ test("old scenes stored as {en,or,hi} objects read as English text, not [object 
   const out = buildScreenplayPlainText({ deck, sceneList: { scenes: [scene("Temple")] }, scenesByEpisode: new Map([[null, [row(0, [{ type: "action", text: { en: "Hello", or: "ନମସ୍କାର" } }])]]]) });
   assert.match(out, /Hello/);
   assert.doesNotMatch(out, /object Object/);
+});
+
+import { parseScreenplayText } from "../screenplayParse.js";
+test("the text made here is read back by Production's own screenplay reader, scene for scene", () => {
+  const sceneList = { scenes: [scene("Temple"), scene("Village")] };
+  const out = buildScreenplayPlainText({ deck, sceneList, scenesByEpisode: new Map([[null, [row(0, els), row(1, els)]]]) });
+  const parsed = parseScreenplayText(out);
+  assert.equal(parsed.scenes.length, 2);
+  assert.ok(parsed.scenes[0].elements.some((e) => e.kind === "dialogue" && e.speaker === "SOUMYA"));
+});
+test("production reads numbered headings as finished scripts print them", () => {
+  const parsed = parseScreenplayText("12. INT. TEMPLE - NIGHT\nShe waits.\n\n13A EXT. VILLAGE - DAY\nHe runs.");
+  assert.deepEqual(parsed.scenes.map((s) => s.number), ["12", "13A"]);
 });

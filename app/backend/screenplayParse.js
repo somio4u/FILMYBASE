@@ -63,6 +63,9 @@ function detectSceneStart(trimmed) {
   const text = plain(trimmed);
   let m = /^SCENE\s+([0-9A-Za-z.]+)\s*[—–:-]\s*(.+)$/i.exec(text);
   if (m) return { number: m[1].replace(/\.$/, ""), rest: m[2] };
+  // A numbered heading as finished scripts print it: "12. INT. PLACE - DAY" or "12A INT. PLACE - DAY".
+  m = /^(\d{1,4}[A-Z]?)[.)]?\s+((?:INT\.?\s*\/\s*EXT|EXT\.?\s*\/\s*INT|I\s*\/\s*E|INT|EXT)[. ]\s*\S.*)$/i.exec(text);
+  if (m && /^[A-Z0-9 .,'’\/()\-—–:&]+$/.test(m[2])) return { number: m[1], rest: m[2] };
   // Fountain-style heading: an INT./EXT. line written in capitals.
   m = /^(INT\.?\s*\/\s*EXT|EXT\.?\s*\/\s*INT|I\s*\/\s*E|INT|EXT)[. ]\s*\S/i.exec(text);
   if (m && /^[A-Z0-9 .,'’\/()\-—–:&]+$/.test(text)) return { number: null, rest: text };

@@ -1,14 +1,13 @@
-// THE CAST RULE: every character and every prop is INDIAN unless the director says otherwise. Without this rule the image model
-// falls back to a Hollywood look (European-looking actors, Western objects). The rule is on by default for every project.
+// THE CAST RULE: every CHARACTER is INDIAN unless the director says otherwise. Without this rule the image model falls back to a
+// Hollywood look (European-looking actors). The rule is on by default for every project.
 //   - a character is Indian unless its details name another origin (director edits "Origin" on the character: e.g. "British")
-//   - props and objects are as found in India
 //   - every person in a shot is Indian (extras and crowd included), except characters named as foreign
-//   - environments are NOT touched: a place is whatever the story says
+//   - objects (a camera, a mug, a TV) and environments are NOT touched: a camera is a normal, universal camera, and a place is
+//     whatever the story says
 export const CAST_ORIGINS = ["indian", "none"];
 export const DEFAULT_CAST_ORIGIN = "indian";
 
 export const INDIAN_PERSON = "INDIAN CAST (strict): this person is Indian — from India — with the facial features, skin tone, hair and bone structure of an Indian person. They must NOT look European, American, British, Hollywood, East-Asian, African or Middle-Eastern, and must not resemble any Western film actor";
-export const INDIAN_OBJECTS = "INDIAN OBJECTS (strict): everything shown is as found in India — Indian designs, materials and everyday objects, Indian-made, with no Western brands, logos or Western styling";
 
 const INDIAN_WORDS = /\b(indian|india|odia|oriya|odisha|hindi|bengali|punjabi|tamil|telugu|kannada|malayali|malayalam|marathi|gujarati|assamese|rajasthani|bhojpuri|desi|south asian)\b/i;
 
@@ -34,13 +33,12 @@ export function personRule(details, castOrigin) {
     ? `This character is ${foreign} (NOT Indian): draw their features, skin tone and look as a ${foreign} person would have.`
     : `${INDIAN_PERSON}.`;
 }
-export const objectRule = (castOrigin) => (castOrigin === "none" ? "" : `${INDIAN_OBJECTS}.`);
 
-// for a shot: the people in the frame (named characters, extras, crowd) and the objects. `assets` are the shot's assets; those
+// for a shot: the PEOPLE in the frame (named characters, extras, crowd) — never the objects. `assets` are the shot's assets; those
 // with an `origin` are the foreign characters.
 export function shotRule(assets, castOrigin) {
   if (castOrigin === "none") return "";
   const foreign = (assets ?? []).filter((a) => a.kind === "character" && a.origin);
   const exception = foreign.length ? ` Exception: ${foreign.map((a) => `${a.name} is ${a.origin}, not Indian`).join("; ")}.` : "";
-  return `Every person in this frame is Indian — from India — with Indian facial features, skin tone and hair, extras and crowd included; nobody looks European, American or Hollywood.${exception} Objects in the frame are as found in India, with no Western brands.`;
+  return `Every person in this frame is Indian — from India — with Indian facial features, skin tone and hair, extras and crowd included; nobody looks European, American or Hollywood.${exception}`;
 }

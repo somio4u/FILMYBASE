@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { foreignOrigin, normalizeStyle, personRule, objectRule, shotRule, INDIAN_PERSON } from "../castRule.js";
+import { foreignOrigin, normalizeStyle, personRule, shotRule, INDIAN_PERSON } from "../castRule.js";
 import { assetPrompt, keyframePrompt, videoPrompt, sheetSpec, frameSpec, videoSpec } from "../generations.js";
 
 const rohan = { id: 1, kind: "character", name: "Rohan", agent_details: { description: "a lean man in a green t-shirt" }, human_edits: {} };
@@ -35,25 +35,27 @@ test("character sheet: Indian by default, never Hollywood; a foreign origin is h
   assert.doesNotMatch(assetPrompt(rohan, "just text"), /Hollywood.*Hollywood/);
 });
 
-test("props (single and sheets) are Indian objects; environments are left to the story", () => {
-  const prop = assetPrompt({ id: 3, kind: "prop", name: "Lamp", agent_details: {}, human_edits: {} }, style);
-  assert.match(prop, /INDIAN OBJECTS/);
+test("props, props sheets and environments are NOT touched by the Indian rule: a camera is an ordinary camera", () => {
+  const prop = assetPrompt({ id: 3, kind: "prop", name: "Camera", agent_details: {}, human_edits: {} }, style);
+  assert.doesNotMatch(prop, /INDIAN|India|Hollywood|Western/);
   const sheet = assetPrompt({ id: 4, kind: "prop", name: "Props sheet 1", agent_details: {}, human_edits: {}, group_members: [{ position: 1, name: "Mug" }, { position: 2, name: "Camera" }] }, style);
-  assert.match(sheet, /INDIAN OBJECTS/);
+  assert.doesNotMatch(sheet, /INDIAN|India|Hollywood|Western/);
+  assert.match(sheet, /as it normally looks anywhere in the world/);
+  assert.match(sheet, /Show only the objects: no people, no hands/);
   const place = assetPrompt({ id: 5, kind: "location", name: "Temple", agent_details: {}, human_edits: {} }, style);
-  assert.doesNotMatch(place, /INDIAN CAST|INDIAN OBJECTS/);
+  assert.doesNotMatch(place, /INDIAN|Hollywood/);
 });
 
-test("shots: every person in the frame is Indian, extras too, except a named foreign character; videos too", () => {
+test("shots: every PERSON in the frame is Indian, extras too, except a named foreign character; objects are not mentioned; videos too", () => {
   const k = keyframePrompt(shot, style, ["Rohan", "John"]);
   assert.match(k, /Every person in this frame is Indian/);
   assert.match(k, /extras and crowd included/);
   assert.match(k, /Exception: John is British, not Indian/);
+  assert.doesNotMatch(k, /Objects in the frame|Western brands|INDIAN OBJECTS/);
   assert.match(videoPrompt(shot, style), /Every person in this frame is Indian/);
   assert.doesNotMatch(keyframePrompt(shot, { ...style, castOrigin: "none" }, []), /Every person in this frame is Indian/);
   assert.equal(shotRule(shot.assets, "none"), "");
   assert.equal(personRule({}, "none"), "");
-  assert.equal(objectRule("none"), "");
 });
 
 test("changing the origin or the rule changes the fingerprints, so old commands show as out of date", () => {

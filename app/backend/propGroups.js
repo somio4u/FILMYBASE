@@ -55,9 +55,13 @@ async function existingGroups(db, projectId) {
     .map((r) => ({ id: r.id, code: r.code, name: r.name, members: r.group_members }));
 }
 
+// A description is stored either as plain text or as { en, hi, or }: always turn it into one plain line of text.
+export const plainText = (value) => (typeof value === "string" ? value : value && typeof value === "object" ? plainText(value.en ?? value.hi ?? value.or ?? Object.values(value).find((v) => typeof v === "string")) : "");
+
 const oneLine = (details) => {
   const d = { ...(details?.agent ?? {}), ...(details?.human ?? {}) };
-  return String(d.description ?? d.notes ?? "").replace(/\s+/g, " ").trim().slice(0, 160);
+  const text = plainText(d.description) || plainText(d.visualDescription) || plainText(d.notes);
+  return text.replace(/\s+/g, " ").trim().slice(0, 160);
 };
 
 export async function combineProps(db, projectId, { perImage = DEFAULT_PROPS_PER_PICTURE } = {}) {
@@ -121,4 +125,23 @@ export function memberLabel(group, shotText = "") {
   const named = all.filter((m) => text.includes(String(m.name).toLowerCase()));
   const shown = named.length > 0 ? named : all;
   return `${group.name} (${shown.map((m) => `position ${m.position}: ${m.name}`).join(", ")})`;
+}
+
+// An earlier version stored a prop's description on a sheet as the words "[object Object]" (it was saved as an object, not text).
+// This puts the real description back, from the prop itself. Safe to run on every start: it only touches sheets that need it.
+export async function repairPropGroupDescriptions(db) {
+  const groups = (await db.query("SELECT id, group_members FROM production_assets WHERE group_members IS NOT NULL AND group_members::text LIKE '%[object Object]%'")).rows;
+  for (const g of groups) {
+    const fixed = [];
+    for (const m of g.group_members) {
+      let description = m.description;
+      if (typeof description !== "string" || description.includes("[object Object]")) {
+        const row = (await db.query("SELECT agent_details, human_edits FROM production_assets WHERE id = $1", [m.assetId])).rows[0];
+        description = row ? oneLine({ agent: row.agent_details, human: row.human_edits }) : "";
+      }
+      fixed.push({ ...m, description });
+    }
+    await db.query("UPDATE production_assets SET group_members = $1 WHERE id = $2", [JSON.stringify(fixed), g.id]);
+  }
+  return groups.length;
 }

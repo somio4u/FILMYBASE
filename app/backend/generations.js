@@ -12,8 +12,8 @@
 // Drive folder through the media store.
 
 import { isPhotographic } from "./visualStyles.js";
-import { memberLabel } from "./propGroups.js";
-import { normalizeStyle, personRule, objectRule, shotRule } from "./castRule.js";
+import { memberLabel, plainText } from "./propGroups.js";
+import { normalizeStyle, personRule, shotRule } from "./castRule.js";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -98,8 +98,8 @@ export function assetPrompt(asset, styleIn) {
   const { text: style, castOrigin } = normalizeStyle(styleIn);
   const details = describeDetails(effectiveDetails(asset));
   const look = style ? ` VISUAL STYLE (follow it strictly, in every view): ${style}.` : "";
-  // THE CAST RULE: characters and props are Indian unless the director says otherwise (castRule.js); places follow the story
-  const who = asset.kind === "character" ? personRule(effectiveDetails(asset), castOrigin) : asset.kind === "location" ? "" : objectRule(castOrigin);
+  // THE CAST RULE: characters are Indian unless the director says otherwise (castRule.js); props and places are not touched
+  const who = asset.kind === "character" ? personRule(effectiveDetails(asset), castOrigin) : "";
   const cast = who ? ` ${who}` : "";
   if (asset.kind === "character") {
     return `Character model sheet for "${asset.name}" for a film. ${details}.${cast}${look} ${SHEET_LAYOUT} Include: a frontal close-up of the face; a side profile of the face; a three-quarter view; a full-body long shot from the front, one from the side and one from the back; and a row of facial expressions (neutral, happy, angry, sad, afraid, surprised). Same person, same face, same clothes, hair, build and age in every view. Realistic proportions. ${NO_TEXT}`;
@@ -108,8 +108,8 @@ export function assetPrompt(asset, styleIn) {
     return `Environment model sheet for the place "${asset.name}" for a film. ${details}.${look} ${SHEET_LAYOUT} Include: a wide establishing view of the whole space; views from two or three other camera positions; a close view of the most important detail or furniture; and the same space in its typical lighting (and a second lighting mood if the details mention one). Same architecture, layout, colours and objects in every view. No people. ${NO_TEXT}`;
   }
   if (asset.group_members?.length) {
-    const rows = asset.group_members.map((m) => `position ${m.position}: ${m.name}${m.description ? ` — ${m.description}` : ""}`).join("; ");
-    return `Props sheet for a film: ${asset.group_members.length} small objects shown TOGETHER in ONE image. ${rows}.${cast}${look} ${SHEET_LAYOUT} Arrange the objects in a tidy grid, numbered by position from left to right, top to bottom, exactly in the order listed above (position 1 is the top-left). Show each object once, large and clearly separated from the others, seen from a three-quarter front view at a believable relative size, with a plain light-grey background and no text or numbers drawn in the picture. ${NO_TEXT}`;
+    const rows = asset.group_members.map((m) => `position ${m.position}: ${m.name}${plainText(m.description) ? ` — ${plainText(m.description)}` : ""}`).join("; ");
+    return `Props sheet for a film: ${asset.group_members.length} small objects shown TOGETHER in ONE image — ${rows}.${look} Lay the objects out in a tidy grid on a plain light-grey background: position 1 is the top-left, then left to right, top to bottom, exactly in the order listed. Show each object once, large and clearly separated from the others, in a three-quarter front view and at a believable size relative to the others. Draw each object as it normally looks anywhere in the world (a camera is an ordinary camera, a phone an ordinary phone). Show only the objects: no people, no hands. Nothing is written in the picture: no text, numbers, labels, logos or watermarks.`;
   }
   return `Prop model sheet for the object "${asset.name}" for a film. ${details}.${cast}${look} ${SHEET_LAYOUT} Include: a front view, a side view, a back view, a top view, a three-quarter hero view, a close-up of its most important detail or texture, and a small view of it being held or placed in a normal setting to show its size. Same object, material, colour and wear in every view. ${NO_TEXT}`;
 }

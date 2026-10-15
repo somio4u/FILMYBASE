@@ -1801,3 +1801,8 @@ Plain version: every project is now a set of **drafts**. Opening a project shows
 - [x] **Switch** (Image Studio → Visual style → "People & objects"): "Indian — every character and prop (default)" or "No rule — as the story says". Changing the origin or the switch refreshes all commands (free); the commands PDF shows the new wording.
 - Pictures already made keep their old faces: press "Make another version" for the characters you want again.
 - Honest note: checked that the wording reaches every command (tests, a real server, the PDF) — whether the image model really draws Indian faces needs a real picture; please try "Make another version" on a character and tell me.
+
+## Cast rule corrected: Indian for CHARACTERS only; props sheet text fixed (not deployed yet)
+- [x] **The Indian rule now applies only to characters** (and to the people in shots, extras included). **Props, props sheets and environments are no longer touched:** a camera is an ordinary, universal camera. The switch in the Image Studio is now called "Characters".
+- [x] **Fixed "[object Object]"** in the props sheet command: a prop's description was stored as { en, hi } and printed as a machine word. It is now plain text, and sheets saved by the earlier version are repaired automatically from the props themselves.
+- [x] **The props sheet command was tidied:** each prop with its description and position, the visual style, "tidy grid, position 1 top-left, left to right, top to bottom", "draw each object as it normally looks anywhere in the world", "show only the objects: no people, no hands", and one single "nothing is written in the picture" line (before, "no text" was said twice and the single-prop wording "every view" was reused).

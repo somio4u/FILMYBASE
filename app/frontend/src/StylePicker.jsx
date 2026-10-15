@@ -46,7 +46,7 @@ export default function StylePicker({ api, projectId, onChanged }) {
     setBusy(false)
     if (!r.ok) { setMessage({ tone: 'bad', text: r.data.error || 'Could not save.' }); await load(); return }
     setCast(r.data.settings.castOrigin)
-    setMessage({ tone: 'good', text: next === 'indian' ? 'Every character and prop is now Indian (unless you name another origin on a character). All commands were updated; pictures already made keep their old look — press “Make another version”.' : 'The Indian rule is off: the story alone decides who and what is shown. Commands were updated.' })
+    setMessage({ tone: 'good', text: next === 'indian' ? 'Every character is now Indian (unless you name another origin on that character). Props and places are not changed. All commands were updated; pictures already made keep their old look — press “Make another version”.' : 'The Indian rule is off: the story alone decides who is shown. Commands were updated.' })
     onChanged?.()
   }
 
@@ -64,9 +64,9 @@ export default function StylePicker({ api, projectId, onChanged }) {
         </label>
       </div>
       <div className="pipe-toolbar">
-        <label className="studio-field">People &amp; objects
+        <label className="studio-field">Characters
           <select value={cast} disabled={busy} onChange={(e) => { setCast(e.target.value); saveCast(e.target.value) }}>
-            <option value="indian">Indian — every character and prop (default)</option>
+            <option value="indian">Indian — every character (default)</option>
             <option value="none">No rule — as the story says</option>
           </select>
         </label>

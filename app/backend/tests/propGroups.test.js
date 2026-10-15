@@ -11,7 +11,7 @@ import { ensureAllProductionSchemas } from "../productionSchema.js";
 import { createMediaStore, createLocalBackend } from "../mediaStore.js";
 import { createProviders, pcmToWav, wavDurationMs } from "../providers.js";
 import { createGenerationService, plannedRefNames, assetPrompt } from "../generations.js";
-import { combineProps, splitProps, previewPropGroups, planPropGroups, memberLabel } from "../propGroups.js";
+import { combineProps, splitProps, previewPropGroups, planPropGroups, memberLabel, repairPropGroupDescriptions, plainText } from "../propGroups.js";
 import { computeSpecs } from "../planning.js";
 import { saveSettings, getSettings, spendSummary, assertWithinBudget } from "../pipelineSettings.js";
 import { divideScene, listShots, generateStoryboard, approveStoryboard, approveShots } from "../shots.js";
@@ -156,4 +156,40 @@ test("a prop that already has a picture is never swallowed into a sheet", async 
   const done = await combineProps(db, projectId, { perImage: 6 });
   const members = done.groups.flatMap((g) => g.members.map((m) => m.assetId));
   assert.ok(!members.includes(props[0].id), "the already-made prop stays on its own");
+});
+
+test("a prop's description on the sheet command is real text (never '[object Object]'), whichever way it is stored", async () => {
+  const { projectId } = await ready();
+  // descriptions saved as { en, hi } objects, the way the AI Movie asset list stores them
+  for (const p of await propsOf(projectId)) {
+    await db.query("UPDATE production_assets SET agent_details = $1 WHERE id = $2", [JSON.stringify({ description: { en: `A real ${p.name} in daily use`, hi: "हिन्दी" } }), p.id]);
+  }
+  const { groups } = await combineProps(db, projectId, { perImage: 6 });
+  assert.ok(groups[0].members.every((m) => typeof m.description === "string" && m.description.startsWith("A real ")), "stored as plain text");
+  const sheet = (await db.query("SELECT * FROM production_assets WHERE project_id = $1 AND code = 'PGRP01'", [projectId])).rows[0];
+  const prompt = assetPrompt(sheet, "Photorealistic test look");
+  assert.doesNotMatch(prompt, /\[object Object\]/);
+  assert.match(prompt, /position 1: .+ — A real /);
+  assert.doesNotMatch(prompt, /INDIAN/, "objects are not made 'Indian'");
+});
+
+test("a sheet saved by the earlier version with '[object Object]' is repaired from the props themselves", async () => {
+  const { projectId } = await ready();
+  for (const p of await propsOf(projectId)) await db.query("UPDATE production_assets SET agent_details = $1 WHERE id = $2", [JSON.stringify({ description: { en: `Genuine ${p.name}`, hi: "x" } }), p.id]);
+  const { groups } = await combineProps(db, projectId, { perImage: 6 });
+  const broken = groups[0].members.map((m) => ({ ...m, description: "[object Object]" }));
+  await db.query("UPDATE production_assets SET group_members = $1 WHERE id = $2", [JSON.stringify(broken), groups[0].id]);
+  assert.equal(await repairPropGroupDescriptions(db), 1);
+  const fixed = (await db.query("SELECT group_members FROM production_assets WHERE id = $1", [groups[0].id])).rows[0].group_members;
+  assert.ok(fixed.every((m) => m.description.startsWith("Genuine ")), JSON.stringify(fixed));
+  assert.equal(await repairPropGroupDescriptions(db), 0, "nothing left to repair");
+});
+
+test("plainText turns every stored shape into one line of text", () => {
+  assert.equal(plainText("hello"), "hello");
+  assert.equal(plainText({ en: "English", hi: "हिन्दी" }), "English");
+  assert.equal(plainText({ hi: "only hindi" }), "only hindi");
+  assert.equal(plainText(null), "");
+  assert.equal(plainText(undefined), "");
+  assert.equal(plainText(42), "");
 });

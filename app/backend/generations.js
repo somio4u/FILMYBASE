@@ -199,7 +199,7 @@ function pickVeoSeconds(durationSec) {
 // Service
 // ---------------------------------------------------------------------------
 
-export function createGenerationService({ db, store, providers, env = process.env, concurrency = Number(env.PIPELINE_CONCURRENCY || 2), videoPollMs = 10000 }) {
+export function createGenerationService({ db, store, providers, env = process.env, concurrency = Number(env.PIPELINE_CONCURRENCY || 1), videoPollMs = 10000 }) {
   const waiting = [];
   let active = 0;
   function enqueue(job) {

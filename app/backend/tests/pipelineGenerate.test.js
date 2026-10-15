@@ -422,3 +422,22 @@ test("prompts: item details are turned into readable text; internal fields are l
   assert.match(p, /ONE single image/);
   assert.match(p, /No text, letters/);
 });
+
+test("several pictures started at once are made one after another, never together", async () => {
+  const { projectId } = await ready();
+  const assets = (await db.query("SELECT id FROM production_assets WHERE project_id = $1 AND kind IN ('character','location','prop') ORDER BY id LIMIT 3", [projectId])).rows;
+  assert.equal(assets.length, 3);
+  const original = providers.generateImage;
+  let running = 0, peak = 0;
+  providers.generateImage = async (args) => {
+    running++; peak = Math.max(peak, running);
+    await new Promise((r) => setTimeout(r, 30));
+    try { return await original(args); } finally { running--; }
+  };
+  try {
+    const jobs = [];
+    for (const a of assets) jobs.push(await gens.generateReference(projectId, a.id));
+    await Promise.all(jobs.map((j) => j.done));
+  } finally { providers.generateImage = original; }
+  assert.equal(peak, 1);
+});

@@ -91,7 +91,7 @@ function Library({ type, api, projectId, backendUrl }) {
     const r = await call(`${api}/${projectId}/generate`, 'POST', { kind, targetIds: ids })
     setBusy(false); setConfirmAll(false)
     if (!r.ok) setMessage({ tone: 'bad', text: r.data.error || 'Could not start.' })
-    else setMessage({ tone: 'good', text: `Started ${r.data.started.length}.${r.data.skipped?.length ? ` ${r.data.skipped.length} skipped: ${r.data.skipped[0].reason}` : ''}` })
+    else setMessage({ tone: 'good', text: `Queued ${r.data.started.length}${r.data.started.length > 1 ? ' — they are made one at a time, the cards fill in as each finishes' : ''}.${r.data.skipped?.length ? ` ${r.data.skipped.length} skipped: ${r.data.skipped[0].reason}` : ''}` })
     load()
   }
   async function review(id, decision) {
@@ -102,15 +102,16 @@ function Library({ type, api, projectId, backendUrl }) {
   }
   if (!data) return <p className="dossier-note">Loading…</p>
   const c = data.counts
-  const todo = data.assets.filter((a) => a.state !== 'approved' && !a.running && a.usedCount > 0 && !a.latestReady)
+  // every item that has no picture yet (even before a shot uses it), in the order shown
+  const todo = data.assets.filter((a) => a.state !== 'approved' && !a.running && !a.latestReady)
   const label = { character: 'Characters', environment: 'Environments', property: 'Properties' }[type]
   return (
     <div className="pipe-panel">
       <div className="is-toolbar">
         <p className="is-counts"><strong>{c.inProject}</strong> {label.toLowerCase()} in the project · <strong>{c.approved}</strong> with an approved reference sheet{c.running > 0 ? ` · ${c.running} generating` : ''}</p>
-        {todo.length > 0 && !confirmAll && <button type="button" className="dossier-small-button" disabled={busy} onClick={() => setConfirmAll(true)}>Make all missing ({todo.length})…</button>}
+        {todo.length > 0 && !confirmAll && <button type="button" className="dossier-small-button" disabled={busy} onClick={() => setConfirmAll(true)}>Make all {todo.length} missing, one by one…</button>}
         {confirmAll && (
-          <span className="is-confirm" role="alert">This will make {todo.length} reference sheet{todo.length === 1 ? '' : 's'} for about {usd(todo.length * 0.04)}.
+          <span className="is-confirm" role="alert">This will make {todo.length} reference sheet{todo.length === 1 ? '' : 's'}, one after another (not together), for about {usd(todo.length * 0.04)}.
             <button type="button" className="dossier-small-button studio-approve" disabled={busy} onClick={() => generate(todo.map((a) => a.dbId))}>Yes, make them</button>
             <button type="button" className="dossier-small-button" onClick={() => setConfirmAll(false)}>Cancel</button></span>
         )}

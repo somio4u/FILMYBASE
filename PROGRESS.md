@@ -1824,3 +1824,8 @@ Plain version: every project is now a set of **drafts**. Opening a project shows
 - [x] **Cause:** the voice assistant asked Gemini for at most 8,192 tokens of answer and read it with no second chance. Odia script costs many tokens per word and the model's own thinking shares that limit, so a long Odia answer was cut off mid-sentence and the broken JSON could not be read. (The Production Manager chat had the same weakness with a 2,048 limit; the plain voice-to-text button used 4,096.)
 - [x] **Fix:** all three now start with more room (16,384 / 8,192) and, if an answer is still cut off, retry automatically with double the room (the app's standard safe-JSON helper).
 - Honest note: found by reading the code (the exact failing request was not available); tests pass, but not tried with a real Odia recording.
+
+## Image Studio: "Make all missing, one by one" for characters / environments / properties (deploying)
+- [x] One button at the top of Characters, Environments and Properties: **"Make all N missing, one by one…"** (after a cost confirmation). It covers every item without a picture — even ones no shot uses yet (before, items not yet used by a shot were left out, so the button often did not appear).
+- [x] **One at a time:** the picture queue now runs ONE picture at a time (was 2 together). All pictures — characters, environments, props, shot frames — wait in line, so rate limits are respected; each card fills in as its picture finishes. Setting `PIPELINE_CONCURRENCY` on the server can raise it later.
+- Honest note: tested with a local imitation of the image service (3 pictures started together → at most 1 running at once); not with real Gemini limits.

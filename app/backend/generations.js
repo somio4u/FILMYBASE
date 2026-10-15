@@ -128,8 +128,12 @@ export function keyframePrompt(shot, styleIn, refNames) {
   const brand = referenceSentence(shotReferences(shot, brandRefs));
   const people = shotRule(shot.assets, castOrigin);
   const camera = [shot.framing, shot.cameraAngle, shot.cameraMove && shot.cameraMove !== "Static" ? `(camera: ${shot.cameraMove})` : null].filter(Boolean).join(", ");
+  const who = (shot.assets ?? []).filter((a) => a.kind === "character").map((a) => a.name);
+  const cast = who.length
+    ? ` The only named people in this frame are: ${who.join(", ")} — look exactly like their attached sheets. Do not add any other recognisable person or invent new characters; background figures only if the description calls for them, few, small and unnamed.`
+    : " No named character is linked to this frame: do not invent characters and do not fill the frame with a crowd; show a person only if the description above names or clearly describes one.";
   const refs = refNames.length ? ` The attached pictures are model sheets (several views of each item). Use them to keep the exact same face, clothes, object design and place layout for: ${refNames.join(", ")}. Build the frame ONLY from these attached pictures: the people must be exactly these people, the place exactly this place and the objects exactly these objects. Do not invent other main characters, vehicles, buildings or locations that are not in the attached pictures or the description. Draw ONLY the single requested frame, never a sheet, and do not copy the sheet layout.` : "";
-  return `A single film frame (keyframe). Camera: ${camera || "natural framing"}. ${shot.storyboardText || shot.description}${people ? ` ${people}` : ""}${brand}${style ? ` VISUAL STYLE (follow it strictly): ${style}.` : ""}${refs} ${isPhotographic(style) ? "Cinematic, natural film lighting, photographic detail." : "Cinematic composition and lighting, in the visual style above."} ${NO_TEXT}`;
+  return `A single film frame (keyframe). Camera: ${camera || "natural framing"}. ${shot.storyboardText || shot.description}${people ? ` ${people}` : ""}${cast}${brand}${style ? ` VISUAL STYLE (follow it strictly): ${style}.` : ""}${refs} ${isPhotographic(style) ? "Cinematic, natural film lighting, photographic detail." : "Cinematic composition and lighting, in the visual style above."} ${NO_TEXT}`;
 }
 
 export function videoPrompt(shot, styleIn) {

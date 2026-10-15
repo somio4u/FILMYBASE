@@ -1842,3 +1842,9 @@ Plain version: every project is now a set of **drafts**. Opening a project shows
 - [x] **Auto-link:** (1) automatically — when you press Generate on a shot with nothing linked, the app first links the characters, places and props its text names (and speakers, and the place in the scene heading), then makes the frame; (2) button **"🔗 Auto-link characters, places & props (this scene)"** in Image Studio → Shot Frames links all unlinked shots of the scene at once, and says which shots it found nothing for.
 - [x] **By hand:** every shot card has **"🔗 Link…"** — tick the characters, environments and props it uses, Save. This does NOT reopen the shot-division approval. Commands refresh (free).
 - Honest note: name matching uses the shot's text; a shot that never names its people or things (e.g. "she turns") needs the hand picker. Tested with a local imitation of the image service.
+
+## First frame invented a crowd of new people (not deployed yet)
+- [x] **Why:** the shot text only described the jeep and the archway, so no character was linked and the command said nothing about people — the image model filled the frame with its own villagers.
+- [x] **Every frame command now says who may appear:** "The only named people in this frame are: Rohan, … — look exactly like their attached sheets; do not add any other recognisable person". With nobody linked: "do not invent characters and do not fill the frame with a crowd; show a person only if the description names or describes one."
+- [x] **Auto-link** now also links the scene's own characters (up to 3) to a shot whose text names nobody, and tells you which shots it did that for, so you can untick with "🔗 Link…". (Before, such shots got only the place and props.)
+- Honest note: which characters are "in" an establishing shot is a guess from the scene; check the "Link…" box. Not tested with real image generation.

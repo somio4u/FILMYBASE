@@ -16,3 +16,10 @@ test("the picture command tells the model not to invent people, vehicles or plac
   const text = keyframePrompt({ description: "Rohan at the gate", assets: [] }, {}, ["Rohan", "Village gate"]);
   assert.match(text, /Do not invent other main characters, vehicles, buildings or locations/);
 });
+
+test("the frame command names the only people allowed, or forbids inventing a crowd when none is linked", () => {
+  const withWho = keyframePrompt({ description: "Rohan arrives", assets: [{ kind: "character", name: "Rohan" }] }, {}, ["Rohan"]);
+  assert.match(withWho, /The only named people in this frame are: Rohan/);
+  const none = keyframePrompt({ description: "A jeep at a gate", assets: [] }, {}, []);
+  assert.match(none, /do not invent characters and do not fill the frame with a crowd/);
+});

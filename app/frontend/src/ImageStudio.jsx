@@ -182,7 +182,7 @@ function ShotFrames({ api, projectId, backendUrl }) {
     const r = await call(`${api}/${projectId}/shots/auto-link`, 'POST', { sceneId: all ? null : sceneId, onlyUnlinked: !all })
     setBusy(false)
     if (!r.ok) setMessage({ tone: 'bad', text: r.data.error || 'Could not link.' })
-    else setMessage({ tone: r.data.stillEmpty.length ? 'bad' : 'good', text: `Linked ${r.data.itemsAdded} item${r.data.itemsAdded === 1 ? '' : 's'} to ${r.data.shotsLinked} shot${r.data.shotsLinked === 1 ? '' : 's'}.${r.data.stillEmpty.length ? ` Nothing could be found for ${r.data.stillEmpty.join(', ')} — use "🔗 Link…" on the shot to choose by hand.` : ''}` })
+    else setMessage({ tone: r.data.stillEmpty.length ? 'bad' : 'good', text: `Linked ${r.data.itemsAdded} item${r.data.itemsAdded === 1 ? '' : 's'} to ${r.data.shotsLinked} shot${r.data.shotsLinked === 1 ? '' : 's'}.${r.data.assumedCharacters?.length ? ` ${r.data.assumedCharacters.join(', ')} name no character, so the scene's own characters were linked — check with "🔗 Link…".` : ''}${r.data.stillEmpty.length ? ` Nothing could be found for ${r.data.stillEmpty.join(', ')} — use "🔗 Link…" on the shot to choose by hand.` : ''}` })
     refresh()
   }
   if (!scenes) return <p className="dossier-note">Loading…</p>

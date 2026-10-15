@@ -533,6 +533,7 @@ export async function autoLinkShots(db, projectId, { sceneId = null, shotId = nu
   const usable = all.filter((a) => LINK_KINDS.includes(a.kind));
   let shotsLinked = 0, itemsAdded = 0;
   const stillEmpty = [];
+  const assumed = [];
   for (const shot of shots) {
     const existing = new Set((await db.query("SELECT asset_id FROM production_shot_assets WHERE shot_id = $1", [shot.id])).rows.map((r) => r.asset_id));
     if (onlyUnlinked && existing.size > 0) continue;
@@ -547,12 +548,20 @@ export async function autoLinkShots(db, projectId, { sceneId = null, shotId = nu
       const byHeading = usable.find((a) => a.kind === "location" && phrasesOf(a).some((ph) => contains(heading, ph)));
       if (byHeading) ids.add(byHeading.id);
     }
+    // no character named in the shot text, yet it belongs to a scene with people (e.g. "the jeep arrives at the palace"): the scene's
+    // own characters are who is in it. The result says so, and the shot's "Link…" box lets you untick them.
+    const hasCharacter = [...ids, ...existing].some((id) => all.find((a) => a.id === id)?.kind === "character");
+    if (!hasCharacter) {
+      const present = (await db.query("SELECT a.id FROM production_scene_assets sa JOIN production_assets a ON a.id = sa.asset_id WHERE sa.scene_id = $1 AND a.kind = 'character' ORDER BY a.code LIMIT 3", [shot.scene_id])).rows;
+      for (const r of present) ids.add(r.id);
+      if (present.length > 0) assumed.push(shot.code);
+    }
     const fresh = [...ids].filter((id) => !existing.has(id));
     for (const id of fresh) await db.query("INSERT INTO production_shot_assets (shot_id, asset_id) VALUES ($1,$2) ON CONFLICT DO NOTHING", [shot.id, id]);
     if (fresh.length > 0) { shotsLinked++; itemsAdded += fresh.length; }
     if (existing.size + fresh.length === 0) stillEmpty.push(shot.code);
   }
-  return { shots: shots.length, shotsLinked, itemsAdded, stillEmpty };
+  return { shots: shots.length, shotsLinked, itemsAdded, stillEmpty, assumedCharacters: assumed };
 }
 
 export async function addShot(db, projectId, sceneId, { afterShotId = null, description = "", framing = null, durationSec = 4 } = {}) {

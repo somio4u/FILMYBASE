@@ -6,6 +6,7 @@
 //   - superseded / restored  history, never deleted
 // Approving never starts paid work, and never touches a shot that already has generated pictures, voices or video.
 
+import { getSettings } from "./pipelineSettings.js";
 import { buildOptimizationPlan, baselineHash, providerCapabilities, reviewPlanWithModel, MODES, GENRE_PROFILES } from "./shotOptimizer.js";
 import { listShots } from "./shots.js";
 import { spendSummary } from "./pipelineSettings.js";
@@ -107,10 +108,10 @@ export async function getPlan(db, projectId, planId) {
 // ---------------------------------------------------------------------------
 async function compute(db, projectId, shots, { mode, genre, decisions, env }) {
   const bp = await latestBlueprint(db, projectId).catch(() => null);
-  const settings = (await db.query("SELECT style_prompt, aspect_ratio FROM production_settings WHERE project_id = $1", [projectId])).rows[0];
+  const settings = await getSettings(db, projectId);
   return buildOptimizationPlan({
     shots, mode, genre, genreHint: await genreHint(db, projectId), decisions, projectId, screenplayVersion: bp?.screenplay_version ?? null,
-    style: settings?.style_prompt ?? "", aspectRatio: settings?.aspect_ratio ?? "16:9", remainingBudgetUsd: await remainingBudget(db, projectId), caps: providerCapabilities(env), env,
+    style: settings.stylePrompt ?? "", aspectRatio: settings.aspectRatio ?? "16:9", remainingBudgetUsd: await remainingBudget(db, projectId), caps: providerCapabilities(env), env,
   });
 }
 

@@ -5,6 +5,8 @@ import { addShot, approveShots, approveStoryboard, deleteShot, divideScene, gene
 import { getSettings, saveSettings, spendSummary, VOICES } from "./pipelineSettings.js";
 import { createGenerationService, KINDS } from "./generations.js";
 import { createAssembler } from "./assemble.js";
+import { planPrompts } from "./planning.js";
+import { VISUAL_STYLES } from "./visualStyles.js";
 
 export function registerPipelineRoutes(app, db, requireRole, { store, providers, cinematic = null, onShotsApproved = null }) {
   const gens = createGenerationService({ db, store, providers });
@@ -37,6 +39,7 @@ export function registerPipelineRoutes(app, db, requireRole, { store, providers,
     await projectExists(projectId);
     res.json({
       status: await gens.status(projectId), settings: await getSettings(db, projectId), spend: await spendSummary(db, projectId), voices: VOICES,
+      visualStyles: VISUAL_STYLES.map(({ id, label }) => ({ id, label })),
       providers: { image: providers.models.image, speech: providers.models.speech, video: providers.models.video, textAvailable: Boolean(textJson) },
     });
   }));
@@ -44,7 +47,14 @@ export function registerPipelineRoutes(app, db, requireRole, { store, providers,
   app.patch("/api/production/:projectId/settings", admin, wrap(async (req, res) => {
     const projectId = need(id(req.params.projectId), "project");
     await projectExists(projectId);
-    res.json({ settings: await saveSettings(db, projectId, req.body ?? {}), spend: await spendSummary(db, projectId) });
+    const before = await getSettings(db, projectId);
+    const settings = await saveSettings(db, projectId, req.body ?? {});
+    // The visual style is written into every picture command, so a changed look refreshes all the commands (free: no AI call).
+    let promptsRefreshed = false;
+    if (settings.stylePrompt !== before.stylePrompt) {
+      try { await planPrompts(db, projectId, { actorUserId: req.user?.id }); promptsRefreshed = true; } catch (error) { console.error("Prompts could not be refreshed after the style changed:", error.message); }
+    }
+    res.json({ settings, spend: await spendSummary(db, projectId), promptsRefreshed });
   }));
 
   // ---- step 2: shots ----

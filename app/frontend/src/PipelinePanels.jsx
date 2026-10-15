@@ -2,6 +2,7 @@
 // reference art, shot pictures, voices, video takes, and assemble/export.
 // Every number comes from saved records; every paid action shows its estimated
 // cost first and the backend refuses anything over the project's money limit.
+import StylePicker from './StylePicker.jsx'
 import { useCallback, useEffect, useState } from 'react'
 import './Pipeline.css'
 
@@ -129,7 +130,7 @@ export function PipelineBar({ pipeline, api, projectId, onSaved }) {
   async function save(e) {
     e.preventDefault()
     const r = await call(`${api}/${projectId}/settings`, 'PATCH', {
-      stylePrompt: form.stylePrompt, aspectRatio: form.aspectRatio, budgetLimitUsd: form.budget === '' ? null : Number(form.budget),
+      aspectRatio: form.aspectRatio, budgetLimitUsd: form.budget === '' ? null : Number(form.budget),
     })
     if (!r.ok) { setMessage({ tone: 'bad', text: r.data.error }); return }
     setMessage({ tone: 'ok', text: 'Saved.' })
@@ -152,15 +153,13 @@ export function PipelineBar({ pipeline, api, projectId, onSaved }) {
       <div className="pipe-money">
         <span>Spent {usd(spend.spentUsd)} of {usd(spend.limitUsd)} limit</span>
         <span className="pipe-meter" aria-hidden="true"><span style={{ width: `${pct}%` }} className={pct >= 90 ? 'hot' : ''} /></span>
-        <button type="button" className="dossier-small-button" onClick={() => { setForm({ stylePrompt: settings.stylePrompt, aspectRatio: settings.aspectRatio, budget: settings.budgetLimitUsd ?? '' }); setOpen(!open) }}>
+        <button type="button" className="dossier-small-button" onClick={() => { setForm({ aspectRatio: settings.aspectRatio, budget: settings.budgetLimitUsd ?? '' }); setOpen(!open) }}>
           {open ? 'Close settings' : 'Look & money limit'}
         </button>
       </div>
       {open && form && (
         <form className="pipe-settings" onSubmit={save}>
-          <label className="dossier-field">The look of the film (added to every picture and video request)
-            <textarea rows={3} maxLength={2000} value={form.stylePrompt} placeholder="e.g. realistic, warm morning light, shallow depth of field" onChange={(e) => setForm({ ...form, stylePrompt: e.target.value })} />
-          </label>
+          <StylePicker api={api} projectId={projectId} onChanged={onSaved} />
           <div className="dossier-controls-row">
             <label className="dossier-field">Picture shape
               <select value={form.aspectRatio} onChange={(e) => setForm({ ...form, aspectRatio: e.target.value })}>

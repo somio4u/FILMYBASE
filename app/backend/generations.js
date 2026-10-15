@@ -11,6 +11,7 @@
 // at a time (enforced by the database), and every file goes to the project's
 // Drive folder through the media store.
 
+import { isPhotographic } from "./visualStyles.js";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -92,7 +93,7 @@ const SHEET_LAYOUT = "Make ONE single image laid out as a clean professional mod
 // each shot can be drawn from it and the item always looks the same.
 export function assetPrompt(asset, style) {
   const details = describeDetails(effectiveDetails(asset));
-  const look = style ? ` Overall look of the film: ${style}.` : "";
+  const look = style ? ` VISUAL STYLE (follow it strictly, in every view): ${style}.` : "";
   if (asset.kind === "character") {
     return `Character model sheet for "${asset.name}" for a film. ${details}.${look} ${SHEET_LAYOUT} Include: a frontal close-up of the face; a side profile of the face; a three-quarter view; a full-body long shot from the front, one from the side and one from the back; and a row of facial expressions (neutral, happy, angry, sad, afraid, surprised). Same person, same face, same clothes, hair, build and age in every view. Realistic proportions. ${NO_TEXT}`;
   }
@@ -105,12 +106,12 @@ export function assetPrompt(asset, style) {
 export function keyframePrompt(shot, style, refNames) {
   const camera = [shot.framing, shot.cameraAngle, shot.cameraMove && shot.cameraMove !== "Static" ? `(camera: ${shot.cameraMove})` : null].filter(Boolean).join(", ");
   const refs = refNames.length ? ` The attached pictures are model sheets (several views of each item). Use them to keep the exact same face, clothes, object design and place layout for: ${refNames.join(", ")}. Draw ONLY the single requested frame, never a sheet, and do not copy the sheet layout.` : "";
-  return `A single film frame (keyframe). Camera: ${camera || "natural framing"}. ${shot.storyboardText || shot.description}${style ? ` Overall look of the film: ${style}.` : ""}${refs} Cinematic, natural film lighting, photographic detail. ${NO_TEXT}`;
+  return `A single film frame (keyframe). Camera: ${camera || "natural framing"}. ${shot.storyboardText || shot.description}${style ? ` VISUAL STYLE (follow it strictly): ${style}.` : ""}${refs} ${isPhotographic(style) ? "Cinematic, natural film lighting, photographic detail." : "Cinematic composition and lighting, in the visual style above."} ${NO_TEXT}`;
 }
 
 export function videoPrompt(shot, style) {
   const move = shot.cameraMove && shot.cameraMove !== "Static" ? ` Camera movement: ${shot.cameraMove}.` : " The camera is steady.";
-  return `${shot.storyboardText || shot.description}${move}${style ? ` Overall look: ${style}.` : ""} Start exactly from the given picture and keep the people, objects and place looking the same. Natural, believable motion. No speech, no subtitles, no on-screen text.`;
+  return `${shot.storyboardText || shot.description}${move}${style ? ` VISUAL STYLE (follow it strictly): ${style}.` : ""} Start exactly from the given picture and keep the people, objects and place looking the same. Natural, believable motion. No speech, no subtitles, no on-screen text.`;
 }
 
 export function speechText(element) {

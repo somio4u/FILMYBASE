@@ -1,3 +1,5 @@
+import { DEFAULT_VISUAL_STYLE, isVisualStyle, resolveStyle } from "./visualStyles.js";
+
 // Per-project settings for the AI production pipeline: the look of the film
 // (style text), picture shape, voices, and the MONEY limit. Every paid AI call
 // is checked against the limit first and written to a spend ledger after.
@@ -22,6 +24,7 @@ export async function ensurePipelineSettingsSchema(db) {
     `CREATE TABLE IF NOT EXISTS production_settings (
       project_id INTEGER PRIMARY KEY REFERENCES ai_movie_projects(id) ON DELETE CASCADE,
       style_prompt TEXT NOT NULL DEFAULT '',
+      visual_style TEXT,
       aspect_ratio TEXT NOT NULL DEFAULT '16:9',
       budget_limit_usd NUMERIC,
       voices JSONB NOT NULL DEFAULT '{}',
@@ -37,6 +40,7 @@ export async function ensurePipelineSettingsSchema(db) {
       ref TEXT,
       created_at TIMESTAMPTZ NOT NULL DEFAULT now()
     )`,
+    `ALTER TABLE production_settings ADD COLUMN IF NOT EXISTS visual_style TEXT`,
     `CREATE INDEX IF NOT EXISTS production_spend_project_idx ON production_spend (project_id)`,
   ];
   for (const sql of statements) await db.query(sql);
@@ -46,8 +50,14 @@ const ASPECTS = new Set(["16:9", "9:16", "1:1", "4:3", "3:4"]);
 
 export async function getSettings(db, projectId) {
   const row = (await db.query("SELECT * FROM production_settings WHERE project_id = $1", [projectId])).rows[0];
+  // visualStyle: the chosen look (realistic by default). A project that only has its own free-text look from before is "custom".
+  const custom = row?.style_prompt ?? "";
+  const visualStyle = row?.visual_style && isVisualStyle(row.visual_style) ? row.visual_style : custom.trim() ? "custom" : DEFAULT_VISUAL_STYLE;
   return {
-    stylePrompt: row?.style_prompt ?? "",
+    visualStyle,
+    customStylePrompt: custom,
+    // the text every picture command is written with (a preset's text, or the director's own words)
+    stylePrompt: resolveStyle(visualStyle, custom),
     aspectRatio: row?.aspect_ratio ?? "16:9",
     budgetLimitUsd: row?.budget_limit_usd === null || row?.budget_limit_usd === undefined ? null : Number(row.budget_limit_usd),
     effectiveBudgetUsd: row?.budget_limit_usd === null || row?.budget_limit_usd === undefined ? DEFAULT_BUDGET_USD : Number(row.budget_limit_usd),
@@ -58,10 +68,17 @@ export async function getSettings(db, projectId) {
 export async function saveSettings(db, projectId, patch) {
   const current = await getSettings(db, projectId);
   const next = { ...current };
+  if (patch.visualStyle !== undefined) {
+    if (!isVisualStyle(patch.visualStyle)) throw Object.assign(new Error("That visual style does not exist."), { status: 400 });
+    next.visualStyle = patch.visualStyle;
+  }
+  // stylePrompt = the director's own words (used when the style is "custom")
   if (patch.stylePrompt !== undefined) {
     if (typeof patch.stylePrompt !== "string" || patch.stylePrompt.length > 2000) throw Object.assign(new Error("The look description must be text under 2000 characters."), { status: 400 });
-    next.stylePrompt = patch.stylePrompt.trim();
+    next.customStylePrompt = patch.stylePrompt.trim();
+    if (patch.visualStyle === undefined && next.customStylePrompt && current.visualStyle !== "custom") next.visualStyle = "custom";
   }
+  if (next.visualStyle === "custom" && !next.customStylePrompt) throw Object.assign(new Error("Describe the look you want, or pick one of the ready-made styles."), { status: 400 });
   if (patch.aspectRatio !== undefined) {
     if (!ASPECTS.has(patch.aspectRatio)) throw Object.assign(new Error("Picture shape must be one of 16:9, 9:16, 1:1, 4:3, 3:4."), { status: 400 });
     next.aspectRatio = patch.aspectRatio;
@@ -84,11 +101,11 @@ export async function saveSettings(db, projectId, patch) {
     next.voices = voices;
   }
   await db.query(
-    `INSERT INTO production_settings (project_id, style_prompt, aspect_ratio, budget_limit_usd, voices, updated_at)
-     VALUES ($1,$2,$3,$4,$5,now())
-     ON CONFLICT (project_id) DO UPDATE SET style_prompt = EXCLUDED.style_prompt, aspect_ratio = EXCLUDED.aspect_ratio,
+    `INSERT INTO production_settings (project_id, style_prompt, visual_style, aspect_ratio, budget_limit_usd, voices, updated_at)
+     VALUES ($1,$2,$3,$4,$5,$6,now())
+     ON CONFLICT (project_id) DO UPDATE SET style_prompt = EXCLUDED.style_prompt, visual_style = EXCLUDED.visual_style, aspect_ratio = EXCLUDED.aspect_ratio,
        budget_limit_usd = EXCLUDED.budget_limit_usd, voices = EXCLUDED.voices, updated_at = now()`,
-    [projectId, next.stylePrompt, next.aspectRatio, next.budgetLimitUsd, JSON.stringify(next.voices)]
+    [projectId, next.customStylePrompt, next.visualStyle, next.aspectRatio, next.budgetLimitUsd, JSON.stringify(next.voices)]
   );
   return getSettings(db, projectId);
 }

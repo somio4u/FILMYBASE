@@ -3,6 +3,7 @@
 // for review and never becomes canonical (or reaches the Timeline) until you approve it. Prompts are written in the Blueprint,
 // are one click away here, and every version is kept.
 
+import StylePicker from './StylePicker.jsx'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { PromptCard } from './Blueprint.jsx'
 import { useLive } from './useLive.js'
@@ -240,6 +241,7 @@ export default function ImageStudio({ projectId, backendUrl }) {
   ], [])
   return (
     <div className="is">
+      <StylePicker api={api} projectId={projectId} />
       <p className="pipe-toolbar">
         <a className="dossier-small-button studio-link" href={`${api}/${projectId}/image-prompts.pdf`} target="_blank" rel="noreferrer">📄 Download all image commands (PDF) — characters, environments, properties, shots</a>
       </p>

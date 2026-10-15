@@ -118,10 +118,20 @@ test("providers: every failure is turned into a plain sentence", async () => {
 test("settings: defaults, saving, and strict checks", async () => {
   const { projectId } = await ready();
   const s = await getSettings(db, projectId);
-  assert.deepEqual([s.aspectRatio, s.stylePrompt, s.budgetLimitUsd], ["16:9", "", null]);
+  // the default look is REALISTIC (never a drawing); older free-text looks count as "custom"
+  assert.deepEqual([s.aspectRatio, s.visualStyle, s.budgetLimitUsd], ["16:9", "realistic", null]);
+  assert.match(s.stylePrompt, /Photorealistic live-action/);
   assert.equal(s.effectiveBudgetUsd, 5);
   const saved = await saveSettings(db, projectId, { stylePrompt: " moody, warm light ", aspectRatio: "9:16", budgetLimitUsd: 12.5, voices: { RAHUL: "Puck" } });
-  assert.deepEqual([saved.stylePrompt, saved.aspectRatio, saved.effectiveBudgetUsd, saved.voices.RAHUL], ["moody, warm light", "9:16", 12.5, "Puck"]);
+  assert.deepEqual([saved.stylePrompt, saved.visualStyle, saved.aspectRatio, saved.effectiveBudgetUsd, saved.voices.RAHUL], ["moody, warm light", "custom", "9:16", 12.5, "Puck"]);
+  // a ready-made style replaces the text in every command, and the custom words are remembered
+  const anime = await saveSettings(db, projectId, { visualStyle: "anime" });
+  assert.equal(anime.visualStyle, "anime");
+  assert.match(anime.stylePrompt, /Japanese anime style/);
+  assert.equal(anime.customStylePrompt, "moody, warm light");
+  assert.equal((await saveSettings(db, projectId, { visualStyle: "custom" })).stylePrompt, "moody, warm light");
+  await assert.rejects(saveSettings(db, projectId, { visualStyle: "sparkly" }), /does not exist/);
+  await assert.rejects(saveSettings(db, projectId, { visualStyle: "custom", stylePrompt: "  " }), /Describe the look/);
   await assert.rejects(saveSettings(db, projectId, { aspectRatio: "2:1" }), /Picture shape/);
   await assert.rejects(saveSettings(db, projectId, { budgetLimitUsd: -1 }), /money limit/);
   await assert.rejects(saveSettings(db, projectId, { budgetLimitUsd: "lots" }), /money limit/);

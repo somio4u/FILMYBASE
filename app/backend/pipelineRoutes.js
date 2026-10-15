@@ -13,6 +13,11 @@ import { publish } from "./events.js";
 import multer from "multer";
 import { importPictures } from "./pictureImport.js";
 import { foreignOrigin } from "./castRule.js";
+import { REF_KINDS, detectReferenceNeeds, listReferenceImages, parseKeywords, slugName } from "./referenceImages.js";
+import { imageKind } from "./pictureNames.js";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 
 export function registerPipelineRoutes(app, db, requireRole, { store, providers, cinematic = null, onShotsApproved = null }) {
   const gens = createGenerationService({ db, store, providers });
@@ -87,6 +92,80 @@ export function registerPipelineRoutes(app, db, requireRole, { store, providers,
     try { await planPrompts(db, projectId, { actorUserId: req.user?.id }); } catch (error) { console.error("Prompts could not be refreshed after the origin changed:", error.message); }
     publish(projectId, { type: "assets_changed" });
     res.json({ origin: edits.origin ?? null });
+  }));
+
+  // ---- reference images: real logos, brands and titles (see referenceImages.js) ----
+  const referenceUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 25 * 1024 * 1024 } });
+  const labelsOf = (refs) => new Set(refs.map((r) => r.label.toLowerCase().trim()));
+
+  app.get("/api/production/:projectId/references", admin, wrap(async (req, res) => {
+    const projectId = need(id(req.params.projectId), "project");
+    await projectExists(projectId);
+    const references = await listReferenceImages(db, projectId);
+    const row = (await db.query("SELECT ref_suggestions, ref_checked_at FROM production_settings WHERE project_id = $1", [projectId])).rows[0];
+    const have = labelsOf(references);
+    res.json({ references, checked: Boolean(row?.ref_checked_at), suggestions: (row?.ref_suggestions ?? []).filter((x) => !have.has(String(x.name).toLowerCase().trim())) });
+  }));
+
+  app.post("/api/production/:projectId/references", admin, referenceUpload.single("file"), wrap(async (req, res) => {
+    const projectId = need(id(req.params.projectId), "project");
+    await projectExists(projectId);
+    const label = String(req.body?.label ?? "").trim().slice(0, 80);
+    if (!label) throw Object.assign(new Error("Give the reference a name, for example “Tarang Plus logo”."), { status: 400 });
+    if (!req.file) throw Object.assign(new Error("Choose the picture first (PNG, JPG or WebP)."), { status: 400 });
+    const kindInfo = imageKind(req.file.buffer);
+    if (!kindInfo) throw Object.assign(new Error("That file is not a picture (PNG, JPG or WebP)."), { status: 400 });
+    const kind = REF_KINDS.includes(req.body?.kind) ? req.body.kind : "logo";
+    const keywords = parseKeywords(req.body?.keywords);
+    const next = Number((await db.query("SELECT COALESCE(MAX(NULLIF(regexp_replace(code, '\\D', '', 'g'), '')::int), 0) + 1 AS n FROM production_reference_images WHERE project_id = $1", [projectId])).rows[0].n);
+    const code = `REF${String(next).padStart(2, "0")}`;
+    const tmp = path.join(os.tmpdir(), `ref-${Date.now()}-${Math.random().toString(36).slice(2)}${kindInfo.ext}`);
+    await fs.promises.writeFile(tmp, req.file.buffer);
+    let media;
+    try {
+      media = await store.putMedia({ projectId, role: "reference", filePath: tmp, originalName: `${code}_${slugName(label)}${kindInfo.ext}`, label: `${code} ${label}`, subfolder: "Reference images", createdBy: req.user?.id ?? null, dimensions: {} });
+    } finally {
+      fs.promises.rm(tmp, { force: true }).catch(() => {});
+    }
+    await db.query("INSERT INTO production_reference_images (project_id, code, label, kind, keywords, media_id, created_by) VALUES ($1,$2,$3,$4,$5,$6,$7)", [projectId, code, label, kind, JSON.stringify(keywords), media.id, req.user?.id ?? null]);
+    try { await planPrompts(db, projectId, { actorUserId: req.user?.id }); } catch (error) { console.error("Prompts could not be refreshed after a reference image was added:", error.message); }
+    publish(projectId, { type: "assets_changed" });
+    res.status(201).json({ references: await listReferenceImages(db, projectId) });
+  }));
+
+  app.delete("/api/production/:projectId/references/:refId", admin, wrap(async (req, res) => {
+    const projectId = need(id(req.params.projectId), "project");
+    await projectExists(projectId);
+    await db.query("DELETE FROM production_reference_images WHERE id = $1 AND project_id = $2", [need(id(req.params.refId), "reference"), projectId]);
+    try { await planPrompts(db, projectId, { actorUserId: req.user?.id }); } catch (error) { console.error("Prompts could not be refreshed after a reference image was removed:", error.message); }
+    publish(projectId, { type: "assets_changed" });
+    res.json({ references: await listReferenceImages(db, projectId) });
+  }));
+
+  // Adu reads the screenplay and suggests the brands, logos and titles that need a real reference image.
+  app.post("/api/production/:projectId/references/detect", admin, wrap(async (req, res) => {
+    const projectId = need(id(req.params.projectId), "project");
+    await projectExists(projectId);
+    if (!textJson) throw Object.assign(new Error("The text AI is not available right now."), { status: 503 });
+    const lines = (await db.query(
+      `SELECT sc.heading, e.kind, e.speaker, COALESCE(NULLIF(e.text_en, ''), e.text_hi, '') AS text
+       FROM production_scene_elements e JOIN production_scenes sc ON sc.id = e.scene_id
+       WHERE e.project_id = $1 AND sc.in_latest ORDER BY sc.order_index, e.order_index`, [projectId]
+    )).rows;
+    let screenplay = lines.map((l) => `${l.speaker ? `${l.speaker}: ` : ""}${l.text}`).join("\n");
+    if (screenplay.length < 80) screenplay = (await db.query("SELECT pasted_text FROM ai_movie_projects WHERE id = $1", [projectId])).rows[0]?.pasted_text ?? "";
+    const references = await listReferenceImages(db, projectId);
+    let items;
+    try {
+      items = await detectReferenceNeeds({ textJson, screenplay, have: references.map((r) => r.label) });
+    } catch (error) {
+      throw Object.assign(new Error(`Adu could not read the screenplay for brands right now (${String(error.message).slice(0, 120)}). You can still add a reference image yourself.`), { status: 502 });
+    }
+    await db.query(
+      `INSERT INTO production_settings (project_id, ref_suggestions, ref_checked_at) VALUES ($1,$2,now())
+       ON CONFLICT (project_id) DO UPDATE SET ref_suggestions = EXCLUDED.ref_suggestions, ref_checked_at = now()`, [projectId, JSON.stringify(items)]
+    );
+    res.json({ references, checked: true, suggestions: items });
   }));
 
   // ---- small props share one picture (propGroups.js) ----

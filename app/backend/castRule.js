@@ -19,10 +19,10 @@ export function foreignOrigin(details) {
   return value.slice(0, 80);
 }
 
-// style may be a plain text (older callers) or { text, castOrigin }
+// style may be a plain text (older callers) or { text, castOrigin, refs } (refs = the project's reference images, see referenceImages.js)
 export function normalizeStyle(style) {
-  if (style && typeof style === "object") return { text: String(style.text ?? ""), castOrigin: CAST_ORIGINS.includes(style.castOrigin) ? style.castOrigin : DEFAULT_CAST_ORIGIN };
-  return { text: String(style ?? ""), castOrigin: DEFAULT_CAST_ORIGIN };
+  if (style && typeof style === "object") return { text: String(style.text ?? ""), castOrigin: CAST_ORIGINS.includes(style.castOrigin) ? style.castOrigin : DEFAULT_CAST_ORIGIN, refs: Array.isArray(style.refs) ? style.refs : [] };
+  return { text: String(style ?? ""), castOrigin: DEFAULT_CAST_ORIGIN, refs: [] };
 }
 
 // for one character sheet

@@ -148,3 +148,124 @@ export function OriginControl({ api, projectId, asset, onChanged }) {
     </div>
   )
 }
+
+// REFERENCE IMAGES: the real logo / brand / title artwork the film must show. Added once; the app attaches it (with "copy it
+// exactly") to every picture whose text mentions it. Adu also reads the screenplay and suggests which ones are needed.
+const KIND_LABELS = { logo: 'Logo', title: 'Title / caption', brand: 'Brand / product', other: 'Other' }
+
+export function ReferenceImages({ api, backendUrl, projectId }) {
+  const fileRef = useRef(null)
+  const [data, setData] = useState(null)
+  const [form, setForm] = useState(null) // { label, kind, keywords } while adding
+  const [busy, setBusy] = useState(false)
+  const [detecting, setDetecting] = useState(false)
+  const [message, setMessage] = useState(null)
+  const autoRan = useRef(false)
+
+  const load = useCallback(async () => {
+    const r = await call(`${api}/${projectId}/references`)
+    if (r.ok) setData(r.data)
+    return r.ok ? r.data : null
+  }, [api, projectId])
+
+  const detect = useCallback(async () => {
+    setDetecting(true); setMessage(null)
+    const r = await call(`${api}/${projectId}/references/detect`, 'POST', {})
+    setDetecting(false)
+    if (r.ok) setData(r.data)
+    else setMessage({ tone: 'bad', text: r.data.error || 'Could not read the screenplay for brands.' })
+  }, [api, projectId])
+
+  useEffect(() => {
+    load().then((d) => {
+      // the first time, Adu reads the screenplay by himself and suggests the brands and titles that need a real picture
+      if (d && !d.checked && !autoRan.current) { autoRan.current = true; detect() }
+    })
+  }, [load, detect])
+
+  async function save(event) {
+    event.preventDefault()
+    const file = fileRef.current?.files?.[0]
+    if (!form.label.trim()) { setMessage({ tone: 'bad', text: 'Give it a name, for example “Tarang Plus logo”.' }); return }
+    if (!file) { setMessage({ tone: 'bad', text: 'Choose the picture first.' }); return }
+    setBusy(true); setMessage(null)
+    const body = new FormData()
+    body.append('file', file); body.append('label', form.label); body.append('kind', form.kind); body.append('keywords', form.keywords)
+    try {
+      const response = await fetch(`${api}/${projectId}/references`, { method: 'POST', body })
+      const result = await response.json().catch(() => ({}))
+      if (!response.ok) throw new Error(result.error || 'Could not save the reference.')
+      setForm(null)
+      setMessage({ tone: 'good', text: `“${form.label}” is saved. From now on it goes along automatically with every picture whose text mentions it — the commands were updated.` })
+      await load()
+    } catch (e) {
+      setMessage({ tone: 'bad', text: e.message })
+    }
+    setBusy(false)
+  }
+
+  async function remove(ref) {
+    if (!window.confirm(`Remove “${ref.label}”? Pictures already made are kept.`)) return
+    setBusy(true)
+    const response = await fetch(`${api}/${projectId}/references/${ref.id}`, { method: 'DELETE' })
+    setBusy(false)
+    if (response.ok) { setMessage({ tone: 'good', text: `“${ref.label}” removed.` }); load() }
+  }
+
+  if (!data) return null
+  const addNew = (preset = {}) => setForm({ label: preset.name ?? '', kind: preset.kind ?? 'logo', keywords: (preset.keywords ?? []).join(', ') })
+  return (
+    <section className="studio-card" aria-label="Reference images">
+      <h3>🏷 Reference images — logos, brands, titles</h3>
+      <p className="dossier-fine-print">An image model cannot draw a real logo from its name — it makes one up. Add the real picture here once (for example the Tarang Plus logo). It is attached automatically, with “copy it exactly”, to every picture whose text mentions that name, and the commands PDF tells you which one to attach when you make pictures elsewhere.</p>
+
+      {data.references.length > 0 && (
+        <ul className="is-grid" style={{ listStyle: 'none', padding: 0 }}>
+          {data.references.map((r) => (
+            <li key={r.id} className="is-card">
+              <header className="is-card-head"><strong>{r.code} · {r.label}</strong><span className="dossier-fine-print">{KIND_LABELS[r.kind] ?? r.kind}</span></header>
+              <img src={`${backendUrl}${r.mediaUrl}`} alt={r.label} style={{ maxWidth: '100%', maxHeight: 140, objectFit: 'contain', background: '#fff' }} />
+              <p className="dossier-fine-print">Also written as: {r.keywords.length ? r.keywords.join(', ') : '— (only the name above)'}</p>
+              <button type="button" className="dossier-small-button" disabled={busy} onClick={() => remove(r)}>Remove</button>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {data.suggestions.length > 0 && (
+        <div role="status">
+          <p className="dossier-message"><strong>Adu found {data.suggestions.length} name{data.suggestions.length === 1 ? '' : 's'} in the screenplay that need a real picture:</strong></p>
+          <ul className="dossier-fine-print">
+            {data.suggestions.map((s) => (
+              <li key={s.name}><strong>{s.name}</strong> ({KIND_LABELS[s.kind] ?? s.kind}){s.where ? ` — ${s.where}` : ''} <button type="button" className="dossier-small-button" disabled={busy} onClick={() => addNew(s)}>Add the picture</button></li>
+            ))}
+          </ul>
+        </div>
+      )}
+      {detecting && <p className="floating-agent-stage-line"><span className="floating-agent-spinner" aria-hidden="true" /><span>Adu is reading the screenplay for brands and titles…</span></p>}
+      {!detecting && data.checked && data.suggestions.length === 0 && data.references.length === 0 && <p className="dossier-fine-print">Adu found no brands or titles in the screenplay. You can still add one yourself.</p>}
+
+      {form && (
+        <form onSubmit={save} className="pipe-toolbar" style={{ flexWrap: 'wrap', gap: 8 }}>
+          <label className="studio-field">Name<input value={form.label} maxLength={80} onChange={(e) => setForm({ ...form, label: e.target.value })} placeholder="e.g. Tarang Plus logo" disabled={busy} /></label>
+          <label className="studio-field">Type
+            <select value={form.kind} onChange={(e) => setForm({ ...form, kind: e.target.value })} disabled={busy}>
+              {Object.entries(KIND_LABELS).map(([k, l]) => <option key={k} value={k}>{l}</option>)}
+            </select>
+          </label>
+          <label className="studio-field">Also written as (commas)<input value={form.keywords} onChange={(e) => setForm({ ...form, keywords: e.target.value })} placeholder="e.g. Tarang, Tarang TV" disabled={busy} /></label>
+          <label className="studio-field">The picture<input ref={fileRef} type="file" accept="image/png,image/jpeg,image/webp,.png,.jpg,.jpeg,.webp" disabled={busy} /></label>
+          <button type="submit" className="dossier-small-button" disabled={busy}>{busy ? 'Saving…' : 'Save reference'}</button>
+          <button type="button" className="dossier-small-button" disabled={busy} onClick={() => setForm(null)}>Cancel</button>
+        </form>
+      )}
+      {!form && (
+        <div className="pipe-toolbar">
+          <button type="button" className="dossier-small-button" disabled={busy} onClick={() => addNew()}>➕ Add a reference image</button>
+          <button type="button" className="dossier-small-button" disabled={busy || detecting} onClick={detect}>{detecting ? 'Looking…' : '🔎 Find brands & titles in the screenplay'}</button>
+        </div>
+      )}
+      {message && <p className={message.tone === 'bad' ? 'dossier-error' : 'dossier-message'} role={message.tone === 'bad' ? 'alert' : 'status'}>{message.text}</p>}
+    </section>
+  )
+}

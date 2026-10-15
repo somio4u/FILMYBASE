@@ -14,6 +14,7 @@
 import { isPhotographic } from "./visualStyles.js";
 import { memberLabel, plainText } from "./propGroups.js";
 import { normalizeStyle, personRule, shotRule } from "./castRule.js";
+import { matchReferences, referenceSentence, referenceSignature } from "./referenceImages.js";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -80,6 +81,8 @@ export function describeDetails(details, max = 1500) {
     let text;
     if (typeof value === "string") text = value;
     else if (typeof value === "number") text = String(value);
+    // a description saved in two languages ({ en, hi }) is used in English; before this it was silently left out of every command
+    else if (value && typeof value === "object" && !Array.isArray(value) && ["en", "hi", "or"].some((k) => typeof value[k] === "string")) text = value.en || value.hi || value.or || "";
     else if (Array.isArray(value)) {
       text = value.map((v) => (typeof v === "string" ? v : v && typeof v === "object" ? Object.values(v).filter((x) => typeof x === "string").join(" - ") : "")).filter(Boolean).join("; ");
     } else continue;
@@ -94,32 +97,39 @@ const SHEET_LAYOUT = "Make ONE single image laid out as a clean professional mod
 
 // One sheet per item holding every view a later shot picture could need, so
 // each shot can be drawn from it and the item always looks the same.
+// Which of the project's reference images (logos, brands, titles) a picture needs: those its own text mentions.
+export const assetReferences = (asset, refs) => matchReferences(`${asset.name} ${describeDetails(effectiveDetails(asset))}`, refs);
+export const shotReferences = (shot, refs) => matchReferences(`${shot.storyboardText || shot.description} ${shot.heading ?? ""}`, refs);
+
 export function assetPrompt(asset, styleIn) {
-  const { text: style, castOrigin } = normalizeStyle(styleIn);
+  const { text: style, castOrigin, refs: brandRefs } = normalizeStyle(styleIn);
   const details = describeDetails(effectiveDetails(asset));
   const look = style ? ` VISUAL STYLE (follow it strictly, in every view): ${style}.` : "";
   // THE CAST RULE: characters are Indian unless the director says otherwise (castRule.js); props and places are not touched
   const who = asset.kind === "character" ? personRule(effectiveDetails(asset), castOrigin) : "";
   const cast = who ? ` ${who}` : "";
+  // real logos / brands / titles this item mentions are attached as reference images (referenceImages.js)
+  const brand = referenceSentence(assetReferences(asset, brandRefs));
   if (asset.kind === "character") {
-    return `Character model sheet for "${asset.name}" for a film. ${details}.${cast}${look} ${SHEET_LAYOUT} Include: a frontal close-up of the face; a side profile of the face; a three-quarter view; a full-body long shot from the front, one from the side and one from the back; and a row of facial expressions (neutral, happy, angry, sad, afraid, surprised). Same person, same face, same clothes, hair, build and age in every view. Realistic proportions. ${NO_TEXT}`;
+    return `Character model sheet for "${asset.name}" for a film. ${details}.${cast}${brand}${look} ${SHEET_LAYOUT} Include: a frontal close-up of the face; a side profile of the face; a three-quarter view; a full-body long shot from the front, one from the side and one from the back; and a row of facial expressions (neutral, happy, angry, sad, afraid, surprised). Same person, same face, same clothes, hair, build and age in every view. Realistic proportions. ${NO_TEXT}`;
   }
   if (asset.kind === "location") {
-    return `Environment model sheet for the place "${asset.name}" for a film. ${details}.${look} ${SHEET_LAYOUT} Include: a wide establishing view of the whole space; views from two or three other camera positions; a close view of the most important detail or furniture; and the same space in its typical lighting (and a second lighting mood if the details mention one). Same architecture, layout, colours and objects in every view. No people. ${NO_TEXT}`;
+    return `Environment model sheet for the place "${asset.name}" for a film. ${details}.${brand}${look} ${SHEET_LAYOUT} Include: a wide establishing view of the whole space; views from two or three other camera positions; a close view of the most important detail or furniture; and the same space in its typical lighting (and a second lighting mood if the details mention one). Same architecture, layout, colours and objects in every view. No people. ${NO_TEXT}`;
   }
   if (asset.group_members?.length) {
     const rows = asset.group_members.map((m) => `position ${m.position}: ${m.name}${plainText(m.description) ? ` — ${plainText(m.description)}` : ""}`).join("; ");
     return `Props sheet for a film: ${asset.group_members.length} small objects shown TOGETHER in ONE image — ${rows}.${look} Lay the objects out in a tidy grid on a plain light-grey background: position 1 is the top-left, then left to right, top to bottom, exactly in the order listed. Show each object once, large and clearly separated from the others, in a three-quarter front view and at a believable size relative to the others. Draw each object as it normally looks anywhere in the world (a camera is an ordinary camera, a phone an ordinary phone). Show only the objects: no people, no hands. Nothing is written in the picture: no text, numbers, labels, logos or watermarks.`;
   }
-  return `Prop model sheet for the object "${asset.name}" for a film. ${details}.${cast}${look} ${SHEET_LAYOUT} Include: a front view, a side view, a back view, a top view, a three-quarter hero view, a close-up of its most important detail or texture, and a small view of it being held or placed in a normal setting to show its size. Same object, material, colour and wear in every view. ${NO_TEXT}`;
+  return `Prop model sheet for the object "${asset.name}" for a film. ${details}.${cast}${brand}${look} ${SHEET_LAYOUT} Include: a front view, a side view, a back view, a top view, a three-quarter hero view, a close-up of its most important detail or texture, and a small view of it being held or placed in a normal setting to show its size. Same object, material, colour and wear in every view. ${NO_TEXT}`;
 }
 
 export function keyframePrompt(shot, styleIn, refNames) {
-  const { text: style, castOrigin } = normalizeStyle(styleIn);
+  const { text: style, castOrigin, refs: brandRefs } = normalizeStyle(styleIn);
+  const brand = referenceSentence(shotReferences(shot, brandRefs));
   const people = shotRule(shot.assets, castOrigin);
   const camera = [shot.framing, shot.cameraAngle, shot.cameraMove && shot.cameraMove !== "Static" ? `(camera: ${shot.cameraMove})` : null].filter(Boolean).join(", ");
   const refs = refNames.length ? ` The attached pictures are model sheets (several views of each item). Use them to keep the exact same face, clothes, object design and place layout for: ${refNames.join(", ")}. Draw ONLY the single requested frame, never a sheet, and do not copy the sheet layout.` : "";
-  return `A single film frame (keyframe). Camera: ${camera || "natural framing"}. ${shot.storyboardText || shot.description}${people ? ` ${people}` : ""}${style ? ` VISUAL STYLE (follow it strictly): ${style}.` : ""}${refs} ${isPhotographic(style) ? "Cinematic, natural film lighting, photographic detail." : "Cinematic composition and lighting, in the visual style above."} ${NO_TEXT}`;
+  return `A single film frame (keyframe). Camera: ${camera || "natural framing"}. ${shot.storyboardText || shot.description}${people ? ` ${people}` : ""}${brand}${style ? ` VISUAL STYLE (follow it strictly): ${style}.` : ""}${refs} ${isPhotographic(style) ? "Cinematic, natural film lighting, photographic detail." : "Cinematic composition and lighting, in the visual style above."} ${NO_TEXT}`;
 }
 
 export function videoPrompt(shot, styleIn) {
@@ -143,18 +153,21 @@ const ORDER = { character: 0, location: 1, prop: 2 };
 export const refLabel = (asset, shot) => (asset.members ? memberLabel({ name: asset.name, members: asset.members }, shot.storyboardText || shot.description) : asset.name);
 export const plannedRefNames = (shot) => [...shot.assets].filter((a) => a.kind in ORDER).sort((a, b) => ORDER[a.kind] - ORDER[b.kind]).slice(0, 4).map((a) => refLabel(a, shot));
 
+// what of the look decides a command's fingerprint: the style and the cast rule (the reference images have their own entry)
+const styleKey = (style) => { const n = normalizeStyle(style); return { t: n.text, c: n.castOrigin }; };
+
 export function sheetSpec(asset, style) {
   const details = describeDetails(effectiveDetails(asset));
-  return { purpose: "model_sheet", assetId: asset.id, text: assetPrompt(asset, style), params: { aspectRatio: "16:9" }, sourceHash: hashInputs({ k: "sheet", kind: asset.kind, name: asset.name, details, style, g: asset.group_members ?? null }) };
+  return { purpose: "model_sheet", assetId: asset.id, text: assetPrompt(asset, style), params: { aspectRatio: "16:9" }, sourceHash: hashInputs({ k: "sheet", kind: asset.kind, name: asset.name, details, style: styleKey(style), g: asset.group_members ?? null, br: referenceSignature(assetReferences(asset, normalizeStyle(style).refs)) }) };
 }
 export function frameSpec(shot, style, aspectRatio = "16:9") {
   const names = plannedRefNames(shot);
-  return { purpose: "first_frame", shotId: shot.id, text: keyframePrompt(shot, style, names), params: { aspectRatio, refNames: names }, sourceHash: hashInputs({ k: "frame", d: shot.storyboardText || shot.description, f: shot.framing, a: shot.cameraAngle, m: shot.cameraMove, names, style, aspectRatio, cf: (shot.assets ?? []).filter((a) => a.origin).map((a) => `${a.name}:${a.origin}`) }) };
+  return { purpose: "first_frame", shotId: shot.id, text: keyframePrompt(shot, style, names), params: { aspectRatio, refNames: names }, sourceHash: hashInputs({ k: "frame", d: shot.storyboardText || shot.description, f: shot.framing, a: shot.cameraAngle, m: shot.cameraMove, names, style: styleKey(style), aspectRatio, cf: (shot.assets ?? []).filter((a) => a.origin).map((a) => `${a.name}:${a.origin}`), br: referenceSignature(shotReferences(shot, normalizeStyle(style).refs)) }) };
 }
 export function videoSpec(shot, style, aspectRatio = "16:9") {
   const seconds = veoSecondsFor(shot.durationSec);
   const text = `${videoPrompt(shot, style)} Target length: about ${seconds} seconds.`;
-  return { purpose: "video", shotId: shot.id, text, params: { seconds, plannedSeconds: shot.durationSec, aspectRatio }, sourceHash: hashInputs({ k: "video", d: shot.storyboardText || shot.description, m: shot.cameraMove, seconds, style, cf: (shot.assets ?? []).filter((a) => a.origin).map((a) => `${a.name}:${a.origin}`) }) };
+  return { purpose: "video", shotId: shot.id, text, params: { seconds, plannedSeconds: shot.durationSec, aspectRatio }, sourceHash: hashInputs({ k: "video", d: shot.storyboardText || shot.description, m: shot.cameraMove, seconds, style: styleKey(style), cf: (shot.assets ?? []).filter((a) => a.origin).map((a) => `${a.name}:${a.origin}`) }) };
 }
 export function audioSpec(element, voice) {
   const text = speechText(element);
@@ -299,10 +312,16 @@ export function createGenerationService({ db, store, providers, env = process.en
       const prompt = `${planned.prompt.text}${note ? ` Extra direction: ${String(note).slice(0, 500)}` : ""}`;
       const aspect = "16:9"; // model sheets are wide so every view fits
       const version = await nextVersion("asset_id = $1", [assetId]);
+      // real logos / brands / titles this item mentions go along as reference images (referenceImages.js)
+      const brand = assetReferences(asset, settings.look.refs);
       return start({
-        projectId, kind, assetId, prompt, promptId: planned.prompt.id, params: { aspectRatio: aspect }, estimate: estimateCost(kind), actorUserId,
+        projectId, kind, assetId, prompt, promptId: planned.prompt.id, params: { aspectRatio: aspect, brandRefs: brand.map((r) => r.code) }, estimate: estimateCost(kind), actorUserId,
         label: `${asset.code}_v${version}`, subfolder: `${asset.code} ${asset.name}`, role: kind, ext: ".png",
-        run: () => providers.generateImage({ prompt, aspectRatio: aspect }),
+        run: async () => {
+          const references = [];
+          for (const r of brand) references.push(await readMediaBuffer(r.mediaId));
+          return providers.generateImage({ prompt, aspectRatio: aspect, ...(references.length ? { references } : {}) });
+        },
       });
     },
 
@@ -370,18 +389,21 @@ export function createGenerationService({ db, store, providers, env = process.en
       if (!ready.ok && (!allowMissing || shot.shotStatus !== "approved")) throw httpError(ready.reason, 409, "not_ready");
       // characters first, then the place, then objects; the AI takes at most 4
       const order = { character: 0, location: 1, prop: 2 };
-      const chosen = [...ready.refs].sort((a, b) => order[a.asset.kind] - order[b.asset.kind]).slice(0, 4);
+      // real logos / brands / titles this shot mentions go along as reference images, after the model sheets (5 pictures at most)
+      const brand = shotReferences(shot, settings.look.refs);
+      const chosen = [...ready.refs].sort((a, b) => order[a.asset.kind] - order[b.asset.kind]).slice(0, Math.max(0, 5 - brand.length));
       const planned = await ensurePrompt(db, projectId, { ...frameSpec(shot, settings.look, settings.aspectRatio), actorUserId });
       const chosenNames = chosen.map((c) => refLabel(c.asset, shot));
       // The planned prompt names every item of the shot; if some reference is missing (allowed on request) the text names only the attached ones.
       const prompt = planned.prompt.edited || JSON.stringify(chosenNames) === JSON.stringify(plannedRefNames(shot)) ? planned.prompt.text : keyframePrompt(shot, settings.look, chosenNames);
       const version = await nextVersion("shot_id = $1 AND kind = 'keyframe'", [shot.id]);
       return start({
-        projectId, kind: "keyframe", shotId: shot.id, prompt, promptId: planned.prompt.id, params: { aspectRatio: settings.aspectRatio, refs: chosen.map((c) => c.generation.id) }, estimate: estimateCost("keyframe"), actorUserId,
+        projectId, kind: "keyframe", shotId: shot.id, prompt, promptId: planned.prompt.id, params: { aspectRatio: settings.aspectRatio, refs: chosen.map((c) => c.generation.id), brandRefs: brand.map((r) => r.code) }, estimate: estimateCost("keyframe"), actorUserId,
         label: `${shot.code}_v${version}`, subfolder: `${shot.sceneCode}`, role: "keyframe", ext: ".png",
         run: async () => {
           const references = [];
           for (const c of chosen) references.push(await readMediaBuffer(c.generation.media_id));
+          for (const r of brand) references.push(await readMediaBuffer(r.mediaId));
           return providers.generateImage({ prompt, references, aspectRatio: settings.aspectRatio });
         },
       });

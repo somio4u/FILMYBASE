@@ -1,5 +1,6 @@
 import { DEFAULT_VISUAL_STYLE, isVisualStyle, resolveStyle } from "./visualStyles.js";
 import { CAST_ORIGINS, DEFAULT_CAST_ORIGIN } from "./castRule.js";
+import { listReferenceImages } from "./referenceImages.js";
 
 // Per-project settings for the AI production pipeline: the look of the film
 // (style text), picture shape, voices, and the MONEY limit. Every paid AI call
@@ -44,6 +45,8 @@ export async function ensurePipelineSettingsSchema(db) {
     )`,
     `ALTER TABLE production_settings ADD COLUMN IF NOT EXISTS visual_style TEXT`,
     `ALTER TABLE production_settings ADD COLUMN IF NOT EXISTS cast_origin TEXT`,
+    `ALTER TABLE production_settings ADD COLUMN IF NOT EXISTS ref_suggestions JSONB`,
+    `ALTER TABLE production_settings ADD COLUMN IF NOT EXISTS ref_checked_at TIMESTAMPTZ`,
     `CREATE INDEX IF NOT EXISTS production_spend_project_idx ON production_spend (project_id)`,
   ];
   for (const sql of statements) await db.query(sql);
@@ -60,7 +63,7 @@ export async function getSettings(db, projectId) {
   const stylePrompt = resolveStyle(visualStyle, custom);
   return {
     castOrigin, // "indian" (default): every character and prop is Indian unless said otherwise; "none": no rule
-    look: { text: stylePrompt, castOrigin }, // what every picture command is written with
+    look: { text: stylePrompt, castOrigin, refs: await listReferenceImages(db, projectId) }, // what every picture command is written with
     visualStyle,
     customStylePrompt: custom,
     // the text every picture command is written with (a preset's text, or the director's own words)

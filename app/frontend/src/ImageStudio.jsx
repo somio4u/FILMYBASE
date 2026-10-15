@@ -4,7 +4,7 @@
 // are one click away here, and every version is kept.
 
 import StylePicker from './StylePicker.jsx'
-import { ImportPictures, PropCombiner, OriginControl } from './ImageTools.jsx'
+import { ImportPictures, PropCombiner, OriginControl, ReferenceImages } from './ImageTools.jsx'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { PromptCard } from './Blueprint.jsx'
 import { useLive } from './useLive.js'
@@ -245,6 +245,7 @@ export default function ImageStudio({ projectId, backendUrl }) {
   return (
     <div className="is">
       <StylePicker api={api} projectId={projectId} />
+      <ReferenceImages api={api} backendUrl={backendUrl} projectId={projectId} />
       <p className="pipe-toolbar">
         <a className="dossier-small-button studio-link" href={`${api}/${projectId}/image-prompts.pdf`} target="_blank" rel="noreferrer">📄 Download all image commands (PDF) — characters, environments, properties, shots</a>
       </p>

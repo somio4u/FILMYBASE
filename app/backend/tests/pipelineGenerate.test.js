@@ -133,7 +133,7 @@ test("settings: defaults, saving, and strict checks", async () => {
   await assert.rejects(saveSettings(db, projectId, { visualStyle: "sparkly" }), /does not exist/);
   // the cast rule: every character and prop is Indian by default (castRule.js); it can be switched off
   assert.equal(s.castOrigin, "indian");
-  assert.deepEqual(s.look, { text: s.stylePrompt, castOrigin: "indian" });
+  assert.deepEqual(s.look, { text: s.stylePrompt, castOrigin: "indian", refs: [] });
   assert.equal((await saveSettings(db, projectId, { castOrigin: "none" })).look.castOrigin, "none");
   await assert.rejects(saveSettings(db, projectId, { castOrigin: "maybe" }), /cast rule/);
   assert.equal((await saveSettings(db, projectId, { castOrigin: "indian" })).castOrigin, "indian");

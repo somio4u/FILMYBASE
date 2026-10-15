@@ -112,17 +112,28 @@ function CreateShotDivision({ projectId, backendUrl }) {
     await loadJob()
   }
 
+  const [cancelling, setCancelling] = useState(false)
+  async function cancel() {
+    setCancelling(true)
+    try { await fetch(`${backendUrl}/api/ai-movie/projects/${projectId}/auto-production/cancel`, { method: 'POST' }) } catch { /* the status below keeps polling */ }
+  }
+  useEffect(() => { if (!running) setCancelling(false) }, [running])
+
   const working = running || busy
   return (
     <section className="dossier-card" style={{ margin: '12px 0' }}>
-      <button type="button" className="choose-button" onClick={create} disabled={working}>
-        {working ? 'Adu is creating the shot division…' : '🎬 Create shot division from screenplay'}
-      </button>
+      <div className="pipe-toolbar">
+        <button type="button" className="choose-button" onClick={create} disabled={working}>
+          {working ? 'Adu is creating the shot division…' : '🎬 Create shot division from screenplay'}
+        </button>
+        {working && <button type="button" className="cancel-button" onClick={cancel} disabled={cancelling}>{cancelling ? 'Cancelling… (finishing the current step)' : '✖ Cancel'}</button>}
+      </div>
       <p className="dossier-fine-print">Adu reads the locked screenplay and cuts every scene into shots. Scenes that already have shots are left as they are. Nothing is approved for you — check the shots below (add, remove, combine or edit) and approve each scene; approved scenes then appear in the Image Studio.</p>
       {working && job?.phase === 'shots' && <p className="floating-agent-stage-line"><span className="floating-agent-spinner" aria-hidden="true" /><span>Step {job.step ?? 1} of {job.steps ?? 4}: {job.label}{job.detail ? ` (${job.detail})` : ''}</span></p>}
       {error && <p className="dossier-error">{error}</p>}
       {!working && job?.phase === 'shots' && (job.status === 'failed' || job.status === 'needs_attention') && <p className="dossier-error">{job.message}</p>}
       {!working && job?.phase === 'shots' && job.status === 'waiting_for_you' && <p className="dossier-message">{job.message}</p>}
+      {!working && job?.phase === 'shots' && job.status === 'cancelled' && <p className="dossier-message">⏹ {job.message}</p>}
     </section>
   )
 }

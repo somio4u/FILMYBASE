@@ -8,6 +8,7 @@ import PDFDocument from "pdfkit";
 import ExcelJS from "exceljs";
 import PptxGenJS from "pptxgenjs";
 import { buildCastingPpt } from "./castingPpt.js";
+import { lengthRule } from "./aiMovieLength.js";
 import { RUNNERS as AUTO_PRODUCTION_RUNNERS } from "./autoProduction.js";
 import { buildScreenplayPlainText, countScenes } from "./screenplayText.js";
 import { GROUPS as CASTING_GROUPS, addToCast, buildCast, castFromSheet, findCharacters, gatherScriptEvidence } from "./castingCast.js";
@@ -171,6 +172,9 @@ async function ensureAiMovieSchema() {
     )`,
     `ALTER TABLE ai_movie_projects ADD COLUMN IF NOT EXISTS stage_status JSONB NOT NULL DEFAULT '{}'`,
     `ALTER TABLE ai_movie_projects ADD COLUMN IF NOT EXISTS auto_production_job JSONB`,
+    `ALTER TABLE ai_movie_projects ADD COLUMN IF NOT EXISTS screenplay_only BOOLEAN NOT NULL DEFAULT false`,
+    `ALTER TABLE ai_movie_projects ADD COLUMN IF NOT EXISTS length_kind TEXT`,
+    `ALTER TABLE ai_movie_projects ADD COLUMN IF NOT EXISTS length_minutes NUMERIC`,
     // The Story Brain's design (see storyBrain.js) lives on the run itself.
     `ALTER TABLE auto_pipeline_runs ADD COLUMN IF NOT EXISTS story_bible JSONB`,
     `ALTER TABLE auto_pipeline_runs ADD COLUMN IF NOT EXISTS story_bible_usage JSONB`,
@@ -4486,7 +4490,15 @@ async function fillAiMovieSceneCardsIfMissing(projectId, backfill) {
 // The model request for one forward story stage (shared by the plain call below and by the judged,
 // budget-checked, quality-mode-routed path in the generate route). previousDraft: the draft being revised,
 // so a revision changes only what the notes ask for instead of starting over.
-function aiMovieForwardStageRequest(stageKey, priorContextText, referenceMaterialText, feedback, previousDraft = null) {
+// The film's length category (short film: 10 minutes at most; film: its own length) as one rule for every writer. Without a
+// length set (older projects), nothing is added and the writers behave as before.
+async function aiMovieLengthNote(projectId) {
+  const row = (await db.query("SELECT length_kind, length_minutes FROM ai_movie_projects WHERE id = $1", [projectId])).rows[0];
+  const minutes = row?.length_minutes == null ? 0 : Number(row.length_minutes);
+  return lengthRule(row?.length_kind, minutes);
+}
+
+function aiMovieForwardStageRequest(stageKey, priorContextText, referenceMaterialText, feedback, previousDraft = null, lengthNote = "") {
   const referenceBlock = referenceMaterialText
     ? `\n\nThe user has also provided reference material below — treat it as authoritative grounding, stay faithful to it:\n\n${referenceMaterialText}`
     : "";
@@ -4505,7 +4517,7 @@ function aiMovieForwardStageRequest(stageKey, priorContextText, referenceMateria
       : "";
   return {
     systemInstruction: AI_MOVIE_STAGE_GENERATION_SYSTEM_PROMPT,
-    contents: `The story's approved layers so far:\n\n${priorContextText}${referenceBlock}${draftBlock}${feedbackBlock}${stageSpecificBlock}\n\nNow generate the "${stageKey}" layer.`,
+    contents: `The story's approved layers so far:\n\n${priorContextText}${referenceBlock}${draftBlock}${feedbackBlock}${stageSpecificBlock}${lengthNote ? `\n\nLENGTH RULE: ${lengthNote}` : ""}\n\nNow generate the "${stageKey}" layer.`,
     maxOutputTokens: 8192,
     responseSchema: { type: Type.OBJECT, properties: { [stageKey]: AI_MOVIE_FORWARD_STAGE_SCHEMAS[stageKey] }, required: [stageKey] },
   };
@@ -4738,7 +4750,7 @@ ${AI_MOVIE_SCREEN_ONLY_RULE}
 
 ${AI_MOVIE_HEADING_AND_NAMES_RULE}`;
 
-async function generateAiMovieScreenplayBeat(priorContextText, referenceMaterialText, scenesSoFarText, beat, feedback) {
+async function generateAiMovieScreenplayBeat(priorContextText, referenceMaterialText, scenesSoFarText, beat, feedback, lengthNote = "") {
   const referenceBlock = referenceMaterialText
     ? `\n\nThe user has also provided reference material below — treat it as authoritative grounding, stay faithful to it:\n\n${referenceMaterialText}`
     : "";
@@ -4757,9 +4769,9 @@ async function generateAiMovieScreenplayBeat(priorContextText, referenceMaterial
   const result = await generateJsonContent({
     agent: aiMovieSceneWriterAgent(),
     model: AI_MOVIE_SCREENPLAY_WRITER_MODEL_NAME,
-    contents: `The story's approved layers so far:\n\n${priorContextText}${referenceBlock}${feedbackBlock}${scenesBlock}\n\nNow write the scenes for this beat:\n${beat.title.en}: ${beat.description.en}${runtimeBlock}${aiMovieBeatBoundaryBlock(beat)}`,
+    contents: `The story's approved layers so far:\n\n${priorContextText}${referenceBlock}${feedbackBlock}${scenesBlock}${lengthNote ? `\n\nLENGTH RULE: ${lengthNote}` : ""}\n\nNow write the scenes for this beat:\n${beat.title.en}: ${beat.description.en}${runtimeBlock}${aiMovieBeatBoundaryBlock(beat)}`,
     config: {
-      systemInstruction: AI_MOVIE_SCREENPLAY_BEAT_SYSTEM_PROMPT,
+      systemInstruction: lengthNote.includes("SHORT FILM") ? AI_MOVIE_SCREENPLAY_BEAT_SYSTEM_PROMPT.replace("never fewer than 2", "never fewer than 1") : AI_MOVIE_SCREENPLAY_BEAT_SYSTEM_PROMPT,
       responseMimeType: "application/json",
       // A beat with a genuinely open-ended scene count (no maxItems cap —
       // some beats need well more than 4) needs more headroom than a
@@ -4774,7 +4786,7 @@ async function generateAiMovieScreenplayBeat(priorContextText, referenceMaterial
           // the beat actually needs, not forced toward a target range. The
           // floor exists only to rule out the earlier real bug (beats
           // reliably coming back with just 1 scene).
-          scenes: { type: Type.ARRAY, items: AI_MOVIE_SCREENPLAY_SCENE_SCHEMA, minItems: "2" },
+          scenes: { type: Type.ARRAY, items: AI_MOVIE_SCREENPLAY_SCENE_SCHEMA, minItems: lengthNote.includes("SHORT FILM") ? "1" : "2" },
         },
         required: ["scenes"],
       },
@@ -5305,7 +5317,7 @@ async function generateNextAiMovieScreenplayBeat(projectId) {
       nextIndex
     );
     const scenesSoFarText = flattenAiMovieScreenplayScenesSoFar(screenplayBeats, nextIndex);
-    const initialScenes = await generateAiMovieScreenplayBeat(priorContextText, referenceMaterialText, scenesSoFarText, aiMovieBeatForWriters(beats, nextIndex), null);
+    const initialScenes = await generateAiMovieScreenplayBeat(priorContextText, referenceMaterialText, scenesSoFarText, aiMovieBeatForWriters(beats, nextIndex), null, await aiMovieLengthNote(projectId));
     // A song beat is mostly the song, which is only a short paragraph on
     // the page -- measured by pages it always looks short, and a real test
     // run showed it then padded with the NEXT beats' plot (the Pahandi beat
@@ -5399,10 +5411,11 @@ app.post("/api/ai-movie/stages/:stage/generate", requireRole("admin"), async (re
   try {
     const referenceMaterialText = await getAiMovieReferenceMaterialText(projectId);
     const priorContextText = flattenAiMovieContentForExtraction(project.pasted_text, project.backfill);
+    const lengthNote = await aiMovieLengthNote(projectId);
     // Story Writer (model by quality mode) -> Story Judge (Gemini 3.1 Pro) -> revise, capped per quality mode.
     // Every call is checked against the project's money limit first and written to the spend ledger.
     const writeStage = async (previousDraft, notes) => {
-      const request = aiMovieForwardStageRequest(stageKey, priorContextText, referenceMaterialText, notes, previousDraft);
+      const request = aiMovieForwardStageRequest(stageKey, priorContextText, referenceMaterialText, notes, previousDraft, lengthNote);
       const { data } = await aiMovieStory.ask.ask(projectId, "story-writer", request);
       return data[stageKey];
     };
@@ -5548,7 +5561,7 @@ app.post("/api/ai-movie/stages/screenplay/beats/:index/request-changes", require
       beatIndex
     );
     const scenesSoFarText = flattenAiMovieScreenplayScenesSoFar(screenplayBeats, beatIndex);
-    const initialScenes = await generateAiMovieScreenplayBeat(priorContextText, referenceMaterialText, scenesSoFarText, aiMovieBeatForWriters(beats, beatIndex), feedback || null);
+    const initialScenes = await generateAiMovieScreenplayBeat(priorContextText, referenceMaterialText, scenesSoFarText, aiMovieBeatForWriters(beats, beatIndex), feedback || null, await aiMovieLengthNote(projectId));
     // The beat's own runtimeMinutes target (set back at the Beat Sheet
     // stage) never gets adjusted down to match a short regeneration -- if
     // the new scenes come up short, more screenplay gets written for this
@@ -6573,18 +6586,20 @@ app.post("/api/ai-movie/stages/screenplay/beats/:beatIndex/scenes/:sceneIndex/di
 // cutting, prompt planning and Blueprint approval run by themselves, in the background, using the same routes the
 // old screens used (called on this server with the user's own session). Progress is saved on the project.
 const autoProductionRunning = new Set();
+const autoProductionCancelled = new Set();
 
 async function startAutoProduction(projectId, cookie, { phase = "prepare", force = false } = {}) {
   const id = Number(projectId);
   const run = AUTO_PRODUCTION_RUNNERS[phase];
   if (!run || !Number.isInteger(id) || autoProductionRunning.has(id)) return false;
-  const row = (await db.query("SELECT auto_production_job FROM ai_movie_projects WHERE id = $1", [id])).rows[0];
+  const row = (await db.query("SELECT auto_production_job, screenplay_only FROM ai_movie_projects WHERE id = $1", [id])).rows[0];
   if (!row) return false;
   const job = row.auto_production_job;
   const fresh = job?.updatedAt && Date.now() - Date.parse(job.updatedAt) < 15 * 60 * 1000;
   if (!force && job && (job.status === "done" || (job.status === "running" && fresh))) return false;
 
   autoProductionRunning.add(id);
+  autoProductionCancelled.delete(id);
   const setJob = (patch) => db.query(
     "UPDATE ai_movie_projects SET auto_production_job = COALESCE(auto_production_job, '{}'::jsonb) || $2::jsonb WHERE id = $1",
     [id, JSON.stringify({ ...patch, updatedAt: new Date().toISOString() })]
@@ -6603,11 +6618,61 @@ async function startAutoProduction(projectId, cookie, { phase = "prepare", force
     }
   };
   const listScenes = async () => (await db.query("SELECT id FROM production_scenes WHERE project_id = $1 AND in_latest ORDER BY order_index", [id])).rows.map((r) => r.id);
-  run({ projectId: id, api, listScenes, setJob })
+  run({ projectId: id, api, listScenes, setJob, screenplayOnly: Boolean(row.screenplay_only), isCancelled: async () => autoProductionCancelled.has(id) })
     .catch((error) => { console.error("Auto production failed:", error); return setJob({ status: "failed", message: `Adu stopped: ${String(error.message).slice(0, 200)}` }); })
-    .finally(() => autoProductionRunning.delete(id));
+    .finally(() => { autoProductionRunning.delete(id); autoProductionCancelled.delete(id); });
   return true;
 }
+
+// SCREENPLAY-ONLY PROJECTS. A finished screenplay (uploaded PDF/Word, or sent from the Film module) is production-ready, so
+// it is NEVER rewritten and no story is rebuilt behind it: no Story Bible, no synopsis / characters / three-act / beat sheet,
+// no critics, no rounds. The project is the screenplay itself, every story stage counts as done, and the director goes straight
+// to the Storyboard Designer. Adu reads the screenplay in production (scenes) at once; the characters, environments and
+// properties are read when the director presses "Create shot division from screenplay".
+const ALL_STAGES_APPROVED = () => approvedStageStatusUpTo(AI_MOVIE_DETECTED_STAGE_COVERED_INDEX.screenplay);
+
+async function createScreenplayOnlyProject({ title, text, userId, cookie }) {
+  const inserted = await db.query(
+    "INSERT INTO ai_movie_projects (title, pasted_text, detected_stage, stage_status, screenplay_only, created_by) VALUES ($1, $2, 'screenplay', $3, true, $4) RETURNING id",
+    [title ?? null, text, JSON.stringify(ALL_STAGES_APPROVED()), userId]
+  );
+  const projectId = inserted.rows[0].id;
+  startAutoProduction(projectId, cookie, { phase: "prepare" }).catch((error) => console.error("Auto production could not start:", error.message));
+  return projectId;
+}
+
+app.post("/api/ai-movie/projects/from-screenplay", requireRole("admin"), async (req, res) => {
+  const text = String(req.body?.text ?? "").trim();
+  if (text.length < 50) {
+    res.status(400).json({ error: "That screenplay is too short to use." });
+    return;
+  }
+  const title = String(req.body?.title ?? "").trim().slice(0, 120) || text.split("\n")[0].slice(0, 80);
+  res.json({ projectId: await createScreenplayOnlyProject({ title, text, userId: req.user.id, cookie: req.headers.cookie }) });
+});
+
+// Reads the final screenplay for what the Image Studio needs: characters (and how they look), environments, properties.
+// One AI call, and only when the project does not already have them.
+app.post("/api/ai-movie/projects/:id/analyze-screenplay-assets", requireRole("admin"), async (req, res) => {
+  try {
+    const row = (await db.query("SELECT pasted_text, assets FROM ai_movie_projects WHERE id = $1", [req.params.id])).rows[0];
+    if (!row) {
+      res.status(404).json({ error: "Project not found." });
+      return;
+    }
+    const has = (row.assets?.characters?.length ?? 0) + (row.assets?.environments?.length ?? 0) + (row.assets?.properties?.length ?? 0) > 0;
+    if (has && req.body?.force !== true) {
+      res.json({ skipped: true });
+      return;
+    }
+    const assets = await generateAiMovieAssetExtraction(row.pasted_text, await getAiMovieReferenceMaterialText(req.params.id));
+    await db.query("UPDATE ai_movie_projects SET assets = $1, updated_at = now() WHERE id = $2", [JSON.stringify(assets), req.params.id]);
+    await syncProductionQuietly(db, Number(req.params.id));
+    res.json({ skipped: false, characters: assets.characters?.length ?? 0, environments: assets.environments?.length ?? 0, properties: assets.properties?.length ?? 0 });
+  } catch (error) {
+    res.status(error.status ?? 502).json({ error: error.message });
+  }
+});
 
 app.get("/api/ai-movie/projects/:id/auto-production", requireRole("admin"), async (req, res) => {
   const row = (await db.query("SELECT auto_production_job FROM ai_movie_projects WHERE id = $1", [req.params.id])).rows[0];
@@ -6623,6 +6688,14 @@ app.post("/api/ai-movie/projects/:id/auto-production", requireRole("admin"), asy
   const row = (await db.query("SELECT auto_production_job FROM ai_movie_projects WHERE id = $1", [req.params.id])).rows[0];
   const started = await startAutoProduction(req.params.id, req.headers.cookie, { phase: row?.auto_production_job?.phase ?? "prepare", force: true });
   res.json({ started });
+});
+
+// CANCEL: stops what Adu is doing at the next safe point (before the next paid scene). Nothing already made is deleted.
+app.post("/api/ai-movie/projects/:id/auto-production/cancel", requireRole("admin"), async (req, res) => {
+  const id = Number(req.params.id);
+  const running = autoProductionRunning.has(id);
+  if (running) autoProductionCancelled.add(id);
+  res.json({ cancelling: running });
 });
 
 // STORYBOARD DESIGNER: "Create shot division from screenplay". The ONLY thing that makes shots, and only when the director presses it.
@@ -6738,8 +6811,11 @@ app.get("/api/ai-movie/projects/:id", requireRole("admin"), async (req, res) => 
   // character dialogue brief existed never got one and never will through
   // the normal trigger -- backfill it quietly in the background, no redo
   // of anything already done.
-  backfillAiMovieCharacterDialogueBriefsIfMissing(row.id, row.pasted_text, row.backfill);
-  fillAiMovieSceneCardsIfMissing(row.id, row.backfill);
+  // (a screenplay-only project has no story layers to fill in: nothing is rebuilt behind the final screenplay)
+  if (!row.screenplay_only) {
+    backfillAiMovieCharacterDialogueBriefsIfMissing(row.id, row.pasted_text, row.backfill);
+    fillAiMovieSceneCardsIfMissing(row.id, row.backfill);
+  }
 
   // Every scene's heading is normalized (English slugline in both
   // languages, never repeated inside the action) and its duration is
@@ -6767,6 +6843,9 @@ app.get("/api/ai-movie/projects/:id", requireRole("admin"), async (req, res) => 
 
   res.json({
     id: row.id,
+    screenplayOnly: row.screenplay_only,
+    lengthKind: row.length_kind,
+    lengthMinutes: row.length_minutes == null ? null : Number(row.length_minutes),
     title: row.title,
     pastedText: row.pasted_text,
     detectedStage: row.detected_stage,
@@ -19335,10 +19414,9 @@ async function fetchSceneListScreenplayData(sceneListId, targetLang) {
 // index) or, with no episode, the whole script — always in the language
 // each scene was written in. PDF by default, Word with ?format=docx.
 // FILM -> AI PRODUCTION. When a Film screenplay is complete, "Send for AI Production" copies it into the
-// AI Movies module as a LOCKED screenplay (every stage up to Screenplay approved). The app then runs
-// "Proceed" on it (/api/ai-movie/backfill), where Adu reads the screenplay and sets up the story behind it
-// and the artists/characters, settings/environments and props. Sending the same finished screenplay twice
-// reuses the AI Movie project made the first time.
+// AI Movies module as a screenplay-only project (see createScreenplayOnlyProject): the screenplay stays exactly as it is,
+// no story is rebuilt behind it, and the director goes straight to the Storyboard Designer. Sending the same finished
+// screenplay twice reuses the AI Movie project made the first time.
 app.post("/api/scene-lists/:id/send-to-ai-production", requireRole("admin"), async (req, res) => {
   if (!/^\d+$/.test(req.params.id)) {
     res.status(400).json({ error: "Invalid scene list id." });
@@ -19358,16 +19436,10 @@ app.post("/api/scene-lists/:id/send-to-ai-production", requireRole("admin"), asy
     }
     const pastedText = buildScreenplayPlainText(data);
     const title = data.deck?.title?.en ?? null;
-    const existing = (await db.query("SELECT id, backfill FROM ai_movie_projects WHERE pasted_text = $1 AND created_by = $2 ORDER BY id DESC LIMIT 1", [pastedText, req.user.id])).rows[0];
-    if (existing) {
-      res.json({ projectId: existing.id, title, alreadyAnalyzed: Boolean(existing.backfill && Object.keys(existing.backfill).length > 0), pastedText });
-      return;
-    }
-    const inserted = await db.query(
-      "INSERT INTO ai_movie_projects (title, pasted_text, detected_stage, stage_status, created_by) VALUES ($1, $2, 'screenplay', $3, $4) RETURNING id",
-      [title, pastedText, JSON.stringify(approvedStageStatusUpTo(AI_MOVIE_DETECTED_STAGE_COVERED_INDEX.screenplay)), req.user.id]
-    );
-    res.json({ projectId: inserted.rows[0].id, title, alreadyAnalyzed: false, pastedText });
+    // The same finished screenplay sent twice reuses the project made the first time.
+    const existing = (await db.query("SELECT id FROM ai_movie_projects WHERE pasted_text = $1 AND created_by = $2 AND screenplay_only ORDER BY id DESC LIMIT 1", [pastedText, req.user.id])).rows[0];
+    const projectId = existing?.id ?? await createScreenplayOnlyProject({ title, text: pastedText, userId: req.user.id, cookie: req.headers.cookie });
+    res.json({ projectId, title, reused: Boolean(existing) });
   } catch (error) {
     console.error("Send to AI production failed:", error.message);
     res.status(500).json({ error: error.message });

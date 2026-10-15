@@ -219,7 +219,7 @@ export function StageJudgeNote({ judge }) {
 function StoryBiblePanel({ api, projectId, backendUrl, settings, reloadSettings }) {
   const [view, setView] = useState(null)
   const [idea, setIdea] = useState('')
-  const [format, setFormat] = useState({ type: 'film', runtimeMinutes: 120, episodeCount: 8, episodeMinutes: 20 })
+  const [format, setFormat] = useState({ type: 'film', kind: 'film', runtimeMinutes: 120, episodeCount: 8, episodeMinutes: 20 })
   const [note, setNote] = useState('')
   const [message, setMessage] = useState(null)
   const [busy, setBusy] = useState(false)
@@ -242,7 +242,7 @@ function StoryBiblePanel({ api, projectId, backendUrl, settings, reloadSettings 
 
   async function design() {
     setBusy(true); setMessage(null)
-    const r = await call(`${api}/${projectId}/story-bible/design`, 'POST', { idea, format: format.type === 'series' ? { type: 'series', episodeCount: Number(format.episodeCount), episodeMinutes: Number(format.episodeMinutes) } : { type: 'film', runtimeMinutes: Number(format.runtimeMinutes) } })
+    const r = await call(`${api}/${projectId}/story-bible/design`, 'POST', { idea, format: format.type === 'series' ? { type: 'series', episodeCount: Number(format.episodeCount), episodeMinutes: Number(format.episodeMinutes) } : { type: 'film', kind: format.kind, runtimeMinutes: Number(format.runtimeMinutes) } })
     setBusy(false)
     if (!r.ok) setMessage(errorOf(r)); else load()
   }
@@ -270,13 +270,23 @@ function StoryBiblePanel({ api, projectId, backendUrl, settings, reloadSettings 
           <textarea className="studio-idea" value={idea} onChange={(e) => setIdea(e.target.value)} rows={5} placeholder="Write the story idea here — who it is about, what they want, what stands in the way." disabled={running} />
           <div className="pipe-toolbar">
             <label className="studio-field">Format
-              <select value={format.type} onChange={(e) => setFormat({ ...format, type: e.target.value })} disabled={running}>
-                <option value="film">Feature film</option>
+              <select
+                value={format.type === 'series' ? 'series' : format.kind}
+                onChange={(e) => {
+                  const v = e.target.value
+                  if (v === 'series') setFormat({ ...format, type: 'series' })
+                  else if (v === 'short_film') setFormat({ ...format, type: 'film', kind: 'short_film', runtimeMinutes: Math.min(10, Math.max(1, Number(format.runtimeMinutes) > 10 ? 5 : Number(format.runtimeMinutes) || 5)) })
+                  else setFormat({ ...format, type: 'film', kind: 'film', runtimeMinutes: Number(format.runtimeMinutes) > 10 ? format.runtimeMinutes : 90 })
+                }}
+                disabled={running}
+              >
+                <option value="short_film">Short film / short drama (1–10 minutes)</option>
+                <option value="film">Film (its own length)</option>
                 <option value="series">Web series</option>
               </select>
             </label>
             {format.type === 'film'
-              ? <label className="studio-field">Minutes<input type="number" min="20" max="240" value={format.runtimeMinutes} onChange={(e) => setFormat({ ...format, runtimeMinutes: e.target.value })} disabled={running} /></label>
+              ? <label className="studio-field">Total minutes{format.kind === 'short_film' ? ' (1–10)' : ''}<input type="number" min={format.kind === 'short_film' ? 1 : 11} max={format.kind === 'short_film' ? 10 : 300} step={format.kind === 'short_film' ? 0.5 : 1} value={format.runtimeMinutes} onChange={(e) => setFormat({ ...format, runtimeMinutes: e.target.value })} disabled={running} /></label>
               : <>
                 <label className="studio-field">Episodes<input type="number" min="2" max="60" value={format.episodeCount} onChange={(e) => setFormat({ ...format, episodeCount: e.target.value })} disabled={running} /></label>
                 <label className="studio-field">Minutes each<input type="number" min="3" max="90" value={format.episodeMinutes} onChange={(e) => setFormat({ ...format, episodeMinutes: e.target.value })} disabled={running} /></label>

@@ -31,6 +31,8 @@ export async function ensureAiMovieStorySchema(db) {
     `ALTER TABLE ai_movie_projects ADD COLUMN IF NOT EXISTS story_bible_job JSONB`,
     `ALTER TABLE ai_movie_projects ADD COLUMN IF NOT EXISTS quality_mode TEXT NOT NULL DEFAULT 'professional'`,
     `ALTER TABLE ai_movie_projects ADD COLUMN IF NOT EXISTS cinematic_mode TEXT NOT NULL DEFAULT 'mass'`,
+    `ALTER TABLE ai_movie_projects ADD COLUMN IF NOT EXISTS length_kind TEXT`,
+    `ALTER TABLE ai_movie_projects ADD COLUMN IF NOT EXISTS length_minutes NUMERIC`,
     `CREATE TABLE IF NOT EXISTS ai_movie_review_cache (
       project_id INTEGER NOT NULL REFERENCES ai_movie_projects(id) ON DELETE CASCADE,
       cache_key TEXT NOT NULL,
@@ -59,6 +61,15 @@ export async function getProjectModes(db, projectId) {
     qualityMode: normalizeQualityMode(row.quality_mode),
     cinematicMode: CREATIVE_MODES.includes(row.cinematic_mode) ? row.cinematic_mode : DEFAULT_CREATIVE_MODE,
   };
+}
+
+// A film is a SHORT film (1 to 10 minutes) or a film with its own length (11 minutes or more).
+export const SHORT_FILM_MAX_MINUTES = 10;
+export function filmFormat(input) {
+  const wantsShort = input?.kind === "short_film";
+  const minutes = Number(input?.runtimeMinutes);
+  if (wantsShort) return { type: "film", short: true, runtimeMinutes: Math.min(SHORT_FILM_MAX_MINUTES, Math.max(1, Math.round((Number.isFinite(minutes) ? minutes : 5) * 10) / 10)) };
+  return { type: "film", short: false, runtimeMinutes: Math.min(300, Math.max(SHORT_FILM_MAX_MINUTES + 1, Math.round(Number.isFinite(minutes) && minutes > 0 ? minutes : 120))) };
 }
 
 export function createAiMovieAsker({ db, callTier }) {
@@ -378,7 +389,9 @@ export function registerAiMovieStoryRoutes(app, db, requireRole, deps) {
     if (!idea) throw httpError("Write the story idea first.", 400);
     const format = req.body?.format?.type === "series"
       ? { type: "series", episodeCount: Number(req.body.format.episodeCount) || 8, episodeMinutes: Number(req.body.format.episodeMinutes) || 20 }
-      : { type: "film", runtimeMinutes: Number(req.body?.format?.runtimeMinutes) || 120 };
+      : filmFormat(req.body?.format);
+    // the length category is remembered so the beat sheet and the screenplay keep to it too
+    await db.query("UPDATE ai_movie_projects SET length_kind = $2, length_minutes = $3 WHERE id = $1", [projectId, format.type === "film" ? (format.short ? "short_film" : "film") : null, format.type === "film" ? format.runtimeMinutes : null]);
     await assertWithinBudget(db, projectId, Number(process.env.COST_STORY_BIBLE_RUN ?? 1.5));
     await beginJob(projectId, "Designing the Story Bible");
     await db.query("UPDATE ai_movie_projects SET story_bible_job = story_bible_job - 'notes' WHERE id = $1", [projectId]);

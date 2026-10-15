@@ -5677,6 +5677,10 @@ function AutoProductionStatus({ backendUrl, projectId, onOpenStoryboard }) {
     return () => { alive = false; if (timer) clearTimeout(timer) }
   }, [backendUrl, projectId, again])
 
+  async function cancelRun() {
+    try { await fetch(`${backendUrl}/api/ai-movie/projects/${projectId}/auto-production/cancel`, { method: 'POST' }) } catch { /* the strip keeps polling */ }
+  }
+
   async function runAgain() {
     try { await fetch(`${backendUrl}/api/ai-movie/projects/${projectId}/auto-production`, { method: 'POST' }) } catch { /* the strip keeps polling */ }
     setAgain((v) => !v)
@@ -5689,9 +5693,11 @@ function AutoProductionStatus({ backendUrl, projectId, onOpenStoryboard }) {
         <p className="floating-agent-stage-line">
           <span className="floating-agent-spinner" aria-hidden="true" />
           <span><strong>Adu is working</strong> — step {job.step ?? 1} of {job.steps ?? 1}: {job.label}{job.detail ? ` (${job.detail})` : ''}</span>
+          <button type="button" className="cancel-button" onClick={cancelRun}>✖ Cancel</button>
         </p>
       )}
       {job.status === 'done' && <p>✅ {job.message || 'The production plan is ready.'}</p>}
+      {job.status === 'cancelled' && <p>⏹ {job.message}</p>}
       {job.status === 'waiting_for_you' && (
         <>
           <p><strong>👉 Your turn:</strong> {job.message}</p>
@@ -7118,6 +7124,7 @@ function App() {
   // up yet — no other sidebar item here does anything.
   const [aiMovieAnalyzeInput, setAiMovieAnalyzeInput] = useState('')
   const [aiMovieAnalyzeStage, setAiMovieAnalyzeStage] = useState(null)
+  const [aiMovieScreenplayOnly, setAiMovieScreenplayOnly] = useState(false)
   const [isSendingToAiProduction, setIsSendingToAiProduction] = useState(false)
   const [sendToAiProductionError, setSendToAiProductionError] = useState('')
   const [isAnalyzingAiMovie, setIsAnalyzingAiMovie] = useState(false)
@@ -7928,9 +7935,10 @@ function App() {
       const response = await fetch(`${BACKEND_URL}/api/scene-lists/${sceneListId}/send-to-ai-production`, { method: 'POST' })
       const data = await response.json().catch(() => ({}))
       if (!response.ok) throw new Error(data.error || t.genericError)
+      // The screenplay is final: nothing is rewritten and no story is rebuilt behind it. Straight to the Storyboard Designer.
       setAppMode('ai')
       await loadAiMovieProject(data.projectId)
-      if (!data.alreadyAnalyzed) await handleAiMovieProceedClick({ text: data.pastedText, stage: 'screenplay', projectId: data.projectId })
+      setAiMovieView('storyboardDesigner')
     } catch (e) {
       setSendToAiProductionError(e.message)
     }
@@ -7940,10 +7948,14 @@ function App() {
   // "Import screenplay (PDF / Word)": the text is a finished screenplay, so skip the question
   // "which stage is this?", save it as the project, and let Adu fill the stages behind it.
   async function handleImportedScreenplay(text) {
-    setAiMovieAnalyzeInput(text)
-    const analyzed = await handleAnalyzeAiMovieClick({ text, forceStage: 'screenplay' })
-    if (!analyzed) throw new Error('Could not save the screenplay. Please try again.')
-    await handleAiMovieProceedClick({ text, stage: 'screenplay', projectId: analyzed.projectId })
+    const response = await fetch(`${BACKEND_URL}/api/ai-movie/projects/from-screenplay`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text }),
+    })
+    const data = await response.json().catch(() => ({}))
+    if (!response.ok) throw new Error(data.error || 'Could not save the screenplay. Please try again.')
+    // The uploaded screenplay IS the project: no Story Bible, no story rebuilt behind it. Straight to the Storyboard Designer.
+    await loadAiMovieProject(data.projectId)
+    setAiMovieView('storyboardDesigner')
   }
 
   async function handleAiMovieProceedClick(override) {
@@ -7991,6 +8003,7 @@ function App() {
   }
 
   function resetAiMovieEditorState() {
+    setAiMovieScreenplayOnly(false)
     setAiMovieAnalyzeInput('')
     setAiMovieAnalyzeStage(null)
     setAiMovieAnalyzeError(null)
@@ -8126,6 +8139,7 @@ function App() {
       setAiMovieProjectId(data.id)
       localStorage.setItem(CURRENT_AI_MOVIE_PROJECT_STORAGE_KEY, String(data.id))
       setAiMovieProjectTitle(data.title)
+      setAiMovieScreenplayOnly(Boolean(data.screenplayOnly))
       setAiMovieBackfillError(null)
       setAiMovieBackfillNote(null)
       setAiMovieStageStatus(data.stageStatus ?? {})
@@ -12164,7 +12178,7 @@ function App() {
                 <span className="agent-expand-icon expanded">▸</span>
                 {t.storyAgentLabel}
               </button>
-              {aiMovieProjectId && (
+              {aiMovieProjectId && !aiMovieScreenplayOnly && (
                 <button
                   className={aiMovieView === 'storyBible' ? 'agent-header agent-sub active' : 'agent-header agent-sub'}
                   onClick={() => { setAiMovieView((prev) => (prev === 'storyBible' ? 'editor' : 'storyBible')); setIsSidebarOpen(false) }}
@@ -12278,7 +12292,15 @@ function App() {
           {aiMovieView === 'editor' && (
           <div className="concept-page empty-state ai-movie-editor">
             {aiMovieProjectId && <AutoProductionStatus backendUrl={BACKEND_URL} projectId={aiMovieProjectId} onOpenStoryboard={() => setAiMovieView('storyboardDesigner')} />}
-            {!aiMovieBackfillResult?.story && (
+            {aiMovieScreenplayOnly && (
+              <div className="format-picker">
+                <h4 className="format-picker-title">{aiMovieProjectTitle || 'Final screenplay'} — final screenplay (locked)</h4>
+                <p className="sidebar-section-note">This screenplay is used exactly as it is. No story is rebuilt and nothing is rewritten. Go to the Storyboard Designer and press “Create shot division from screenplay”.</p>
+                <button type="button" className="choose-button" onClick={() => setAiMovieView('storyboardDesigner')}>Open the Storyboard Designer</button>
+                <textarea className="skip-ahead-textarea" value={aiMovieAnalyzeInput} readOnly />
+              </div>
+            )}
+            {!aiMovieScreenplayOnly && !aiMovieBackfillResult?.story && (
             <div className="format-picker">
               <p className="sidebar-section-note">{t.aiMovieAnalyzeIntro}</p>
               <ScreenplayImportButton backendUrl={BACKEND_URL} onText={handleImportedScreenplay} disabled={isAnalyzingAiMovie || isBackfillingAiMovie} />

@@ -328,7 +328,7 @@ export function registerSpectacleRoutes(app, db, requireRole, deps) {
     const queue = todo.slice(0, limit);
     // The money limit is checked before the pass starts and again before every Pro call (the pass stops cleanly when it is reached).
     await assertWithinBudget(db, projectId, estimateCost("pro", 1));
-    await setJob(projectId, { status: "running", startedAt: new Date().toISOString(), total: queue.length, done: 0, error: null, stoppedBy: null });
+    await setJob(projectId, { status: "running", startedAt: new Date().toISOString(), total: queue.length, done: 0, error: null, stoppedBy: null, stopRequested: false });
     res.json({ started: true, scenes: queue.length, allowRewrite });
     (async () => {
       let done = 0;
@@ -336,6 +336,9 @@ export function registerSpectacleRoutes(app, db, requireRole, deps) {
         const ctx = await deps.getContext(projectId);
         const { cinematicMode } = await deps.ask.getModes(projectId);
         for (const scene of queue) {
+          // the director pressed Cancel: stop before the next (paid) scene
+          const asked = (await db.query("SELECT cinematic_job FROM ai_movie_projects WHERE id = $1", [projectId])).rows[0]?.cinematic_job;
+          if (asked?.stopRequested) { await setJob(projectId, { stoppedBy: "user" }); break; }
           let result;
           try {
             result = await deps.ask.ask(projectId, AGENT_ID, scenePrompt({ cinematicMode, sceneText: scene.text, sceneKey: scene.key, contextText: ctx.contextText, allowRewrite, characterBriefs: ctx.characterBriefs }));
@@ -372,6 +375,13 @@ export function registerSpectacleRoutes(app, db, requireRole, deps) {
         await setJob(projectId, { status: "failed", error: `The Director stopped: ${error.message}`, done }).catch(() => {});
       }
     })();
+  }));
+
+  // The director pressed Cancel: the running pass stops before its next scene.
+  app.post("/api/ai-movie/projects/:id/cinematic/stop", admin, wrap(async (req, res) => {
+    const { projectId } = await projectOf(req);
+    await setJob(projectId, { stopRequested: true });
+    res.json({ ok: true });
   }));
 
   // ---- decisions ----

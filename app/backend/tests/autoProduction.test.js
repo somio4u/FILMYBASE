@@ -103,3 +103,57 @@ test("FINISH: a blueprint that does not validate is not approved, and the proble
   assert.match(result.message, /Scene 2 has no shots/);
   never(h.calls, "blueprint/approve");
 });
+
+test("CANCEL while cutting: stops before the next scene, keeps what was made, nothing is approved or planned after", async () => {
+  const h = harness();
+  let cutSoFar = 0;
+  h.args.api = ((original) => async (method, path, body) => { if (path.includes("/divide")) cutSoFar++; return original(method, path, body); })(h.args.api);
+  h.args.isCancelled = async () => cutSoFar >= 1; // pressed Cancel after the first scene was cut
+  const result = await runShotDivision(h.args);
+  assert.equal(result.status, "cancelled");
+  assert.match(result.message, /already made is kept/);
+  assert.equal(h.jobs.at(-1).status, "cancelled");
+  assert.equal(cutSoFar, 1, "the second scene is never cut");
+  never(h.calls.filter((c) => !c.includes("scenes/101")), "scenes/102/divide");
+  never(h.calls, "shots/approve", "prompts/plan", "blueprint/approve");
+});
+
+test("CANCEL during the Cinematic Director asks it to stop and ends the job as cancelled", async () => {
+  const h = harness();
+  h.args.isCancelled = async () => h.calls.some((c) => c.endsWith("/cinematic/analyze")); // pressed right after it started
+  const result = await runShotDivision(h.args);
+  assert.equal(result.status, "cancelled");
+  assert.ok(h.calls.some((c) => c.endsWith("/cinematic/stop")), "the Director is told to stop");
+  never(h.calls, "divide");
+});
+
+test("a Cinematic Director that stopped because the director cancelled ends the job as cancelled", async () => {
+  const h = harness({ "GET /api/ai-movie/projects/7/cinematic": { ok: true, status: 200, data: { job: { status: "idle", stoppedBy: "user" }, items: [] } } });
+  const result = await runShotDivision(h.args);
+  assert.equal(result.status, "cancelled");
+  never(h.calls, "divide");
+});
+
+test("SCREENPLAY-ONLY project: Adu reads the final screenplay for characters / environments / properties FIRST, never runs the Cinematic Director, and still waits for the director", async () => {
+  const h = harness();
+  h.args.screenplayOnly = true;
+  const result = await runShotDivision(h.args);
+  assert.equal(result.status, "waiting_for_you");
+  const analyze = h.calls.findIndex((c) => c.endsWith("/analyze-screenplay-assets"));
+  const divide = h.calls.findIndex((c) => c.includes("/divide"));
+  assert.ok(analyze >= 0 && analyze < divide, "the screenplay is analysed before any shot is cut");
+  never(h.calls, "/cinematic", "shots/approve", "prompts/plan", "blueprint/approve");
+});
+
+test("the screenplay analysis failing stops with a plain message instead of cutting shots blindly", async () => {
+  const h = harness({ "POST /api/ai-movie/projects/7/analyze-screenplay-assets": { ok: false, status: 502, data: { error: "AI busy" } } });
+  const result = await runShotDivision(h.args);
+  assert.equal(result.status, "failed");
+  assert.match(result.message, /characters, environments and properties/);
+  never(h.calls, "divide");
+});
+
+test("a money limit while analysing the screenplay ends as needs_attention", async () => {
+  const h = harness({ "POST /api/ai-movie/projects/7/analyze-screenplay-assets": { ok: false, status: 402, data: { error: "limit" } } });
+  assert.equal((await runShotDivision(h.args)).status, "needs_attention");
+});

@@ -177,6 +177,12 @@ function formatUnits(format) {
     return { kind: "episode", count: Number(format.episodeCount) || 8, minutes: Number(format.episodeMinutes) || 20, label: `a web series of ${Number(format.episodeCount) || 8} episodes, ${Number(format.episodeMinutes) || 20} minutes each` };
   }
   const runtime = Number(format?.runtimeMinutes) || 120;
+  // A SHORT film (10 minutes at most) is tiny: one simple story in a few sequences, never the four or more of a feature.
+  if (format?.short || runtime <= 10) {
+    const count = Math.max(1, Math.min(5, Math.round(runtime / 2)));
+    const each = Math.round((runtime / count) * 10) / 10;
+    return { kind: "sequence", count, minutes: each, label: `a SHORT film of exactly ${runtime} minute${runtime === 1 ? "" : "s"} in total (never longer), designed as ${count} sequence${count === 1 ? "" : "s"} of about ${each} minute${each === 1 ? "" : "s"} — one simple story, two or three characters, very few locations, very few scenes` };
+  }
   const count = Math.max(4, Math.round(runtime / 15));
   return { kind: "sequence", count, minutes: Math.round(runtime / count), label: `a feature film of ${runtime} minutes, designed as ${count} sequences of about ${Math.round(runtime / count)} minutes` };
 }

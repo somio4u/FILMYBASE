@@ -5688,7 +5688,7 @@ function AutoProductionStatus({ backendUrl, projectId, onOpenStoryboard }) {
       {job.status === 'running' && (
         <p className="floating-agent-stage-line">
           <span className="floating-agent-spinner" aria-hidden="true" />
-          <span><strong>Adu is preparing production by himself</strong> — step {job.step ?? 1} of {job.steps ?? 6}: {job.label}{job.detail ? ` (${job.detail})` : ''}</span>
+          <span><strong>Adu is working</strong> — step {job.step ?? 1} of {job.steps ?? 1}: {job.label}{job.detail ? ` (${job.detail})` : ''}</span>
         </p>
       )}
       {job.status === 'done' && <p>✅ {job.message || 'The production plan is ready.'}</p>}

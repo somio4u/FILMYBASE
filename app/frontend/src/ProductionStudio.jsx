@@ -74,6 +74,59 @@ function ProjectHeader({ projectId, backendUrl }) {
   )
 }
 
+// STORYBOARD DESIGNER: the one place shots are made. Adu never cuts shots by himself; he does it only when this button is
+// pressed (Cinematic Director directions first, then every scene is cut), and then waits for the director's approval.
+function CreateShotDivision({ projectId, backendUrl }) {
+  const [job, setJob] = useState(null)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+  const loadJob = useCallback(async () => {
+    const data = await getJson(`${backendUrl}/api/ai-movie/projects/${projectId}/auto-production`)
+    setJob(data?.job ?? null)
+    return data?.job ?? null
+  }, [backendUrl, projectId])
+  useEffect(() => { loadJob() }, [loadJob])
+  const running = job?.status === 'running'
+  useEffect(() => {
+    if (!running && !busy) return undefined
+    const timer = setInterval(async () => {
+      const next = await loadJob()
+      if (next && next.status !== 'running') setBusy(false)
+    }, 4000)
+    return () => clearInterval(timer)
+  }, [running, busy, loadJob])
+
+  async function create() {
+    setBusy(true)
+    setError('')
+    try {
+      const response = await fetch(`${backendUrl}/api/ai-movie/projects/${projectId}/storyboard/create-shots`, { method: 'POST' })
+      const data = await response.json().catch(() => ({}))
+      if (!response.ok) throw new Error(data.error || 'Could not start.')
+      if (!data.started) setError('Adu is already working on this project — wait a moment.')
+    } catch (e) {
+      setError(e.message)
+      setBusy(false)
+      return
+    }
+    await loadJob()
+  }
+
+  const working = running || busy
+  return (
+    <section className="dossier-card" style={{ margin: '12px 0' }}>
+      <button type="button" className="choose-button" onClick={create} disabled={working}>
+        {working ? 'Adu is creating the shot division…' : '🎬 Create shot division from screenplay'}
+      </button>
+      <p className="dossier-fine-print">Adu reads the locked screenplay and cuts every scene into shots. Scenes that already have shots are left as they are. Nothing is approved for you — check the shots below (add, remove, combine or edit) and approve each scene; approved scenes then appear in the Image Studio.</p>
+      {working && job?.phase === 'shots' && <p className="floating-agent-stage-line"><span className="floating-agent-spinner" aria-hidden="true" /><span>Step {job.step ?? 1} of {job.steps ?? 4}: {job.label}{job.detail ? ` (${job.detail})` : ''}</span></p>}
+      {error && <p className="dossier-error">{error}</p>}
+      {!working && job?.phase === 'shots' && (job.status === 'failed' || job.status === 'needs_attention') && <p className="dossier-error">{job.message}</p>}
+      {!working && job?.phase === 'shots' && job.status === 'waiting_for_you' && <p className="dossier-message">{job.message}</p>}
+    </section>
+  )
+}
+
 export default function ProductionStudio({ workspace, projectId, backendUrl, onNavigate }) {
   if (!projectId) return <p className="dossier-note">Open or create an AI Movie project first.</p>
   const info = PRODUCTION_WORKSPACES[workspace]
@@ -81,7 +134,12 @@ export default function ProductionStudio({ workspace, projectId, backendUrl, onN
     <div className="dossier ps" key={`${workspace}-${projectId}`}>
       <header className="dossier-header"><div><h2>{info.title}</h2><p className="dossier-fine-print">{info.intro}</p></div></header>
       <ProjectHeader projectId={projectId} backendUrl={backendUrl} />
-      {workspace === 'storyboardDesigner' && <PipelineStage stage="shots" projectId={projectId} backendUrl={backendUrl} />}
+      {workspace === 'storyboardDesigner' && (
+        <>
+          <CreateShotDivision projectId={projectId} backendUrl={backendUrl} />
+          <PipelineStage stage="shots" projectId={projectId} backendUrl={backendUrl} />
+        </>
+      )}
       {workspace === 'blueprint' && <Blueprint projectId={projectId} backendUrl={backendUrl} onNavigate={onNavigate} />}
       {workspace === 'timeline' && <TimelineView projectId={projectId} backendUrl={backendUrl} onNavigate={onNavigate} />}
       {workspace === 'imageStudio' && <ImageStudio projectId={projectId} backendUrl={backendUrl} />}

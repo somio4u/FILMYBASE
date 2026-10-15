@@ -8,7 +8,7 @@ import PDFDocument from "pdfkit";
 import ExcelJS from "exceljs";
 import PptxGenJS from "pptxgenjs";
 import { buildCastingPpt } from "./castingPpt.js";
-import { runAutoProduction } from "./autoProduction.js";
+import { RUNNERS as AUTO_PRODUCTION_RUNNERS } from "./autoProduction.js";
 import { buildScreenplayPlainText, countScenes } from "./screenplayText.js";
 import { GROUPS as CASTING_GROUPS, addToCast, buildCast, castFromSheet, findCharacters, gatherScriptEvidence } from "./castingCast.js";
 import { Document, Packer, Paragraph, TextRun, AlignmentType, HeadingLevel } from "docx";
@@ -3794,7 +3794,7 @@ app.post("/api/ai-movie/backfill", requireRole("admin"), async (req, res) => {
         [JSON.stringify(backfill), JSON.stringify(assets), JSON.stringify(stageStatus), title, projectId]
       );
       syncProductionQuietly(db, projectId);
-      if (stageStatus.screenplay?.status === "approved") startAutoProduction(projectId, req.headers.cookie).catch((error) => console.error("Auto production could not start:", error.message));
+      if (stageStatus.screenplay?.status === "approved") startAutoProduction(projectId, req.headers.cookie, { phase: "prepare" }).catch((error) => console.error("Auto production could not start:", error.message));
     }
 
     res.json({ backfill, assets, stageStatus });
@@ -6574,9 +6574,10 @@ app.post("/api/ai-movie/stages/screenplay/beats/:beatIndex/scenes/:sceneIndex/di
 // old screens used (called on this server with the user's own session). Progress is saved on the project.
 const autoProductionRunning = new Set();
 
-async function startAutoProduction(projectId, cookie, { force = false } = {}) {
+async function startAutoProduction(projectId, cookie, { phase = "prepare", force = false } = {}) {
   const id = Number(projectId);
-  if (!Number.isInteger(id) || autoProductionRunning.has(id)) return false;
+  const run = AUTO_PRODUCTION_RUNNERS[phase];
+  if (!run || !Number.isInteger(id) || autoProductionRunning.has(id)) return false;
   const row = (await db.query("SELECT auto_production_job FROM ai_movie_projects WHERE id = $1", [id])).rows[0];
   if (!row) return false;
   const job = row.auto_production_job;
@@ -6588,7 +6589,7 @@ async function startAutoProduction(projectId, cookie, { force = false } = {}) {
     "UPDATE ai_movie_projects SET auto_production_job = COALESCE(auto_production_job, '{}'::jsonb) || $2::jsonb WHERE id = $1",
     [id, JSON.stringify({ ...patch, updatedAt: new Date().toISOString() })]
   );
-  await setJob({ status: "running", startedAt: new Date().toISOString(), message: null, warnings: [], step: 0, label: "Starting" });
+  await setJob({ phase, status: "running", startedAt: new Date().toISOString(), message: null, next: null, warnings: [], step: 0, label: "Starting" });
   const api = async (method, path, body) => {
     try {
       const response = await fetch(`http://127.0.0.1:${PORT}${path}`, {
@@ -6602,7 +6603,7 @@ async function startAutoProduction(projectId, cookie, { force = false } = {}) {
     }
   };
   const listScenes = async () => (await db.query("SELECT id FROM production_scenes WHERE project_id = $1 AND in_latest ORDER BY order_index", [id])).rows.map((r) => r.id);
-  runAutoProduction({ projectId: id, api, listScenes, setJob })
+  run({ projectId: id, api, listScenes, setJob })
     .catch((error) => { console.error("Auto production failed:", error); return setJob({ status: "failed", message: `Adu stopped: ${String(error.message).slice(0, 200)}` }); })
     .finally(() => autoProductionRunning.delete(id));
   return true;
@@ -6617,9 +6618,16 @@ app.get("/api/ai-movie/projects/:id/auto-production", requireRole("admin"), asyn
   res.json({ job: row.auto_production_job ?? null });
 });
 
-// "Run again" — also what continues a job that stopped for the money limit.
+// "Run again": repeats the phase that stopped (e.g. after raising the money limit).
 app.post("/api/ai-movie/projects/:id/auto-production", requireRole("admin"), async (req, res) => {
-  const started = await startAutoProduction(req.params.id, req.headers.cookie, { force: true });
+  const row = (await db.query("SELECT auto_production_job FROM ai_movie_projects WHERE id = $1", [req.params.id])).rows[0];
+  const started = await startAutoProduction(req.params.id, req.headers.cookie, { phase: row?.auto_production_job?.phase ?? "prepare", force: true });
+  res.json({ started });
+});
+
+// STORYBOARD DESIGNER: "Create shot division from screenplay". The ONLY thing that makes shots, and only when the director presses it.
+app.post("/api/ai-movie/projects/:id/storyboard/create-shots", requireRole("admin"), async (req, res) => {
+  const started = await startAutoProduction(req.params.id, req.headers.cookie, { phase: "shots", force: true });
   res.json({ started });
 });
 
@@ -6685,7 +6693,7 @@ app.post("/api/ai-movie/stages/:stage/approve", requireRole("admin"), async (req
     } catch (error) {
       console.error("Production planning after screenplay approval failed (approval itself still succeeded):", error.message);
     }
-    startAutoProduction(projectId, req.headers.cookie).catch((error) => console.error("Auto production could not start:", error.message));
+    startAutoProduction(projectId, req.headers.cookie, { phase: "prepare" }).catch((error) => console.error("Auto production could not start:", error.message));
   }
 
   res.json({ ok: true, assets, blueprint });
@@ -19879,7 +19887,8 @@ registerPipelineRoutes(app, db, requireRole, {
   // actually waiting are touched — approving shots in an older project never starts paid work by surprise.
   onShotsApproved: async (projectId, req) => {
     const row = (await db.query("SELECT auto_production_job FROM ai_movie_projects WHERE id = $1", [projectId])).rows[0];
-    if (row?.auto_production_job?.status === "waiting_for_you") await startAutoProduction(projectId, req.headers.cookie);
+    const job = row?.auto_production_job;
+    if (job?.status === "waiting_for_you" && job.next === "approve_shots") await startAutoProduction(projectId, req.headers.cookie, { phase: "finish" });
   },
   store: productionMedia.store,
   providers: createProviders({

@@ -13,12 +13,13 @@ import { analyzeScreenplay, listScenes } from "../screenplayAnalysis.js";
 import { ensureAllProductionSchemas } from "../productionSchema.js";
 import { createMediaStore, createLocalBackend } from "../mediaStore.js";
 import { createProviders, pcmToWav, wavDurationMs } from "../providers.js";
-import { createGenerationService, failStaleGenerations, speechText, describeDetails, assetPrompt } from "../generations.js";
+import { createGenerationService, frameSpec, failStaleGenerations, speechText, describeDetails, assetPrompt } from "../generations.js";
 import { saveSettings, getSettings, spendSummary, assertWithinBudget } from "../pipelineSettings.js";
 import { divideScene, listShots, generateStoryboard, approveStoryboard, approveShots } from "../shots.js";
 import { startMockGemini } from "./mockGemini.js";
 import { assetLibrary, acceptCurrentPictures } from "../studio.js";
 import { planPrompts } from "../planning.js";
+import { writeFrameDescriptions } from "../frameDescriptions.js";
 import { autoLinkShots, setShotLinks, shotLinkChoices } from "../shots.js";
 
 const db = new pg.Pool({ database: process.env.TEST_DB || "filmmaking_app_test", user: process.env.PGUSER || "root", host: process.env.PGHOST || "/var/run/postgresql" });
@@ -486,4 +487,30 @@ test("shots with nothing linked are linked by name (button), by hand (picker) an
   await gens.generateKeyframe(projectId, (await listShots(db, projectId)).find((s) => s.id === target.id)).catch(() => {});
   const relinked = (await listShots(db, projectId)).find((s) => s.id === target.id);
   assert.ok(relinked.assets.length > 0);
+});
+
+test("full frame description: written from the screenplay, links the named made items, used by the picture command, shot approval stays", async () => {
+  const { projectId, scene } = await ready();
+  const shots = (await listShots(db, projectId, { sceneId: scene.id }));
+  const first = shots[0];
+  const rahul = await assetByName(projectId, /Rahul/);
+  let asked = "";
+  const textJson = async (prompt) => {
+    asked = prompt;
+    return { shots: [{ code: first.code, description: "From the front, a jeep travels along the middle of a lonely road towards the palace; Rahul sits at the wheel, three others behind him, all looking ahead.", characters: ["Rahul Mohapatra", "Nobody Known"], environment: "", props: [], people: 4 }] };
+  };
+  const out = await writeFrameDescriptions(db, projectId, { sceneId: scene.id, textJson, listShots });
+  assert.equal(out.written, 1);
+  assert.match(asked, /MADE CHARACTERS/);
+  assert.match(asked, /Rahul/);
+  assert.ok(out.unknown.some((u) => /Nobody Known/.test(u)));
+  const after = (await listShots(db, projectId)).find((x) => x.id === first.id);
+  assert.match(after.frameDescription, /jeep travels along the middle/);
+  assert.equal(after.framePeople, 4);
+  assert.ok(after.assets.some((a) => a.id === rahul.id));
+  assert.equal(after.shotStatus, "approved"); // the cutter's own text and the approval are untouched
+  assert.equal(after.description, first.description);
+  const text = frameSpec(after, {}).text;
+  assert.match(text, /jeep travels along the middle/);
+  assert.match(text, /exactly 4 people/);
 });

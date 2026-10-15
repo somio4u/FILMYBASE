@@ -6,6 +6,7 @@ import { getSettings, saveSettings, spendSummary, VOICES } from "./pipelineSetti
 import { createGenerationService, KINDS } from "./generations.js";
 import { createAssembler } from "./assemble.js";
 import { planPrompts } from "./planning.js";
+import { writeFrameDescriptions, setFrameDescription } from "./frameDescriptions.js";
 import { VISUAL_STYLES } from "./visualStyles.js";
 import { combineProps, previewPropGroups, splitProps, DEFAULT_PROPS_PER_PICTURE } from "./propGroups.js";
 import { priceTable } from "./pipelineSettings.js";
@@ -225,6 +226,24 @@ export function registerPipelineRoutes(app, db, requireRole, { store, providers,
       try { await planPrompts(db, projectId, { actorUserId: req.user?.id }); } catch (error) { console.error("Prompts could not be refreshed after linking:", error.message); }
       publish(projectId, { type: "assets_changed" });
     }
+    res.json(result);
+  }));
+  // the AI re-reads the screenplay and writes the complete first frame of each shot, then links the made characters / place / props it names
+  app.post("/api/production/:projectId/shots/write-descriptions", admin, wrap(async (req, res) => {
+    const projectId = need(id(req.params.projectId), "project");
+    await projectExists(projectId);
+    const result = await writeFrameDescriptions(db, projectId, { sceneId: id(req.body?.sceneId), shotId: id(req.body?.shotId), overwrite: req.body?.overwrite !== false, textJson, listShots });
+    if (result.written > 0) {
+      try { await planPrompts(db, projectId, { actorUserId: req.user?.id }); } catch (error) { console.error("Prompts could not be refreshed after the descriptions:", error.message); }
+      publish(projectId, { type: "assets_changed" });
+    }
+    res.json({ ...result, shots: result.written > 0 ? await listShots(db, projectId, { sceneId: id(req.body?.sceneId) }) : [] });
+  }));
+  app.put("/api/production/:projectId/shots/:shotId/frame-description", admin, wrap(async (req, res) => {
+    const projectId = need(id(req.params.projectId), "project");
+    const result = await setFrameDescription(db, projectId, need(id(req.params.shotId), "shot"), req.body?.text);
+    try { await planPrompts(db, projectId, { actorUserId: req.user?.id }); } catch (error) { console.error("Prompts could not be refreshed after the description:", error.message); }
+    publish(projectId, { type: "assets_changed" });
     res.json(result);
   }));
   app.get("/api/production/:projectId/shots/:shotId/links", admin, wrap(async (req, res) => {

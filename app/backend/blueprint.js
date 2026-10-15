@@ -201,7 +201,7 @@ export async function buildShotManifest(db, projectId) {
       shot_id: shotRefId(s), db_id: s.id, code: s.code, scene_id: s.sceneCode, scene_db_id: s.sceneId, scene_number: s.sceneNumber, number: s.number,
       screenplay_version: version?.version ?? null, sequence: index + 1,
       planned_start_ms: start, planned_duration_ms: durationMs,
-      purpose: s.storyboardText || "", action: s.description, framing: s.framing, camera_angle: s.cameraAngle, camera_move: s.cameraMove,
+      purpose: s.storyboardText || "", frame_description: s.frameDescription || "", action: s.description, framing: s.framing, camera_angle: s.cameraAngle, camera_move: s.cameraMove,
       character_ids: ids.character_ids, environment_id: ids.environment_ids[0] ?? null, environment_ids: ids.environment_ids, prop_ids: ids.prop_ids, other_ids: ids.other_ids,
       dialogue: s.dialogue.map((d) => ({ id: d.id, code: d.code, speaker: d.speaker })),
       audio_cue_ids: s.dialogue.map((d) => d.code),

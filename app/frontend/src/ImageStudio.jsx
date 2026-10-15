@@ -185,6 +185,15 @@ function ShotFrames({ api, projectId, backendUrl }) {
     else setMessage({ tone: r.data.stillEmpty.length ? 'bad' : 'good', text: `Linked ${r.data.itemsAdded} item${r.data.itemsAdded === 1 ? '' : 's'} to ${r.data.shotsLinked} shot${r.data.shotsLinked === 1 ? '' : 's'}.${r.data.assumedCharacters?.length ? ` ${r.data.assumedCharacters.join(', ')} name no character, so the scene's own characters were linked — check with "🔗 Link…".` : ''}${r.data.stillEmpty.length ? ` Nothing could be found for ${r.data.stillEmpty.join(', ')} — use "🔗 Link…" on the shot to choose by hand.` : ''}` })
     refresh()
   }
+  // the AI re-reads the scene's screenplay and writes the full frame of every shot, then links the made characters, place and props it names
+  async function writeAll() {
+    setBusy(true); setMessage(null)
+    const r = await call(`${api}/${projectId}/shots/write-descriptions`, 'POST', { sceneId })
+    setBusy(false)
+    if (!r.ok) setMessage({ tone: 'bad', text: r.data.error || 'Could not write the descriptions.' })
+    else setMessage({ tone: r.data.written ? 'good' : 'bad', text: `Wrote ${r.data.written} full frame description${r.data.written === 1 ? '' : 's'} and linked the characters, places and props of ${r.data.linked} shot${r.data.linked === 1 ? '' : 's'}.${r.data.unknown?.length ? ` Names not in the project (left out): ${r.data.unknown.slice(0, 6).join('; ')}.` : ''} Check the result on each shot — you can edit it.` })
+    refresh()
+  }
   if (!scenes) return <p className="dossier-note">Loading…</p>
   if (scenes.length === 0) {
     return (
@@ -213,6 +222,7 @@ function ShotFrames({ api, projectId, backendUrl }) {
           <>
             <div className="is-toolbar">
               <p className="is-counts"><strong>{data.counts.shots}</strong> planned frames · <strong>{data.counts.approved}</strong> approved · {data.counts.review} waiting for review · {data.counts.readyToMake} ready to make · {data.counts.blocked} waiting for references</p>
+              <button type="button" className="dossier-small-button" disabled={busy} onClick={writeAll}>✍ Write full descriptions from the screenplay (this scene)</button>
               <button type="button" className="dossier-small-button" disabled={busy} onClick={() => autoLink(false)}>🔗 Auto-link characters, places &amp; props (this scene)</button>
               <button type="button" className="dossier-small-button" disabled={busy || readyIds.length === 0} onClick={() => generate(readyIds)}>Make the {readyIds.length} ready frame{readyIds.length === 1 ? '' : 's'} (≈{usd(readyIds.length * 0.04)})</button>
             </div>
@@ -222,6 +232,7 @@ function ShotFrames({ api, projectId, backendUrl }) {
                 <li key={s.dbId} className={`is-card ${s.state}`}>
                   <header className="is-card-head"><strong>{s.shotId}</strong><span className="dossier-fine-print">{s.framing ?? ''}{s.cameraMove && s.cameraMove !== 'Static' ? ` · ${s.cameraMove}` : ''} · {(s.plannedDurationMs / 1000).toFixed(0)}s</span><StateBadge state={s.state} stale={s.stale} /></header>
                   <p className="is-action">{s.action}</p>
+                  <FrameDescription api={api} projectId={projectId} shot={s} onChanged={refresh} />
                   <ul className="is-deps" aria-label="References this frame needs">
                     {s.dependencies.map((d) => <li key={d.code} className={d.approved ? 'ok' : 'missing'}>{d.approved ? '✓' : '✕'} {d.code} {d.name}</li>)}
                   </ul>
@@ -243,6 +254,41 @@ function ShotFrames({ api, projectId, backendUrl }) {
           </>
         )}
       </div>
+    </div>
+  )
+}
+
+// The complete first frame of a shot, written from the screenplay (who is in it, what each does, the place, the objects). The
+// picture command uses this text. The AI writes it; it can be edited here.
+function FrameDescription({ api, projectId, shot, onChanged }) {
+  const [text, setText] = useState(shot.frameDescription || '')
+  const [busy, setBusy] = useState(false)
+  const [message, setMessage] = useState(null)
+  useEffect(() => { setText(shot.frameDescription || '') }, [shot.frameDescription])
+  async function write() {
+    setBusy(true); setMessage(null)
+    const r = await call(`${api}/${projectId}/shots/write-descriptions`, 'POST', { shotId: shot.dbId })
+    setBusy(false)
+    if (!r.ok) setMessage({ tone: 'bad', text: r.data.error || 'Could not write it.' })
+    else setMessage({ tone: r.data.written ? 'good' : 'bad', text: r.data.written ? `Written and linked${r.data.unknown?.length ? ` (not in the project, left out: ${r.data.unknown.join('; ')})` : ''}.` : 'The AI gave nothing for this shot — try again.' })
+    onChanged()
+  }
+  async function save() {
+    setBusy(true); setMessage(null)
+    const r = await call(`${api}/${projectId}/shots/${shot.dbId}/frame-description`, 'PUT', { text })
+    setBusy(false)
+    if (!r.ok) setMessage({ tone: 'bad', text: r.data.error || 'Could not save.' }); else { setMessage({ tone: 'good', text: 'Saved.' }); onChanged() }
+  }
+  return (
+    <div className="is-frame-description">
+      <label className="dossier-fine-print">Full frame description (used for the picture)
+        <textarea rows={4} value={text} placeholder="Not written yet — press “✍ Write from screenplay”, or type it yourself." onChange={(e) => setText(e.target.value)} style={{ width: '100%' }} />
+      </label>
+      <div className="pipe-card-buttons">
+        <button type="button" className="dossier-small-button" disabled={busy} onClick={write}>{busy ? 'Working…' : '✍ Write from screenplay'}</button>
+        {text !== (shot.frameDescription || '') && <button type="button" className="dossier-small-button studio-approve" disabled={busy} onClick={save}>Save my text</button>}
+      </div>
+      {message && <p className={message.tone === 'bad' ? 'dossier-error' : 'dossier-message'} role="status">{message.text}</p>}
     </div>
   )
 }

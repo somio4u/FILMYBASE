@@ -143,7 +143,7 @@ export async function frameSlots(db, projectId, sceneDbId) {
     const ready = s.shot_status === "approved" && deps.every((d) => d.approved) && !covered;
     return {
       generationUnit: unit ? { code: unit.unit.code, members: unit.members.length, isLead: unit.isLead } : null, coveredBy: covered,
-      shotId: s.shot_id, dbId: s.db_id, number: s.number, sequence: s.sequence, action: s.action, framing: s.framing, cameraAngle: s.camera_angle, cameraMove: s.camera_move,
+      shotId: s.shot_id, dbId: s.db_id, number: s.number, sequence: s.sequence, action: s.action, frameDescription: s.frame_description ?? "", framing: s.framing, cameraAngle: s.camera_angle, cameraMove: s.camera_move,
       plannedDurationMs: s.planned_duration_ms, state: s.image.state, prompt, dependencies: deps,
       readiness: { ok: ready, shotDivisionApproved: s.shot_status === "approved", missing: deps.filter((d) => !d.approved).map((d) => `${d.code} ${d.name}`) },
       canonical: canonicalView, stale: Boolean(canonicalView?.outdated) || Boolean(prompt?.stale),

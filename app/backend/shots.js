@@ -405,7 +405,7 @@ export async function listShots(db, projectId, { sceneId = null } = {}) {
     return {
       id: r.id, code: r.code, sceneId: r.scene_id, sceneCode: r.scene_code, sceneNumber: r.scene_number, number: `${r.scene_number}.${n}`, heading: r.heading,
       framing: r.framing, cameraAngle: r.camera_angle, cameraMove: r.camera_move, description: r.description, durationSec: Number(r.duration_sec),
-      source: r.source, sourceLabel: r.source_label, storyboardText: r.storyboard_text, storyboardStatus: r.storyboard_status, shotStatus: r.shot_status, edited: r.edited, revision: r.revision,
+      source: r.source, sourceLabel: r.source_label, storyboardText: r.storyboard_text, frameDescription: r.frame_description ?? "", framePeople: r.frame_people ?? null, storyboardStatus: r.storyboard_status, shotStatus: r.shot_status, edited: r.edited, revision: r.revision,
       assets: assets.filter((a) => a.shot_id === r.id).map(({ id, code, name, kind, members, agent_details, human_edits }) => {
         const origin = kind === "character" ? foreignOrigin({ ...agent_details, ...human_edits }) : null; // a character from outside India (castRule.js)
         return { id, code, name, kind, ...(members ? { members } : {}), ...(origin ? { origin } : {}) };

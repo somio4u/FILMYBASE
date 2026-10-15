@@ -99,7 +99,9 @@ const SHEET_LAYOUT = "Make ONE single image laid out as a clean professional mod
 // each shot can be drawn from it and the item always looks the same.
 // Which of the project's reference images (logos, brands, titles) a picture needs: those its own text mentions.
 export const assetReferences = (asset, refs) => matchReferences(`${asset.name} ${describeDetails(effectiveDetails(asset))}`, refs);
-export const shotReferences = (shot, refs) => matchReferences(`${shot.storyboardText || shot.description} ${shot.heading ?? ""}`, refs);
+// what a shot's picture command says happens: the full description written from the screenplay, else the storyboard text, else the cutter's line
+export const frameText = (shot) => shot.frameDescription || shot.storyboardText || shot.description;
+export const shotReferences = (shot, refs) => matchReferences(`${frameText(shot)} ${shot.heading ?? ""}`, refs);
 
 export function assetPrompt(asset, styleIn) {
   const { text: style, castOrigin, refs: brandRefs } = normalizeStyle(styleIn);
@@ -130,17 +132,17 @@ export function keyframePrompt(shot, styleIn, refNames) {
   const camera = [shot.framing, shot.cameraAngle, shot.cameraMove && shot.cameraMove !== "Static" ? `(camera: ${shot.cameraMove})` : null].filter(Boolean).join(", ");
   const who = (shot.assets ?? []).filter((a) => a.kind === "character").map((a) => a.name);
   const cast = who.length
-    ? ` The only named people in this frame are: ${who.join(", ")} — look exactly like their attached sheets. Do not add any other recognisable person or invent new characters; background figures only if the description calls for them, few, small and unnamed.`
+    ? ` The only named people in this frame are: ${who.join(", ")} — look exactly like their attached sheets.${Number.isInteger(shot.framePeople) ? ` There are exactly ${shot.framePeople} ${shot.framePeople === 1 ? "person" : "people"} in the frame.` : ""} Do not add any other recognisable person or invent new characters; background figures only if the description calls for them, few, small and unnamed.`
     : " No named character is linked to this frame: do not invent characters and do not fill the frame with a crowd; show a person only if the description above names or clearly describes one.";
   const refs = refNames.length ? ` The attached pictures are model sheets (several views of each item). Use them to keep the exact same face, clothes, object design and place layout for: ${refNames.join(", ")}. Build the frame ONLY from these attached pictures: the people must be exactly these people, the place exactly this place and the objects exactly these objects. Do not invent other main characters, vehicles, buildings or locations that are not in the attached pictures or the description. Draw ONLY the single requested frame, never a sheet, and do not copy the sheet layout.` : "";
-  return `A single film frame (keyframe). Camera: ${camera || "natural framing"}. ${shot.storyboardText || shot.description}${people ? ` ${people}` : ""}${cast}${brand}${style ? ` VISUAL STYLE (follow it strictly): ${style}.` : ""}${refs} ${isPhotographic(style) ? "Cinematic, natural film lighting, photographic detail." : "Cinematic composition and lighting, in the visual style above."} ${NO_TEXT}`;
+  return `A single film frame (keyframe). Camera: ${camera || "natural framing"}. ${frameText(shot)}${people ? ` ${people}` : ""}${cast}${brand}${style ? ` VISUAL STYLE (follow it strictly): ${style}.` : ""}${refs} ${isPhotographic(style) ? "Cinematic, natural film lighting, photographic detail." : "Cinematic composition and lighting, in the visual style above."} ${NO_TEXT}`;
 }
 
 export function videoPrompt(shot, styleIn) {
   const { text: style, castOrigin } = normalizeStyle(styleIn);
   const people = shotRule(shot.assets, castOrigin);
   const move = shot.cameraMove && shot.cameraMove !== "Static" ? ` Camera movement: ${shot.cameraMove}.` : " The camera is steady.";
-  return `${shot.storyboardText || shot.description}${move}${people ? ` ${people}` : ""}${style ? ` VISUAL STYLE (follow it strictly): ${style}.` : ""} Start exactly from the given picture and keep the people, objects and place looking the same. Natural, believable motion. No speech, no subtitles, no on-screen text.`;
+  return `${frameText(shot)}${move}${people ? ` ${people}` : ""}${style ? ` VISUAL STYLE (follow it strictly): ${style}.` : ""} Start exactly from the given picture and keep the people, objects and place looking the same. Natural, believable motion. No speech, no subtitles, no on-screen text.`;
 }
 
 export function speechText(element) {
@@ -154,7 +156,7 @@ export function speechText(element) {
 export const veoSecondsFor = (durationSec) => VEO_SECONDS.find((s) => s >= Math.round(Number(durationSec) || 4)) ?? VEO_SECONDS[VEO_SECONDS.length - 1];
 const ORDER = { character: 0, location: 1, prop: 2 };
 // How a shot's command names an item: a combined props sheet is named by the positions of the props it holds that this shot uses.
-export const refLabel = (asset, shot) => (asset.members ? memberLabel({ name: asset.name, members: asset.members }, shot.storyboardText || shot.description) : asset.name);
+export const refLabel = (asset, shot) => (asset.members ? memberLabel({ name: asset.name, members: asset.members }, frameText(shot)) : asset.name);
 export const plannedRefNames = (shot) => [...shot.assets].filter((a) => a.kind in ORDER).sort((a, b) => ORDER[a.kind] - ORDER[b.kind]).slice(0, 4).map((a) => refLabel(a, shot));
 
 // what of the look decides a command's fingerprint: the style and the cast rule (the reference images have their own entry)
@@ -166,12 +168,12 @@ export function sheetSpec(asset, style) {
 }
 export function frameSpec(shot, style, aspectRatio = "16:9") {
   const names = plannedRefNames(shot);
-  return { purpose: "first_frame", shotId: shot.id, text: keyframePrompt(shot, style, names), params: { aspectRatio, refNames: names }, sourceHash: hashInputs({ k: "frame", d: shot.storyboardText || shot.description, f: shot.framing, a: shot.cameraAngle, m: shot.cameraMove, names, style: styleKey(style), aspectRatio, cf: (shot.assets ?? []).filter((a) => a.origin).map((a) => `${a.name}:${a.origin}`), br: referenceSignature(shotReferences(shot, normalizeStyle(style).refs)) }) };
+  return { purpose: "first_frame", shotId: shot.id, text: keyframePrompt(shot, style, names), params: { aspectRatio, refNames: names }, sourceHash: hashInputs({ k: "frame", d: frameText(shot), f: shot.framing, a: shot.cameraAngle, m: shot.cameraMove, names, style: styleKey(style), aspectRatio, cf: (shot.assets ?? []).filter((a) => a.origin).map((a) => `${a.name}:${a.origin}`), br: referenceSignature(shotReferences(shot, normalizeStyle(style).refs)) }) };
 }
 export function videoSpec(shot, style, aspectRatio = "16:9") {
   const seconds = veoSecondsFor(shot.durationSec);
   const text = `${videoPrompt(shot, style)} Target length: about ${seconds} seconds.`;
-  return { purpose: "video", shotId: shot.id, text, params: { seconds, plannedSeconds: shot.durationSec, aspectRatio }, sourceHash: hashInputs({ k: "video", d: shot.storyboardText || shot.description, m: shot.cameraMove, seconds, style: styleKey(style), cf: (shot.assets ?? []).filter((a) => a.origin).map((a) => `${a.name}:${a.origin}`) }) };
+  return { purpose: "video", shotId: shot.id, text, params: { seconds, plannedSeconds: shot.durationSec, aspectRatio }, sourceHash: hashInputs({ k: "video", d: frameText(shot), m: shot.cameraMove, seconds, style: styleKey(style), cf: (shot.assets ?? []).filter((a) => a.origin).map((a) => `${a.name}:${a.origin}`) }) };
 }
 export function audioSpec(element, voice) {
   const text = speechText(element);

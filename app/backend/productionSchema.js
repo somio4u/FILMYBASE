@@ -25,12 +25,14 @@ import { ensureShotPlanSchema } from "./shotPlans.js";
 import { ensureDraftSchema } from "./drafts.js";
 import { repairPropGroupDescriptions } from "./propGroups.js";
 import { ensureReferenceSchema } from "./referenceImages.js";
+import { ensureFrameDescriptionSchema } from "./frameDescriptions.js";
 
 export async function ensureAllProductionSchemas(db, log = console.error) {
   const steps = [
     ["production dossier", ensureProductionSchema],
     ["media storage", ensureMediaSchema],
     ["reference images (logos, brands, titles)", ensureReferenceSchema],
+    ["full frame descriptions written from the screenplay", ensureFrameDescriptionSchema],
     ["designer tasks", ensureDesignTaskSchema],
     ["designer submissions", ensureSubmissionSchema],
     ["screenplay scenes", ensureScreenplayAnalysisSchema],

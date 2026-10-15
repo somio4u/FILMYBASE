@@ -2592,18 +2592,17 @@ async function generateAgentChatReply(stageKey, stateSummaryText, history, userM
     { role: "user", parts: lastUserParts },
   ];
 
-  const response = await generateContentWithRetry({
+  // 2K was too little for an Odia scene edit (script cost + thinking): cut off mid-string. Retries with more room if it happens.
+  return generateJsonContent({
     model: GEMINI_MODEL_NAME,
     contents,
     config: {
       systemInstruction: systemPrompt,
       responseMimeType: "application/json",
-      maxOutputTokens: 2048,
+      maxOutputTokens: 8192,
       responseSchema: AGENT_CHAT_RESPONSE_SCHEMA,
     },
   });
-
-  return JSON.parse(response.text);
 }
 
 function requireConceptAccess(req, conceptId) {
@@ -12028,12 +12027,13 @@ Do three things:
 insertAfterLine: where the new lines go. If they said where ("after Meera's line", "at the start", "before he leaves"), the number of the existing line the new lines should come right after (0 = at the very start of the scene). Otherwise ${fallbackAfter}${fallbackAfter === existingElements.length ? " (the end)" : " (where the writer's cursor is)"}.
 note: one short friendly sentence for the writer, like a close friend talking, in the language they mostly spoke — in Odia always the casual ତୁ form (ତୁ / ତୋ / କର / କହ, never ତୁମେ / ଆପଣ) and everyday words (ସିନ୍, not ଦୃଶ୍ୟ), e.g. "ହେଇଗଲା ଭାଇ, ସିନ୍ ଶେଷରେ ମୀରାର ଡାଇଲଗ୍ ଯୋଡ଼ିଦେଲି।" — what you added, or what you couldn't do and why.`;
 
-  const response = await generateContentWithRetry({
+  // Odia script costs many tokens per word and the model's thinking shares the same limit, so an 8K answer used to be cut off
+  // mid-sentence ("Unterminated string in JSON"). This call retries with double the room when that happens.
+  const parsed = await generateJsonContent({
     model: VOICE_TO_SCREENPLAY_MODEL_NAME,
     contents: [{ role: "user", parts: [{ inlineData: { data: audioBase64, mimeType } }, { text: instructions }] }],
-    config: { responseMimeType: "application/json", responseSchema: VOICE_TO_SCREENPLAY_SCHEMA, maxOutputTokens: 8192, temperature: 0.3 },
+    config: { responseMimeType: "application/json", responseSchema: VOICE_TO_SCREENPLAY_SCHEMA, maxOutputTokens: 16384, temperature: 0.3 },
   });
-  const parsed = JSON.parse(response.text);
   const elements = (parsed.elements ?? [])
     .filter((e) => String(e.text ?? "").trim())
     .map((e) => ({
@@ -12066,7 +12066,7 @@ app.post("/api/transcribe", requireLogin, async (req, res) => {
     return;
   }
   try {
-    const response = await generateContentWithRetry({
+    const parsed = await generateJsonContent({
       model: VOICE_TO_SCREENPLAY_MODEL_NAME,
       contents: [{
         role: "user",
@@ -12075,9 +12075,8 @@ app.post("/api/transcribe", requireLogin, async (req, res) => {
           { text: `Write down exactly what is said in this recording. The speaker may use Odia, Hindi or English, or switch between them mid-sentence. Write each part in its own script: Odia in Odia script, Hindi in Devanagari, English in Latin letters. Do not translate, summarise, correct or add anything — only drop filler sounds like "umm". Use normal punctuation. language: the main language spoken ("or", "hi", "en"), "mixed" if it's a real mix, or "none" (with text "") if nothing is said.` },
         ],
       }],
-      config: { responseMimeType: "application/json", responseSchema: TRANSCRIBE_SCHEMA, maxOutputTokens: 4096, temperature: 0 },
+      config: { responseMimeType: "application/json", responseSchema: TRANSCRIBE_SCHEMA, maxOutputTokens: 16384, temperature: 0 },
     });
-    const parsed = JSON.parse(response.text);
     res.json({ text: String(parsed.text ?? "").trim(), language: parsed.language });
   } catch (error) {
     console.error("Transcription failed:", error.message);

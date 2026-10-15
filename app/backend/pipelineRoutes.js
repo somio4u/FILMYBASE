@@ -232,6 +232,22 @@ export function registerPipelineRoutes(app, db, requireRole, { store, providers,
   app.post("/api/production/:projectId/shots/write-descriptions", admin, wrap(async (req, res) => {
     const projectId = need(id(req.params.projectId), "project");
     await projectExists(projectId);
+    // all: every scene that already has shots (no re-dividing), one scene after another; a scene that fails is reported, the rest go on
+    if (req.body?.all === true) {
+      const scenes = (await db.query("SELECT DISTINCT sc.id, sc.order_index FROM production_scenes sc JOIN production_shots s ON s.scene_id = sc.id WHERE sc.project_id = $1 AND sc.in_latest ORDER BY sc.order_index", [projectId])).rows;
+      const total = { written: 0, linked: 0, unknown: [], skipped: 0, scenes: scenes.length, failedScenes: [] };
+      for (const sc of scenes) {
+        try {
+          const r = await writeFrameDescriptions(db, projectId, { sceneId: sc.id, overwrite: req.body?.overwrite !== false, textJson, listShots });
+          total.written += r.written; total.linked += r.linked; total.skipped += r.skipped; total.unknown.push(...r.unknown);
+        } catch (error) { total.failedScenes.push(`${sc.id}: ${error.message}`); }
+      }
+      if (total.written > 0) {
+        try { await planPrompts(db, projectId, { actorUserId: req.user?.id }); } catch (error) { console.error("Prompts could not be refreshed after the descriptions:", error.message); }
+        publish(projectId, { type: "assets_changed" });
+      }
+      return res.json(total);
+    }
     const result = await writeFrameDescriptions(db, projectId, { sceneId: id(req.body?.sceneId), shotId: id(req.body?.shotId), overwrite: req.body?.overwrite !== false, textJson, listShots });
     if (result.written > 0) {
       try { await planPrompts(db, projectId, { actorUserId: req.user?.id }); } catch (error) { console.error("Prompts could not be refreshed after the descriptions:", error.message); }

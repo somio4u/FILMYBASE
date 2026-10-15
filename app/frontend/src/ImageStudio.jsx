@@ -194,6 +194,15 @@ function ShotFrames({ api, projectId, backendUrl }) {
     else setMessage({ tone: r.data.written ? 'good' : 'bad', text: `Wrote ${r.data.written} full frame description${r.data.written === 1 ? '' : 's'} and linked the characters, places and props of ${r.data.linked} shot${r.data.linked === 1 ? '' : 's'}.${r.data.unknown?.length ? ` Names not in the project (left out): ${r.data.unknown.slice(0, 6).join('; ')}.` : ''} Check the result on each shot — you can edit it.` })
     refresh()
   }
+  // an older project whose shot division is done: write the full frame description for EVERY shot of EVERY scene, shots stay as divided
+  async function writeEverywhere() {
+    setBusy(true); setMessage({ tone: 'good', text: 'Reading the screenplay scene by scene… this can take a minute or two.' })
+    const r = await call(`${api}/${projectId}/shots/write-descriptions`, 'POST', { all: true })
+    setBusy(false)
+    if (!r.ok) setMessage({ tone: 'bad', text: r.data.error || 'Could not write the descriptions.' })
+    else setMessage({ tone: r.data.failedScenes?.length || !r.data.written ? 'bad' : 'good', text: `Re-analysed ${r.data.scenes} scene${r.data.scenes === 1 ? '' : 's'}: wrote ${r.data.written} full frame description${r.data.written === 1 ? '' : 's'} and linked the made characters, places and props (${r.data.linked} shots). The shots themselves were not changed.${r.data.failedScenes?.length ? ` ${r.data.failedScenes.length} scene(s) failed — press again to retry.` : ''}${r.data.unknown?.length ? ` Names not in the project (left out): ${r.data.unknown.slice(0, 6).join('; ')}.` : ''}` })
+    refresh()
+  }
   if (!scenes) return <p className="dossier-note">Loading…</p>
   if (scenes.length === 0) {
     return (
@@ -222,6 +231,7 @@ function ShotFrames({ api, projectId, backendUrl }) {
           <>
             <div className="is-toolbar">
               <p className="is-counts"><strong>{data.counts.shots}</strong> planned frames · <strong>{data.counts.approved}</strong> approved · {data.counts.review} waiting for review · {data.counts.readyToMake} ready to make · {data.counts.blocked} waiting for references</p>
+              <button type="button" className="dossier-small-button" disabled={busy} onClick={writeEverywhere}>🔁 Re-analyse ALL scenes — write full descriptions for every divided shot</button>
               <button type="button" className="dossier-small-button" disabled={busy} onClick={writeAll}>✍ Write full descriptions from the screenplay (this scene)</button>
               <button type="button" className="dossier-small-button" disabled={busy} onClick={() => autoLink(false)}>🔗 Auto-link characters, places &amp; props (this scene)</button>
               <button type="button" className="dossier-small-button" disabled={busy || readyIds.length === 0} onClick={() => generate(readyIds)}>Make the {readyIds.length} ready frame{readyIds.length === 1 ? '' : 's'} (≈{usd(readyIds.length * 0.04)})</button>

@@ -4,7 +4,7 @@
 // are one click away here, and every version is kept.
 
 import StylePicker from './StylePicker.jsx'
-import { ImportPictures, PropCombiner } from './ImageTools.jsx'
+import { ImportPictures, PropCombiner, OriginControl } from './ImageTools.jsx'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { PromptCard } from './Blueprint.jsx'
 import { useLive } from './useLive.js'
@@ -122,6 +122,7 @@ function Library({ type, api, projectId, backendUrl }) {
           <li key={a.dbId} className={`is-card ${a.state}`}>
             <header className="is-card-head"><strong>{a.assetId} · {a.name}</strong><StateBadge state={a.state} stale={a.canonical?.promptCurrent === false} /></header>
             {a.canonical ? <Picture version={a.canonical} backendUrl={backendUrl} alt={`Approved reference sheet of ${a.name}`} /> : <div className="is-empty">{a.state === 'generating' ? 'Generating…' : 'No approved reference sheet yet'}</div>}
+            {type === 'character' && <OriginControl api={api} projectId={projectId} asset={a} onChanged={load} />}
             <div className="pipe-card-buttons">
               <button type="button" className="dossier-small-button" disabled={busy || a.running} onClick={() => generate([a.dbId])}>{a.running ? 'Generating…' : a.canonical || a.versions > 0 ? `Make another version (${usd(a.estimateUsd)})` : `Generate (${usd(a.estimateUsd)})`}</button>
             </div>

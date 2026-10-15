@@ -15,6 +15,7 @@ export default function StylePicker({ api, projectId, onChanged }) {
   const [styles, setStyles] = useState([])
   const [style, setStyle] = useState(null)
   const [custom, setCustom] = useState('')
+  const [cast, setCast] = useState('indian')
   const [message, setMessage] = useState(null)
   const [busy, setBusy] = useState(false)
 
@@ -24,6 +25,7 @@ export default function StylePicker({ api, projectId, onChanged }) {
     setStyles(r.data.visualStyles ?? [])
     setStyle(r.data.settings?.visualStyle ?? 'realistic')
     setCustom(r.data.settings?.customStylePrompt ?? '')
+    setCast(r.data.settings?.castOrigin ?? 'indian')
   }, [api, projectId])
   useEffect(() => { load() }, [load])
 
@@ -38,6 +40,16 @@ export default function StylePicker({ api, projectId, onChanged }) {
     onChanged?.()
   }
 
+  async function saveCast(next) {
+    setBusy(true); setMessage(null)
+    const r = await call(`${api}/${projectId}/settings`, 'PATCH', { castOrigin: next })
+    setBusy(false)
+    if (!r.ok) { setMessage({ tone: 'bad', text: r.data.error || 'Could not save.' }); await load(); return }
+    setCast(r.data.settings.castOrigin)
+    setMessage({ tone: 'good', text: next === 'indian' ? 'Every character and prop is now Indian (unless you name another origin on a character). All commands were updated; pictures already made keep their old look — press “Make another version”.' : 'The Indian rule is off: the story alone decides who and what is shown. Commands were updated.' })
+    onChanged?.()
+  }
+
   if (style === null) return null
   return (
     <section className="studio-card" aria-label="Visual style of the film">
@@ -48,6 +60,14 @@ export default function StylePicker({ api, projectId, onChanged }) {
           <select value={style} disabled={busy} onChange={(e) => { const v = e.target.value; setStyle(v); if (v !== 'custom') save(v, custom) }}>
             {styles.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
             <option value="custom">Custom — describe it yourself</option>
+          </select>
+        </label>
+      </div>
+      <div className="pipe-toolbar">
+        <label className="studio-field">People &amp; objects
+          <select value={cast} disabled={busy} onChange={(e) => { setCast(e.target.value); saveCast(e.target.value) }}>
+            <option value="indian">Indian — every character and prop (default)</option>
+            <option value="none">No rule — as the story says</option>
           </select>
         </label>
       </div>

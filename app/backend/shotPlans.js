@@ -111,7 +111,7 @@ async function compute(db, projectId, shots, { mode, genre, decisions, env }) {
   const settings = await getSettings(db, projectId);
   return buildOptimizationPlan({
     shots, mode, genre, genreHint: await genreHint(db, projectId), decisions, projectId, screenplayVersion: bp?.screenplay_version ?? null,
-    style: settings.stylePrompt ?? "", aspectRatio: settings.aspectRatio ?? "16:9", remainingBudgetUsd: await remainingBudget(db, projectId), caps: providerCapabilities(env), env,
+    style: settings.look, aspectRatio: settings.aspectRatio ?? "16:9", remainingBudgetUsd: await remainingBudget(db, projectId), caps: providerCapabilities(env), env,
   });
 }
 

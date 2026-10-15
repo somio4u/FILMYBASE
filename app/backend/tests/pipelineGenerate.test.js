@@ -131,6 +131,12 @@ test("settings: defaults, saving, and strict checks", async () => {
   assert.equal(anime.customStylePrompt, "moody, warm light");
   assert.equal((await saveSettings(db, projectId, { visualStyle: "custom" })).stylePrompt, "moody, warm light");
   await assert.rejects(saveSettings(db, projectId, { visualStyle: "sparkly" }), /does not exist/);
+  // the cast rule: every character and prop is Indian by default (castRule.js); it can be switched off
+  assert.equal(s.castOrigin, "indian");
+  assert.deepEqual(s.look, { text: s.stylePrompt, castOrigin: "indian" });
+  assert.equal((await saveSettings(db, projectId, { castOrigin: "none" })).look.castOrigin, "none");
+  await assert.rejects(saveSettings(db, projectId, { castOrigin: "maybe" }), /cast rule/);
+  assert.equal((await saveSettings(db, projectId, { castOrigin: "indian" })).castOrigin, "indian");
   await assert.rejects(saveSettings(db, projectId, { visualStyle: "custom", stylePrompt: "  " }), /Describe the look/);
   await assert.rejects(saveSettings(db, projectId, { aspectRatio: "2:1" }), /Picture shape/);
   await assert.rejects(saveSettings(db, projectId, { budgetLimitUsd: -1 }), /money limit/);

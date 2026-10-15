@@ -6,6 +6,7 @@
 //   frameScenes()        the scenes with how many of their first frames are approved / ready to make / blocked
 //   frameSlots(scene)    one slot per PLANNED shot: first-frame prompt, the references it depends on, state, versions
 
+import { foreignOrigin } from "./castRule.js";
 import { unitIndex } from "./generationUnits.js";
 import { buildShotManifest, httpError } from "./blueprint.js";
 import { promptStatus } from "./planning.js";
@@ -60,6 +61,7 @@ export async function assetLibrary(db, projectId, type) {
       versions: list.length,
       usedInShots: a.shot_ids, usedCount: a.shot_ids.length,
       note: detail.get(a.db_id)?.description ?? detail.get(a.db_id)?.notes ?? null,
+      origin: a.type === "character" ? (foreignOrigin(detail.get(a.db_id)) ?? null) : undefined, // a character from outside India, or null (Indian is the default)
       estimateUsd: estimateCost("character"),
     };
   });

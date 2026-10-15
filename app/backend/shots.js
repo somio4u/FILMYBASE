@@ -8,6 +8,7 @@
 // and which dialogue lines (D001...) it covers. The storyboard is a short
 // written description of each shot's picture — no images.
 
+import { foreignOrigin } from "./castRule.js";
 import { phrasesOf, contains, normalizeForMatch } from "./screenplayAnalysis.js";
 
 export async function ensureShotSchema(db) {
@@ -379,7 +380,7 @@ export async function listShots(db, projectId, { sceneId = null } = {}) {
   const assets = (await db.query(
     `SELECT * FROM (
        SELECT DISTINCT ON (sa.shot_id, COALESCE(g.id, a.id)) sa.shot_id, COALESCE(g.id, a.id) AS id, COALESCE(g.code, a.code) AS code,
-              COALESCE(g.name, a.name) AS name, a.kind AS kind, g.group_members AS members
+              COALESCE(g.name, a.name) AS name, a.kind AS kind, g.group_members AS members, a.agent_details AS agent_details, a.human_edits AS human_edits
        FROM production_shot_assets sa JOIN production_assets a ON a.id = sa.asset_id LEFT JOIN production_assets g ON g.id = a.grouped_into
        WHERE sa.shot_id = ANY($1) ORDER BY sa.shot_id, COALESCE(g.id, a.id)
      ) t ORDER BY kind, code`, [ids]
@@ -396,7 +397,10 @@ export async function listShots(db, projectId, { sceneId = null } = {}) {
       id: r.id, code: r.code, sceneId: r.scene_id, sceneCode: r.scene_code, sceneNumber: r.scene_number, number: `${r.scene_number}.${n}`, heading: r.heading,
       framing: r.framing, cameraAngle: r.camera_angle, cameraMove: r.camera_move, description: r.description, durationSec: Number(r.duration_sec),
       source: r.source, sourceLabel: r.source_label, storyboardText: r.storyboard_text, storyboardStatus: r.storyboard_status, shotStatus: r.shot_status, edited: r.edited, revision: r.revision,
-      assets: assets.filter((a) => a.shot_id === r.id).map(({ id, code, name, kind, members }) => ({ id, code, name, kind, ...(members ? { members } : {}) })),
+      assets: assets.filter((a) => a.shot_id === r.id).map(({ id, code, name, kind, members, agent_details, human_edits }) => {
+        const origin = kind === "character" ? foreignOrigin({ ...agent_details, ...human_edits }) : null; // a character from outside India (castRule.js)
+        return { id, code, name, kind, ...(members ? { members } : {}), ...(origin ? { origin } : {}) };
+      }),
       dialogue: dialogue.filter((d) => d.shot_id === r.id).map((d) => ({ id: d.id, code: d.code, speaker: d.speaker, parenthetical: d.parenthetical, text: d.text_en || d.text_hi })),
     };
   });

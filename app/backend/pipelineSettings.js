@@ -1,4 +1,5 @@
 import { DEFAULT_VISUAL_STYLE, isVisualStyle, resolveStyle } from "./visualStyles.js";
+import { CAST_ORIGINS, DEFAULT_CAST_ORIGIN } from "./castRule.js";
 
 // Per-project settings for the AI production pipeline: the look of the film
 // (style text), picture shape, voices, and the MONEY limit. Every paid AI call
@@ -25,6 +26,7 @@ export async function ensurePipelineSettingsSchema(db) {
       project_id INTEGER PRIMARY KEY REFERENCES ai_movie_projects(id) ON DELETE CASCADE,
       style_prompt TEXT NOT NULL DEFAULT '',
       visual_style TEXT,
+      cast_origin TEXT,
       aspect_ratio TEXT NOT NULL DEFAULT '16:9',
       budget_limit_usd NUMERIC,
       voices JSONB NOT NULL DEFAULT '{}',
@@ -41,6 +43,7 @@ export async function ensurePipelineSettingsSchema(db) {
       created_at TIMESTAMPTZ NOT NULL DEFAULT now()
     )`,
     `ALTER TABLE production_settings ADD COLUMN IF NOT EXISTS visual_style TEXT`,
+    `ALTER TABLE production_settings ADD COLUMN IF NOT EXISTS cast_origin TEXT`,
     `CREATE INDEX IF NOT EXISTS production_spend_project_idx ON production_spend (project_id)`,
   ];
   for (const sql of statements) await db.query(sql);
@@ -53,11 +56,15 @@ export async function getSettings(db, projectId) {
   // visualStyle: the chosen look (realistic by default). A project that only has its own free-text look from before is "custom".
   const custom = row?.style_prompt ?? "";
   const visualStyle = row?.visual_style && isVisualStyle(row.visual_style) ? row.visual_style : custom.trim() ? "custom" : DEFAULT_VISUAL_STYLE;
+  const castOrigin = CAST_ORIGINS.includes(row?.cast_origin) ? row.cast_origin : DEFAULT_CAST_ORIGIN;
+  const stylePrompt = resolveStyle(visualStyle, custom);
   return {
+    castOrigin, // "indian" (default): every character and prop is Indian unless said otherwise; "none": no rule
+    look: { text: stylePrompt, castOrigin }, // what every picture command is written with
     visualStyle,
     customStylePrompt: custom,
     // the text every picture command is written with (a preset's text, or the director's own words)
-    stylePrompt: resolveStyle(visualStyle, custom),
+    stylePrompt,
     aspectRatio: row?.aspect_ratio ?? "16:9",
     budgetLimitUsd: row?.budget_limit_usd === null || row?.budget_limit_usd === undefined ? null : Number(row.budget_limit_usd),
     effectiveBudgetUsd: row?.budget_limit_usd === null || row?.budget_limit_usd === undefined ? DEFAULT_BUDGET_USD : Number(row.budget_limit_usd),
@@ -68,6 +75,10 @@ export async function getSettings(db, projectId) {
 export async function saveSettings(db, projectId, patch) {
   const current = await getSettings(db, projectId);
   const next = { ...current };
+  if (patch.castOrigin !== undefined) {
+    if (!CAST_ORIGINS.includes(patch.castOrigin)) throw Object.assign(new Error("The cast rule must be \"indian\" or \"none\"."), { status: 400 });
+    next.castOrigin = patch.castOrigin;
+  }
   if (patch.visualStyle !== undefined) {
     if (!isVisualStyle(patch.visualStyle)) throw Object.assign(new Error("That visual style does not exist."), { status: 400 });
     next.visualStyle = patch.visualStyle;
@@ -101,11 +112,11 @@ export async function saveSettings(db, projectId, patch) {
     next.voices = voices;
   }
   await db.query(
-    `INSERT INTO production_settings (project_id, style_prompt, visual_style, aspect_ratio, budget_limit_usd, voices, updated_at)
-     VALUES ($1,$2,$3,$4,$5,$6,now())
+    `INSERT INTO production_settings (project_id, style_prompt, visual_style, aspect_ratio, budget_limit_usd, voices, cast_origin, updated_at)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,now())
      ON CONFLICT (project_id) DO UPDATE SET style_prompt = EXCLUDED.style_prompt, visual_style = EXCLUDED.visual_style, aspect_ratio = EXCLUDED.aspect_ratio,
-       budget_limit_usd = EXCLUDED.budget_limit_usd, voices = EXCLUDED.voices, updated_at = now()`,
-    [projectId, next.customStylePrompt, next.visualStyle, next.aspectRatio, next.budgetLimitUsd, JSON.stringify(next.voices)]
+       budget_limit_usd = EXCLUDED.budget_limit_usd, voices = EXCLUDED.voices, cast_origin = EXCLUDED.cast_origin, updated_at = now()`,
+    [projectId, next.customStylePrompt, next.visualStyle, next.aspectRatio, next.budgetLimitUsd, JSON.stringify(next.voices), next.castOrigin]
   );
   return getSettings(db, projectId);
 }

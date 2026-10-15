@@ -114,3 +114,37 @@ export function PropCombiner({ api, projectId }) {
     </section>
   )
 }
+
+// Every character is INDIAN unless you say otherwise (the cast rule). This shows it, and lets you name another origin.
+export function OriginControl({ api, projectId, asset, onChanged }) {
+  const [editing, setEditing] = useState(false)
+  const [value, setValue] = useState(asset.origin ?? '')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+  async function save(next) {
+    setBusy(true); setError('')
+    const r = await call(`${api}/${projectId}/assets/${asset.dbId}/origin`, 'PUT', { origin: next })
+    setBusy(false)
+    if (!r.ok) { setError(r.data.error || 'Could not save.'); return }
+    setEditing(false); setValue(r.data.origin ?? '')
+    onChanged?.()
+  }
+  return (
+    <div className="dossier-fine-print" style={{ margin: '4px 0' }}>
+      {!editing ? (
+        <>
+          <span>🌏 Origin: <strong>{asset.origin ? `${asset.origin} (not Indian)` : 'Indian (default)'}</strong></span>{' '}
+          <button type="button" className="dossier-small-button" onClick={() => { setValue(asset.origin ?? ''); setEditing(true) }}>Change</button>
+        </>
+      ) : (
+        <span>
+          <input value={value} maxLength={80} placeholder="e.g. British, Japanese — empty = Indian" onChange={(e) => setValue(e.target.value)} disabled={busy} aria-label={`Origin of ${asset.name}`} />{' '}
+          <button type="button" className="dossier-small-button" disabled={busy} onClick={() => save(value)}>Save</button>{' '}
+          <button type="button" className="dossier-small-button" disabled={busy} onClick={() => save('')}>Make Indian</button>{' '}
+          <button type="button" className="dossier-small-button" disabled={busy} onClick={() => setEditing(false)}>Cancel</button>
+        </span>
+      )}
+      {error && <span className="dossier-error"> {error}</span>}
+    </div>
+  )
+}

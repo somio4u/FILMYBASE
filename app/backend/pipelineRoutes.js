@@ -12,6 +12,7 @@ import { priceTable } from "./pipelineSettings.js";
 import { publish } from "./events.js";
 import multer from "multer";
 import { importPictures } from "./pictureImport.js";
+import { foreignOrigin } from "./castRule.js";
 
 export function registerPipelineRoutes(app, db, requireRole, { store, providers, cinematic = null, onShotsApproved = null }) {
   const gens = createGenerationService({ db, store, providers });
@@ -56,7 +57,7 @@ export function registerPipelineRoutes(app, db, requireRole, { store, providers,
     const settings = await saveSettings(db, projectId, req.body ?? {});
     // The visual style is written into every picture command, so a changed look refreshes all the commands (free: no AI call).
     let promptsRefreshed = false;
-    if (settings.stylePrompt !== before.stylePrompt) {
+    if (settings.stylePrompt !== before.stylePrompt || settings.castOrigin !== before.castOrigin) {
       try { await planPrompts(db, projectId, { actorUserId: req.user?.id }); promptsRefreshed = true; } catch (error) { console.error("Prompts could not be refreshed after the style changed:", error.message); }
     }
     res.json({ settings, spend: await spendSummary(db, projectId), promptsRefreshed });
@@ -70,6 +71,22 @@ export function registerPipelineRoutes(app, db, requireRole, { store, providers,
     if (!req.files?.length) throw Object.assign(new Error("Choose the pictures (or a .zip of them) first."), { status: 400 });
     const files = req.files.map((f) => ({ name: Buffer.from(f.originalname, "latin1").toString("utf8"), bytes: f.buffer }));
     res.json(await importPictures({ db, gens, projectId, files, actorUserId: req.user?.id, autoApprove: req.body?.autoApprove === "true" }));
+  }));
+
+  // The CAST RULE makes every character Indian unless the director says otherwise: this sets (or clears) a character's origin.
+  app.put("/api/production/:projectId/assets/:assetId/origin", admin, wrap(async (req, res) => {
+    const projectId = need(id(req.params.projectId), "project");
+    const assetId = need(id(req.params.assetId), "item");
+    const asset = (await db.query("SELECT * FROM production_assets WHERE id = $1 AND project_id = $2", [assetId, projectId])).rows[0];
+    if (!asset) throw Object.assign(new Error("Item not found."), { status: 404 });
+    if (asset.kind !== "character") throw Object.assign(new Error("Only a character has an origin."), { status: 400 });
+    const origin = String(req.body?.origin ?? "").trim().slice(0, 80);
+    const edits = { ...(asset.human_edits ?? {}) };
+    if (!origin || foreignOrigin({ origin }) === null) delete edits.origin; else edits.origin = origin; // Indian = the default: nothing to store
+    await db.query("UPDATE production_assets SET human_edits = $1, revision = revision + 1, updated_at = now() WHERE id = $2", [JSON.stringify(edits), assetId]);
+    try { await planPrompts(db, projectId, { actorUserId: req.user?.id }); } catch (error) { console.error("Prompts could not be refreshed after the origin changed:", error.message); }
+    publish(projectId, { type: "assets_changed" });
+    res.json({ origin: edits.origin ?? null });
   }));
 
   // ---- small props share one picture (propGroups.js) ----

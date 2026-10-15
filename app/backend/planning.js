@@ -21,7 +21,7 @@ import { assetFileName, shotFileName } from "./pictureNames.js";
 // What every prompt SHOULD say right now, from the project's current facts.
 export async function computeSpecs(db, projectId) {
   const settings = await getSettings(db, projectId);
-  const style = settings.stylePrompt;
+  const style = settings.look; // the look AND the cast rule (castRule.js)
   const shots = await listShots(db, projectId);
   const assets = (await db.query("SELECT * FROM production_assets WHERE project_id = $1 AND in_latest_import AND grouped_into IS NULL ORDER BY kind, code", [projectId])).rows;
   const used = new Set(shots.flatMap((s) => s.assets.map((a) => a.id)));

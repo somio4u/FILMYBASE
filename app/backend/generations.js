@@ -23,7 +23,7 @@ import { assertWithinBudget, getSettings, priceTable, recordSpend, VOICES } from
 import { ensurePrompt, hashInputs } from "./prompts.js";
 import { publish } from "./events.js";
 import { unitShotView } from "./generationUnits.js";
-import { listShots } from "./shots.js";
+import { autoLinkShots, listShots } from "./shots.js";
 
 const httpError = (message, status = 400, code = "bad_request") => Object.assign(new Error(message), { status, code });
 
@@ -385,9 +385,14 @@ export function createGenerationService({ db, store, providers, env = process.en
 
     async generateKeyframe(projectId, shot, { actorUserId = null, allowMissing = false } = {}) {
       const settings = await getSettings(db, projectId);
+      // a shot with nothing linked is linked by itself first: the characters, places and props its text names
+      if (!(shot.assets ?? []).some((a) => ["character", "location", "prop"].includes(a.kind))) {
+        const found = await autoLinkShots(db, projectId, { shotId: shot.id });
+        if (found.itemsAdded > 0) shot = (await listShots(db, projectId)).find((s) => s.id === shot.id) ?? shot;
+      }
       const ready = await this.checkKeyframeReady(projectId, shot);
       if (ready.ok && !(shot.assets ?? []).some((a) => ["character", "location", "prop"].includes(a.kind)) && !allowMissing) {
-        throw httpError(`Shot ${shot.code} has no character, environment or prop linked to it, so the picture would be invented. Link them to the shot first (or tick "Go ahead even if a reference picture is missing").`, 409, "not_ready");
+        throw httpError(`Shot ${shot.code} has no character, environment or prop linked to it, so the picture would be invented. Use "🔗 Auto-link" (or "🔗 Link…" on the shot) in the Image Studio first, or tick "Go ahead even if a reference picture is missing".`, 409, "not_ready");
       }
       if (!ready.ok && (!allowMissing || shot.shotStatus !== "approved")) throw httpError(ready.reason, 409, "not_ready");
       // characters first, then the place, then objects; the AI takes at most 4

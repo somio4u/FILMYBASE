@@ -1836,3 +1836,9 @@ Plain version: every project is now a set of **drafts**. Opening a project shows
 - [x] Shot frames keep working with the made characters/props/places: a frame whose reference sheet was later replaced is no longer shown as outdated either.
 - Why the "Make all missing, one by one" button may not show: it appears only when some item has NO picture at all. If every item already has a picture it is hidden (correct).
 - Honest note: tested with the local imitation of the image service.
+
+## Shots not linked to characters / places / props: auto-link and link by hand (deploying)
+- [x] **Why "Shot SH001 has no character, environment or prop linked":** shots made by the Storyboard Designer from a screenplay-only project were not tied to the made characters, places and props (the screenplay analysis had not linked them to the scene), so there was nothing to attach.
+- [x] **Auto-link:** (1) automatically — when you press Generate on a shot with nothing linked, the app first links the characters, places and props its text names (and speakers, and the place in the scene heading), then makes the frame; (2) button **"🔗 Auto-link characters, places & props (this scene)"** in Image Studio → Shot Frames links all unlinked shots of the scene at once, and says which shots it found nothing for.
+- [x] **By hand:** every shot card has **"🔗 Link…"** — tick the characters, environments and props it uses, Save. This does NOT reopen the shot-division approval. Commands refresh (free).
+- Honest note: name matching uses the shot's text; a shot that never names its people or things (e.g. "she turns") needs the hand picker. Tested with a local imitation of the image service.

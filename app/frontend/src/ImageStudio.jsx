@@ -176,6 +176,15 @@ function ShotFrames({ api, projectId, backendUrl }) {
     setBusy(false)
     if (!r.ok) setMessage({ tone: 'bad', text: r.data.error }); else refresh()
   }
+  // finds the made characters, places and props each shot names and links them (only shots with nothing linked, or all of them)
+  async function autoLink(all) {
+    setBusy(true); setMessage(null)
+    const r = await call(`${api}/${projectId}/shots/auto-link`, 'POST', { sceneId: all ? null : sceneId, onlyUnlinked: !all })
+    setBusy(false)
+    if (!r.ok) setMessage({ tone: 'bad', text: r.data.error || 'Could not link.' })
+    else setMessage({ tone: r.data.stillEmpty.length ? 'bad' : 'good', text: `Linked ${r.data.itemsAdded} item${r.data.itemsAdded === 1 ? '' : 's'} to ${r.data.shotsLinked} shot${r.data.shotsLinked === 1 ? '' : 's'}.${r.data.stillEmpty.length ? ` Nothing could be found for ${r.data.stillEmpty.join(', ')} — use "🔗 Link…" on the shot to choose by hand.` : ''}` })
+    refresh()
+  }
   if (!scenes) return <p className="dossier-note">Loading…</p>
   if (scenes.length === 0) {
     return (
@@ -204,6 +213,7 @@ function ShotFrames({ api, projectId, backendUrl }) {
           <>
             <div className="is-toolbar">
               <p className="is-counts"><strong>{data.counts.shots}</strong> planned frames · <strong>{data.counts.approved}</strong> approved · {data.counts.review} waiting for review · {data.counts.readyToMake} ready to make · {data.counts.blocked} waiting for references</p>
+              <button type="button" className="dossier-small-button" disabled={busy} onClick={() => autoLink(false)}>🔗 Auto-link characters, places &amp; props (this scene)</button>
               <button type="button" className="dossier-small-button" disabled={busy || readyIds.length === 0} onClick={() => generate(readyIds)}>Make the {readyIds.length} ready frame{readyIds.length === 1 ? '' : 's'} (≈{usd(readyIds.length * 0.04)})</button>
             </div>
             {message && <p className={message.tone === 'bad' ? 'dossier-error' : 'dossier-message'} role={message.tone === 'bad' ? 'alert' : 'status'}>{message.text}</p>}
@@ -218,6 +228,7 @@ function ShotFrames({ api, projectId, backendUrl }) {
                   {s.canonical ? <Picture version={s.canonical} backendUrl={backendUrl} alt={`Approved first frame of ${s.shotId}`} /> : <div className="is-empty">{s.running ? 'Generating…' : 'No approved first frame yet'}</div>}
                   <div className="pipe-card-buttons">
                     <button type="button" className="dossier-small-button" disabled={busy || s.running || !s.readiness.ok} title={s.readiness.ok ? '' : `Needs: ${s.readiness.missing.join(', ') || 'shot division approval'}`} onClick={() => generate([s.dbId])}>{s.running ? 'Generating…' : s.versions > 0 ? 'Make another version ($0.04)' : 'Generate first frame ($0.04)'}</button>
+                    <LinkPicker api={api} projectId={projectId} shot={s} onChanged={refresh} />
                     {!s.readiness.ok && <span className="dossier-fine-print">Needs an approved reference: {s.readiness.missing.join(', ') || 'the shot division approved'}</span>}
                   </div>
                   <Versions slot={s} backendUrl={backendUrl} onReview={review} busy={busy} label={s.shotId} />
@@ -232,6 +243,50 @@ function ShotFrames({ api, projectId, backendUrl }) {
           </>
         )}
       </div>
+    </div>
+  )
+}
+
+// Choose by hand which made characters, places and props a shot uses (the picture is built only from these).
+function LinkPicker({ api, projectId, shot, onChanged }) {
+  const [open, setOpen] = useState(false)
+  const [items, setItems] = useState(null)
+  const [picked, setPicked] = useState(new Set())
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState(null)
+  async function toggleOpen() {
+    if (open) { setOpen(false); return }
+    setOpen(true); setError(null)
+    const r = await call(`${api}/${projectId}/shots/${shot.dbId}/links`)
+    if (!r.ok) { setError(r.data.error || 'Could not load.'); return }
+    setItems(r.data.items); setPicked(new Set(r.data.items.filter((i) => i.linked).map((i) => i.id)))
+  }
+  async function save() {
+    setBusy(true); setError(null)
+    const r = await call(`${api}/${projectId}/shots/${shot.dbId}/links`, 'PUT', { assetIds: [...picked] })
+    setBusy(false)
+    if (!r.ok) { setError(r.data.error || 'Could not save.'); return }
+    setOpen(false); onChanged()
+  }
+  const label = { character: 'Characters', location: 'Environments', prop: 'Props', other: 'Other' }
+  return (
+    <div className="is-link-picker">
+      <button type="button" className="dossier-small-button" onClick={toggleOpen}>🔗 Link…</button>
+      {open && (
+        <div className="is-link-box">
+          {!items && !error && <p className="dossier-note">Loading…</p>}
+          {error && <p className="dossier-error" role="alert">{error}</p>}
+          {items && ['character', 'location', 'prop', 'other'].map((k) => {
+            const list = items.filter((i) => i.kind === k)
+            return list.length === 0 ? null : (
+              <fieldset key={k}><legend>{label[k]}</legend>
+                {list.map((i) => <label key={i.id} className="pipe-inline"><input type="checkbox" checked={picked.has(i.id)} onChange={(e) => setPicked((prev) => { const n = new Set(prev); if (e.target.checked) n.add(i.id); else n.delete(i.id); return n })} /> {i.code} {i.name}</label>)}
+              </fieldset>
+            )
+          })}
+          {items && <button type="button" className="dossier-small-button studio-approve" disabled={busy} onClick={save}>Save links</button>}
+        </div>
+      )}
     </div>
   )
 }

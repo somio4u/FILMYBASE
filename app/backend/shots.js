@@ -484,6 +484,77 @@ export async function updateShot(db, projectId, shotId, { expectedRevision, edit
   }
 }
 
+// ---- linking a shot to the project's characters, places and props ----
+const LINK_KINDS = ["character", "location", "prop"];
+
+// The items of the project a shot is linked to, and every item it could be linked to (a prop that sits on a props sheet is
+// offered through the sheet).
+export async function shotLinkChoices(db, projectId, shotId) {
+  const shot = (await db.query("SELECT id FROM production_shots WHERE id = $1 AND project_id = $2", [shotId, projectId])).rows[0];
+  if (!shot) throw httpError("Shot not found.", 404, "not_found");
+  const linked = new Set((await db.query("SELECT asset_id FROM production_shot_assets WHERE shot_id = $1", [shotId])).rows.map((r) => r.asset_id));
+  const items = (await db.query("SELECT id, kind, code, name FROM production_assets WHERE project_id = $1 AND grouped_into IS NULL ORDER BY kind, code", [projectId])).rows
+    .filter((a) => LINK_KINDS.includes(a.kind) || a.kind === "other")
+    .map((a) => ({ ...a, linked: linked.has(a.id) }));
+  return { items };
+}
+
+// Replaces a shot's links with exactly these items. Unlike editing the shot in the Storyboard Designer this does NOT reopen the
+// scene's shot-division approval: linking only tells the picture which made pictures to use.
+export async function setShotLinks(db, projectId, shotId, assetIds) {
+  const shot = (await db.query("SELECT id FROM production_shots WHERE id = $1 AND project_id = $2", [shotId, projectId])).rows[0];
+  if (!shot) throw httpError("Shot not found.", 404, "not_found");
+  const valid = (await db.query("SELECT id FROM production_assets WHERE project_id = $1 AND id = ANY($2)", [projectId, (assetIds ?? []).map(Number).filter(Number.isInteger)])).rows.map((r) => r.id);
+  const client = await db.connect();
+  try {
+    await client.query("BEGIN");
+    await client.query("DELETE FROM production_shot_assets WHERE shot_id = $1", [shotId]);
+    for (const id of valid) await client.query("INSERT INTO production_shot_assets (shot_id, asset_id) VALUES ($1,$2)", [shotId, id]);
+    await client.query("COMMIT");
+  } catch (error) {
+    await client.query("ROLLBACK").catch(() => {});
+    throw error;
+  } finally {
+    client.release();
+  }
+  return { linked: valid.length };
+}
+
+// Finds, for shots, the characters, places and props the shot plainly names (its text, who speaks in it, the AI's list) among ALL
+// the project's items, and adds them. Only adds: links already there stay. By default only shots with no link at all are touched.
+// If a shot names nothing, it gets its scene's place so the picture at least has the right setting.
+export async function autoLinkShots(db, projectId, { sceneId = null, shotId = null, onlyUnlinked = true } = {}) {
+  const params = [projectId];
+  let where = "s.project_id = $1";
+  if (shotId) { params.push(shotId); where += ` AND s.id = $${params.length}`; }
+  else if (sceneId) { params.push(sceneId); where += ` AND s.scene_id = $${params.length}`; }
+  const shots = (await db.query(`SELECT s.*, sc.heading FROM production_shots s JOIN production_scenes sc ON sc.id = s.scene_id WHERE ${where} AND sc.in_latest ORDER BY s.id`, params)).rows;
+  const all = (await db.query("SELECT id, kind, code, name, aliases FROM production_assets WHERE project_id = $1", [projectId])).rows.map((a) => ({ ...a, aliases: a.aliases ?? [] }));
+  const usable = all.filter((a) => LINK_KINDS.includes(a.kind));
+  let shotsLinked = 0, itemsAdded = 0;
+  const stillEmpty = [];
+  for (const shot of shots) {
+    const existing = new Set((await db.query("SELECT asset_id FROM production_shot_assets WHERE shot_id = $1", [shot.id])).rows.map((r) => r.asset_id));
+    if (onlyUnlinked && existing.size > 0) continue;
+    const sceneAssets = (await db.query("SELECT a.id, a.kind, a.code, a.name, a.aliases FROM production_scene_assets sa JOIN production_assets a ON a.id = sa.asset_id WHERE sa.scene_id = $1", [shot.scene_id])).rows.map((a) => ({ ...a, aliases: a.aliases ?? [] }));
+    const inScene = new Set(sceneAssets.map((a) => a.id));
+    const elements = (await db.query("SELECT e.id, e.kind, e.speaker FROM production_shot_dialogue d JOIN production_scene_elements e ON e.id = d.element_id WHERE d.shot_id = $1", [shot.id])).rows;
+    const text = `${shot.description ?? ""} ${shot.storyboard_text ?? ""}`;
+    const ids = new Set(assetsForShot({ description: text, dialogueIds: elements.map((e) => e.id), names: [] }, elements, sceneAssets, usable.filter((a) => !inScene.has(a.id))));
+    // no place named anywhere: take the place the scene heading names, else the scene's own place
+    if (![...ids].some((id) => usable.find((a) => a.id === id)?.kind === "location")) {
+      const heading = normalizeForMatch(shot.heading ?? "");
+      const byHeading = usable.find((a) => a.kind === "location" && phrasesOf(a).some((ph) => contains(heading, ph)));
+      if (byHeading) ids.add(byHeading.id);
+    }
+    const fresh = [...ids].filter((id) => !existing.has(id));
+    for (const id of fresh) await db.query("INSERT INTO production_shot_assets (shot_id, asset_id) VALUES ($1,$2) ON CONFLICT DO NOTHING", [shot.id, id]);
+    if (fresh.length > 0) { shotsLinked++; itemsAdded += fresh.length; }
+    if (existing.size + fresh.length === 0) stillEmpty.push(shot.code);
+  }
+  return { shots: shots.length, shotsLinked, itemsAdded, stillEmpty };
+}
+
 export async function addShot(db, projectId, sceneId, { afterShotId = null, description = "", framing = null, durationSec = 4 } = {}) {
   const client = await db.connect();
   try {

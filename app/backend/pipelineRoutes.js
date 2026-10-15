@@ -1,7 +1,7 @@
 // All the web routes for pipeline steps 2-8 (admin only): shots, text storyboard,
 // settings and money limit, AI generation, review, and export.
 
-import { addShot, approveShots, approveStoryboard, deleteShot, divideScene, generateStoryboard, listShots, mergeShotWithNext, splitShot, updateShot } from "./shots.js";
+import { addShot, autoLinkShots, setShotLinks, shotLinkChoices, approveShots, approveStoryboard, deleteShot, divideScene, generateStoryboard, listShots, mergeShotWithNext, splitShot, updateShot } from "./shots.js";
 import { getSettings, saveSettings, spendSummary, VOICES } from "./pipelineSettings.js";
 import { createGenerationService, KINDS } from "./generations.js";
 import { createAssembler } from "./assemble.js";
@@ -214,6 +214,28 @@ export function registerPipelineRoutes(app, db, requireRole, { store, providers,
     const projectId = need(id(req.params.projectId), "project");
     const shotId = need(id(req.params.shotId), "shot");
     res.json({ shot: await updateShot(db, projectId, shotId, { expectedRevision: req.body?.expectedRevision, edits: req.body?.edits ?? {} }) });
+  }));
+
+  // linking shots to the made characters / places / props (does not touch the shot-division approval)
+  app.post("/api/production/:projectId/shots/auto-link", admin, wrap(async (req, res) => {
+    const projectId = need(id(req.params.projectId), "project");
+    await projectExists(projectId);
+    const result = await autoLinkShots(db, projectId, { sceneId: id(req.body?.sceneId), shotId: id(req.body?.shotId), onlyUnlinked: req.body?.onlyUnlinked !== false });
+    if (result.itemsAdded > 0) {
+      try { await planPrompts(db, projectId, { actorUserId: req.user?.id }); } catch (error) { console.error("Prompts could not be refreshed after linking:", error.message); }
+      publish(projectId, { type: "assets_changed" });
+    }
+    res.json(result);
+  }));
+  app.get("/api/production/:projectId/shots/:shotId/links", admin, wrap(async (req, res) => {
+    res.json(await shotLinkChoices(db, need(id(req.params.projectId), "project"), need(id(req.params.shotId), "shot")));
+  }));
+  app.put("/api/production/:projectId/shots/:shotId/links", admin, wrap(async (req, res) => {
+    const projectId = need(id(req.params.projectId), "project");
+    const result = await setShotLinks(db, projectId, need(id(req.params.shotId), "shot"), req.body?.assetIds);
+    try { await planPrompts(db, projectId, { actorUserId: req.user?.id }); } catch (error) { console.error("Prompts could not be refreshed after linking:", error.message); }
+    publish(projectId, { type: "assets_changed" });
+    res.json(result);
   }));
 
   app.post("/api/production/:projectId/scenes/:sceneId/shots", admin, wrap(async (req, res) => {

@@ -19,6 +19,7 @@ import { divideScene, listShots, generateStoryboard, approveStoryboard, approveS
 import { startMockGemini } from "./mockGemini.js";
 import { assetLibrary, acceptCurrentPictures } from "../studio.js";
 import { planPrompts } from "../planning.js";
+import { autoLinkShots, setShotLinks, shotLinkChoices } from "../shots.js";
 
 const db = new pg.Pool({ database: process.env.TEST_DB || "filmmaking_app_test", user: process.env.PGUSER || "root", host: process.env.PGHOST || "/var/run/postgresql" });
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "gen-test-"));
@@ -461,4 +462,28 @@ test("'Keep my pictures': an approved picture made before the commands changed i
   assert.equal(fresh.canonical.promptCurrent, true);
   assert.equal(fresh.prompt.stale, false);
   assert.equal(mock.state.requests.length, 0); // no picture was requested
+});
+
+test("shots with nothing linked are linked by name (button), by hand (picker) and automatically when a frame is made", async () => {
+  const { projectId } = await ready();
+  const shots = (await listShots(db, projectId)).filter((s) => s.shotStatus === "approved");
+  assert.ok(shots.length > 0);
+  await db.query("DELETE FROM production_shot_assets WHERE shot_id IN (SELECT id FROM production_shots WHERE project_id = $1)", [projectId]);
+  const found = await autoLinkShots(db, projectId, {});
+  assert.ok(found.itemsAdded > 0 && found.shotsLinked > 0);
+  const linked = (await listShots(db, projectId)).filter((s) => s.assets.length > 0);
+  assert.ok(linked.length > 0);
+  // by hand: exactly these items, and the shot-division approval stays
+  const target = shots[0];
+  const choices = await shotLinkChoices(db, projectId, target.id);
+  const rahul = choices.items.find((i) => /Rahul/.test(i.name));
+  await setShotLinks(db, projectId, target.id, [rahul.id]);
+  const after = (await listShots(db, projectId)).find((s) => s.id === target.id);
+  assert.deepEqual(after.assets.map((a) => a.name), [rahul.name]);
+  assert.equal(after.shotStatus, "approved");
+  // making a frame links an unlinked shot first (it is then blocked only for the missing reference pictures)
+  await db.query("DELETE FROM production_shot_assets WHERE shot_id = $1", [target.id]);
+  await gens.generateKeyframe(projectId, (await listShots(db, projectId)).find((s) => s.id === target.id)).catch(() => {});
+  const relinked = (await listShots(db, projectId)).find((s) => s.id === target.id);
+  assert.ok(relinked.assets.length > 0);
 });

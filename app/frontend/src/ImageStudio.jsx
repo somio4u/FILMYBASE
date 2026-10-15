@@ -236,6 +236,33 @@ function ShotFrames({ api, projectId, backendUrl }) {
   )
 }
 
+// "Out of date" appears when the commands changed after a picture was made (new style, cast rule, descriptions, reference images).
+// This ties every existing picture to the current command so nothing has to be made again. Free; no picture is touched.
+function KeepPictures({ api, projectId, onDone }) {
+  const [busy, setBusy] = useState(false)
+  const [message, setMessage] = useState(null)
+  const run = useCallback(async (quiet) => {
+    setBusy(true); if (!quiet) setMessage(null)
+    const r = await call(`${api}/${projectId}/studio/accept-current`, 'POST', {})
+    setBusy(false)
+    if (!r.ok) { if (!quiet) setMessage({ tone: 'bad', text: r.data.error || 'Could not update.' }); return }
+    if (!quiet || r.data.accepted > 0) { setMessage({ tone: 'good', text: r.data.accepted > 0 ? `Done — ${r.data.accepted} picture${r.data.accepted === 1 ? '' : 's'} are now up to date and linked to the shots. Nothing was made again.` : 'Everything is already up to date.' }); onDone() }
+  }, [api, projectId, onDone])
+  // once per project, on first open, so old pictures are not left "out of date" for no reason
+  useEffect(() => {
+    const key = `keepPictures:${projectId}`
+    let seen = false
+    try { seen = Boolean(localStorage.getItem(key)); localStorage.setItem(key, '1') } catch { /* private window */ }
+    if (!seen) run(true)
+  }, [projectId, run])
+  return (
+    <p className="pipe-toolbar">
+      <button type="button" className="dossier-small-button" disabled={busy} onClick={() => run(false)}>{busy ? 'Updating…' : '✓ Keep my pictures — mark everything up to date (free)'}</button>
+      {message && <span className={message.tone === 'bad' ? 'dossier-error' : 'dossier-message'} role="status"> {message.text}</span>}
+    </p>
+  )
+}
+
 export default function ImageStudio({ projectId, backendUrl }) {
   const api = `${backendUrl}/api/production`
   const [tab, setTab] = useState('character')
@@ -250,6 +277,7 @@ export default function ImageStudio({ projectId, backendUrl }) {
       <p className="pipe-toolbar">
         <a className="dossier-small-button studio-link" href={`${api}/${projectId}/image-prompts.pdf`} target="_blank" rel="noreferrer">📄 Download all image commands (PDF) — characters, environments, properties, shots</a>
       </p>
+      <KeepPictures api={api} projectId={projectId} onDone={() => setRefresh((n) => n + 1)} />
       <ImportPictures api={api} projectId={projectId} onImported={() => setRefresh((n) => n + 1)} />
       <nav className="dossier-tabs is-tabs" aria-label="Image Studio areas">
         {tabs.map((t) => <button key={t.key} type="button" className={tab === t.key ? 'dossier-tab active' : 'dossier-tab'} aria-current={tab === t.key ? 'page' : undefined} onClick={() => setTab(t.key)}>{t.label}</button>)}

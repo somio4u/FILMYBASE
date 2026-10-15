@@ -9,7 +9,7 @@
 import { foreignOrigin } from "./castRule.js";
 import { unitIndex } from "./generationUnits.js";
 import { buildShotManifest, httpError } from "./blueprint.js";
-import { promptStatus } from "./planning.js";
+import { promptStatus, planPrompts } from "./planning.js";
 import { promptView } from "./prompts.js";
 import { estimateCost, veoSecondsFor } from "./generations.js";
 
@@ -68,6 +68,30 @@ export async function assetLibrary(db, projectId, type) {
   const approved = out.filter((a) => a.state === "approved").length;
   const missing = out.filter((a) => a.state !== "approved" && !a.running && a.usedCount > 0).length;
   return { type, assets: out, counts: { inProject: out.length, approved, missing, running: out.filter((a) => a.running).length, estimateMissingUsd: Math.round(missing * estimateCost("character") * 100) / 100 } };
+}
+
+// "Keep my pictures": the commands changed (style, cast rule, descriptions, reference images) after pictures were made, so
+// they show "Out of date". This refreshes every command and then ties each existing picture (made or waiting for review)
+// to the current command, so nothing needs to be generated again. Costs nothing; no picture is touched.
+export async function acceptCurrentPictures(db, projectId, { actorUserId = null } = {}) {
+  await planPrompts(db, projectId, { actorUserId });
+  const status = await promptStatus(db, projectId);
+  // a command a person edited by hand stays as written, but is no longer reported as behind
+  for (const { spec, prompt } of status.stale) await db.query("UPDATE production_prompts SET source_hash = $1 WHERE id = $2", [spec.sourceHash, prompt.id]);
+  const current = new Map(status.current.map((p) => [keyOf(p.purpose, p.asset_id, p.shot_id, p.element_id), p]));
+  const gens = (await db.query("SELECT id, kind, asset_id, shot_id, prompt_id, params FROM production_generations WHERE project_id = $1 AND status = 'ready' AND kind IN ('character','prop','environment','keyframe')", [projectId])).rows;
+  const approvedIds = new Set((await db.query("SELECT id FROM production_generations WHERE project_id = $1 AND review = 'approved' AND asset_id IS NOT NULL", [projectId])).rows.map((r) => r.id));
+  let accepted = 0;
+  for (const g of gens) {
+    const p = current.get(g.kind === "keyframe" ? keyOf("first_frame", null, g.shot_id, null) : keyOf("model_sheet", g.asset_id, null, null));
+    if (!p) continue;
+    const refs = Array.isArray(g.params?.refs) ? g.params.refs.filter((r) => approvedIds.has(r)) : null;
+    const refsChanged = refs && refs.length !== g.params.refs.length;
+    if (g.prompt_id === p.id && !refsChanged) continue;
+    await db.query("UPDATE production_generations SET prompt_id = $1, params = $2 WHERE id = $3", [p.id, JSON.stringify(refsChanged ? { ...g.params, refs } : g.params ?? {}), g.id]);
+    accepted++;
+  }
+  return { accepted };
 }
 
 // The Image Studio only shows shots whose shot division the director approved in the Storyboard Designer.
@@ -291,6 +315,7 @@ export function registerStudioRoutes(app, db, requireRole) {
     if ((await db.query("SELECT 1 FROM ai_movie_projects WHERE id = $1", [projectId])).rowCount === 0) throw httpError("Project not found.", 404);
     return projectId;
   };
+  app.post("/api/production/:projectId/studio/accept-current", admin, wrap(async (req, res) => res.json(await acceptCurrentPictures(db, await project(req), { actorUserId: req.user?.id }))));
   app.get("/api/production/:projectId/studio/assets", admin, wrap(async (req, res) => res.json(await assetLibrary(db, await project(req), String(req.query.type ?? "")))));
   app.get("/api/production/:projectId/studio/frames/scenes", admin, wrap(async (req, res) => res.json(await frameScenes(db, await project(req)))));
   app.get("/api/production/:projectId/studio/video/scenes", admin, wrap(async (req, res) => res.json(await videoScenes(db, await project(req)))));

@@ -17,6 +17,8 @@ import { createGenerationService, failStaleGenerations, speechText, describeDeta
 import { saveSettings, getSettings, spendSummary, assertWithinBudget } from "../pipelineSettings.js";
 import { divideScene, listShots, generateStoryboard, approveStoryboard, approveShots } from "../shots.js";
 import { startMockGemini } from "./mockGemini.js";
+import { assetLibrary, acceptCurrentPictures } from "../studio.js";
+import { planPrompts } from "../planning.js";
 
 const db = new pg.Pool({ database: process.env.TEST_DB || "filmmaking_app_test", user: process.env.PGUSER || "root", host: process.env.PGHOST || "/var/run/postgresql" });
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "gen-test-"));
@@ -440,4 +442,23 @@ test("several pictures started at once are made one after another, never togethe
     await Promise.all(jobs.map((j) => j.done));
   } finally { providers.generateImage = original; }
   assert.equal(peak, 1);
+});
+
+test("'Keep my pictures': an approved picture made before the commands changed is marked up to date, nothing is made again", async () => {
+  const { projectId } = await ready();
+  await planPrompts(db, projectId, {});
+  const rahul = await assetByName(projectId, /Rahul/);
+  const g = await finish(await gens.generateReference(projectId, rahul.id));
+  await gens.review(projectId, g.id, { decision: "approve" });
+  await saveSettings(db, projectId, { visualStyle: "anime" }); // the command changes after the picture exists
+  await planPrompts(db, projectId, {});
+  const stale = (await assetLibrary(db, projectId, "character")).assets.find((a) => a.dbId === rahul.id);
+  assert.equal(stale.canonical.promptCurrent, false);
+  mock.state.requests.length = 0;
+  const { accepted } = await acceptCurrentPictures(db, projectId, {});
+  assert.ok(accepted >= 1);
+  const fresh = (await assetLibrary(db, projectId, "character")).assets.find((a) => a.dbId === rahul.id);
+  assert.equal(fresh.canonical.promptCurrent, true);
+  assert.equal(fresh.prompt.stale, false);
+  assert.equal(mock.state.requests.length, 0); // no picture was requested
 });

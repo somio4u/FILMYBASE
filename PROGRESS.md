@@ -1829,3 +1829,10 @@ Plain version: every project is now a set of **drafts**. Opening a project shows
 - [x] One button at the top of Characters, Environments and Properties: **"Make all N missing, one by one…"** (after a cost confirmation). It covers every item without a picture — even ones no shot uses yet (before, items not yet used by a shot were left out, so the button often did not appear).
 - [x] **One at a time:** the picture queue now runs ONE picture at a time (was 2 together). All pictures — characters, environments, props, shot frames — wait in line, so rate limits are respected; each card fills in as its picture finishes. Setting `PIPELINE_CONCURRENCY` on the server can raise it later.
 - Honest note: tested with a local imitation of the image service (3 pictures started together → at most 1 running at once); not with real Gemini limits.
+
+## "Out of date" pictures: keep them, link them to the current commands (deploying)
+- [x] **Why everything said "Out of date":** the commands changed after the pictures were made (visual style, cast rule, descriptions fixed, reference images), so each picture pointed at an older command. Nothing was wrong with the pictures.
+- [x] **Image Studio → "✓ Keep my pictures — mark everything up to date (free)"**: refreshes every command and ties each existing picture (characters, environments, properties, shot frames) to the current command. No picture is made again, nothing is charged. A command you edited by hand stays as you wrote it. It also runs by itself once, the first time a project's Image Studio is opened after this update.
+- [x] Shot frames keep working with the made characters/props/places: a frame whose reference sheet was later replaced is no longer shown as outdated either.
+- Why the "Make all missing, one by one" button may not show: it appears only when some item has NO picture at all. If every item already has a picture it is hidden (correct).
+- Honest note: tested with the local imitation of the image service.

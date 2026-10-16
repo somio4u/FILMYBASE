@@ -8006,6 +8006,10 @@ function App() {
   const isProductionOnly = currentUser?.role === 'production'
   // A "Screenplay writer" login: the Story & Screenplay tools of ONE assigned project, opened straight at the screenplay where he stopped.
   const isScreenplayWriter = currentUser?.role === 'screenplay_writer'
+  // A screenplay writer's login starts with Odia (Akruti layout) typing already switched on
+  useEffect(() => {
+    if (isScreenplayWriter) window.dispatchEvent(new Event('filmybase:odia-on'))
+  }, [isScreenplayWriter])
   const hasStoryAccess = currentUser?.role === 'admin' || isScreenplayWriter
   const canEditProduction = currentUser?.role === 'admin' || currentUser?.role === 'production_manager' || isProductionOnly
   const canReviewProduction = currentUser?.role === 'admin' || currentUser?.role === 'director' || isProductionOnly

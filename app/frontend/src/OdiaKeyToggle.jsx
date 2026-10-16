@@ -17,6 +17,12 @@ export default function OdiaKeyToggle() {
   const [show, setShow] = useState(false)
 
   useEffect(() => {
+    const turnOn = () => setOn(true)
+    window.addEventListener('filmybase:odia-on', turnOn)
+    return () => window.removeEventListener('filmybase:odia-on', turnOn)
+  }, [])
+
+  useEffect(() => {
     try { localStorage.setItem(STORE, on ? '1' : '0') } catch { /* private window: fine */ }
     if (!on) return undefined
     document.addEventListener('keydown', odiaKeyHandler, true)

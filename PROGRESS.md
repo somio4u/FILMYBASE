@@ -1946,3 +1946,4 @@ Plain version: every project is now a set of **drafts**. Opening a project shows
 - [x] Small **EN / ଓଡ଼ିଆ** button at the top right (left of Full/Light). When ON, the keys type Odia letters directly (k → କ, Shift+K → ଖ …) in every text box, including the screenplay editor; the choice is remembered. A ⌨ button shows the on-screen Odia keyboard.
 - The layout is in one small file (`odiaKeys.js`) and follows the **final key table the owner supplied** (including the conjuncts like ତ୍ର, ଞ୍ଚ, ଙ୍ଗ on Shift keys). Blank Shift positions type normally. Checked in a real browser.
 - Still not built: Unicode ↔ Akruti *font* (legacy encoding) conversion — only needed if you want text stored/exported in the old Akruti font encoding.
+- [x] **Odia typing is switched on automatically for the Screenplay writer's login** (he can still turn it off with the EN / ଓଡ଼ିଆ button). Checked in a real browser in a text box and in an editable (screenplay-style) area. Not deployed yet.

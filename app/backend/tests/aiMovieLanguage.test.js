@@ -182,6 +182,10 @@ test("Voice Writer (Speak Here): a recording becomes draft lines for the scene e
   assert.equal(edited.json.changes.changed, 1);
   assert.equal(edited.json.changes.removed, 1);
   voice = async (args) => { seen = args; return { transcript: "Rudra says hello", elements: [{ type: "dialogue", character: "RUDRA", text: "Hello" }], insertAfter: 2, note: "added" }; };
+  // the writer confirmed the words on screen: no recording is needed, the confirmed words are the instruction
+  const confirmed = await api("POST", `/api/ai-movie/projects/${pid}/scene/voice`, { beatIndex: 0, sceneIndex: 0, language: "en", instruction: "  Add a line where Rudra says hello  " });
+  assert.equal(confirmed.status, 200);
+  assert.equal(seen.instructionText, "Add a line where Rudra says hello");
   assert.equal((await api("POST", `/api/ai-movie/projects/${pid}/scene/voice`, { ...body, audio: "short" })).status, 400);
   assert.equal((await api("POST", `/api/ai-movie/projects/${pid}/scene/voice`, { ...body, mimeType: "text/plain" })).status, 400);
   assert.equal((await api("POST", `/api/ai-movie/projects/${pid}/scene/voice`, { ...body, beatIndex: 7 })).status, 400);

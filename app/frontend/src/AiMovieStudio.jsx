@@ -640,6 +640,7 @@ function LanguagePanel({ api, projectId, backendUrl }) {
   const [voiceLang, setVoiceLang] = useState('en')
   const [draft, setDraft] = useState(null)
   const [voiceNote, setVoiceNote] = useState(null)
+  const [heard, setHeard] = useState(null) // what was heard, waiting for the writer's OK: { transcript, english, editing, edited, translating } or { loading }
   const recorder = useRecorder()
 
   const load = useCallback(async () => {
@@ -669,14 +670,36 @@ function LanguagePanel({ api, projectId, backendUrl }) {
   const vsel = scenes.find((s) => s.key === voiceKey)
   useEffect(() => { setDraft(vsel ? sceneToBlocks(vsel.scene, voiceLang) : null); setVoiceNote(null) }, [voiceKey, voiceLang]) // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Step 1: the recording is only written down and translated; nothing in the draft changes until the writer says "Yes, do it".
   async function toggleRecord() {
     setMessage(null)
     try {
       if (recorder.phase === 'idle') { await recorder.start(); return }
       const clip = await recorder.stop()
       if (!clip) return
-      const r = await call(`${api}/${projectId}/scene/voice`, 'POST', { ...clip, beatIndex: vsel.b, sceneIndex: vsel.s, language: voiceLang, draftBlocks: draft })
-      if (!r.ok) { setMessage(errorOf(r)); return }
+      setHeard({ loading: true })
+      const r = await call(`${backendUrl}/api/voice/understand`, 'POST', clip)
+      if (!r.ok) { setHeard(null); setMessage(errorOf(r)); return }
+      setHeard({ transcript: r.data.transcript, english: r.data.english, editing: false, edited: false, translating: false })
+    } catch (error) {
+      setHeard(null)
+      setMessage({ tone: 'bad', text: error.message || 'The microphone did not work.' })
+    }
+  }
+  async function translateAgain() {
+    setHeard((h) => ({ ...h, translating: true }))
+    const r = await call(`${backendUrl}/api/voice/understand`, 'POST', { text: heard.transcript })
+    setHeard((h) => (h ? { ...h, translating: false, ...(r.ok ? { english: r.data.english, edited: false } : {}) } : h))
+  }
+  // Step 2: the confirmed words (not the audio) go to the agent, and what it did is shown.
+  async function runVoice() {
+    const text = heard?.transcript.trim()
+    if (!text) return
+    setHeard(null)
+    setVoiceNote(`You said: “${text}” — working on the scene …`)
+    try {
+      const r = await call(`${api}/${projectId}/scene/voice`, 'POST', { instruction: text, beatIndex: vsel.b, sceneIndex: vsel.s, language: voiceLang, draftBlocks: draft })
+      if (!r.ok) { setVoiceNote(null); setMessage(errorOf(r)); return }
       if (Array.isArray(r.data.fullElements)) {
         // the agent may add, change or remove lines, take a character out, or write the scene again: the draft becomes its result
         setDraft(r.data.fullElements.map((e) => ({ type: e.type, character: e.character ?? '', parenthetical: e.parenthetical ?? '', text: e.text })))
@@ -686,9 +709,10 @@ function LanguagePanel({ api, projectId, backendUrl }) {
       }
       const c = r.data.changes
       const did = c ? [c.rewrote ? 'wrote the scene again' : null, c.added ? `added ${c.added}` : null, c.changed ? `changed ${c.changed}` : null, c.removed ? `removed ${c.removed}` : null].filter(Boolean).join(', ') : ''
-      setVoiceNote(`You said: “${r.data.transcript}” — ${r.data.note}${did ? ` (${did} line${c.added + c.changed + c.removed === 1 ? '' : 's'}; press Save the scene to keep it)` : ''}`)
+      setVoiceNote(`✓ You said: “${r.data.transcript}” — ${r.data.note}${did ? ` (${did} line${c.added + c.changed + c.removed === 1 ? '' : 's'}; press Save the scene to keep it)` : ''}`)
     } catch (error) {
-      setMessage({ tone: 'bad', text: error.message || 'The microphone did not work.' })
+      setVoiceNote(null)
+      setMessage({ tone: 'bad', text: error.message || 'The voice agent did not work.' })
     }
   }
   async function saveScene() {
@@ -761,11 +785,29 @@ function LanguagePanel({ api, projectId, backendUrl }) {
           <>
             <BlocksEditor blocks={draft} onChange={setDraft} />
             <div className="pipe-toolbar">
-              <button type="button" className={recorder.phase === 'recording' ? 'dossier-small-button studio-rec' : 'dossier-small-button'} disabled={recorder.phase === 'sending'} aria-pressed={recorder.phase === 'recording'} onClick={toggleRecord}>
+              <button type="button" className={recorder.phase === 'recording' ? 'dossier-small-button studio-rec' : 'dossier-small-button'} disabled={recorder.phase === 'sending' || Boolean(heard)} aria-pressed={recorder.phase === 'recording'} onClick={toggleRecord}>
                 {recorder.phase === 'idle' ? '🎤 Speak here' : recorder.phase === 'recording' ? '⏹ Stop' : 'Listening to your recording…'}
               </button>
               <button type="button" className="dossier-small-button studio-approve" disabled={busy || draft.every((b) => !b.text.trim())} onClick={saveScene}>Save the scene</button>
             </div>
+            {heard?.loading && <p className="dossier-message" role="status">⏳ Listening to your recording and writing down exactly what you said …</p>}
+            {heard && !heard.loading && (
+              <div className="studio-heard" role="group" aria-label="Confirm what was heard">
+                <p className="dossier-fine-print"><strong>I heard this — is it right?</strong></p>
+                <p className="dossier-fine-print">Your words</p>
+                {heard.editing
+                  ? <textarea rows={3} value={heard.transcript} onChange={(e) => setHeard({ ...heard, transcript: e.target.value, edited: true })} style={{ width: '100%' }} />
+                  : <blockquote className="studio-heard-quote">{heard.transcript}</blockquote>}
+                <p className="dossier-fine-print">In English (translated exactly)</p>
+                <blockquote className="studio-heard-quote">{heard.translating ? '…' : heard.english || '—'}{heard.edited && !heard.translating ? ' (words changed — translate again)' : ''}</blockquote>
+                <div className="pipe-toolbar">
+                  <button type="button" className="dossier-small-button studio-approve" disabled={!heard.transcript.trim() || heard.translating} onClick={runVoice}>✓ Yes, do it</button>
+                  <button type="button" className="dossier-small-button" onClick={() => setHeard({ ...heard, editing: !heard.editing })}>{heard.editing ? 'Done editing' : '✏ Fix the words'}</button>
+                  {heard.edited && <button type="button" className="dossier-small-button" disabled={heard.translating} onClick={translateAgain}>🌐 Translate again</button>}
+                  <button type="button" className="dossier-small-button" onClick={() => setHeard(null)}>Cancel</button>
+                </div>
+              </div>
+            )}
             {voiceNote && <p className="dossier-message" role="status">{voiceNote}</p>}
           </>
         )}

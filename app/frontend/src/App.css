@@ -7759,3 +7759,22 @@ body.is-script-edit-mode { overflow: hidden; }
 .script-heading-form input, .script-heading-form select { padding: 6px 10px; border-radius: 8px; border: 1px solid var(--border-subtle); background: var(--bg-input); color: inherit; font: inherit; }
 
 .script-multi-form textarea { width: 100%; box-sizing: border-box; padding: 10px; border-radius: 8px; border: 1px solid var(--border-subtle); background: var(--bg-input); color: inherit; font: inherit; line-height: 1.5; resize: vertical; }
+
+/* ---- the voice assistant's panel: what it heard (with an exact English translation) for the writer to confirm, then every step it takes ---- */
+.voice-writer-panel { position: fixed; z-index: 890; width: min(440px, calc(100vw - 24px)); max-height: min(70vh, 560px); overflow: auto; padding: 14px 16px; border-radius: 14px; border: 1px solid rgba(140, 175, 255, 0.55); background: #151a30; color: #f2f3f7; box-shadow: 0 18px 44px rgba(0, 0, 0, 0.6); font-size: 0.92rem; line-height: 1.45; }
+.voice-writer-panel p { margin: 0 0 6px; }
+.voice-panel-title { font-weight: 700; font-size: 1rem; }
+.voice-panel-label { margin-top: 8px !important; font-size: 0.75rem; letter-spacing: 0.05em; text-transform: uppercase; opacity: 0.65; }
+.voice-panel-quote { margin: 0 0 4px; padding: 8px 10px; border-left: 3px solid #6aa0ff; border-radius: 4px; background: rgba(255, 255, 255, 0.06); white-space: pre-wrap; }
+.voice-panel-quote.is-english { border-left-color: #f0b429; }
+.voice-panel-text { width: 100%; box-sizing: border-box; padding: 8px 10px; border-radius: 8px; border: 1px solid rgba(140, 175, 255, 0.6); background: rgba(0, 0, 0, 0.3); color: inherit; font: inherit; resize: vertical; }
+.voice-panel-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.voice-panel-log { margin: 10px 0 0; padding: 0; list-style: none; display: grid; gap: 6px; }
+.voice-panel-log li { padding: 6px 8px; border-radius: 8px; background: rgba(255, 255, 255, 0.05); }
+.voice-panel-log li.is-ok { border-left: 3px solid #4cc38a; }
+.voice-panel-log li.is-work { border-left: 3px solid #f0b429; }
+.voice-panel-log li.is-error { border-left: 3px solid #ff6b6b; background: rgba(255, 107, 107, 0.12); }
+.voice-panel-working { font-weight: 600; }
+
+.studio-heard { margin: 10px 0; padding: 12px; border-radius: 10px; border: 1px solid rgba(140, 175, 255, 0.5); background: rgba(255, 255, 255, 0.04); }
+.studio-heard-quote { margin: 4px 0 8px; padding: 8px 10px; border-left: 3px solid #6aa0ff; border-radius: 4px; background: rgba(255, 255, 255, 0.06); white-space: pre-wrap; }

@@ -12259,7 +12259,7 @@ const VOICE_TO_SCREENPLAY_SCHEMA = {
   required: ["transcript", "elements", "edits", "rewrittenElements", "sceneActions", "placeSaid", "insertAfterLine", "note"],
 };
 
-async function voiceNoteToScreenplayElements({ audioBase64, mimeType, liveText, sceneOutline, existingElements, dialogueLanguage, actionLanguage = dialogueLanguage, defaultInsertAfter, allowSceneActions = true }) {
+async function voiceNoteToScreenplayElements({ audioBase64, mimeType, liveText, sceneOutline, existingElements, dialogueLanguage, actionLanguage = dialogueLanguage, defaultInsertAfter, allowSceneActions = true, instructionText = null }) {
   const fallbackAfter = Number.isInteger(defaultInsertAfter) ? Math.max(0, Math.min(existingElements.length, defaultInsertAfter)) : existingElements.length;
   const numbered = existingElements.length
     ? existingElements.map((e, i) => `${i + 1}. ${e.type === "dialogue" ? `${e.character}${e.parenthetical ? ` (${e.parenthetical})` : ""}: ${e.text}` : `[${e.type}] ${e.text}`}`).join("\n")
@@ -12288,9 +12288,13 @@ note: one short friendly sentence for the writer, like a close friend talking, i
 
   // Odia script costs many tokens per word and the model's thinking shares the same limit, so an 8K answer used to be cut off
   // mid-sentence ("Unterminated string in JSON"). This call retries with double the room when that happens.
+  // the writer has already seen and confirmed what was heard: the confirmed words are the instruction, no audio is sent again
+  const typedPart = instructionText
+    ? `\n\nTHE WRITER'S INSTRUCTION (already written down, translated and CONFIRMED by the writer — follow it exactly; for "transcript" copy it word for word):\n${instructionText}`
+    : "";
   const ask = (extra = "") => generateJsonContent({
     model: VOICE_TO_SCREENPLAY_MODEL_NAME,
-    contents: [{ role: "user", parts: [{ inlineData: { data: audioBase64, mimeType } }, { text: instructions + extra }] }],
+    contents: [{ role: "user", parts: [...(instructionText ? [] : [{ inlineData: { data: audioBase64, mimeType } }]), { text: instructions + typedPart + extra }] }],
     config: { responseMimeType: "application/json", responseSchema: VOICE_TO_SCREENPLAY_SCHEMA, maxOutputTokens: 16384, temperature: 0.3 },
   });
   const produced = (r) => ({ elements: r.elements, rewritten: r.rewrittenElements, edits: r.edits });
@@ -12352,13 +12356,52 @@ app.post("/api/transcribe", requireLogin, async (req, res) => {
   }
 });
 
+// "What did I hear?": the recording is written down exactly (each language in its own script) and translated into English, and shown to
+// the writer to confirm BEFORE anything is changed in the screenplay. `text` (instead of audio) translates words the writer edited.
+const UNDERSTAND_SCHEMA = {
+  type: Type.OBJECT,
+  properties: { transcript: { type: Type.STRING }, english: { type: Type.STRING }, language: { type: Type.STRING, enum: ["or", "hi", "en", "mixed", "none"] } },
+  required: ["transcript", "english", "language"],
+};
+
+app.post("/api/voice/understand", requireRole("admin"), async (req, res) => {
+  const mimeType = String(req.body?.mimeType ?? "").split(";")[0].trim().toLowerCase();
+  const audioBase64 = String(req.body?.audio ?? "");
+  const text = String(req.body?.text ?? "").trim().slice(0, 4000);
+  if (!text && (!VOICE_AUDIO_TYPES.includes(mimeType) || audioBase64.length < 200)) {
+    res.status(400).json({ error: "No recording came through — try again." });
+    return;
+  }
+  try {
+    const task = `Do two things and nothing else. You are NOT carrying out the request, only writing it down and translating it.
+1. transcript: ${text ? "the words below, unchanged" : "write down EXACTLY what is said in the recording, word for word"}. The speaker may use Odia, Hindi or English, or switch between them mid-sentence. Write each part in its own script: Odia in Odia script, Hindi in Devanagari, English in Latin letters. Do not translate, summarise, correct or add anything — only drop filler sounds like "umm". Use normal punctuation. Names of people stay as spoken.
+2. english: an EXACT, faithful English translation of the transcript — sentence by sentence, the same meaning, nothing added, nothing left out, not a summary and not an interpretation (a request to "change X to Y" stays "change X to Y"). If it is already English, repeat it. Keep character names as they are.
+language: the main language spoken ("or", "hi", "en"), "mixed" if it is a real mix, or "none" (transcript "" and english "") if nothing is said.${text ? `\n\nTHE WORDS:\n${text}` : ""}`;
+    const parsed = await generateJsonContent({
+      model: VOICE_TO_SCREENPLAY_MODEL_NAME,
+      contents: [{ role: "user", parts: [...(text ? [] : [{ inlineData: { data: audioBase64, mimeType } }]), { text: task }] }],
+      config: { responseMimeType: "application/json", responseSchema: UNDERSTAND_SCHEMA, maxOutputTokens: 16384, temperature: 0 },
+    });
+    const transcript = String(parsed.transcript ?? "").trim();
+    if (!transcript || parsed.language === "none") {
+      res.status(422).json({ error: "I couldn't make out anything — try again, a little closer to the mic." });
+      return;
+    }
+    res.json({ transcript, english: String(parsed.english ?? "").trim(), language: parsed.language });
+  } catch (error) {
+    console.error("Understanding the recording failed:", error.message);
+    res.status(error.status ?? 502).json({ error: error.message });
+  }
+});
+
 app.post("/api/screenplay/scene/voice", requireRole("admin"), async (req, res) => {
   const sceneListId = Number(req.body.sceneListId);
   const episodeIndex = req.body.episodeIndex === null || req.body.episodeIndex === undefined ? null : Number(req.body.episodeIndex);
   const sceneIndex = Number(req.body.sceneIndex);
   const mimeType = String(req.body.mimeType ?? "").split(";")[0].trim().toLowerCase();
   const audioBase64 = String(req.body.audio ?? "");
-  if (!VOICE_AUDIO_TYPES.includes(mimeType) || audioBase64.length < 200) {
+  const instructionText = String(req.body.instruction ?? "").trim().slice(0, 4000);
+  if (!instructionText && (!VOICE_AUDIO_TYPES.includes(mimeType) || audioBase64.length < 200)) {
     res.status(400).json({ error: "No recording came through — try speaking again." });
     return;
   }
@@ -12400,6 +12443,7 @@ app.post("/api/screenplay/scene/voice", requireRole("admin"), async (req, res) =
     const voice = await voiceNoteToScreenplayElements({
       audioBase64,
       mimeType,
+      instructionText: instructionText || null,
       liveText: String(req.body.liveText ?? "").slice(0, 2000),
       sceneOutline: outline,
       existingElements,

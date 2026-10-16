@@ -199,7 +199,8 @@ export function registerAiMovieLanguageRoutes(app, db, requireRole, deps) {
     const projectId = await projectOf(req);
     const mimeType = String(req.body?.mimeType ?? "").split(";")[0].trim().toLowerCase();
     const audioBase64 = String(req.body?.audio ?? "");
-    if (!["audio/webm", "audio/ogg", "audio/mp4", "audio/mpeg", "audio/wav", "audio/aac", "audio/m4a"].includes(mimeType) || audioBase64.length < 200) throw httpError("No recording came through — try speaking again.", 400);
+    const instructionText = String(req.body?.instruction ?? "").trim().slice(0, 4000);
+    if (!instructionText && (!["audio/webm", "audio/ogg", "audio/mp4", "audio/mpeg", "audio/wav", "audio/aac", "audio/m4a"].includes(mimeType) || audioBase64.length < 200)) throw httpError("No recording came through — try speaking again.", 400);
     const scenes = await deps.getSceneBlocks(projectId);
     const scene = scenes.find((s) => s.beatIndex === Number(req.body?.beatIndex) && s.sceneIndex === Number(req.body?.sceneIndex));
     if (!scene) throw httpError("That scene doesn't exist.", 400);
@@ -208,7 +209,7 @@ export function registerAiMovieLanguageRoutes(app, db, requireRole, deps) {
       ? req.body.draftBlocks.slice(0, 500).map((b) => ({ type: String(b?.type ?? "action"), character: String(b?.character ?? ""), parenthetical: String(b?.parenthetical ?? ""), text: String(b?.text ?? "") }))
       : scene.blocks;
     const voice = await deps.voiceToElements({
-      audioBase64, mimeType, liveText: String(req.body?.liveText ?? "").slice(0, 2000), sceneOutline: scene.heading, existingElements: existing,
+      audioBase64, mimeType, instructionText: instructionText || null, liveText: String(req.body?.liveText ?? "").slice(0, 2000), sceneOutline: scene.heading, existingElements: existing,
       dialogueLanguage: ["en", "hi", "or"].includes(req.body?.language) ? req.body.language : "en",
       defaultInsertAfter: Number.isInteger(req.body?.cursorAfter) ? req.body.cursorAfter : undefined,
       allowSceneActions: false, // an AI Movie screenplay has no "add / delete a scene" of its own (scenes come with their beat)

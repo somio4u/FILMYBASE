@@ -3623,9 +3623,14 @@ const VOICE_ORB_SIZE_PHONE = 60
 // scene and saved as a new version. Editing on the page (`editDraft` given):
 // the lines go into your unsaved edit where your cursor is, and you save.
 function VoiceWriterButton({ t, sceneListId, episodeIndex, sceneIndex, sceneNumber, blockedNote, editDraft, onAdded, onDraftLines, onSceneActions }) {
-  const [phase, setPhase] = useState('idle') // idle | listening | writing
+  const [phase, setPhase] = useState('idle') // idle | listening | understanding | confirm | working
   const [liveText, setLiveText] = useState('')
   const [message, setMessage] = useState(null) // { kind: 'done' | 'error', text }
+  const [confirm, setConfirm] = useState(null) // what was heard, waiting for the writer's OK: { transcript, english, editing, translating, edited }
+  const [log, setLog] = useState([]) // what the agent is doing / did: [{ id, kind: 'work' | 'ok' | 'error', text }]
+  const logId = useRef(0)
+  const lang = t.scriptToolbarLang === 'or' ? 'or' : 'en'
+  const V = (en, or) => (lang === 'or' ? or : en)
   const [seconds, setSeconds] = useState(0)
   const buttonRef = useRef(null)
   const sessionRef = useRef(null)
@@ -3753,49 +3758,112 @@ function VoiceWriterButton({ t, sceneListId, episodeIndex, sceneIndex, sceneNumb
     session.recorder.stop()
   }
 
+  // What the agent is doing, shown step by step in the panel (never just "working…")
+  const report = {
+    step: (text) => { const id = ++logId.current; setLog((prev) => [...prev, { id, kind: 'work', text }]); return id },
+    done: (id, text, kind = 'ok') => setLog((prev) => prev.map((l) => (l.id === id ? { ...l, kind, text } : l))),
+  }
+
+  const toBase64 = (blob) => new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(String(reader.result).split(',')[1] ?? '')
+    reader.onerror = reject
+    reader.readAsDataURL(blob)
+  })
+
+  // Step 1: the recording is only written down and translated — nothing in the screenplay changes until the writer confirms.
   async function sendRecording(blob, mimeType) {
     if (blob.size < 1500) {
       setPhase('idle')
       setMessage({ kind: 'error', text: t.voiceNothingHeard })
       return
     }
-    setPhase('writing')
-    // Read the editor at the moment the recording is sent (lines typed while speaking count).
+    setPhase('understanding')
+    setLog([])
+    setMessage(null)
+    try {
+      const audio = await toBase64(blob)
+      const response = await fetch(`${BACKEND_URL}/api/voice/understand`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ audio, mimeType, liveText }),
+      })
+      const data = await response.json()
+      if (!response.ok) {
+        setMessage({ kind: 'error', text: data.error || t.genericError })
+        setPhase('idle')
+      } else {
+        setConfirm({ transcript: data.transcript, english: data.english, editing: false, translating: false, edited: false })
+        setPhase('confirm')
+      }
+    } catch {
+      setMessage({ kind: 'error', text: t.genericError })
+      setPhase('idle')
+    }
+    setLiveText('')
+  }
+
+  // the writer fixed a word: translate the corrected words again
+  async function translateAgain() {
+    if (!confirm?.transcript.trim()) return
+    setConfirm({ ...confirm, translating: true })
+    try {
+      const response = await fetch(`${BACKEND_URL}/api/voice/understand`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text: confirm.transcript }),
+      })
+      const data = await response.json()
+      setConfirm((c) => (c ? { ...c, translating: false, ...(response.ok ? { english: data.english, edited: false } : {}) } : c))
+    } catch {
+      setConfirm((c) => (c ? { ...c, translating: false } : c))
+    }
+  }
+
+  // Step 2: the writer said "Yes, do it" — the confirmed words (not the audio) go to the agent, and every step is shown.
+  async function runInstruction() {
+    const text = confirm?.transcript.trim()
+    if (!text) return
+    setConfirm(null)
+    setPhase('working')
+    setLog([])
+    report.done(report.step(''), `${V('You said', 'ତୁ କହିଲୁ')}: “${text}”`, 'ok')
+    const understood = report.step(V(`Asking the AI to work on scene ${sceneNumber} …`, `AIକୁ ସିନ୍ ${sceneNumber} ରେ କାମ କରିବାକୁ କହୁଛି …`))
+    // Read the editor now (lines typed while the question was open count)
     const draft = editDraft?.()
     try {
-      const audio = await new Promise((resolve, reject) => {
-        const reader = new FileReader()
-        reader.onload = () => resolve(String(reader.result).split(',')[1] ?? '')
-        reader.onerror = reject
-        reader.readAsDataURL(blob)
-      })
       const response = await fetch(`${BACKEND_URL}/api/screenplay/scene/voice`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          sceneListId, episodeIndex, sceneIndex, audio, mimeType, liveText,
+          sceneListId, episodeIndex, sceneIndex, instruction: text,
           ...(draft ? { draftElements: draft.elements, cursorAfter: draft.cursorAfter } : {}),
         }),
       })
       const data = await response.json()
       if (!response.ok) {
-        setMessage({ kind: 'error', text: data.error || t.genericError })
-      } else if (data.draft) {
-        onDraftLines(data)
-        const c = data.changes
-        setMessage({ kind: 'done', text: c && (c.changed || c.removed || c.rewrote) ? t.voiceChanged(c, data.transcript, true) : t.voiceAddedToEdit(data.added, data.transcript) })
-        if (data.sceneActions?.length) onSceneActions?.(data.sceneActions)
+        report.done(understood, data.error || t.genericError, 'error')
       } else {
-        if (data.scene) onAdded(data.scene)
-        const c = data.changes
-        const lineChanges = c && (c.added || c.changed || c.removed || c.rewrote)
-        setMessage({ kind: 'done', text: !lineChanges && data.note ? `${data.note} (“${data.transcript}”)` : c && (c.changed || c.removed || c.rewrote) ? t.voiceChanged(c, data.transcript, false) : t.voiceAdded(data.added, data.transcript) })
-        if (data.sceneActions?.length) onSceneActions?.(data.sceneActions)
+        const c = data.changes ?? {}
+        const parts = [c.rewrote ? V('wrote the scene again', 'ସିନ୍ ପୁଣି ଲେଖିଲା') : null, c.added ? V(`added ${c.added} line(s)`, `${c.added}ଟା ଲାଇନ୍ ଯୋଡ଼ିଲା`) : null, c.changed ? V(`changed ${c.changed} line(s)`, `${c.changed}ଟା ଲାଇନ୍ ବଦଳାଇଲା`) : null, c.removed ? V(`removed ${c.removed} line(s)`, `${c.removed}ଟା ଲାଇନ୍ ହଟାଇଲା`) : null].filter(Boolean)
+        const sceneActions = data.sceneActions ?? []
+        report.done(understood, parts.length
+          ? `${V('Understood. In the scene it', 'ବୁଝିଲି। ସିନ୍‌ରେ ସେ')} ${parts.join(', ')}.`
+          : `${V('Understood.', 'ବୁଝିଲି।')}${data.note ? ` ${data.note}` : ''}`, 'ok')
+        if (data.draft) {
+          if (parts.length) { onDraftLines(data); report.done(report.step(''), V('Put into your open edit — press "Save my changes" to keep it.', 'ତୋ ଖୋଲା ଏଡିଟ୍‌ରେ ଯୋଡ଼ିଲି — ରଖିବାକୁ "ମୋ ଚେଞ୍ଜ ସେଭ୍ କର" ଦବା।'), 'ok') }
+        } else if (data.scene) {
+          onAdded(data.scene)
+          report.done(report.step(''), V('Saved as a new version of the scene — ↶ Undo takes it back.', 'ସିନ୍‌ର ନୂଆ ଭର୍ସନ୍ ଭାବେ ସେଭ୍ ହେଲା — ↶ Undo ଦେଲେ ଫେରିଯିବ।'), 'ok')
+        }
+        if (parts.length && data.note) report.done(report.step(''), data.note, 'ok')
+        if (sceneActions.length) await onSceneActions?.(sceneActions, report, V)
+        report.done(report.step(''), V('Done.', 'ହେଇଗଲା।'), 'ok')
       }
     } catch {
-      setMessage({ kind: 'error', text: t.genericError })
+      report.done(understood, t.genericError, 'error')
     }
-    setLiveText('')
+    setPhase('idle')
+  }
+
+  function cancelConfirm() {
+    setConfirm(null)
     setPhase('idle')
   }
 
@@ -3810,10 +3878,37 @@ function VoiceWriterButton({ t, sceneListId, episodeIndex, sceneIndex, sceneNumb
   // On <body>, so no panel's effects can pull it out of its floating spot.
   return createPortal(
     <>
-      {(phase !== 'idle' || message || blocked || isEditing) && (
+      {(phase === 'understanding' || phase === 'confirm' || phase === 'working' || log.length > 0) ? (
+        <div className="voice-writer-panel" style={bubbleStyle} role="dialog" aria-label={V('Voice assistant', 'ଭଏସ୍ ଏସିଷ୍ଟାଣ୍ଟ')}>
+          {phase === 'idle' && <button type="button" className="voice-writer-bubble-close" onClick={() => setLog([])} aria-label={t.closeLabel}>×</button>}
+          {phase === 'understanding' && <p className="voice-panel-working">⏳ {V('Listening to your recording and writing down exactly what you said …', 'ତୋ ରେକର୍ଡିଂ ଶୁଣି ଯାହା କହିଲୁ ଠିକ୍ ସେୟା ଲେଖୁଛି …')}</p>}
+          {phase === 'confirm' && confirm && (
+            <div className="voice-panel-confirm">
+              <p className="voice-panel-title">{V('I heard this — is it right?', 'ମୁଁ ଏହା ଶୁଣିଲି — ଠିକ୍ ଅଛି?')}</p>
+              <p className="voice-panel-label">{V('Your words', 'ତୋ କଥା')}</p>
+              {confirm.editing
+                ? <textarea className="voice-panel-text" rows={4} value={confirm.transcript} onChange={(e) => setConfirm({ ...confirm, transcript: e.target.value, edited: true })} />
+                : <blockquote className="voice-panel-quote">{confirm.transcript}</blockquote>}
+              <p className="voice-panel-label">{V('In English (translated exactly)', 'ଇଂରାଜୀରେ (ଠିକ୍ ଅନୁବାଦ)')}</p>
+              <blockquote className="voice-panel-quote is-english">{confirm.translating ? '…' : confirm.english || '—'}{confirm.edited && !confirm.translating ? ` (${V('words changed — translate again', 'କଥା ବଦଳିଛି — ପୁଣି ଅନୁବାଦ କର')})` : ''}</blockquote>
+              <div className="voice-panel-actions">
+                <button type="button" className="choose-button" onClick={runInstruction} disabled={!confirm.transcript.trim() || confirm.translating}>{V('✓ Yes, do it', '✓ ହଁ, କର')}</button>
+                <button type="button" className="cancel-button" onClick={() => setConfirm({ ...confirm, editing: !confirm.editing })}>{confirm.editing ? V('Done editing', 'ଏଡିଟ୍ ଶେଷ') : V('✏ Fix the words', '✏ କଥା ସୁଧାର')}</button>
+                {confirm.edited && <button type="button" className="cancel-button" onClick={translateAgain} disabled={confirm.translating}>{V('🌐 Translate again', '🌐 ପୁଣି ଅନୁବାଦ')}</button>}
+                <button type="button" className="cancel-button" onClick={() => { cancelConfirm(); startListening() }}>{V('🎙 Speak again', '🎙 ପୁଣି କହ')}</button>
+                <button type="button" className="cancel-button" onClick={cancelConfirm}>{V('Cancel', 'ବାତିଲ୍')}</button>
+              </div>
+            </div>
+          )}
+          {log.length > 0 && (
+            <ul className="voice-panel-log" aria-live="polite">
+              {log.map((l) => <li key={l.id} className={`is-${l.kind}`}><span aria-hidden="true">{l.kind === 'ok' ? '✓' : l.kind === 'error' ? '⚠' : '⏳'}</span> {l.text}</li>)}
+            </ul>
+          )}
+        </div>
+      ) : (phase !== 'idle' || message || blocked || isEditing) && (
         <div className={`voice-writer-bubble${message?.kind === 'error' ? ' is-error' : ''}${phase === 'idle' && !message && !blocked && isEditing ? ' is-hint' : ''}`} style={bubbleStyle}>
           {phase === 'listening' && <p>{liveText || t.voiceListeningHint}</p>}
-          {phase === 'writing' && <p>{t.voiceWritingLabel}</p>}
           {phase === 'idle' && message && (
             <>
               <p>{message.text}</p>
@@ -3834,10 +3929,10 @@ function VoiceWriterButton({ t, sceneListId, episodeIndex, sceneIndex, sceneNumb
         onPointerDown={handlePointerDown}
         onClick={() => {
           if (draggedRef.current) return
-          if (phase === 'idle' && !blocked) startListening()
+          if ((phase === 'idle' || phase === 'confirm') && !blocked) { if (phase === 'confirm') cancelConfirm(); startListening() }
           else if (phase === 'listening') stopListening()
         }}
-        aria-disabled={phase === 'writing' || blocked}
+        aria-disabled={phase === 'understanding' || phase === 'working' || phase === 'confirm' || blocked}
         aria-label={phase === 'listening' ? t.voiceStopLabel : `${t.voiceButtonLabel} — ${target}`}
         title={phase === 'idle' ? `${t.voiceButtonLabel} · ${t.voiceButtonHint} · ${target} · ${t.voiceDragHint}` : undefined}
       >
@@ -3847,7 +3942,8 @@ function VoiceWriterButton({ t, sceneListId, episodeIndex, sceneIndex, sceneNumb
         <span className="voice-writer-caption">
           {phase === 'idle' && t.voiceButtonLabel}
           {phase === 'listening' && `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`}
-          {phase === 'writing' && t.voiceThinkingLabel}
+          {(phase === 'understanding' || phase === 'working') && t.voiceThinkingLabel}
+          {phase === 'confirm' && V('Confirm', 'ନିଶ୍ଚିତ କର')}
         </span>
       </button>
     </>,
@@ -4181,18 +4277,38 @@ function MovieScreenplayWorkspace({
   }
 
   // The voice agent asked for scene-list changes: new scenes are made at once (like the "Add a scene" buttons); a deletion waits for a click.
-  async function runAgentSceneActions(actions) {
+  async function runAgentSceneActions(actions, report, V = (en) => en) {
     // adding a scene closes the open edit: never throw away typed-but-unsaved words
-    if (editing?.dirty && (actions ?? []).some((a) => a.action === 'add_scene' || a.action === 'rename_everywhere')) { setSceneChangeError(t.editSaveFirst); return }
+    if (editing?.dirty && (actions ?? []).some((a) => a.action === 'add_scene' || a.action === 'rename_everywhere')) {
+      setSceneChangeError(t.editSaveFirst)
+      report?.done(report.step(''), V('Save the scene you are editing first, then say it again.', 'ଆଗେ ଯେଉଁ ସିନ୍ ଏଡିଟ୍ କରୁଛୁ ତାକୁ ସେଭ୍ କର, ତା\'ପରେ ପୁଣି କହ।'), 'error')
+      return
+    }
+    const total = (actions ?? []).filter((a) => a.action === 'add_scene').length
     let cursor = sceneIndex
     let afterCount = 0
+    let n = 0
     for (const a of actions ?? []) {
-      if (a.action === 'delete_scene') { setAgentDelete(sceneIndex); continue }
-      if (a.action === 'rename_everywhere') { await renameCharacterEverywhere(a.from, a.to, false); continue }
+      if (a.action === 'delete_scene') {
+        setAgentDelete(sceneIndex)
+        report?.done(report.step(''), V(`Waiting for your OK to delete scene ${numberOf(scene, sceneIndex)} — see the yellow box above the script.`, `ସିନ୍ ${numberOf(scene, sceneIndex)} ହଟାଇବା ପାଇଁ ତୋ ଅନୁମତି ଅପେକ୍ଷା — ସ୍କ୍ରିପ୍ଟ ଉପରେ ହଳଦିଆ ବାକ୍ସ ଦେଖ।`), 'ok')
+        continue
+      }
+      if (a.action === 'rename_everywhere') {
+        const id = report?.step(V(`Renaming ${a.from} → ${a.to} in the whole script …`, `ପୂରା ସ୍କ୍ରିପ୍ଟରେ ${a.from} → ${a.to} ବଦଳାଉଛି …`))
+        const r = await renameCharacterEverywhere(a.from, a.to, false)
+        report?.done(id, r
+          ? V(`Renamed ${a.from} → ${a.to}: ${r.scenes} scene(s), ${r.speakerLines} speaking line(s), ${r.mentions} mention(s) in the words.`, `${a.from} → ${a.to} ବଦଳିଲା: ${r.scenes}ଟି ସିନ୍, ${r.speakerLines}ଟି କହିବା ଲାଇନ୍, ଲେଖା ଭିତରେ ${r.mentions}ଟି।`)
+          : V(`Could not rename ${a.from}.`, `${a.from} ବଦଳାଇ ପାରିଲିନି।`), r ? 'ok' : 'error')
+        continue
+      }
       if (a.action !== 'add_scene') continue
+      n += 1
       const position = a.where === 'before' ? cursor : cursor + 1 + afterCount
       if (a.where === 'before') cursor += 1; else afterCount += 1
+      const id = report?.step(V(`Adding scene ${n} of ${total}: ${a.intExt}. ${a.location} - ${a.timeOfDay} — writing it …`, `${total}ରୁ ${n} ନମ୍ବର ସିନ୍ ଯୋଡ଼ୁଛି: ${a.intExt}. ${a.location} - ${a.timeOfDay} — ଲେଖୁଛି …`))
       const ok = await createScene({ position, intExt: a.intExt, location: a.location, timeOfDay: a.timeOfDay, oneLiner: a.oneLiner, estimatedMinutes: a.minutes }, a.write !== false)
+      report?.done(id, ok ? V(`Scene ${n} added${a.write !== false ? ' and written' : ' (blank)'}: ${a.location}.`, `ସିନ୍ ${n} ଯୋଡ଼ିଲି${a.write !== false ? ' ଓ ଲେଖିଲି' : ' (ଖାଲି)'}: ${a.location}।`) : V(`Scene ${n} could not be added.`, `ସିନ୍ ${n} ଯୋଡ଼ିହେଲା ନାହିଁ।`), ok ? 'ok' : 'error')
       if (!ok) break
     }
   }
@@ -4947,7 +5063,7 @@ function MovieScreenplayWorkspace({
 
       {screenplay && scene && (
         <VoiceWriterButton
-          key={`${sceneList.id}-${group.episodeIndex}-${sceneIndex}`}
+          key={`${sceneList.id}-${group.episodeIndex}`}
           t={t}
           sceneListId={sceneList.id}
           episodeIndex={group.episodeIndex}

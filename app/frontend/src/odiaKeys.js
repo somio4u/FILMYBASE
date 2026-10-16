@@ -1,20 +1,23 @@
 // Odia typing layout (Akruti / InScript style). Each physical key gives [normal, with Shift].
 // The keys are matched by their position on the keyboard (event.code), so it works on any English keyboard.
 // To fix a key, change its pair here — nothing else needs to change.
-// null = that Shift position is blank on the layout, so the key types normally.
+// Read from the keyboard picture: every key cap shows the English label on the left and the Odia letters on
+// the right (top = with Shift, bottom = normal). Each pair is [normal, with Shift].
+// null = nothing on the cap there, so the key types normally. Keys marked "?" were hard to read in the picture.
 export const ODIA_KEYS = {
-  Backquote: ['|', '୨'],
-  Digit1: ['୧', '!'], Digit2: ['୨', '‘'], Digit3: ['୩', '’'], Digit4: ['୪', 'ୟ'], Digit5: ['୫', '%'],
-  Digit6: ['୬', 'ତ୍ତ'], Digit7: ['୭', 'ଞ'], Digit8: ['୮', '*'], Digit9: ['୯', '('], Digit0: ['୦', ')'],
-  Minus: ['=', '-'], Equal: ['=', '+'],
-  KeyQ: ['ବ', 'ଽ'], KeyW: ['ପ', 'ଫ'], KeyE: ['ନ', 'ତ୍ର'], KeyR: ['ଦ', 'ଧ'], KeyT: ['ସ', 'ଞ୍ଚ'],
-  KeyY: ['ା', 'ଞ୍ଜ'], KeyU: ['ଯ', 'ଶ'], KeyI: ['ଂ', 'O'], KeyO: ['ହ', 'ଭ'], KeyP: ['ି', 'ଢ'],
-  BracketLeft: ['ଅ', 'ୃ'], BracketRight: ['୍', '୪'], Backslash: ['ୟ', '|'],
-  KeyA: ['ମ', 'ଛ'], KeyS: ['କ', 'ଖ'], KeyD: ['୍', null], KeyF: ['ତ', 'ଥ'], KeyG: ['େ', 'ଳ'],
-  KeyH: ['ା', 'ଲ'], KeyJ: ['ର', 'ଣ'], KeyK: ['।', 'ଙ'], KeyL: ['୨', 'ଷ'],
-  Semicolon: [';', ':'], Quote: ['’', '”'],
-  KeyZ: ['ଉ', 'ଙ୍ଗ'], KeyX: ['ଗ', 'ଘ'], KeyC: ['ଜ', 'ଝ'], KeyV: ['ଚ', 'ଛ'], KeyB: ['ଠ', 'ଡ'],
-  KeyN: ['ୁ', 'ଣ'], KeyM: ['ୂ', 'ଲ'], Comma: [',', 'ଏ'], Period: ['.', 'ଐ'], Slash: ['/', '?'],
+  Backquote: ['।', 'ଵ'],                                  // shift ?
+  Digit1: ['୧', '!'], Digit2: ['୨', '‘'], Digit3: ['୩', '’'], Digit4: ['୪', 'ଷ'], Digit5: ['୫', '%'], // 4 shift ?
+  Digit6: ['୬', 'ଋ'], Digit7: ['୭', 'ଊ'], Digit8: ['୮', '*'], Digit9: ['୯', '('], Digit0: ['୦', ')'], // 6, 7 shift ?
+  Minus: [null, null], Equal: [null, null],
+  KeyQ: ['ବ', null],                                      // shift ? (small mark)
+  KeyW: ['ପ', 'ଫ'], KeyE: ['ନ', '\u0B5C'], KeyR: ['ଦ', 'ଧ'], KeyT: ['ସ', 'ଓ'], KeyY: ['ା', 'ଔ'],
+  KeyU: ['ଯ', 'ଟ'], KeyI: ['ଂ', '୦'], KeyO: ['ହ', 'ଉ'], KeyP: ['ୀ', 'ଢ'],                    // I, O shift ?
+  BracketLeft: ['ଅ', 'ୃ'], BracketRight: ['ୗ', 'ୟ'], Backslash: ['ଆ', '|'],                   // ] both, \ normal ?
+  KeyA: ['ମ', '\u0B5D'], KeyS: ['କ', 'ଖ'], KeyD: ['୍', null], KeyF: ['ତ', 'ଥ'], KeyG: ['ୁ', 'ଇ'],
+  KeyH: ['ି', 'ଈ'], KeyJ: ['ର', 'ଣ'], KeyK: ['।', 'ଶ'], KeyL: ['ଟ', 'ଠ'],                    // G, H shift, K shift ?
+  Semicolon: [null, null], Quote: ["'", 'ଁ'],
+  KeyZ: ['ଭ', 'ଙ'], KeyX: ['ଗ', 'ଘ'], KeyC: ['ଜ', 'ଝ'], KeyV: ['ଚ', 'ଛ'], KeyB: ['ଽ', 'ଡ'],    // Z, B normal ?
+  KeyN: ['ୂ', 'ଞ'], KeyM: ['ଲ', 'ଳ'], Comma: [',', 'ଏ'], Period: ['.', 'ଐ'], Slash: [null, null], // N both, M shift ?
 }
 
 const TYPING_TAGS = ['INPUT', 'TEXTAREA']

@@ -503,6 +503,7 @@ const LABELS = {
     scriptEditNoFixesNote: 'All good — nothing to fix.',
     aiMovieStageNotOpenYetNote: 'This step opens once you approve the one before it.',
     scriptScenesTitle: 'Scenes',
+    scriptEpisodeScenesTitle: (n) => `Episode ${n} Scenes`,
     scriptSelectedSceneTitle: (number) => `Scene ${number}`,
     scriptAiWritingLabel: 'AI is writing… hang tight',
     aiMovieShortDuration: (minutes) => aiMovieDurationText(minutes, 'sec', 'min'),
@@ -1373,6 +1374,7 @@ const LABELS = {
     scriptEditNoFixesNote: 'ସବୁ ଠିକ୍ ଅଛି — କିଛି ଠିକ୍ କରିବାକୁ ପଡ଼ିଲାନି।',
     aiMovieStageNotOpenYetNote: 'ଆଗ ଷ୍ଟେପ୍ ଅପ୍ରୁଭ୍ କଲେ ଏଇଟା ଖୋଲିବ।',
     scriptScenesTitle: 'ସିନ୍ ସବୁ',
+    scriptEpisodeScenesTitle: (n) => `ଏପିସୋଡ୍ ${n} ସିନ୍ ସବୁ`,
     scriptSelectedSceneTitle: (number) => `ସିନ୍ ${number}`,
     scriptAiWritingLabel: 'AI ଲେଖୁଛି… ଟିକେ ରହ',
     aiMovieShortDuration: (minutes) => aiMovieDurationText(minutes, 'ସେକେଣ୍ଡ', 'ମିନିଟ୍'),
@@ -4742,8 +4744,8 @@ function MovieScreenplayWorkspace({
 
         {scenes.length > 0 && (
           <div className="script-workspace">
-            <aside className="script-navigator" aria-label={t.scriptScenesTitle}>
-              <p className="script-panel-title">{t.scriptScenesTitle}</p>
+            <aside className="script-navigator" aria-label={t.scriptEpisodeScenesTitle(groupIndex + 1)}>
+              <p className="script-panel-title">{t.scriptEpisodeScenesTitle(groupIndex + 1)}</p>
               <div className="script-navigator-list">
                 {scenes.map((s, index) => (
                   <div

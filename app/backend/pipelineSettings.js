@@ -1,3 +1,4 @@
+import { mirrorSpend } from "./usageLedger.js";
 import { DEFAULT_VISUAL_STYLE, isVisualStyle, resolveStyle } from "./visualStyles.js";
 import { CAST_ORIGINS, DEFAULT_CAST_ORIGIN } from "./castRule.js";
 import { listReferenceImages } from "./referenceImages.js";
@@ -153,4 +154,5 @@ export async function assertWithinBudget(db, projectId, estimateUsd) {
 
 export async function recordSpend(db, projectId, { kind, provider = null, units = null, costUsd, ref = null }) {
   await db.query("INSERT INTO production_spend (project_id, kind, provider, units, cost_usd, ref) VALUES ($1,$2,$3,$4,$5,$6)", [projectId, kind, provider, units, costUsd, ref]);
+  await mirrorSpend(db, projectId, { kind, provider, units, costUsd, ref }); // the Money Meter copy (who and which project)
 }

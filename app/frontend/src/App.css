@@ -6322,6 +6322,11 @@ button:not(:disabled):active {
   animation-delay: 0.12s, 1.02s;
 }
 
+.mode-card-money {
+  --glow: 255, 196, 80;
+  animation-delay: 0.24s, 1.14s;
+}
+
 .mode-card:hover:not(:disabled),
 .mode-card:focus-visible {
   transform: translateY(-6px) scale(1.03);
@@ -6382,6 +6387,9 @@ button:not(:disabled):active {
   transform: translate(calc(-50% - clamp(10px, 2.5vw, 32px)), 12vh) scale(1.25);
   opacity: 0;
 }
+
+/* The Money Meter card just fades away, no gliding (it is a report screen, not a film). */
+.mode-stage.is-choosing-money .mode-card.is-chosen { transform: scale(1.2); opacity: 0; }
 
 @keyframes mode-title-in {
   from { opacity: 0; transform: translateY(-18px); filter: blur(6px) drop-shadow(0 0 22px rgba(80, 190, 255, 0.35)); }
@@ -7801,3 +7809,42 @@ body.is-script-edit-mode { overflow: hidden; }
   background: rgba(20, 28, 60, 0.92); color: #cfe0ff; border: 1px solid rgba(138, 180, 248, 0.55); cursor: pointer;
 }
 .fullscreen-toggle[aria-pressed="true"] { background: #1d5fd6; color: #fff; border-color: #8ab4f8; }
+
+/* Money Meter (admin-only spend screen) */
+.mm-page { max-width: 1100px; margin: 0 auto; padding: 56px 16px 48px; color: var(--text-primary, #e8eefc); }
+.mm-top { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 16px; }
+.mm-top h1 { flex: 1; margin: 0; font-size: 1.6rem; }
+.mm-back, .mm-refresh { padding: 6px 14px; border-radius: 999px; border: 1px solid rgba(138, 180, 248, 0.55); background: rgba(20, 28, 60, 0.7); color: inherit; cursor: pointer; }
+.mm-error { color: #ff9b9b; }
+.mm-muted { opacity: 0.65; font-size: 0.9rem; }
+.mm-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 10px; margin-bottom: 18px; }
+.mm-card { padding: 12px 14px; border-radius: 12px; border: 1px solid rgba(138, 180, 248, 0.3); background: rgba(10, 16, 40, 0.7); display: flex; flex-direction: column; gap: 2px; }
+.mm-card span { font-size: 0.78rem; opacity: 0.75; }
+.mm-card b { font-size: 1.5rem; }
+.mm-card small { opacity: 0.65; font-size: 0.75rem; }
+.mm-card-main { border-color: rgba(255, 196, 80, 0.7); }
+.mm-tabs { display: flex; gap: 6px; margin-bottom: 10px; }
+.mm-tabs button { padding: 6px 14px; border-radius: 999px; border: 1px solid rgba(138, 180, 248, 0.4); background: transparent; color: inherit; cursor: pointer; }
+.mm-tabs button.on { background: #1d5fd6; border-color: #8ab4f8; color: #fff; }
+.mm-check { display: block; margin: 6px 0 10px; font-size: 0.85rem; opacity: 0.85; }
+.mm-table-wrap { overflow-x: auto; }
+.mm-table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+.mm-table th, .mm-table td { padding: 8px 10px; border-bottom: 1px solid rgba(138, 180, 248, 0.18); text-align: left; vertical-align: top; }
+.mm-table th.r, .mm-table td.r { text-align: right; white-space: nowrap; }
+.mm-row { cursor: pointer; }
+.mm-row:hover { background: rgba(138, 180, 248, 0.08); }
+.mm-table small { opacity: 0.65; }
+.mm-badge { padding: 2px 8px; border-radius: 999px; font-size: 0.72rem; border: 1px solid rgba(138, 180, 248, 0.5); }
+.mm-badge.mm-ai_movie { border-color: rgba(190, 130, 255, 0.8); }
+.mm-badge.mm-story { border-color: rgba(80, 200, 255, 0.8); }
+.mm-live { color: #6be58a; font-size: 0.75rem; }
+.mm-detail td { background: rgba(10, 16, 40, 0.55); }
+.mm-split { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 14px; }
+.mm-split h4 { margin: 0 0 4px; font-size: 0.85rem; opacity: 0.8; }
+.mm-split p { margin: 2px 0; font-size: 0.85rem; }
+.mm-days { display: flex; flex-direction: column; gap: 4px; }
+.mm-day { display: grid; grid-template-columns: 90px 1fr 70px 80px; gap: 8px; align-items: center; font-size: 0.82rem; }
+.mm-day i { display: block; height: 10px; border-radius: 5px; background: linear-gradient(90deg, #ffc450, #ff8a3d); }
+.mm-day b { text-align: right; }
+.mm-note { margin-top: 18px; font-size: 0.78rem; opacity: 0.7; line-height: 1.5; }
+@media (max-width: 640px) { .mm-day { grid-template-columns: 78px 1fr 56px; } .mm-day small { display: none; } }

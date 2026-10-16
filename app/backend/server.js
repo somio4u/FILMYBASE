@@ -38,6 +38,7 @@ import { setupProductionMedia } from "./productionMedia.js";
 import { registerDesignTaskRoutes } from "./designTasks.js";
 import { registerSubmissionRoutes, designerGatekeeper, DESIGNER_ROLE } from "./designSubmissions.js";
 import { WRITER_ROLE, writerGatekeeper, ensureWriterSchema, registerWriterRoutes } from "./writerAccess.js";
+import { usageContext, installGeminiMetering, ensureUsageSchema, registerUsageRoutes, setSceneListResolver } from "./usageLedger.js";
 import { readStoryFromPdf } from "./pdfReader.js";
 import { BIBLE_PASS_SCORE, brainAsker, newUsage, designStoryBible, generateBrainJson, reviseBibleWithNote, storyBibleToMarkdown } from "./storyBrain.js";
 import { ensureAiMovieStorySchema, getProjectModes, judgedStage, registerAiMovieStoryRoutes } from "./aiMovieStory.js";
@@ -143,6 +144,9 @@ const db = new Pool(
     ? { connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } }
     : { database: "filmmaking_app" }
 );
+
+// Money Meter: measures every Gemini text call (tokens x price) and remembers who and which project it was for.
+installGeminiMetering(ai, db);
 // Supabase's pooled connection role has an empty default search_path, so
 // unqualified table names (`users`, `concepts`, ...) fail to resolve unless
 // each new connection sets it explicitly.
@@ -1437,6 +1441,7 @@ app.use(async (req, res, next) => {
   req.user = await getCurrentUser(req);
   next();
 });
+app.use(usageContext);
 
 // Wrap a route handler to require the caller be logged in as one of the
 // given roles — 401 if not logged in at all, 403 if logged in as the wrong
@@ -20320,6 +20325,8 @@ registerPipelineRoutes(app, db, requireRole, {
 });
 registerSubmissionRoutes(app, db, requireRole, { store: productionMedia.store, serveMedia: productionMedia.serveMedia });
 registerWriterRoutes(app, db);
+registerUsageRoutes(app, db, requireRole);
+setSceneListResolver(sceneListConceptId);
 registerAudioCueRoutes(app, db, requireRole, { store: productionMedia.store });
 
 // Schema self-heal runs before the server starts accepting traffic — worst
@@ -20327,6 +20334,7 @@ registerAudioCueRoutes(app, db, requireRole, { store: productionMedia.store });
 // starts, rather than blocking startup entirely.
 ensureAiMovieSchema()
   .then(() => ensureWriterSchema(db))
+  .then(() => ensureUsageSchema(db))
   .then(() => ensureAllProductionSchemas(db))
   .then(async (failures) => { try { const made = await backfillDrafts(db); await failInterruptedRequests(db); if (made) console.log(`Draft Management: ${made} existing project(s) are now Draft 1 of their project.`); } catch (error) { console.error("Draft backfill failed:", error.message); } return failures; })
   .catch((error) => console.error("Schema setup failed:", error.message))

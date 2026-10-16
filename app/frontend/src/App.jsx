@@ -1,3 +1,4 @@
+import MoneyMeter from './MoneyMeter.jsx'
 import { useState, useEffect, useRef, useMemo, useCallback, useContext, createContext, Fragment, lazy, Suspense } from 'react'
 import { createPortal } from 'react-dom'
 import ScriptEditor, { ScriptToolbar } from './ScriptEditor.jsx'
@@ -302,6 +303,8 @@ const LABELS = {
     appModeAiMovieOption: 'AI Movie',
     appModeMovieHint: 'Write it, plan it, shoot it — your film, start to finish',
     appModeAiMovieHint: 'Make the whole film with AI — story to screen',
+    appModeMoneyOption: 'Money Meter',
+    appModeMoneyHint: 'What every project and every user has spent on AI (admin only)',
     aiMovieProductionLabel: 'Production',
     aiMovieAnalyzeIntro: "Paste anything — a concept, story, synopsis, bit sheet, or screenplay — and I'll tell you what stage it's at.",
     aiMovieAnalyzePlaceholder: 'Paste anything here…',
@@ -1173,6 +1176,8 @@ const LABELS = {
     appModeAiMovieOption: 'AI ମୁଭି',
     appModeMovieHint: 'ଲେଖ, ପ୍ଲାନ୍ କର, ସୁଟ୍ କର — ତୋ ଫିଲ୍ମ, ଆରମ୍ଭରୁ ଶେଷ ଯାଏ',
     appModeAiMovieHint: 'AI ସାଙ୍ଗରେ ପୁରା ଫିଲ୍ମ ବନା — ଗପରୁ ସ୍କ୍ରିନ୍ ଯାଏ',
+    appModeMoneyOption: 'ମନି ମିଟର',
+    appModeMoneyHint: 'କେଉଁ ପ୍ରୋଜେକ୍ଟ ଓ କେଉଁ ୟୁଜର AI ରେ କେତେ ଖର୍ଚ୍ଚ କଲେ (କେବଳ ଆଡମିନ୍)',
     aiMovieProductionLabel: 'ପ୍ରଡକ୍ସନ୍',
     aiMovieAnalyzeIntro: 'ଯାହା ବି ପେଷ୍ଟ କର — କନସେପ୍ଟ, ଗପ, ସିନୋପସିସ୍, ବିଟ୍ ସିଟ୍ ବା ସ୍କ୍ରିନପ୍ଲେ — ମୁଁ କହିଦେବି ସେଇଟା କେଉଁ ଷ୍ଟେଜ୍‌ରେ ଅଛି।',
     aiMovieAnalyzePlaceholder: 'ଯାହା ବି ଏଠି ପେଷ୍ଟ କର…',
@@ -12668,7 +12673,7 @@ function App() {
     const chooseMode = (mode) => {
       if (modeChoice) return
       const reduceMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
-      const open = () => (mode === 'ai' ? handleChooseAiMovieMode() : setAppMode('movie'))
+      const open = () => (mode === 'ai' ? handleChooseAiMovieMode() : mode === 'money' ? setAppMode('money') : setAppMode('movie'))
       if (reduceMotion) {
         open()
         return
@@ -12683,6 +12688,7 @@ function App() {
     const modes = [
       { key: 'movie', icon: '🎬', label: t.appModeMovieOption, hint: t.appModeMovieHint },
       { key: 'ai', icon: '✨', label: t.appModeAiMovieOption, hint: t.appModeAiMovieHint },
+      ...(currentUser.role === 'admin' ? [{ key: 'money', icon: '💰', label: t.appModeMoneyOption, hint: t.appModeMoneyHint }] : []),
     ]
     return (
       <div className={`mode-stage${modeChoice ? ` is-choosing is-choosing-${modeChoice}` : ''}`}>
@@ -12705,6 +12711,10 @@ function App() {
         <AduWorkBar currentUser={currentUser} t={t} appMode="picker" onOpenAdu={(w) => { if (w.module === 'film') setAppMode('movie'); else handleChooseAiMovieMode(); setTimeout(() => setAduOpenNonce((v) => v + 1), 800) }} />
       </div>
     )
+  }
+
+  if (appMode === 'money' && currentUser.role === 'admin') {
+    return <MoneyMeter backendUrl={BACKEND_URL} onBack={() => setAppMode(null)} />
   }
 
   if (appMode === 'ai') {

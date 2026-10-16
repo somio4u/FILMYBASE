@@ -2,7 +2,7 @@
 // The keys are matched by their position on the keyboard (event.code), so it works on any English keyboard.
 // To fix a key, change its pair here — nothing else needs to change.
 // Taken from the owner's typed test: the same keys typed once normally and once with Shift on his Odia keyboard.
-// Each pair is [normal, with Shift]. null = that key just types normally (English).
+// Each pair is [normal, with Shift]. null = that key just types normally (English). '' = the key types nothing.
 // Z-row to Q-row follow his sequence exactly. K and L (aa-kar and e-kar) follow the keyboard picture.
 export const ODIA_KEYS = {
   Backquote: ['।', 'ଃ'],
@@ -12,7 +12,7 @@ export const ODIA_KEYS = {
   KeyQ: ['ବ', null], KeyW: ['ପ', 'ଫ'], KeyE: ['ନ', '\u0B21\u0B3C'], KeyR: ['ଦ', 'ଧ'], KeyT: ['ସ', 'ଓ'],
   KeyY: ['ୌ', 'ଔ'], KeyU: ['ଯ', 'ଟ'], KeyI: ['ଂ', 'ଠ'], KeyO: ['ହ', 'ଡ'], KeyP: ['ୈ', 'ଢ'],
   BracketLeft: ['ଅ', 'ୃ'], BracketRight: ['୍ର', '୍ୟ'], Backslash: ['ୟ', 'ଞ'],
-  KeyA: ['ମ', '\u0B22\u0B3C'], KeyS: ['କ', 'ଖ'], KeyD: ['୍', '\u200C'], KeyF: ['ତ', 'ଥ'], KeyG: ['ି', 'ଇ'],
+  KeyA: ['ମ', '\u0B22\u0B3C'], KeyS: ['କ', 'ଖ'], KeyD: ['୍', ''], KeyF: ['ତ', 'ଥ'], KeyG: ['ି', 'ଇ'],
   KeyH: ['ୀ', 'ଈ'], KeyJ: ['ର', 'ଣ'], KeyK: ['ା', 'ଶ'], KeyL: ['େ', 'ଷ'],
   Semicolon: [null, null], Quote: [null, 'ଁ'],
   KeyZ: ['ଭ', 'ଙ'], KeyX: ['ଗ', 'ଘ'], KeyC: ['ଜ', 'ଝ'], KeyV: ['ଚ', 'ଛ'], KeyB: ['ୁ', 'ଉ'],
@@ -35,7 +35,7 @@ export function odiaKeyHandler(event) {
   const pair = ODIA_KEYS[event.code]
   if (!pair || !isTypingTarget(event.target)) return
   const letter = event.shiftKey ? pair[1] : pair[0]
-  if (!letter) return
+  if (letter === null) return
   event.preventDefault()
-  document.execCommand('insertText', false, letter)
+  if (letter) document.execCommand('insertText', false, letter) // '' = the key types nothing
 }

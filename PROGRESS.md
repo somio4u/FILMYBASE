@@ -1921,3 +1921,7 @@ Plain version: every project is now a set of **drafts**. Opening a project shows
 - [x] The voice agent can do it too ("change Sula to Sulagna in the whole script").
 - Not changed: the Characters sheet and casting keep the old name until you change it there (the app says so). A scene counts as "found" also when the old name is only in its characters-present list.
 - Checked on a real server (preview changes nothing; SULATA untouched; Odia ending; versions kept) and in a real browser. 5 unit tests (renameCharacter, voice action).
+
+## Fix: the voice agent refused every Odia scene ("wrote in the wrong script") (deploying)
+- [x] **Cause (my mistake):** the script check I added counted the Odia full stop "।" as Hindi. That sign is U+0964, which sits in the Devanagari block but is the full stop of Odia, Hindi and Bengali alike — so every correct Odia answer was refused with "The AI wrote in the wrong script … nothing was changed".
+- [x] **Fix:** "।" and "॥" (and zero-width joiners) are ignored by the check; real Devanagari letters in an Odia scene, and Odia letters in a Hindi scene, are still refused. Regression test added.

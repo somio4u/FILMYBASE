@@ -73,3 +73,10 @@ test("scene actions: a rename of a character in the whole script is kept; same-n
   assert.deepEqual(cleanSceneActions([{ action: "rename_everywhere", from: " Sula ", to: "Sulagna" }]), [{ action: "rename_everywhere", from: "Sula", to: "Sulagna" }]);
   assert.deepEqual(cleanSceneActions([{ action: "rename_everywhere", from: "Sula", to: "SULA" }, { action: "rename_everywhere", from: "", to: "x" }]), []);
 });
+
+test("the Odia full stop is not a wrong script (it is U+0964, shared by Odia, Hindi and Bengali) — an Odia scene is never refused for it", () => {
+  const odia = { type: "action", text: "ମାଆ କାଳୀଙ୍କ ମନ୍ଦିର ପ୍ରାଙ୍ଗଣରେ ପହଞ୍ଚିଲେ। ସେ କହିଲା, ହଁ॥" };
+  assert.deepEqual(wrongScriptLines({ rewritten: [odia, { type: "dialogue", character: "SOUMYA", text: "ମୁଁ ଡାକ୍ତର। ଏସବୁରେ ବିଶ୍ୱାସ କରେନା।" }] }, "or"), []);
+  assert.equal(wrongScriptLines({ rewritten: [{ type: "action", text: "मा' काळीङ्क मन्दिर प्राङ्गणे।" }] }, "or").length, 1, "real Devanagari letters are still refused");
+  assert.equal(wrongScriptLines({ elements: [{ type: "action", text: "ମାଳତୀ ଆସିଲା।" }] }, "hi").length, 1, "Odia letters in a Hindi scene are still refused");
+});

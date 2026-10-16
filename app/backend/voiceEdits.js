@@ -125,7 +125,13 @@ const INDIC = {
   hi: /[ঀ-෿]/,
   en: /[ऀ-෿]/,
 };
-const forbiddenFor = (language) => INDIC[language] ?? INDIC.en;
+// The full stop of Odia, Hindi and Bengali is the same "।" (U+0964) and "॥" (U+0965): it sits in the Devanagari block but is used by
+// EVERY Indic script, so it must never count as a wrong script (an Odia scene is full of it).
+const SHARED_PUNCTUATION = /[\u0964\u0965\u200c\u200d]/g;
+const forbiddenFor = (language) => {
+  const re = INDIC[language] ?? INDIC.en;
+  return { test: (text) => re.test(String(text).replace(SHARED_PUNCTUATION, "")) };
+};
 
 export const SCRIPT_NAMES = { or: "Odia (ଓଡ଼ିଆ script — never Devanagari / Hindi script)", hi: "Hindi (Devanagari script — never Odia script)", en: "English (Latin letters)" };
 

@@ -235,11 +235,11 @@ export function registerPipelineRoutes(app, db, requireRole, { store, providers,
     // all: every scene that already has shots (no re-dividing), one scene after another; a scene that fails is reported, the rest go on
     if (req.body?.all === true) {
       const scenes = (await db.query("SELECT DISTINCT sc.id, sc.order_index FROM production_scenes sc JOIN production_shots s ON s.scene_id = sc.id WHERE sc.project_id = $1 AND sc.in_latest ORDER BY sc.order_index", [projectId])).rows;
-      const total = { written: 0, linked: 0, unknown: [], skipped: 0, scenes: scenes.length, failedScenes: [] };
+      const total = { written: 0, linked: 0, unknown: [], countUnknown: [], skipped: 0, scenes: scenes.length, failedScenes: [] };
       for (const sc of scenes) {
         try {
           const r = await writeFrameDescriptions(db, projectId, { sceneId: sc.id, overwrite: req.body?.overwrite !== false, textJson, listShots });
-          total.written += r.written; total.linked += r.linked; total.skipped += r.skipped; total.unknown.push(...r.unknown);
+          total.written += r.written; total.linked += r.linked; total.skipped += r.skipped; total.unknown.push(...r.unknown); total.countUnknown.push(...r.countUnknown);
         } catch (error) { total.failedScenes.push(`${sc.id}: ${error.message}`); }
       }
       if (total.written > 0) {

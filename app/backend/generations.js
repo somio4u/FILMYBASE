@@ -134,8 +134,11 @@ export function keyframePrompt(shot, styleIn, refNames) {
   const cast = who.length
     ? ` The only named people in this frame are: ${who.join(", ")} — look exactly like their attached sheets.${Number.isInteger(shot.framePeople) ? ` There are exactly ${shot.framePeople} ${shot.framePeople === 1 ? "person" : "people"} in the frame.` : ""} Do not add any other recognisable person or invent new characters; background figures only if the description calls for them, few, small and unnamed.`
     : " No named character is linked to this frame: do not invent characters and do not fill the frame with a crowd; show a person only if the description above names or clearly describes one.";
+  const extra = wordsOnlyNames(shot, shotReferences(shot, brandRefs).length);
+  const more = extra.length ? ` Also in the frame, but with no attached picture (draw them from the description): ${extra.join(", ")}.` : "";
+  const everyone = Number.isInteger(shot.framePeople) && shot.framePeople >= 2 ? ` Place the ${shot.framePeople} people as described and frame the shot so that ALL ${shot.framePeople} are clearly visible — nobody hidden behind glass, a pillar or the frame edge, nobody left out.` : "";
   const refs = refNames.length ? ` The attached pictures are model sheets (several views of each item). Use them to keep the exact same face, clothes, object design and place layout for: ${refNames.join(", ")}. Build the frame ONLY from these attached pictures: the people must be exactly these people, the place exactly this place and the objects exactly these objects. Do not invent other main characters, vehicles, buildings or locations that are not in the attached pictures or the description. Draw ONLY the single requested frame, never a sheet, and do not copy the sheet layout.` : "";
-  return `A single film frame (keyframe). Camera: ${camera || "natural framing"}. ${frameText(shot)}${people ? ` ${people}` : ""}${cast}${brand}${style ? ` VISUAL STYLE (follow it strictly): ${style}.` : ""}${refs} ${isPhotographic(style) ? "Cinematic, natural film lighting, photographic detail." : "Cinematic composition and lighting, in the visual style above."} ${NO_TEXT}`;
+  return `A single film frame (keyframe). Camera: ${camera || "natural framing"}. ${frameText(shot)}${people ? ` ${people}` : ""}${cast}${everyone}${more}${brand}${style ? ` VISUAL STYLE (follow it strictly): ${style}.` : ""}${refs} ${isPhotographic(style) ? "Cinematic, natural film lighting, photographic detail." : "Cinematic composition and lighting, in the visual style above."} ${NO_TEXT}`;
 }
 
 export function videoPrompt(shot, styleIn) {
@@ -157,7 +160,12 @@ export const veoSecondsFor = (durationSec) => VEO_SECONDS.find((s) => s >= Math.
 const ORDER = { character: 0, location: 1, prop: 2 };
 // How a shot's command names an item: a combined props sheet is named by the positions of the props it holds that this shot uses.
 export const refLabel = (asset, shot) => (asset.members ? memberLabel({ name: asset.name, members: asset.members }, frameText(shot)) : asset.name);
-export const plannedRefNames = (shot) => [...shot.assets].filter((a) => a.kind in ORDER).sort((a, b) => ORDER[a.kind] - ORDER[b.kind]).slice(0, 4).map((a) => refLabel(a, shot));
+// the image model takes at most this many attached pictures in all (made sheets first, then real logos / brands)
+export const MAX_ATTACHED_PICTURES = 5;
+const sortedItems = (shot) => [...shot.assets].filter((a) => a.kind in ORDER).sort((a, b) => ORDER[a.kind] - ORDER[b.kind]);
+export const plannedRefNames = (shot, brandCount = 0) => sortedItems(shot).slice(0, Math.max(0, MAX_ATTACHED_PICTURES - brandCount)).map((a) => refLabel(a, shot));
+// items of the shot that do not fit in the attached pictures: they are still named in the command, in words only
+export const wordsOnlyNames = (shot, brandCount = 0) => sortedItems(shot).slice(Math.max(0, MAX_ATTACHED_PICTURES - brandCount)).map((a) => refLabel(a, shot));
 
 // what of the look decides a command's fingerprint: the style and the cast rule (the reference images have their own entry)
 const styleKey = (style) => { const n = normalizeStyle(style); return { t: n.text, c: n.castOrigin }; };
@@ -167,7 +175,7 @@ export function sheetSpec(asset, style) {
   return { purpose: "model_sheet", assetId: asset.id, text: assetPrompt(asset, style), params: { aspectRatio: "16:9" }, sourceHash: hashInputs({ k: "sheet", kind: asset.kind, name: asset.name, details, style: styleKey(style), g: asset.group_members ?? null, br: referenceSignature(assetReferences(asset, normalizeStyle(style).refs)) }) };
 }
 export function frameSpec(shot, style, aspectRatio = "16:9") {
-  const names = plannedRefNames(shot);
+  const names = plannedRefNames(shot, shotReferences(shot, normalizeStyle(style).refs).length);
   return { purpose: "first_frame", shotId: shot.id, text: keyframePrompt(shot, style, names), params: { aspectRatio, refNames: names }, sourceHash: hashInputs({ k: "frame", d: frameText(shot), f: shot.framing, a: shot.cameraAngle, m: shot.cameraMove, names, style: styleKey(style), aspectRatio, cf: (shot.assets ?? []).filter((a) => a.origin).map((a) => `${a.name}:${a.origin}`), br: referenceSignature(shotReferences(shot, normalizeStyle(style).refs)) }) };
 }
 export function videoSpec(shot, style, aspectRatio = "16:9") {
@@ -405,11 +413,11 @@ export function createGenerationService({ db, store, providers, env = process.en
       const order = { character: 0, location: 1, prop: 2 };
       // real logos / brands / titles this shot mentions go along as reference images, after the model sheets (5 pictures at most)
       const brand = shotReferences(shot, settings.look.refs);
-      const chosen = [...ready.refs].sort((a, b) => order[a.asset.kind] - order[b.asset.kind]).slice(0, Math.max(0, 5 - brand.length));
+      const chosen = [...ready.refs].sort((a, b) => order[a.asset.kind] - order[b.asset.kind]).slice(0, Math.max(0, MAX_ATTACHED_PICTURES - brand.length));
       const planned = await ensurePrompt(db, projectId, { ...frameSpec(shot, settings.look, settings.aspectRatio), actorUserId });
       const chosenNames = chosen.map((c) => refLabel(c.asset, shot));
       // The planned prompt names every item of the shot; if some reference is missing (allowed on request) the text names only the attached ones.
-      const prompt = planned.prompt.edited || JSON.stringify(chosenNames) === JSON.stringify(plannedRefNames(shot)) ? planned.prompt.text : keyframePrompt(shot, settings.look, chosenNames);
+      const prompt = planned.prompt.edited || JSON.stringify(chosenNames) === JSON.stringify(plannedRefNames(shot, brand.length)) ? planned.prompt.text : keyframePrompt(shot, settings.look, chosenNames);
       const version = await nextVersion("shot_id = $1 AND kind = 'keyframe'", [shot.id]);
       return start({
         projectId, kind: "keyframe", shotId: shot.id, prompt, promptId: planned.prompt.id, params: { aspectRatio: settings.aspectRatio, refs: chosen.map((c) => c.generation.id), brandRefs: brand.map((r) => r.code) }, estimate: estimateCost("keyframe"), actorUserId,

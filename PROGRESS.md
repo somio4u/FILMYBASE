@@ -1855,3 +1855,10 @@ Plain version: every project is now a set of **drafts**. Opening a project shows
 - [x] The picture command now uses this full description (else the storyboard text, else the cutter's line) and says "exactly N people in the frame; the only named people are …". The text box on each shot can be edited ("Save my text"). The Storyboard Designer's own shot text and the shot-division approval are never touched.
 - Honest note: tested with scripted AI answers only — not with the real Gemini. Try one scene and check the descriptions before making pictures.
 - [x] **Older projects:** Image Studio → Shot Frames → **"🔁 Re-analyse ALL scenes — write full descriptions for every divided shot"**: re-reads every scene's screenplay and fills the full frame description and links for the shots that are ALREADY divided (shots are not re-cut, approvals stay). A scene that fails is reported; press again to retry.
+
+## Frame descriptions: keep the group's count, place every person, never lose a picture silently (deploying)
+- [x] **Problem:** "four friends coming to the palace" came out as one man in the jeep.
+- [x] The description writer now also reads the **story background**, the **neighbouring shots** and which characters are **in this scene**; it must keep a stated group size ("four friends" → 4, each named), describe **each person separately** (where in the frame, what they do), and pick a camera angle so **everyone is visible** (a vehicle with passengers: three-quarter / side view). If the number truly cannot be told, it says so and the Studio tells you to check those shots.
+- [x] The picture command adds "Place the N people as described and frame the shot so that ALL N are clearly visible".
+- [x] **Picture limit bug fixed:** the command named up to 4 items but 5 pictures were attached, so with 6 items (4 friends + place + jeep) the last one was dropped silently. Now one limit (5) is used everywhere and any item that does not fit is named in the command "in words only".
+- Not built: a shared "group sheet" picture for the friends. Honest note: tested with scripted AI answers only; check SH001 with "Re-analyse ALL scenes" then "Make another version".

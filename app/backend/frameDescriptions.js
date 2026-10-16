@@ -14,9 +14,10 @@ export async function ensureFrameDescriptionSchema(db) {
   await db.query("ALTER TABLE production_shots ADD COLUMN IF NOT EXISTS frame_people INTEGER");
 }
 
-export function frameDescriptionPrompt({ heading, elements, shots, assets }) {
+export function frameDescriptionPrompt({ heading, elements, shots, assets, allShots = null, story = "", present = [] }) {
   const script = elements.map((e) => (e.kind === "dialogue" ? `${e.speaker}${e.parenthetical ? ` ${e.parenthetical}` : ""}: ${e.text}` : `[${e.kind}] ${e.text}`)).join("\n");
-  const list = (kind) => assets.filter((a) => a.kind === kind).map((a) => `- ${a.name}${a.about ? ` (${a.about})` : ""}`).join("\n") || "(none)";
+  const list = (kind) => assets.filter((a) => a.kind === kind).map((a) => `- ${a.name}${present.includes(a.id) ? " [in this scene]" : ""}${a.about ? ` (${a.about})` : ""}`).join("\n") || "(none)";
+  const around = allShots && allShots.length > shots.length ? `\nALL SHOTS OF THE SCENE, for context (the neighbours of a shot tell who arrives, who is already there):\n${allShots.map((s) => `${s.code}: ${s.description}`).join("\n")}\n` : "";
   const shotLines = shots.map((s) => `${s.code} | ${[s.framing, s.cameraAngle, s.cameraMove].filter(Boolean).join(", ") || "framing not set"} | ${Number(s.durationSec) || 4}s | ${s.description}`).join("\n");
   return `You are a film director's assistant. Below is ONE scene of a screenplay, the shots it was cut into, and the made characters, places and objects of the film. For EACH shot write the complete picture of its first frame, so that an image can be made from your words alone.
 
@@ -24,9 +25,9 @@ SCENE: ${heading}
 SCREENPLAY OF THE SCENE:
 ${script || "(no lines)"}
 
-SHOTS (code | framing, angle, move | length | what the cutter wrote):
+${story ? `STORY BACKGROUND (may say who a group of friends / family is and how many they are):\n${story}\n\n` : ""}SHOTS (code | framing, angle, move | length | what the cutter wrote):
 ${shotLines}
-
+${around}
 MADE CHARACTERS:
 ${list("character")}
 MADE ENVIRONMENTS:
@@ -35,12 +36,13 @@ MADE PROPS:
 ${list("prop")}
 
 For every shot give:
-- description: ONE complete paragraph (2-4 sentences) that says WHERE the camera is and what it sees; HOW MANY people are in the frame, who each one is (use the made character names exactly) and exactly what each one is doing and where (e.g. seated in the front, at the wheel, looking out); the place and what part of it is visible; the important objects and where they are; the movement or action at this moment (e.g. a jeep travelling along the middle of a lonely road towards the palace); light and time of day. Use ONLY what the screenplay and the shot say or clearly imply — do not invent events, new named characters or new places. If the shot or the scene implies people (a jeep arriving carries its passengers), put the scene's characters in it and say how many.
+- description: ONE complete paragraph (2-4 sentences) that says WHERE the camera is and what it sees; HOW MANY people are in the frame, who each one is (use the made character names exactly) and exactly what each one is doing and where (e.g. seated in the front, at the wheel, looking out); the place and what part of it is visible; the important objects and where they are; the movement or action at this moment (e.g. a jeep travelling along the middle of a lonely road towards the palace); light and time of day. Use ONLY what the screenplay and the shot say or clearly imply — do not invent events, new named characters or new places. If the shot or the scene implies people (a jeep arriving carries its passengers), put the scene's characters in it. THE COUNT MATTERS: if the screenplay, the story background or the neighbouring shots say how many people there are (e.g. "four friends"), use exactly that many and name each one; never reduce a group to one person. Describe EACH person separately — who, exactly where in the frame (e.g. front left, back right, standing on the left), what they are doing and where they look. Choose the camera angle and framing so that every person is clearly visible and none is hidden behind the windscreen, a pillar or the frame edge (a vehicle with passengers: a three-quarter or side view, not straight on). If the number of people truly cannot be told from anything given, say so in countKnown (false) instead of guessing.
 - characters: the made character names who are in this frame (exact spelling from the list; [] if nobody).
 - environment: the made environment's name (exact), or "".
 - props: the made prop names visible in this frame (exact spelling).
 - people: the number of people in the frame, a whole number (0 if none).
-Return JSON: {"shots":[{"code":"SH001","description":"…","characters":["…"],"environment":"…","props":["…"],"people":4}]} with one entry for every shot code above.`;
+- countKnown: true if the number of people comes from the screenplay / story / neighbouring shots, false if you had to guess.
+Return JSON: {"shots":[{"code":"SH001","description":"…","characters":["…"],"environment":"…","props":["…"],"people":4,"countKnown":true}]} with one entry for every shot code above.`;
 }
 
 // the project's item whose name or alias a reported name points at
@@ -60,7 +62,7 @@ export async function writeFrameDescriptions(db, projectId, { sceneId = null, sh
   const allShots = await listShots(db, projectId, { sceneId: scene });
   if (allShots.length === 0) throw httpError("This scene has no shots yet.", 400, "no_shots");
   const targets = allShots.filter((s) => (shotId ? s.id === shotId : overwrite || !s.frameDescription));
-  if (targets.length === 0) return { written: 0, linked: 0, unknown: [], skipped: allShots.length };
+  if (targets.length === 0) return { written: 0, linked: 0, unknown: [], countUnknown: [], skipped: allShots.length };
   const elements = (await db.query("SELECT kind, speaker, parenthetical, text_en, text_hi FROM production_scene_elements WHERE scene_id = $1 ORDER BY order_index", [scene])).rows
     .map((e) => ({ kind: e.kind, speaker: e.speaker, parenthetical: e.parenthetical, text: e.text_en || e.text_hi || "" })).filter((e) => e.text);
   const rows = (await db.query("SELECT id, kind, code, name, aliases, agent_details, human_edits, grouped_into FROM production_assets WHERE project_id = $1 AND kind IN ('character','location','prop')", [projectId])).rows;
@@ -68,10 +70,13 @@ export async function writeFrameDescriptions(db, projectId, { sceneId = null, sh
     const d = { ...(a.agent_details ?? {}), ...(a.human_edits ?? {}) };
     return { id: a.id, kind: a.kind, code: a.code, name: a.name, aliases: a.aliases ?? [], grouped: a.grouped_into, about: plainText(d.description ?? d.notes ?? "").slice(0, 160) };
   });
-  const raw = await textJson(frameDescriptionPrompt({ heading: sceneRow.heading, elements, shots: targets, assets: assets.filter((a) => !a.grouped) }));
+  const story = clean((await db.query("SELECT pasted_text FROM ai_movie_projects WHERE id = $1", [projectId])).rows[0]?.pasted_text ?? "", 2500);
+  const present = (await db.query("SELECT asset_id FROM production_scene_assets WHERE scene_id = $1", [scene])).rows.map((r) => r.asset_id);
+  const raw = await textJson(frameDescriptionPrompt({ heading: sceneRow.heading, elements, shots: targets, assets: assets.filter((a) => !a.grouped), allShots: allShots, story, present }));
   const byCode = new Map((Array.isArray(raw?.shots) ? raw.shots : []).filter((s) => typeof s?.code === "string").map((s) => [s.code.toUpperCase(), s]));
   let written = 0, linked = 0;
   const unknown = [];
+  const countUnknown = [];
   for (const shot of targets) {
     const got = byCode.get(shot.code.toUpperCase());
     const description = clean(got?.description, 2000);
@@ -85,6 +90,7 @@ export async function writeFrameDescriptions(db, projectId, { sceneId = null, sh
     };
     note(got.characters, "character"); note(got.environment, "location"); note(got.props, "prop");
     const people = Number.isInteger(got.people) && got.people >= 0 && got.people < 100 ? got.people : null;
+    if (got.countKnown === false) countUnknown.push(shot.code);
     await db.query("UPDATE production_shots SET frame_description = $1, frame_people = $2, updated_at = now() WHERE id = $3", [description, people, shot.id]);
     if (ids.size > 0) {
       // the AI read the whole scene: its list replaces what the guesses had linked
@@ -94,7 +100,7 @@ export async function writeFrameDescriptions(db, projectId, { sceneId = null, sh
     }
     written++;
   }
-  return { written, linked, unknown, skipped: targets.length - written };
+  return { written, linked, unknown, countUnknown, skipped: targets.length - written };
 }
 
 export async function setFrameDescription(db, projectId, shotId, text) {

@@ -109,3 +109,35 @@ export function cleanSceneActions(raw) {
   // deleting the scene and changing it in the same breath makes no sense: a deletion stands alone (the writer confirms it)
   return remove ? [{ action: "delete_scene" }] : adds.slice(0, 3);
 }
+
+// ---- the screenplay's language rules, checked in code (a Hindi-speaking writer must still get an Odia scene) ----
+// headings, transitions and CHARACTER names: English capitals. action lines: the action language. dialogue and parentheticals: the
+// dialogue language. Whatever language the writer SPEAKS in never changes this.
+const INDIC = {
+  // every Indic block that is NOT the scene's own script
+  or: /[ऀ-૿஀-෿]/,
+  hi: /[ঀ-෿]/,
+  en: /[ऀ-෿]/,
+};
+const forbiddenFor = (language) => INDIC[language] ?? INDIC.en;
+
+export const SCRIPT_NAMES = { or: "Odia (ଓଡ଼ିଆ script — never Devanagari / Hindi script)", hi: "Hindi (Devanagari script — never Odia script)", en: "English (Latin letters)" };
+
+// every element the agent produced (new lines, replacements, whole-scene rewrites) must be in the right script
+export function wrongScriptLines({ elements = [], rewritten = [], edits = [] }, dialogueLanguage = "or", actionLanguage = dialogueLanguage) {
+  const bad = [];
+  const check = (what, text, language) => { if (text && forbiddenFor(language).test(String(text))) bad.push({ what, text: String(text).slice(0, 80), language }); };
+  const checkElement = (e, label) => {
+    if (e?.type === "dialogue") { check(`${label} speaker`, e.character, "en"); check(`${label} dialogue`, e.text, dialogueLanguage); check(`${label} acting note`, e.parenthetical, dialogueLanguage); }
+    else if (e?.type === "transition") check(`${label} transition`, e.text, "en");
+    else check(`${label} action`, e?.text, actionLanguage);
+  };
+  elements.forEach((e) => checkElement(e, "new line"));
+  rewritten.forEach((e) => checkElement(e, "rewritten line"));
+  for (const e of edits) {
+    check("changed line", e?.text, dialogueLanguage === actionLanguage ? dialogueLanguage : dialogueLanguage);
+    check("speaker", e?.character, "en");
+    check("new speaker name", e?.to, "en");
+  }
+  return bad;
+}

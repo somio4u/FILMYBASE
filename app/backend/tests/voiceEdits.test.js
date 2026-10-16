@@ -55,3 +55,16 @@ test("scene actions: a scene can be added before/after with a place and what hap
   assert.deepEqual(cleanSceneActions([{ action: "add_scene", location: "A", oneLiner: "b" }, { action: "delete_scene" }]), [{ action: "delete_scene" }]);
   assert.deepEqual(cleanSceneActions("nope"), []);
 });
+
+import { wrongScriptLines } from "../voiceEdits.js";
+
+test("language rules: an Odia scene may not get Hindi (Devanagari) text, speaker names stay in Latin letters", () => {
+  const odia = (t) => ({ type: "action", character: "", parenthetical: "", text: t });
+  assert.deepEqual(wrongScriptLines({ rewritten: [odia("ମାଆ କାଳୀଙ୍କ ମନ୍ଦିର ପ୍ରାଙ୍ଗଣ"), { type: "dialogue", character: "JAGANNATH", parenthetical: "", text: "ଆସ" }, { type: "transition", text: "CUT TO:" }] }, "or"), []);
+  const bad = wrongScriptLines({ rewritten: [odia("मा' काळीङ्क मन्दिर प्राङ्गणे"), { type: "dialogue", character: "ଜଗନ୍ନାଥ", text: "ଆସ" }] }, "or");
+  assert.deepEqual(bad.map((b) => b.what), ["rewritten line action", "rewritten line speaker"]);
+  assert.equal(wrongScriptLines({ edits: [{ action: "replace", line: 2, text: "मालती तुमे" }] }, "or").length, 1);
+  assert.equal(wrongScriptLines({ elements: [{ type: "action", text: "ମାଳତୀ" }] }, "hi").length, 1, "Odia text in a Hindi scene is wrong too");
+  assert.equal(wrongScriptLines({ elements: [{ type: "dialogue", character: "MEERA", text: "Hello" }] }, "or").length, 0, "English words are always fine");
+  assert.equal(wrongScriptLines({ elements: [{ type: "action", text: "ମାଳତୀ" }] }, "or", "en").length, 1, "action language can differ from dialogue language");
+});

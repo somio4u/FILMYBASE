@@ -677,9 +677,16 @@ function LanguagePanel({ api, projectId, backendUrl }) {
       if (!clip) return
       const r = await call(`${api}/${projectId}/scene/voice`, 'POST', { ...clip, beatIndex: vsel.b, sceneIndex: vsel.s, language: voiceLang, draftBlocks: draft })
       if (!r.ok) { setMessage(errorOf(r)); return }
-      const at = Math.max(0, Math.min(draft.length, r.data.insertAfter))
-      setDraft([...draft.slice(0, at), ...r.data.elements.map((e) => ({ type: e.type, character: e.character ?? '', parenthetical: e.parenthetical ?? '', text: e.text })), ...draft.slice(at)])
-      setVoiceNote(`You said: “${r.data.transcript}” — ${r.data.note}`)
+      if (Array.isArray(r.data.fullElements)) {
+        // the agent may add, change or remove lines, take a character out, or write the scene again: the draft becomes its result
+        setDraft(r.data.fullElements.map((e) => ({ type: e.type, character: e.character ?? '', parenthetical: e.parenthetical ?? '', text: e.text })))
+      } else {
+        const at = Math.max(0, Math.min(draft.length, r.data.insertAfter))
+        setDraft([...draft.slice(0, at), ...r.data.elements.map((e) => ({ type: e.type, character: e.character ?? '', parenthetical: e.parenthetical ?? '', text: e.text })), ...draft.slice(at)])
+      }
+      const c = r.data.changes
+      const did = c ? [c.rewrote ? 'wrote the scene again' : null, c.added ? `added ${c.added}` : null, c.changed ? `changed ${c.changed}` : null, c.removed ? `removed ${c.removed}` : null].filter(Boolean).join(', ') : ''
+      setVoiceNote(`You said: “${r.data.transcript}” — ${r.data.note}${did ? ` (${did} line${c.added + c.changed + c.removed === 1 ? '' : 's'}; press Save the scene to keep it)` : ''}`)
     } catch (error) {
       setMessage({ tone: 'bad', text: error.message || 'The microphone did not work.' })
     }

@@ -173,6 +173,15 @@ test("Voice Writer (Speak Here): a recording becomes draft lines for the scene e
   const withDraft = await api("POST", `/api/ai-movie/projects/${pid}/scene/voice`, { ...body, draftBlocks: [{ type: "action", text: "Only this" }] });
   assert.equal(seen.existingElements.length, 1, "while editing, the unsaved editor copy is the context");
   assert.equal(withDraft.status, 200);
+  // the agent can also CHANGE and REMOVE lines of the draft, take a character out, or write the scene again; scene-list actions are not offered here
+  voice = async (args) => { seen = args; return { transcript: "change line 1, remove Rudra", elements: [], insertAfter: 0, edits: [{ action: "replace", line: 1, text: "Changed words" }, { action: "remove_character", line: 0, text: "", character: "rudra", to: "" }], rewritten: [], sceneActions: [], note: "done" }; };
+  const edited = await api("POST", `/api/ai-movie/projects/${pid}/scene/voice`, { ...body, draftBlocks: [{ type: "action", text: "Old words" }, { type: "dialogue", character: "RUDRA", text: "Hi" }, { type: "dialogue", character: "MEERA", text: "Hello" }] });
+  assert.equal(edited.status, 200);
+  assert.equal(seen.allowSceneActions, false);
+  assert.deepEqual(edited.json.fullElements.map((e) => e.text), ["Changed words", "Hello"]);
+  assert.equal(edited.json.changes.changed, 1);
+  assert.equal(edited.json.changes.removed, 1);
+  voice = async (args) => { seen = args; return { transcript: "Rudra says hello", elements: [{ type: "dialogue", character: "RUDRA", text: "Hello" }], insertAfter: 2, note: "added" }; };
   assert.equal((await api("POST", `/api/ai-movie/projects/${pid}/scene/voice`, { ...body, audio: "short" })).status, 400);
   assert.equal((await api("POST", `/api/ai-movie/projects/${pid}/scene/voice`, { ...body, mimeType: "text/plain" })).status, 400);
   assert.equal((await api("POST", `/api/ai-movie/projects/${pid}/scene/voice`, { ...body, beatIndex: 7 })).status, 400);

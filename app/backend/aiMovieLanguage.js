@@ -8,6 +8,7 @@
 //   * Odia and Hindi get a second "spoken language" pass (everyday spoken words, not bookish ones).
 //   * Money: every call is checked against the project's limit first and written to the spend ledger.
 
+import { applyVoiceEdits, changeTotal } from "./voiceEdits.js";
 import crypto from "node:crypto";
 import { assertWithinBudget, recordSpend } from "./pipelineSettings.js";
 import { estimateCost } from "./modelRouting.js";
@@ -210,9 +211,13 @@ export function registerAiMovieLanguageRoutes(app, db, requireRole, deps) {
       audioBase64, mimeType, liveText: String(req.body?.liveText ?? "").slice(0, 2000), sceneOutline: scene.heading, existingElements: existing,
       dialogueLanguage: ["en", "hi", "or"].includes(req.body?.language) ? req.body.language : "en",
       defaultInsertAfter: Number.isInteger(req.body?.cursorAfter) ? req.body.cursorAfter : undefined,
+      allowSceneActions: false, // an AI Movie screenplay has no "add / delete a scene" of its own (scenes come with their beat)
     });
     await recordSpend(db, projectId, { kind: "text", provider: "Gemini 2.5 Flash (voice writer)", units: 1, costUsd: estimateCost("flash", 1), ref: "voice-writer" });
-    if (voice.elements.length === 0) { res.status(422).json({ error: voice.note || "I couldn't make out anything to add — try again, a little closer to the mic.", transcript: voice.transcript }); return; }
-    res.json({ draft: true, elements: voice.elements, transcript: voice.transcript, note: voice.note, added: voice.elements.length, insertAfter: voice.insertAfter });
+    // the agent may add lines, change or remove existing ones, take a character out, or write the whole scene again
+    const applied = applyVoiceEdits(existing, { insert: voice.elements, insertAfter: voice.insertAfter, edits: voice.edits ?? [], rewritten: voice.rewritten ?? [] });
+    const changes = { ...applied.counts, total: applied.counts.added + applied.counts.changed + applied.counts.removed };
+    if (changes.total === 0 && !changes.rewrote) { res.status(422).json({ error: voice.note || "I couldn't make out anything to change or add — try again, a little closer to the mic.", transcript: voice.transcript }); return; }
+    res.json({ draft: true, fullElements: applied.elements, elements: voice.elements, transcript: voice.transcript, note: voice.note, added: applied.counts.added, changes, insertAfter: voice.insertAfter });
   }));
 }

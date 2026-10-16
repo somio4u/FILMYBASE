@@ -3,6 +3,7 @@ import express from "express";
 import "express-async-errors";
 import cors from "cors";
 import { cleanPlan, planPrompt } from "./multiScenes.js";
+import { renameInScreenplay, renameInSceneList, validRename } from "./renameCharacter.js";
 import { moveIndex, moveInArray, moveCaseSql, validMove } from "./sceneOrder.js";
 import { applyVoiceEdits, changeTotal, cleanSceneActions, wrongScriptLines, SCRIPT_NAMES } from "./voiceEdits.js";
 import { GoogleGenAI, Type } from "@google/genai";
@@ -11906,6 +11907,51 @@ app.delete("/api/scene-lists/:id/scenes", requireRole("admin"), async (req, res)
   }
 });
 
+// Rename a character in the whole script: every scene's latest version (saved as a new version, so ↶ Undo works) and the scene list's
+// outline lines. `preview: true` only counts. A name changes only as a whole name (SULA, not SULATA).
+app.post("/api/scene-lists/:id/rename-character", requireRole("admin"), async (req, res) => {
+  const sceneListId = Number(req.params.id);
+  const from = String(req.body?.from ?? "").trim();
+  const to = String(req.body?.to ?? "").trim();
+  const problem = validRename(from, to);
+  if (problem) { res.status(400).json({ error: problem }); return; }
+  const preview = req.body?.preview === true;
+  const client = await db.connect();
+  try {
+    await client.query("BEGIN");
+    const list = await client.query("SELECT content, status FROM scene_lists WHERE id = $1 FOR UPDATE", [sceneListId]);
+    if (!list.rows[0]) { await client.query("ROLLBACK"); res.status(404).json({ error: "Scene list not found" }); return; }
+    if (!preview) {
+      const running = await client.query("SELECT 1 FROM auto_pipeline_runs WHERE scene_list_id = $1 AND status = 'running' LIMIT 1", [sceneListId]);
+      if (running.rows.length > 0) { await client.query("ROLLBACK"); res.status(409).json({ error: "The AI is still writing this script. Rename the character once it has finished." }); return; }
+    }
+    const rows = (await client.query(
+      `SELECT DISTINCT ON (episode_index, scene_index) id, episode_index, scene_index, content
+       FROM screenplay_scenes WHERE scene_list_id = $1 ORDER BY episode_index, scene_index, created_at DESC, id DESC`, [sceneListId]
+    )).rows;
+    const summary = { scenes: 0, speakerLines: 0, mentions: 0, outlineLines: 0 };
+    for (const row of rows) {
+      const r = renameInScreenplay(row.content, from, to);
+      if (!r.changed) continue;
+      summary.scenes++; summary.speakerLines += r.speakers; summary.mentions += r.mentions;
+      if (!preview) {
+        await client.query("INSERT INTO screenplay_scenes (scene_list_id, episode_index, scene_index, content) VALUES ($1, $2, $3, $4)", [sceneListId, row.episode_index, row.scene_index, JSON.stringify({ ...r.content, editedByUser: true })]);
+      }
+    }
+    const outline = renameInSceneList(list.rows[0].content, from, to);
+    summary.outlineLines = outline.count;
+    if (!preview && outline.count > 0) await client.query("UPDATE scene_lists SET content = $1 WHERE id = $2", [JSON.stringify(outline.content), sceneListId]);
+    await client.query(preview ? "ROLLBACK" : "COMMIT");
+    res.json({ ...summary, preview, sceneList: preview ? null : outline.content });
+  } catch (error) {
+    await client.query("ROLLBACK").catch(() => {});
+    console.error("Renaming a character failed:", error.message);
+    res.status(500).json({ error: error.message });
+  } finally {
+    client.release();
+  }
+});
+
 // "Add multiple scenes": the writer's descriptions in, a heading (INT/EXT, place, time) and a length for each out. The descriptions are never changed.
 app.post("/api/scene-lists/:id/scenes/plan", requireRole("admin"), async (req, res) => {
   const contexts = (Array.isArray(req.body?.contexts) ? req.body.contexts : []).map((c) => String(c ?? "").replace(/\s+/g, " ").trim()).filter(Boolean).slice(0, 30);
@@ -12192,7 +12238,9 @@ const VOICE_TO_SCREENPLAY_SCHEMA = {
       items: {
         type: Type.OBJECT,
         properties: {
-          action: { type: Type.STRING, enum: ["add_scene", "delete_scene"] },
+          action: { type: Type.STRING, enum: ["add_scene", "delete_scene", "rename_everywhere"] },
+          from: { type: Type.STRING },
+          to: { type: Type.STRING },
           where: { type: Type.STRING, enum: ["before", "after"] },
           intExt: { type: Type.STRING, enum: ["INT", "EXT", "INT/EXT"] },
           location: { type: Type.STRING },
@@ -12201,7 +12249,7 @@ const VOICE_TO_SCREENPLAY_SCHEMA = {
           minutes: { type: Type.NUMBER },
           write: { type: Type.BOOLEAN },
         },
-        required: ["action", "where", "intExt", "location", "timeOfDay", "oneLiner", "minutes", "write"],
+        required: ["action", "where", "intExt", "location", "timeOfDay", "oneLiner", "minutes", "write", "from", "to"],
       },
     },
     placeSaid: { type: Type.BOOLEAN },
@@ -12231,7 +12279,7 @@ Do these things:
    - elements: NEW lines to add, in proper screenplay form — "action" lines for what we see and hear, and "dialogue" with the speaking CHARACTER's name in capitals exactly as it is spelled in the scene so far (a new character: their name in capital Latin letters). Do not invent events, characters or lines they didn't ask for. Natural spoken style. LANGUAGE RULES for everything you write into the screenplay (see the strict rules at the end). Use parenthetical only for a short acting note they actually gave, otherwise "". character is "" for action and transition lines. [] if nothing is to be added.
    - edits: changes to EXISTING lines, using the line numbers shown above (they mean the scene as it is now): {action:"replace", line:N, text:"the full new words of that line", character:"" (or a new speaker name if the speaker changes), to:""}; {action:"delete", line:N, text:"", character:"", to:""}; {action:"remove_character", line:0, text:"", character:"NAME exactly as in the scene", to:""} (removes all of that character's dialogue); {action:"rename_character", line:0, text:"", character:"OLD NAME", to:"NEW NAME"}. For fields you do not use, give line 0 and "" . [] if nothing changes.
    - rewrittenElements: ONLY when the writer asks to change the whole scene or many lines at once (day instead of night, a different mood, fewer characters, shorter, another language): the COMPLETE new scene as elements, keeping everything they did not ask to change (same story, same characters unless told, same order), changing only what the instruction needs — including every dialogue and action line that mentions the old time of day. Otherwise [] (and use edits for small changes). When you use rewrittenElements, leave edits and elements empty.
-${allowSceneActions ? `   - sceneActions: you may also work on the SCENE LIST, like the writer can: {action:"add_scene", where:"before"|"after" (this scene), intExt:"INT"|"EXT"|"INT/EXT", location:"the place, short, in capitals", timeOfDay:"DAY"|"NIGHT"|"MORNING"|"EVENING"…, oneLiner:"one or two sentences, in English, saying what happens in the new scene", minutes: about how long, write: true to have the new scene written out (usual) or false to leave it blank for the writer} — use it when the writer asks for a new scene ("add a scene after this where the four friends reach the palace"); at most 3. {action:"delete_scene"} — ONLY when the writer clearly says to delete THIS scene; the writer is asked to confirm, and when you use it leave every other field empty. For fields you do not use give "" / 0 / false. [] when the writer asks for no scene to be added or deleted.
+${allowSceneActions ? `   - sceneActions: you may also work on the SCENE LIST, like the writer can: {action:"add_scene", where:"before"|"after" (this scene), intExt:"INT"|"EXT"|"INT/EXT", location:"the place, short, in capitals", timeOfDay:"DAY"|"NIGHT"|"MORNING"|"EVENING"…, oneLiner:"one or two sentences, in English, saying what happens in the new scene", minutes: about how long, write: true to have the new scene written out (usual) or false to leave it blank for the writer} — use it when the writer asks for a new scene ("add a scene after this where the four friends reach the palace"); at most 3. {action:"rename_everywhere", from:"OLD NAME", to:"NEW NAME"} — when the writer asks to change a character's NAME in the WHOLE script ("change Sula to Sulagna everywhere"): every scene is changed by the app, so use only this (not edits). {action:"delete_scene"} — ONLY when the writer clearly says to delete THIS scene; the writer is asked to confirm, and when you use it leave every other field empty. For fields you do not use give "" / 0 / false. [] when the writer asks for no scene to be added or deleted.
 ` : ""}   If they only gave context and nothing to change, leave elements, edits and rewrittenElements${allowSceneActions ? " and sceneActions" : ""} empty and say in note what you understood.
 LANGUAGE RULES (strict, for every line you write — new lines, changed lines, rewritten scenes): the writer may SPEAK to you in Odia, Hindi or English or a mix, but that never changes the language of the screenplay. The scene's own rules are: scene headings, transitions and CHARACTER names are ALWAYS English in Latin capitals (JAGANNATH, never ଜଗନ୍ନାଥ or जगन्नाथ); action lines are written in ${SCRIPT_NAMES[actionLanguage] ?? SCRIPT_NAMES.en}; dialogue and acting notes (parentheticals) are written in ${SCRIPT_NAMES[dialogueLanguage] ?? SCRIPT_NAMES.en}. Never write Hindi / Devanagari letters unless the scene's language above is Hindi. When you rewrite or change existing lines, keep their language and script exactly.
 3. placeSaid: true only if they actually said out loud where the NEW lines should go; otherwise false.

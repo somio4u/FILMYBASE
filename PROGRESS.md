@@ -1913,3 +1913,11 @@ Plain version: every project is now a set of **drafts**. Opening a project shows
 - [x] **The AI stays inside your context:** your text becomes the scene's outline word for word and the scene is marked `strictContext`; the scene writer is told to stage ONLY what you described — no new plot events, characters, twists or ending — and not to pad a short description.
 - Checked in a real browser (3 scenes → created at the right places in order, each written, headings from the plan). Tests: sceneContexts splitting, the plan clean-up (multiScenes.test.js).
 - Honest note: whether the real Gemini obeys "stay inside the context" needs a real try; and a very long list (30 scenes max at a time) takes a while because each scene is written one by one.
+
+## Rename a character in the whole script (not deployed yet)
+- [x] **"🔁 Rename a character everywhere"** (right-hand panel, with Add scene before / after / multiple): type the old name (the project's names are suggested) and the new one (e.g. Sula → Sulagna), press **Check** (it only counts: "Found in 7 scenes: 12 speaking lines, 9 mentions in the words, 1 in the scene outline"), then **Rename everywhere**.
+- [x] It changes the speaker of dialogue lines, the name inside action lines, dialogue and acting notes, flashback POV names, each scene's "characters present" and the scene list's outline lines / names. **Only the whole name** changes (SULA, never SULATA); a name with an Odia ending stuck on (SULAଙ୍କ) changes too; the case style is kept (SULA → SULAGNA, Sula → Sulagna).
+- [x] Every changed scene is saved as a NEW version, so ↶ Undo works scene by scene. Refused while the AI is still writing the script or while you have unsaved typing.
+- [x] The voice agent can do it too ("change Sula to Sulagna in the whole script").
+- Not changed: the Characters sheet and casting keep the old name until you change it there (the app says so). A scene counts as "found" also when the old name is only in its characters-present list.
+- Checked on a real server (preview changes nothing; SULATA untouched; Odia ending; versions kept) and in a real browser. 5 unit tests (renameCharacter, voice action).

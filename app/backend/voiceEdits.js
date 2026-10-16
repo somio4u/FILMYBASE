@@ -86,9 +86,15 @@ const INT_EXT = ["INT", "EXT", "INT/EXT"];
 export function cleanSceneActions(raw) {
   const list = Array.isArray(raw) ? raw.slice(0, 6) : [];
   const adds = [];
+  const renames = [];
   let remove = false;
   for (const a of list) {
     if (a?.action === "delete_scene") remove = true;
+    else if (a?.action === "rename_everywhere") {
+      const from = String(a.from ?? "").replace(/\s+/g, " ").trim().slice(0, 60);
+      const to = String(a.to ?? "").replace(/\s+/g, " ").trim().slice(0, 60);
+      if (from && to && from.toUpperCase() !== to.toUpperCase()) renames.push({ action: "rename_everywhere", from, to });
+    }
     else if (a?.action === "add_scene") {
       const location = String(a.location ?? "").replace(/\s+/g, " ").trim().slice(0, 120);
       const oneLiner = String(a.oneLiner ?? "").replace(/\s+/g, " ").trim().slice(0, 400);
@@ -107,7 +113,7 @@ export function cleanSceneActions(raw) {
     }
   }
   // deleting the scene and changing it in the same breath makes no sense: a deletion stands alone (the writer confirms it)
-  return remove ? [{ action: "delete_scene" }] : adds.slice(0, 3);
+  return remove ? [{ action: "delete_scene" }] : [...renames.slice(0, 3), ...adds.slice(0, 3)];
 }
 
 // ---- the screenplay's language rules, checked in code (a Hindi-speaking writer must still get an Odia scene) ----

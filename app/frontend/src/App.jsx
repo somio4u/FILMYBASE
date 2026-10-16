@@ -526,6 +526,15 @@ const LABELS = {
     sceneMultiGo: (n) => `Create and write ${n} scene${n === 1 ? '' : 's'}`,
     sceneMultiPlanning: 'Reading your descriptions…',
     sceneMultiWorking: (i, n) => `Writing scene ${i} of ${n}…`,
+    sceneRenameButton: '🔁 Rename a character everywhere',
+    sceneRenameTitle: 'Rename a character in the whole script',
+    sceneRenameHint: 'Changes the name in every scene: who speaks, and the name inside action lines, dialogue and acting notes. Only the whole name changes (SULA, not SULATA). Each scene is saved as a new version, so ↶ Undo works.',
+    sceneRenameFrom: 'Old name',
+    sceneRenameTo: 'New name',
+    sceneRenameCheck: 'Check',
+    sceneRenameFound: (r) => (r.scenes === 0 && r.outlineLines === 0 ? 'This name was not found in the script.' : `Found in ${r.scenes} scene${r.scenes === 1 ? '' : 's'}: ${r.speakerLines} speaking line${r.speakerLines === 1 ? '' : 's'}, ${r.mentions} mention${r.mentions === 1 ? '' : 's'} in the words, ${r.outlineLines} in the scene outline.`),
+    sceneRenameGo: 'Rename everywhere',
+    sceneRenameDone: (r, to) => `Done — the name is now ${to} in ${r.scenes} scene${r.scenes === 1 ? '' : 's'}. (The Characters sheet and casting keep the old name until you change it there.)`,
     editModeOn: '✏ Edit mode',
     scriptToolbarLang: 'en',
     pageZoomLabel: 'Page zoom',
@@ -1384,6 +1393,15 @@ const LABELS = {
     sceneMultiGo: (n) => `${n}ଟି ସିନ୍ ତିଆରି କରି ଲେଖ`,
     sceneMultiPlanning: 'ତୁମର ବର୍ଣ୍ଣନା ପଢ଼ୁଛି…',
     sceneMultiWorking: (i, n) => `${n}ରୁ ${i} ନମ୍ବର ସିନ୍ ଲେଖୁଛି…`,
+    sceneRenameButton: '🔁 ଚରିତ୍ର ନାମ ସବୁଠି ବଦଳାଅ',
+    sceneRenameTitle: 'ପୂରା ସ୍କ୍ରିପ୍ଟରେ ଚରିତ୍ରର ନାମ ବଦଳାଅ',
+    sceneRenameHint: 'ପ୍ରତ୍ୟେକ ସିନ୍‌ରେ ନାମ ବଦଳେ: କିଏ କହୁଛି, ଆକ୍ସନ୍ ଲାଇନ୍, ଡାଇଲଗ୍ ଓ ଆକ୍ଟିଂ ନୋଟ୍ ଭିତରେ ମଧ୍ୟ। କେବଳ ପୂରା ନାମ ବଦଳେ (SULA, SULATA ନୁହେଁ)। ପ୍ରତ୍ୟେକ ସିନ୍ ନୂଆ ଭର୍ସନ୍ ଭାବେ ସେଭ୍ ହୁଏ, ତେଣୁ ↶ Undo ଚାଲେ।',
+    sceneRenameFrom: 'ପୁରୁଣା ନାମ',
+    sceneRenameTo: 'ନୂଆ ନାମ',
+    sceneRenameCheck: 'ଯାଞ୍ଚ କର',
+    sceneRenameFound: (r) => (r.scenes === 0 && r.outlineLines === 0 ? 'ଏହି ନାମ ସ୍କ୍ରିପ୍ଟରେ ମିଳିଲା ନାହିଁ।' : `${r.scenes}ଟି ସିନ୍‌ରେ ମିଳିଲା: ${r.speakerLines}ଟି କହିବା ଲାଇନ୍, ଲେଖା ଭିତରେ ${r.mentions}ଟି, ସିନ୍ ଆଉଟ୍‌ଲାଇନ୍‌ରେ ${r.outlineLines}ଟି।`),
+    sceneRenameGo: 'ସବୁଠି ବଦଳାଅ',
+    sceneRenameDone: (r, to) => `ହେଇଗଲା — ${r.scenes}ଟି ସିନ୍‌ରେ ନାମ ଏବେ ${to}। (ଚରିତ୍ର ସିଟ୍ ଓ କାଷ୍ଟିଂରେ ପୁରୁଣା ନାମ ରହିବ, ସେଠି ବଦଳାଅ।)`,
     editModeOn: '✏ ଏଡିଟ୍ ମୋଡ୍',
     scriptToolbarLang: 'or',
     pageZoomLabel: 'ପେଜ୍ ଜୁମ୍',
@@ -3982,6 +4000,7 @@ function MovieScreenplayWorkspace({
   const [drag, setDrag] = useState(null) // while a scene is dragged in the list: { from, over, after }
   const [headingForm, setHeadingForm] = useState(null) // { index, intExt, location, timeOfDay }
   const [multiForm, setMultiForm] = useState(null) // "Add multiple scenes": { text, where }
+  const [renameForm, setRenameForm] = useState(null) // "Rename a character everywhere": { from, to, found, done }
   const [multiProgress, setMultiProgress] = useState(null) // { step: 'planning' | 'writing', index, total }
   useEffect(() => {
     if (!ctxMenu) return undefined
@@ -4164,16 +4183,42 @@ function MovieScreenplayWorkspace({
   // The voice agent asked for scene-list changes: new scenes are made at once (like the "Add a scene" buttons); a deletion waits for a click.
   async function runAgentSceneActions(actions) {
     // adding a scene closes the open edit: never throw away typed-but-unsaved words
-    if (editing?.dirty && (actions ?? []).some((a) => a.action === 'add_scene')) { setSceneChangeError(t.editSaveFirst); return }
+    if (editing?.dirty && (actions ?? []).some((a) => a.action === 'add_scene' || a.action === 'rename_everywhere')) { setSceneChangeError(t.editSaveFirst); return }
     let cursor = sceneIndex
     let afterCount = 0
     for (const a of actions ?? []) {
       if (a.action === 'delete_scene') { setAgentDelete(sceneIndex); continue }
+      if (a.action === 'rename_everywhere') { await renameCharacterEverywhere(a.from, a.to, false); continue }
       if (a.action !== 'add_scene') continue
       const position = a.where === 'before' ? cursor : cursor + 1 + afterCount
       if (a.where === 'before') cursor += 1; else afterCount += 1
       const ok = await createScene({ position, intExt: a.intExt, location: a.location, timeOfDay: a.timeOfDay, oneLiner: a.oneLiner, estimatedMinutes: a.minutes }, a.write !== false)
       if (!ok) break
+    }
+  }
+
+  // "Rename a character everywhere": check how many places, then change them (each scene becomes a new version, so Undo works)
+  async function renameCharacterEverywhere(from, to, preview) {
+    if (editing?.dirty && !preview) { setSceneChangeError(t.editSaveFirst); return null }
+    setIsChangingScenes(true)
+    setSceneChangeError(null)
+    try {
+      const response = await fetch(`${BACKEND_URL}/api/scene-lists/${sceneList.id}/rename-character`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ from, to, preview }),
+      })
+      const data = await response.json()
+      setIsChangingScenes(false)
+      if (!response.ok) { setSceneChangeError(data.error || t.genericError); return null }
+      if (!preview) {
+        setEditing(null)
+        setEditFixes(null)
+        await onSceneListChanged?.(data.sceneList)
+      }
+      return data
+    } catch {
+      setSceneChangeError(t.genericError)
+      setIsChangingScenes(false)
+      return null
     }
   }
 
@@ -4767,7 +4812,26 @@ function MovieScreenplayWorkspace({
               {screenplay && (
                 <div className="script-scene-manage">
                   <p className="script-panel-title">{t.sceneManageTitle}</p>
-                  {multiForm ? (
+                  {renameForm ? (
+                    <div className="script-scene-form script-rename-form">
+                      <p className="script-tools-heading">{t.sceneRenameTitle}</p>
+                      <p className="script-tools-editing-note">{t.sceneRenameHint}</p>
+                      <label>{t.sceneRenameFrom}
+                        <input type="text" list="rename-character-names" value={renameForm.from} onChange={(event) => setRenameForm({ ...renameForm, from: event.target.value, found: null, done: null })} />
+                        <datalist id="rename-character-names">{characterNames.map((name) => <option key={name} value={name} />)}</datalist>
+                      </label>
+                      <label>{t.sceneRenameTo}
+                        <input type="text" value={renameForm.to} onChange={(event) => setRenameForm({ ...renameForm, to: event.target.value, found: null, done: null })} />
+                      </label>
+                      {renameForm.found && <p className="script-tools-editing-note">{t.sceneRenameFound(renameForm.found)}</p>}
+                      {renameForm.done && <p className="dossier-message" role="status">{renameForm.done}</p>}
+                      <div className="script-scene-form-actions">
+                        <button type="button" className="cancel-button" disabled={isChangingScenes || !renameForm.from.trim() || !renameForm.to.trim()} onClick={async () => { const r = await renameCharacterEverywhere(renameForm.from, renameForm.to, true); if (r) setRenameForm({ ...renameForm, found: r, done: null }) }}>{t.sceneRenameCheck}</button>
+                        <button type="button" className="choose-button" disabled={isChangingScenes || !renameForm.found || (renameForm.found.scenes === 0 && renameForm.found.outlineLines === 0)} onClick={async () => { const r = await renameCharacterEverywhere(renameForm.from, renameForm.to, false); if (r) setRenameForm({ from: '', to: '', found: null, done: t.sceneRenameDone(r, renameForm.to.trim().toUpperCase()) }) }}>{t.sceneRenameGo}</button>
+                        <button type="button" className="cancel-button" onClick={() => setRenameForm(null)} disabled={isChangingScenes}>{t.sceneNewCancelButton}</button>
+                      </div>
+                    </div>
+                  ) : multiForm ? (
                     <div className="script-scene-form script-multi-form">
                       <p className="script-tools-heading">{t.sceneMultiTitle}</p>
                       <p className="script-tools-editing-note">{t.sceneMultiHint}</p>
@@ -4838,6 +4902,9 @@ function MovieScreenplayWorkspace({
                       </button>
                       <button type="button" className="cancel-button" onClick={() => setMultiForm({ text: '', where: 'after' })} disabled={Boolean(editing) || isAiWriting || isChecking || isChangingScenes}>
                         {t.sceneMultiButton}
+                      </button>
+                      <button type="button" className="cancel-button" onClick={() => setRenameForm({ from: '', to: '', found: null, done: null })} disabled={Boolean(editing) || isAiWriting || isChecking || isChangingScenes}>
+                        {t.sceneRenameButton}
                       </button>
                       <button type="button" className="cancel-button script-scene-delete-button" onClick={deleteSelectedScene} disabled={Boolean(editing) || isAiWriting || isChecking || isChangingScenes || scenes.length < 2}>
                         {t.sceneDeleteButton}

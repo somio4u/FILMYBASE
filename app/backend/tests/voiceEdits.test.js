@@ -68,3 +68,8 @@ test("language rules: an Odia scene may not get Hindi (Devanagari) text, speaker
   assert.equal(wrongScriptLines({ elements: [{ type: "dialogue", character: "MEERA", text: "Hello" }] }, "or").length, 0, "English words are always fine");
   assert.equal(wrongScriptLines({ elements: [{ type: "action", text: "ମାଳତୀ" }] }, "or", "en").length, 1, "action language can differ from dialogue language");
 });
+
+test("scene actions: a rename of a character in the whole script is kept; same-name or empty renames are dropped", () => {
+  assert.deepEqual(cleanSceneActions([{ action: "rename_everywhere", from: " Sula ", to: "Sulagna" }]), [{ action: "rename_everywhere", from: "Sula", to: "Sulagna" }]);
+  assert.deepEqual(cleanSceneActions([{ action: "rename_everywhere", from: "Sula", to: "SULA" }, { action: "rename_everywhere", from: "", to: "x" }]), []);
+});

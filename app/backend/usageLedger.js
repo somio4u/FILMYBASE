@@ -18,10 +18,12 @@ export function tokenPrices(env = process.env) {
   };
 }
 
+const n2 = (v, d) => (Number.isFinite(Number(v)) && v !== undefined && v !== "" ? Number(v) : d);
 export function priceFor(model, env = process.env) {
   const p = tokenPrices(env);
   const m = String(model ?? "").toLowerCase();
   if (m.includes("lite")) return { tier: "flash-lite", price: p["flash-lite"], known: true };
+  if (m.includes("2.5-pro")) return { tier: "pro-2.5", price: [n2(env.PRICE_PRO25_IN, 1.25), n2(env.PRICE_PRO25_OUT, 10)], known: true };
   if (m.includes("pro")) return { tier: "pro", price: p.pro, known: true };
   if (m.includes("flash")) return { tier: "flash", price: p.flash, known: true };
   return { tier: "flash", price: p.flash, known: false }; // unknown model: priced like Flash
@@ -110,7 +112,9 @@ export async function recordUsage(db, entry) {
 }
 
 // Measures every text call made through the Gemini library.
+let meterDb = null;
 export function installGeminiMetering(ai, db) {
+  meterDb = db;
   const original = ai.models.generateContent.bind(ai.models);
   ai.models.generateContent = async (params) => {
     const response = await original(params);
@@ -126,13 +130,109 @@ export function installGeminiMetering(ai, db) {
   };
 }
 
-// Called by recordSpend: copies the pieces the token meter does not see.
+// Called by recordSpend: copies the pieces the token meter does not see (pictures, voices, video).
+// Text of every kind (Flash, Flash-Lite and the Pro "Story Brain") is measured by its token counts instead.
 export async function mirrorSpend(db, projectId, { kind, provider = null, units = null, costUsd, ref = null }) {
-  if (kind === "text" && !/pro|story brain/i.test(String(provider ?? ""))) return; // other text calls are measured by token counts
+  if (kind === "text") return;
   await recordUsage(db, { kind, provider, units, costUsd, via: "spend-log", ref, project: { type: "ai_movie", id: projectId } });
 }
 
+// The Pro "Story Brain" model is called over REST (not the Gemini library), so storyBrain.js reports each answer here.
+export async function recordBrainCall({ model, usage, label }) {
+  if (!meterDb) return;
+  const promptTokens = usage?.promptTokenCount ?? 0;
+  const outputTokens = (usage?.candidatesTokenCount ?? 0) + (usage?.thoughtsTokenCount ?? 0);
+  await recordUsage(meterDb, { kind: "text", provider: `${label ?? "Story Brain"} (${model})`, model, units: 1, promptTokens, outputTokens, costUsd: tokenCostUsd(model, promptTokens, outputTokens), via: "metered" });
+}
+
 const r4 = (v) => Math.round(Number(v ?? 0) * 10000) / 10000;
+
+
+// ---------------------------------------------------------------------------
+// Work done BEFORE the meter existed: estimated from what is saved.
+// Every saved version of a pitch deck, character sheet, three-act structure, bit sheet, scene list, screenplay scene,
+// breakdown, schedule and every assistant chat reply was one AI answer. Its size tells us the answer's tokens; the
+// prompt size, the model's "thinking" and the Pro judge pass are assumptions, listed here so the screen can show them.
+// Versions that were overwritten or deleted, and failed or retried calls, left nothing behind — so this is a LOW estimate.
+// ---------------------------------------------------------------------------
+const FLASH = "gemini-2.5-flash";
+const LITE = "gemini-2.5-flash-lite";
+const PRO = "gemini-3.1-pro-preview";
+// inBase: fixed prompt tokens (rules, examples). inMult: prompt tokens per answer token (earlier stages sent as context).
+// think: the model's hidden thinking tokens per answer token. judge: a Pro judge read it (tokens in = answer + 2500, out 1200 + 2500 thinking).
+export const ESTIMATE_RULES = {
+  storylines: { label: "Storylines", model: LITE, inBase: 1500, inMult: 1, think: 0.2 },
+  pitch: { label: "Pitch deck", model: FLASH, inBase: 2000, inMult: 2, think: 1, judge: true },
+  characters: { label: "Character sheet", model: FLASH, inBase: 3000, inMult: 3, think: 1, judge: true },
+  threeAct: { label: "Three-act structure", model: FLASH, inBase: 3500, inMult: 3, think: 1, judge: true },
+  bitSheet: { label: "Bit sheet", model: FLASH, inBase: 4000, inMult: 4, think: 1, judge: true },
+  sceneList: { label: "Scene list (Pro model)", model: PRO, inBase: 8000, inMult: 6, think: 2, judge: true },
+  screenplay: { label: "Screenplay scenes", model: FLASH, inBase: 4000, inMult: 6, think: 1 },
+  breakdown: { label: "Script breakdown", model: LITE, inBase: 3000, inMult: 5, think: 0.2 },
+  schedule: { label: "Shoot schedule", model: LITE, inBase: 3000, inMult: 4, think: 0.2 },
+  chat: { label: "Agent chat replies", model: LITE, inBase: 3000, inMult: 8, think: 0.2 },
+};
+const JUDGE = { inBase: 2500, out: 1200, think: 2500 };
+const CHARS_PER_TOKEN = { latin: 4, other: 1.5 }; // English text vs Odia/Hindi text
+
+const ROWS_SQL = (cols) => `
+  SELECT concept_id, stage, count(*)::float AS n, sum(len)::float AS len, sum(asc_len)::float AS asc_len FROM (
+    SELECT c.id AS concept_id, 'storylines' AS stage, length(c.storylines::text) AS len, length(regexp_replace(c.storylines::text, '[^ -~]', '', 'g')) AS asc_len, c.created_at FROM concepts c
+    UNION ALL SELECT x.concept_id, 'pitch', ${cols("x.content")}, x.created_at FROM pitch_decks x
+    UNION ALL SELECT pd.concept_id, 'characters', ${cols("x.content")}, x.created_at FROM character_sheets x JOIN pitch_decks pd ON pd.id = x.pitch_deck_id
+    UNION ALL SELECT pd.concept_id, 'threeAct', ${cols("x.content")}, x.created_at FROM three_act_structures x JOIN pitch_decks pd ON pd.id = x.pitch_deck_id
+    UNION ALL SELECT pd.concept_id, 'bitSheet', ${cols("x.content")}, x.created_at FROM bit_sheets x JOIN three_act_structures t ON t.id = x.three_act_structure_id JOIN pitch_decks pd ON pd.id = t.pitch_deck_id
+    UNION ALL SELECT COALESCE(x.concept_id, pd.concept_id), 'sceneList', ${cols("x.content")}, x.created_at FROM scene_lists x
+      LEFT JOIN bit_sheets b ON b.id = x.bit_sheet_id LEFT JOIN three_act_structures t ON t.id = b.three_act_structure_id LEFT JOIN pitch_decks pd ON pd.id = t.pitch_deck_id
+    UNION ALL SELECT s.concept_id, 'screenplay', ${cols("x.content")}, x.created_at FROM screenplay_scenes x JOIN ${SL_CONCEPT} s ON s.id = x.scene_list_id
+    UNION ALL SELECT s.concept_id, 'breakdown', ${cols("x.content")}, x.created_at FROM script_breakdowns x JOIN ${SL_CONCEPT} s ON s.id = x.scene_list_id
+    UNION ALL SELECT s.concept_id, 'schedule', ${cols("x.content")}, x.created_at FROM shoot_schedules x JOIN ${SL_CONCEPT} s ON s.id = x.scene_list_id
+    UNION ALL SELECT x.concept_id, 'chat', length(x.content), length(regexp_replace(x.content, '[^ -~]', '', 'g')), x.created_at FROM agent_chat_messages x WHERE x.role = 'assistant'
+  ) r WHERE created_at < $1 AND concept_id IS NOT NULL GROUP BY concept_id, stage`;
+const SL_CONCEPT = `(SELECT sl.id, COALESCE(sl.concept_id, pd.concept_id) AS concept_id FROM scene_lists sl
+    LEFT JOIN bit_sheets b ON b.id = sl.bit_sheet_id LEFT JOIN three_act_structures t ON t.id = b.three_act_structure_id LEFT JOIN pitch_decks pd ON pd.id = t.pitch_deck_id)`;
+const jsonCols = (col) => `length(${col}::text), length(regexp_replace(${col}::text, '[^ -~]', '', 'g'))`;
+
+// returns Map(conceptId -> { usd, stages: [{ stage, label, model, rows, usd }], proUsd })
+export async function estimateEarlierStoryWork(db, startedAt, env = process.env) {
+  const scale = Number(env.ESTIMATE_SCALE ?? 1);
+  const out = new Map();
+  const add = (conceptId, entry) => {
+    if (!out.has(conceptId)) out.set(conceptId, { usd: 0, proUsd: 0, stages: [] });
+    const c = out.get(conceptId);
+    c.usd += entry.usd; if (/pro/.test(entry.model)) c.proUsd += entry.usd;
+    c.stages.push(entry);
+  };
+  if (!startedAt) return out;
+  const rows = (await db.query(ROWS_SQL(jsonCols), [startedAt])).rows;
+  for (const r of rows) {
+    const rule = ESTIMATE_RULES[r.stage];
+    if (!rule) continue;
+    const answerTokens = r.asc_len / CHARS_PER_TOKEN.latin + (r.len - r.asc_len) / CHARS_PER_TOKEN.other;
+    const inTokens = r.n * rule.inBase + rule.inMult * answerTokens;
+    const outTokens = answerTokens + rule.think * answerTokens;
+    let usd = tokenCostUsd(rule.model, inTokens, outTokens, env);
+    add(r.concept_id, { stage: r.stage, label: rule.label, model: rule.model, rows: r.n, usd: usd * scale });
+    if (rule.judge) {
+      const judgeUsd = tokenCostUsd(PRO, r.n * JUDGE.inBase + answerTokens, r.n * (JUDGE.out + JUDGE.think), env);
+      add(r.concept_id, { stage: `${r.stage}-judge`, label: `${rule.label}: Pro judge reads`, model: PRO, rows: r.n, usd: judgeUsd * scale });
+    }
+  }
+  // Story Brain runs of the automatic pipeline saved their real Pro token counts.
+  const runs = (await db.query("SELECT concept_id, story_bible_usage AS u FROM auto_pipeline_runs WHERE story_bible_usage IS NOT NULL AND concept_id IS NOT NULL AND created_at < $1", [startedAt])).rows;
+  for (const run of runs) {
+    const u = run.u ?? {};
+    const usd = tokenCostUsd(PRO, u.promptTokens ?? 0, (u.outputTokens ?? 0) + (u.thinkingTokens ?? 0), env);
+    if (usd > 0) add(run.concept_id, { stage: "storyBrain", label: "Story Brain (real saved token counts)", model: PRO, rows: u.calls ?? 1, usd });
+  }
+  for (const c of out.values()) {
+    const merged = new Map();
+    for (const st of c.stages) { const m = merged.get(st.stage) ?? { ...st, usd: 0, rows: 0 }; m.usd += st.usd; m.rows += st.rows; merged.set(st.stage, m); }
+    c.stages = [...merged.values()].map((st) => ({ ...st, usd: r4(st.usd) })).sort((a, b) => b.usd - a.usd);
+    c.usd = r4(c.usd); c.proUsd = r4(c.proUsd);
+  }
+  return out;
+}
 
 // Everything the Money Meter screen shows.
 export async function usageReport(db, env = process.env) {
@@ -151,12 +251,13 @@ export async function usageReport(db, env = process.env) {
         FROM production_spend s WHERE s.created_at < $1 GROUP BY s.project_id, s.kind`, [startedAt])
     : [];
 
+  const estimates = await estimateEarlierStoryWork(db, startedAt, env);
   const projects = new Map();
   const project = (type, id) => {
     const key = type && id ? `${type}:${id}` : "none";
     if (!projects.has(key)) {
       const meta = names.get(key);
-      projects.set(key, { key, type: meta?.type ?? (key === "none" ? "none" : type), id: id ?? null, name: meta?.name ?? (key === "none" ? "Not tied to one project" : `${type} #${id} (deleted)`), owner: meta?.owner ?? null, createdAt: meta?.createdAt ?? null, trackedUsd: 0, earlierUsd: 0, calls: 0, lastAt: null, byKind: {}, byUser: {} });
+      projects.set(key, { key, type: meta?.type ?? (key === "none" ? "none" : type), id: id ?? null, name: meta?.name ?? (key === "none" ? "Not tied to one project" : `${type} #${id} (deleted)`), owner: meta?.owner ?? null, createdAt: meta?.createdAt ?? null, trackedUsd: 0, earlierUsd: 0, earlierLoggedUsd: 0, earlierEstimatedUsd: 0, estimateStages: [], calls: 0, lastAt: null, byKind: {}, byUser: {} });
     }
     return projects.get(key);
   };
@@ -181,13 +282,21 @@ export async function usageReport(db, env = process.env) {
   }
   for (const row of earlier) {
     const p = project("ai_movie", row.project_id);
-    p.earlierUsd += row.usd; p.calls += row.calls;
+    p.earlierUsd += row.usd; p.earlierLoggedUsd += row.usd; p.calls += row.calls;
     if (!p.lastAt || row.last_at > p.lastAt) p.lastAt = row.last_at;
     bump(p.byKind, row.kind, row.usd);
   }
 
+  for (const [conceptId, est] of estimates) {
+    const p = project("story", conceptId);
+    p.earlierUsd += est.usd; p.earlierEstimatedUsd += est.usd; p.estimateStages = est.stages;
+    bump(p.byKind, "text (estimated)", est.usd);
+  }
+  const proEstimatedUsd = r4([...estimates.values()].reduce((s, e) => s + e.proUsd, 0));
+  const proMeasuredUsd = r4((await q("SELECT COALESCE(sum(cost_usd) FILTER (WHERE model ILIKE '%pro%'), 0)::float AS usd FROM ai_usage_ledger"))[0]?.usd);
+
   const total = (list, f) => r4(list.reduce((s, x) => s + f(x), 0));
-  const projectList = [...projects.values()].map((p) => ({ ...p, trackedUsd: r4(p.trackedUsd), earlierUsd: r4(p.earlierUsd), totalUsd: r4(p.trackedUsd + p.earlierUsd) }))
+  const projectList = [...projects.values()].map((p) => ({ ...p, trackedUsd: r4(p.trackedUsd), earlierUsd: r4(p.earlierUsd), earlierLoggedUsd: r4(p.earlierLoggedUsd), earlierEstimatedUsd: r4(p.earlierEstimatedUsd), totalUsd: r4(p.trackedUsd + p.earlierUsd) }))
     .sort((a, b) => b.totalUsd - a.totalUsd || String(b.createdAt).localeCompare(String(a.createdAt)));
   const userList = [...users.values()].map((u) => ({ ...u, trackedUsd: r4(u.trackedUsd) })).sort((a, b) => b.trackedUsd - a.trackedUsd);
 
@@ -201,12 +310,14 @@ export async function usageReport(db, env = process.env) {
     currency: "USD",
     inrPerUsd: Number(env.USD_INR_RATE ?? 88),
     trackingStartedAt: startedAt,
-    totals: { trackedUsd, earlierUsd, grandUsd: r4(trackedUsd + earlierUsd), projects: projectList.filter((p) => p.type !== "none").length, usersWithSpend: userList.length },
+    totals: { trackedUsd, earlierUsd, earlierLoggedUsd: total(projectList, (p) => p.earlierLoggedUsd), earlierEstimatedUsd: total(projectList, (p) => p.earlierEstimatedUsd), proMeasuredUsd, proEstimatedUsd, grandUsd: r4(trackedUsd + earlierUsd), projects: projectList.filter((p) => p.type !== "none").length, usersWithSpend: userList.length },
     projects: projectList,
     users: userList,
     allUsers,
     daily: daily.map((d) => ({ ...d, usd: r4(d.usd) })),
     prices: tokenPrices(env),
+    estimateRules: Object.entries(ESTIMATE_RULES).map(([stage, r]) => ({ stage, ...r })),
+    estimateJudge: JUDGE,
   };
 }
 

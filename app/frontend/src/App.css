@@ -7848,3 +7848,5 @@ body.is-script-edit-mode { overflow: hidden; }
 .mm-day b { text-align: right; }
 .mm-note { margin-top: 18px; font-size: 0.78rem; opacity: 0.7; line-height: 1.5; }
 @media (max-width: 640px) { .mm-day { grid-template-columns: 78px 1fr 56px; } .mm-day small { display: none; } }
+.mm-wide { grid-column: 1 / -1; }
+.mm-note summary { cursor: pointer; margin-top: 8px; }

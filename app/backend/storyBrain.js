@@ -8,6 +8,7 @@
 // library under 17,000 lines of working code.
 
 import { GoogleAuth } from "google-auth-library";
+import { recordBrainCall } from "./usageLedger.js";
 
 // Best model first. Checked on the project on 2026-10-07: gemini-3.1-pro-preview
 // works on the "global" endpoint; gemini-2.5-pro is the fallback if the
@@ -116,6 +117,7 @@ export async function generateBrainJson({ systemInstruction, contents, responseS
         console.log(
           `${label}: ${result.modelVersion} — ${result.usage.promptTokenCount ?? 0} in, ${result.usage.candidatesTokenCount ?? 0} out, ${result.usage.thoughtsTokenCount ?? 0} thinking tokens`
         );
+        recordBrainCall({ model: result.modelVersion, usage: result.usage, label }).catch(() => {}); // Money Meter: who and which project
         return { data, model: result.modelVersion, usage: result.usage };
       } catch (error) {
         lastError = error;

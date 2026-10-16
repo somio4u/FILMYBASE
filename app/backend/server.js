@@ -2,7 +2,7 @@ import "dotenv/config";
 import express from "express";
 import "express-async-errors";
 import cors from "cors";
-import { applyVoiceEdits, changeTotal } from "./voiceEdits.js";
+import { applyVoiceEdits, changeTotal, cleanSceneActions } from "./voiceEdits.js";
 import { GoogleGenAI, Type } from "@google/genai";
 import { Pool } from "pg";
 import PDFDocument from "pdfkit";
@@ -12036,11 +12036,28 @@ const VOICE_TO_SCREENPLAY_SCHEMA = {
       },
     },
     rewrittenElements: { type: Type.ARRAY, items: VOICE_ELEMENT_SCHEMA },
+    sceneActions: {
+      type: Type.ARRAY,
+      items: {
+        type: Type.OBJECT,
+        properties: {
+          action: { type: Type.STRING, enum: ["add_scene", "delete_scene"] },
+          where: { type: Type.STRING, enum: ["before", "after"] },
+          intExt: { type: Type.STRING, enum: ["INT", "EXT", "INT/EXT"] },
+          location: { type: Type.STRING },
+          timeOfDay: { type: Type.STRING },
+          oneLiner: { type: Type.STRING },
+          minutes: { type: Type.NUMBER },
+          write: { type: Type.BOOLEAN },
+        },
+        required: ["action", "where", "intExt", "location", "timeOfDay", "oneLiner", "minutes", "write"],
+      },
+    },
     placeSaid: { type: Type.BOOLEAN },
     insertAfterLine: { type: Type.INTEGER },
     note: { type: Type.STRING },
   },
-  required: ["transcript", "elements", "edits", "rewrittenElements", "placeSaid", "insertAfterLine", "note"],
+  required: ["transcript", "elements", "edits", "rewrittenElements", "sceneActions", "placeSaid", "insertAfterLine", "note"],
 };
 
 async function voiceNoteToScreenplayElements({ audioBase64, mimeType, liveText, sceneOutline, existingElements, dialogueLanguage, defaultInsertAfter }) {
@@ -12063,7 +12080,8 @@ Do these things:
    - elements: NEW lines to add, in proper screenplay form — "action" lines for what we see and hear, and "dialogue" with the speaking CHARACTER's name in capitals exactly as it is spelled in the scene so far (a new character: their name in capital Latin letters). Do not invent events, characters or lines they didn't ask for. Write action lines in the same language and script as the scene's existing action lines (if the scene is empty, in ${languageName}), and dialogue in the language it was spoken in (normally ${languageName}), in natural spoken style. Use parenthetical only for a short acting note they actually gave, otherwise "". character is "" for action and transition lines. [] if nothing is to be added.
    - edits: changes to EXISTING lines, using the line numbers shown above (they mean the scene as it is now): {action:"replace", line:N, text:"the full new words of that line", character:"" (or a new speaker name if the speaker changes), to:""}; {action:"delete", line:N, text:"", character:"", to:""}; {action:"remove_character", line:0, text:"", character:"NAME exactly as in the scene", to:""} (removes all of that character's dialogue); {action:"rename_character", line:0, text:"", character:"OLD NAME", to:"NEW NAME"}. For fields you do not use, give line 0 and "" . [] if nothing changes.
    - rewrittenElements: ONLY when the writer asks to change the whole scene or many lines at once (day instead of night, a different mood, fewer characters, shorter, another language): the COMPLETE new scene as elements, keeping everything they did not ask to change (same story, same characters unless told, same order), changing only what the instruction needs — including every dialogue and action line that mentions the old time of day. Otherwise [] (and use edits for small changes). When you use rewrittenElements, leave edits and elements empty.
-   If they only gave context and nothing to change, leave elements, edits and rewrittenElements empty and say in note what you understood.
+   - sceneActions: you may also work on the SCENE LIST, like the writer can: {action:"add_scene", where:"before"|"after" (this scene), intExt:"INT"|"EXT"|"INT/EXT", location:"the place, short, in capitals", timeOfDay:"DAY"|"NIGHT"|"MORNING"|"EVENING"…, oneLiner:"one or two sentences, in English, saying what happens in the new scene", minutes: about how long, write: true to have the new scene written out (usual) or false to leave it blank for the writer} — use it when the writer asks for a new scene ("add a scene after this where the four friends reach the palace"); at most 3. {action:"delete_scene"} — ONLY when the writer clearly says to delete THIS scene; the writer is asked to confirm, and when you use it leave every other field empty. For fields you do not use give "" / 0 / false. [] when the writer asks for no scene to be added or deleted.
+   If they only gave context and nothing to change, leave elements, edits, rewrittenElements and sceneActions empty and say in note what you understood.
 3. placeSaid: true only if they actually said out loud where the NEW lines should go; otherwise false.
 insertAfterLine: where the new lines go. If they said where ("after Meera's line", "at the start", "before he leaves"), the number of the existing line the new lines should come right after (0 = at the very start of the scene). Otherwise ${fallbackAfter}${fallbackAfter === existingElements.length ? " (the end)" : " (where the writer's cursor is)"}.
 note: one short friendly sentence for the writer, like a close friend talking, in the language they mostly spoke — in Odia always the casual ତୁ form (ତୁ / ତୋ / କର / କହ, never ତୁମେ / ଆପଣ) and everyday words (ସିନ୍, not ଦୃଶ୍ୟ), e.g. "ହେଇଗଲା ଭାଇ, ସିନ୍ ଶେଷରେ ମୀରାର ଡାଇଲଗ୍ ଯୋଡ଼ିଦେଲି।" — what you added, changed or removed, or what you couldn't do and why.`;
@@ -12087,7 +12105,7 @@ note: one short friendly sentence for the writer, like a close friend talking, i
   // while editing, otherwise the end) — not wherever the model guesses.
   const spoken = parsed.placeSaid === true && Number.isInteger(parsed.insertAfterLine);
   const insertAfter = Math.max(0, Math.min(existingElements.length, spoken ? parsed.insertAfterLine : fallbackAfter));
-  return { transcript: String(parsed.transcript ?? "").trim(), elements, insertAfter, edits: parsed.edits ?? [], rewritten: parsed.rewrittenElements ?? [], note: String(parsed.note ?? "").trim() };
+  return { transcript: String(parsed.transcript ?? "").trim(), elements, insertAfter, edits: parsed.edits ?? [], rewritten: parsed.rewrittenElements ?? [], sceneActions: cleanSceneActions(parsed.sceneActions), note: String(parsed.note ?? "").trim() };
 }
 
 // Every 🎤 mic button in the app: the person speaks Odia, Hindi or English
@@ -12180,8 +12198,9 @@ app.post("/api/screenplay/scene/voice", requireRole("admin"), async (req, res) =
       defaultInsertAfter: isDraft && Number.isInteger(req.body.cursorAfter) ? req.body.cursorAfter : undefined,
     });
     // the agent may add lines, change or remove existing ones, or write the whole scene again
-    const applied = applyVoiceEdits(existingElements, { insert: voice.elements, insertAfter: voice.insertAfter, edits: voice.edits, rewritten: voice.rewritten });
-    const total = changeTotal(applied.counts) + (applied.counts.rewrote ? 1 : 0);
+    const deleting = voice.sceneActions.some((a) => a.action === "delete_scene");
+    const applied = applyVoiceEdits(existingElements, deleting ? {} : { insert: voice.elements, insertAfter: voice.insertAfter, edits: voice.edits, rewritten: voice.rewritten });
+    const total = changeTotal(applied.counts) + (applied.counts.rewrote ? 1 : 0) + voice.sceneActions.length;
     if (total === 0) {
       res.status(422).json({ error: voice.note || "I couldn't make out anything to change or add — try again, a little closer to the mic.", transcript: voice.transcript });
       return;
@@ -12189,7 +12208,12 @@ app.post("/api/screenplay/scene/voice", requireRole("admin"), async (req, res) =
     const changes = { ...applied.counts, total: applied.counts.added + applied.counts.changed + applied.counts.removed };
 
     if (isDraft) {
-      res.json({ draft: true, fullElements: applied.elements, elements: voice.elements, transcript: voice.transcript, note: voice.note, added: applied.counts.added, changes, insertAfter: voice.insertAfter });
+      res.json({ draft: true, fullElements: applied.elements, elements: voice.elements, transcript: voice.transcript, note: voice.note, added: applied.counts.added, changes, sceneActions: voice.sceneActions, insertAfter: voice.insertAfter });
+      return;
+    }
+    // nothing to save in the scene itself (only scene-list actions): hand them to the screen, which runs them like its own buttons
+    if (changes.total === 0 && !changes.rewrote) {
+      res.json({ sceneActions: voice.sceneActions, transcript: voice.transcript, note: voice.note, added: 0, changes, insertAfter: voice.insertAfter, scene: null });
       return;
     }
 
@@ -12208,7 +12232,7 @@ app.post("/api/screenplay/scene/voice", requireRole("admin"), async (req, res) =
        ORDER BY s.episode_index, s.scene_index, s.created_at DESC, s.id DESC`,
       [sceneListId, episodeIndex, sceneIndex]
     )).rows[0];
-    res.json({ scene: screenplaySceneJson(current), transcript: voice.transcript, note: voice.note, added: applied.counts.added, changes, insertAfter: voice.insertAfter });
+    res.json({ scene: screenplaySceneJson(current), transcript: voice.transcript, note: voice.note, added: applied.counts.added, changes, sceneActions: voice.sceneActions, insertAfter: voice.insertAfter });
   } catch (error) {
     console.error("Voice writing failed:", error.message);
     res.status(502).json({ error: error.message });

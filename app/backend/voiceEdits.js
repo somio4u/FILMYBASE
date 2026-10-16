@@ -79,3 +79,33 @@ export function applyVoiceEdits(existing, { insert = [], insertAfter = existing.
 }
 
 export const changeTotal = (c) => c.added + c.changed + c.removed;
+
+// ---- scene-level actions: add a scene before/after this one, or delete this one ----
+const INT_EXT = ["INT", "EXT", "INT/EXT"];
+
+export function cleanSceneActions(raw) {
+  const list = Array.isArray(raw) ? raw.slice(0, 6) : [];
+  const adds = [];
+  let remove = false;
+  for (const a of list) {
+    if (a?.action === "delete_scene") remove = true;
+    else if (a?.action === "add_scene") {
+      const location = String(a.location ?? "").replace(/\s+/g, " ").trim().slice(0, 120);
+      const oneLiner = String(a.oneLiner ?? "").replace(/\s+/g, " ").trim().slice(0, 400);
+      if (!location || !oneLiner) continue;
+      const minutes = Number(a.minutes);
+      adds.push({
+        action: "add_scene",
+        where: a.where === "before" ? "before" : "after",
+        intExt: INT_EXT.includes(String(a.intExt).toUpperCase()) ? String(a.intExt).toUpperCase() : "INT",
+        location,
+        timeOfDay: String(a.timeOfDay ?? "DAY").trim().toUpperCase().slice(0, 30) || "DAY",
+        oneLiner,
+        minutes: Number.isFinite(minutes) && minutes >= 0.5 && minutes <= 30 ? minutes : 2,
+        write: a.write !== false,
+      });
+    }
+  }
+  // deleting the scene and changing it in the same breath makes no sense: a deletion stands alone (the writer confirms it)
+  return remove ? [{ action: "delete_scene" }] : adds.slice(0, 3);
+}

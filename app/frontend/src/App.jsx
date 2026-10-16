@@ -448,6 +448,9 @@ const LABELS = {
     voiceWritingLabel: 'Got it — turning that into screenplay lines…',
     voiceAdded: (count, transcript) => `Added ${count} line${count === 1 ? '' : 's'} to the scene. I heard: “${transcript}”. Not right? Hit ↶ Undo.`,
     voiceChanged: (c, transcript, inEdit) => `${[c.rewrote ? 'wrote the scene again' : null, c.added ? `added ${c.added}` : null, c.changed ? `changed ${c.changed}` : null, c.removed ? `removed ${c.removed}` : null].filter(Boolean).join(', ')} line${(c.added + c.changed + c.removed) === 1 ? '' : 's'}. I heard: “${transcript}”. ${inEdit ? 'Happy? Hit "Save my changes".' : 'Not right? Hit ↶ Undo.'}`,
+    voiceDeleteAsk: (number) => `The voice agent wants to delete scene ${number}. Delete it?`,
+    voiceDeleteKeep: 'Keep it',
+    voiceDeleteConfirm: 'Yes, delete the scene',
     voiceMicBlocked: "I can't hear you — allow the microphone for this site in your browser, then try again.",
     voiceNothingHeard: "Didn't catch anything — try again and speak a little longer.",
     voiceTargetCursor: (number) => `Types into your edit of scene ${number}, where your cursor is`,
@@ -1281,6 +1284,9 @@ const LABELS = {
     voiceWritingLabel: 'ବୁଝିଗଲି — ସ୍କ୍ରିନପ୍ଲେ ଲାଇନ୍ ବନଉଛି…',
     voiceAdded: (count, transcript) => `ସିନ୍‌ରେ ${count}ଟା ଲାଇନ୍ ଯୋଡ଼ିଦେଲି। ମୁଁ ଶୁଣିଲି: “${transcript}”। ଠିକ୍ ନାହିଁ? ↶ ପଛକୁ ଫେର ଦବା।`,
     voiceChanged: (c, transcript, inEdit) => `${[c.rewrote ? 'ସିନ୍ ପୁଣି ଲେଖିଦେଲି' : null, c.added ? `${c.added}ଟା ଯୋଡ଼ିଲି` : null, c.changed ? `${c.changed}ଟା ବଦଳାଇଲି` : null, c.removed ? `${c.removed}ଟା ହଟାଇଲି` : null].filter(Boolean).join(', ')}। ମୁଁ ଶୁଣିଲି: “${transcript}”। ${inEdit ? 'ଠିକ୍ ଲାଗିଲେ "ମୋ ଚେଞ୍ଜ ସେଭ୍ କର" ଦବା।' : 'ଠିକ୍ ନାହିଁ? ↶ Undo ଦବା।'}`,
+    voiceDeleteAsk: (number) => `ଭଏସ୍ ଏଜେଣ୍ଟ ସିନ୍ ${number} ହଟାଇବାକୁ ଚାହୁଁଛି। ହଟାଇବି?`,
+    voiceDeleteKeep: 'ରଖ',
+    voiceDeleteConfirm: 'ହଁ, ସିନ୍ ହଟାଅ',
     voiceMicBlocked: 'ତୋ କଥା ଶୁଣିପାରୁନି — ବ୍ରାଉଜରରେ ଏ ସାଇଟ୍ ପାଇଁ ମାଇକ୍ ଅନୁମତି ଦେ, ତା\'ପରେ ଆଉ ଥରେ ଚେଷ୍ଟା କର।',
     voiceNothingHeard: 'କିଛି ଶୁଣିପାରିଲିନି — ଆଉ ଥରେ ଟିକେ ଲମ୍ବା କରି କହ।',
     voiceTargetCursor: (number) => `ସିନ୍ ${number} ର ଏଡିଟ୍‌ରେ, ତୋ କର୍ସର୍ ଯେଉଁଠି ଅଛି ସେଠି ଲେଖିବି`,
@@ -3553,7 +3559,7 @@ const VOICE_ORB_SIZE_PHONE = 60
 // the pen buddy). Not editing: what you say is written into the selected
 // scene and saved as a new version. Editing on the page (`editDraft` given):
 // the lines go into your unsaved edit where your cursor is, and you save.
-function VoiceWriterButton({ t, sceneListId, episodeIndex, sceneIndex, sceneNumber, blockedNote, editDraft, onAdded, onDraftLines }) {
+function VoiceWriterButton({ t, sceneListId, episodeIndex, sceneIndex, sceneNumber, blockedNote, editDraft, onAdded, onDraftLines, onSceneActions }) {
   const [phase, setPhase] = useState('idle') // idle | listening | writing
   const [liveText, setLiveText] = useState('')
   const [message, setMessage] = useState(null) // { kind: 'done' | 'error', text }
@@ -3715,10 +3721,13 @@ function VoiceWriterButton({ t, sceneListId, episodeIndex, sceneIndex, sceneNumb
         onDraftLines(data)
         const c = data.changes
         setMessage({ kind: 'done', text: c && (c.changed || c.removed || c.rewrote) ? t.voiceChanged(c, data.transcript, true) : t.voiceAddedToEdit(data.added, data.transcript) })
+        if (data.sceneActions?.length) onSceneActions?.(data.sceneActions)
       } else {
-        onAdded(data.scene)
+        if (data.scene) onAdded(data.scene)
         const c = data.changes
-        setMessage({ kind: 'done', text: c && (c.changed || c.removed || c.rewrote) ? t.voiceChanged(c, data.transcript, false) : t.voiceAdded(data.added, data.transcript) })
+        const lineChanges = c && (c.added || c.changed || c.removed || c.rewrote)
+        setMessage({ kind: 'done', text: !lineChanges && data.note ? `${data.note} (“${data.transcript}”)` : c && (c.changed || c.removed || c.rewrote) ? t.voiceChanged(c, data.transcript, false) : t.voiceAdded(data.added, data.transcript) })
+        if (data.sceneActions?.length) onSceneActions?.(data.sceneActions)
       }
     } catch {
       setMessage({ kind: 'error', text: t.genericError })
@@ -3923,6 +3932,7 @@ function MovieScreenplayWorkspace({
   const changeScriptZoom = (next) => { const v = Math.max(0.5, Math.min(2.5, Math.round(next * 100) / 100)); setScriptZoom(v); try { localStorage.setItem('filmybase.scriptZoom', String(v)) } catch { /* private window */ } }
   const editorRef = useRef(null)
   const [activeLineType, setActiveLineType] = useState('action')
+  const [agentDelete, setAgentDelete] = useState(null) // scene index the voice agent wants to delete, waiting for the writer's click
   useEffect(() => {
     if (!editMode) return undefined
     const onKey = (event) => { if (event.key === 'Escape') setEditMode(false) }
@@ -4054,6 +4064,12 @@ function MovieScreenplayWorkspace({
   // scene to edit by hand.
   async function submitNewScene(writeWithAi) {
     if (!sceneForm || !sceneForm.location.trim() || !sceneForm.oneLiner.trim()) return
+    await createScene(sceneForm, writeWithAi)
+  }
+
+  // Adds a scene to the scene list (later scenes move down by one), then either has the AI write it or leaves it blank. The "Add a
+  // scene" form and the voice agent both come here.
+  async function createScene(spec, writeWithAi) {
     setIsChangingScenes(true)
     setSceneChangeError(null)
     try {
@@ -4061,13 +4077,13 @@ function MovieScreenplayWorkspace({
       const response = await fetch(`${BACKEND_URL}/api/scene-lists/${sceneList.id}/scenes`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...sceneForm, episodeIndex: group.episodeIndex, blank: !writeWithAi, dialogueLanguage }),
+        body: JSON.stringify({ ...spec, episodeIndex: group.episodeIndex, blank: !writeWithAi, dialogueLanguage }),
       })
       const data = await response.json()
       if (!response.ok) {
         setSceneChangeError(data.error || t.genericError)
         setIsChangingScenes(false)
-        return
+        return false
       }
       setEditing(null)
       setEditFixes(null)
@@ -4077,9 +4093,27 @@ function MovieScreenplayWorkspace({
       setScenesMoved(true)
       setIsChangingScenes(false)
       if (writeWithAi) await screenplay?.onWriteScene?.(group.episodeIndex, data.sceneIndex, dialogueLanguage)
+      return true
     } catch {
       setSceneChangeError(t.genericError)
       setIsChangingScenes(false)
+      return false
+    }
+  }
+
+  // The voice agent asked for scene-list changes: new scenes are made at once (like the "Add a scene" buttons); a deletion waits for a click.
+  async function runAgentSceneActions(actions) {
+    // adding a scene closes the open edit: never throw away typed-but-unsaved words
+    if (editing?.dirty && (actions ?? []).some((a) => a.action === 'add_scene')) { setSceneChangeError(t.editSaveFirst); return }
+    let cursor = sceneIndex
+    let afterCount = 0
+    for (const a of actions ?? []) {
+      if (a.action === 'delete_scene') { setAgentDelete(sceneIndex); continue }
+      if (a.action !== 'add_scene') continue
+      const position = a.where === 'before' ? cursor : cursor + 1 + afterCount
+      if (a.where === 'before') cursor += 1; else afterCount += 1
+      const ok = await createScene({ position, intExt: a.intExt, location: a.location, timeOfDay: a.timeOfDay, oneLiner: a.oneLiner, estimatedMinutes: a.minutes }, a.write !== false)
+      if (!ok) break
     }
   }
 
@@ -4106,6 +4140,11 @@ function MovieScreenplayWorkspace({
 
   async function deleteSelectedScene() {
     if (!window.confirm(t.sceneDeleteConfirm(numberOf(scene, sceneIndex)))) return
+    await removeScene()
+  }
+
+  async function removeScene() {
+    setAgentDelete(null)
     setIsChangingScenes(true)
     setSceneChangeError(null)
     try {
@@ -4331,6 +4370,13 @@ function MovieScreenplayWorkspace({
           </div>
         )}
         <RuntimeSummary total={group.total} target={group.target} t={t} />
+        {agentDelete !== null && agentDelete === sceneIndex && (
+          <div className="script-agent-ask" role="alert">
+            <span>{t.voiceDeleteAsk(numberOf(scene, sceneIndex))}</span>
+            <button type="button" className="cancel-button" onClick={() => setAgentDelete(null)}>{t.voiceDeleteKeep}</button>
+            <button type="button" className="choose-button" onClick={removeScene} disabled={isChangingScenes}>{t.voiceDeleteConfirm}</button>
+          </div>
+        )}
 
         {scenes.length > 0 && (
           <div className="script-workspace">
@@ -4620,6 +4666,7 @@ function MovieScreenplayWorkspace({
             cursorAfter: editCursorRef.current === null ? editing.elements.length : editCursorRef.current + 1,
           }) : null}
           onDraftLines={insertVoiceLines}
+          onSceneActions={runAgentSceneActions}
           onAdded={(data) => {
             setEditFixes(null)
             onSceneSaved?.(keyOf(sceneIndex), data)

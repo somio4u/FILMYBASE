@@ -7733,3 +7733,6 @@ body.is-script-edit-mode { overflow: hidden; }
 .script-zoom button { min-width: 30px; padding: 4px 8px; border: 0; border-radius: 999px; background: transparent; color: inherit; font: inherit; cursor: pointer; }
 .script-zoom button:disabled { opacity: 0.35; cursor: default; }
 .script-zoom .script-zoom-value { min-width: 56px; font-variant-numeric: tabular-nums; }
+
+.script-agent-ask { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin: 10px 0; padding: 10px 14px; border-radius: 10px; border: 1px solid rgba(240, 180, 41, 0.6); background: rgba(240, 180, 41, 0.12); }
+.script-agent-ask span { flex: 1 1 260px; font-weight: 600; }

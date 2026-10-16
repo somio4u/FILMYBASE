@@ -40,3 +40,18 @@ test("bad edits are ignored, not applied", () => {
   const out = applyVoiceEdits(scene, { edits: [{ action: "delete", line: 99 }] });
   assert.equal(out.elements.length, 4);
 });
+
+import { cleanSceneActions } from "../voiceEdits.js";
+
+test("scene actions: a scene can be added before/after with a place and what happens; a deletion stands alone; junk is dropped", () => {
+  const adds = cleanSceneActions([
+    { action: "add_scene", where: "before", intExt: "ext", location: "Palace gate", timeOfDay: "day", oneLiner: "Four friends arrive.", minutes: 2, write: true },
+    { action: "add_scene", where: "sideways", intExt: "", location: "", oneLiner: "no place" },
+    { action: "add_scene", location: "Temple", oneLiner: "They pray.", minutes: 99, write: false },
+  ]);
+  assert.equal(adds.length, 2);
+  assert.deepEqual([adds[0].where, adds[0].intExt, adds[0].timeOfDay, adds[0].write], ["before", "EXT", "DAY", true]);
+  assert.deepEqual([adds[1].where, adds[1].intExt, adds[1].minutes, adds[1].write], ["after", "INT", 2, false]);
+  assert.deepEqual(cleanSceneActions([{ action: "add_scene", location: "A", oneLiner: "b" }, { action: "delete_scene" }]), [{ action: "delete_scene" }]);
+  assert.deepEqual(cleanSceneActions("nope"), []);
+});

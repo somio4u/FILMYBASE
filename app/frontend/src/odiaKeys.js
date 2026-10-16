@@ -3,17 +3,18 @@
 // To fix a key, change its pair here — nothing else needs to change.
 // null = that Shift position is blank on the layout, so the key types normally.
 export const ODIA_KEYS = {
-  Digit1: ['୧', null], Digit2: ['୨', null], Digit3: ['୩', null], Digit4: ['୪', '₹'], Digit5: ['୫', null],
-  Digit6: ['୬', null], Digit7: ['୭', null], Digit8: ['୮', null], Digit9: ['୯', '('], Digit0: ['୦', ')'],
-  Minus: ['-', 'ଃ'], Equal: ['ୃ', 'ୠ'],
-  KeyQ: ['ୌ', 'ଔ'], KeyW: ['ୈ', 'ଐ'], KeyE: ['ା', 'ଆ'], KeyR: ['ୀ', 'ଈ'], KeyT: ['ୂ', 'ଊ'],
-  KeyY: ['ବ', 'ଭ'], KeyU: ['ହ', 'ଙ'], KeyI: ['ଗ', 'ଘ'], KeyO: ['ଦ', 'ଧ'], KeyP: ['ଜ', 'ଝ'],
-  BracketLeft: ['ଡ', 'ଢ'], BracketRight: ['଼', 'ଞ'],
-  KeyA: ['ୋ', 'ଓ'], KeyS: ['େ', 'ଏ'], KeyD: ['୍', 'ଅ'], KeyF: ['ି', 'ଇ'], KeyG: ['ୁ', 'ଉ'],
-  KeyH: ['ପ', 'ଫ'], KeyJ: ['ର', 'ଋ'], KeyK: ['କ', 'ଖ'], KeyL: ['ତ', 'ଥ'],
-  Semicolon: ['ଚ', 'ଛ'], Quote: ['ଟ', 'ଠ'],
-  KeyZ: ['୍ର', 'ର୍'], KeyX: ['ଂ', 'ଁ'], KeyC: ['ମ', 'ଣ'], KeyV: ['ନ', null], KeyB: ['ଵ', 'ଳ'],
-  KeyN: ['ଲ', '\u0B5C'], KeyM: ['ସ', 'ଶ'], Comma: [',', 'ଷ'], Period: ['.', '।'], Slash: ['ଯ', 'ୟ'],
+  Backquote: ['|', '୨'],
+  Digit1: ['୧', '!'], Digit2: ['୨', '‘'], Digit3: ['୩', '’'], Digit4: ['୪', 'ୟ'], Digit5: ['୫', '%'],
+  Digit6: ['୬', 'ତ୍ତ'], Digit7: ['୭', 'ଞ'], Digit8: ['୮', '*'], Digit9: ['୯', '('], Digit0: ['୦', ')'],
+  Minus: ['=', '-'], Equal: ['=', '+'],
+  KeyQ: ['ବ', 'ଽ'], KeyW: ['ପ', 'ଫ'], KeyE: ['ନ', 'ତ୍ର'], KeyR: ['ଦ', 'ଧ'], KeyT: ['ସ', 'ଞ୍ଚ'],
+  KeyY: ['ା', 'ଞ୍ଜ'], KeyU: ['ଯ', 'ଶ'], KeyI: ['ଂ', 'O'], KeyO: ['ହ', 'ଭ'], KeyP: ['ି', 'ଢ'],
+  BracketLeft: ['ଅ', 'ୃ'], BracketRight: ['୍', '୪'], Backslash: ['ୟ', '|'],
+  KeyA: ['ମ', 'ଛ'], KeyS: ['କ', 'ଖ'], KeyD: ['୍', null], KeyF: ['ତ', 'ଥ'], KeyG: ['େ', 'ଳ'],
+  KeyH: ['ା', 'ଲ'], KeyJ: ['ର', 'ଣ'], KeyK: ['।', 'ଙ'], KeyL: ['୨', 'ଷ'],
+  Semicolon: [';', ':'], Quote: ['’', '”'],
+  KeyZ: ['ଉ', 'ଙ୍ଗ'], KeyX: ['ଗ', 'ଘ'], KeyC: ['ଜ', 'ଝ'], KeyV: ['ଚ', 'ଛ'], KeyB: ['ଠ', 'ଡ'],
+  KeyN: ['ୁ', 'ଣ'], KeyM: ['ୂ', 'ଲ'], Comma: [',', 'ଏ'], Period: ['.', 'ଐ'], Slash: ['/', '?'],
 }
 
 const TYPING_TAGS = ['INPUT', 'TEXTAREA']

@@ -1704,7 +1704,7 @@ Plain version: every project is now a set of **drafts**. Opening a project shows
 - The download has language links: Odia, Hindi, English (the story's own text is used wherever a language is missing).
 - Note: a PDF already downloaded with the old fonts cannot be repaired (the letters were lost). Download it again after the fix.
 
-## Stop / Resume Adu + cleaner pasted text (not deployed yet)
+## Stop / Resume Adu + cleaner pasted text (deployed)
 - [x] **Stop Adu button**: while Adu is writing a story, a "Stop Adu" button appears. Pressing it (after a confirm) halts the work at once; what was written so far is kept. The run then shows "Pick up where it broke" (resume) and "Start fresh" (redo).
 - [x] **Pasted text is cleaned first**: page headers, page numbers, running titles and wrapped lines from PDF copies are filtered out, and some broken Odia/Hindi vowel order is repaired, before Adu uses the text. The synopses PDF is tidied the same way.
 - [ ] Next: **Upload PDF** so Adu reads the PDF pages directly (not built yet; needs a real-AI test).
@@ -1718,7 +1718,7 @@ Plain version: every project is now a set of **drafts**. Opening a project shows
 - [x] Under the character sheet there is a **Download Casting PPT** button; clicking it offers **English** or **Odia**. Slide 1: "THE CAST" + film title. Then one slide per character in the sheet: top ~45% = tag, name, age, short description, Look / Wants / Needs / Flaw / Inner conflict / Arc, and a Virtues strip; bottom ~55% = three big photo cards with only a Name line.
 - Note: in the Odia file everything is Odia except "Look" and "Relation to the hero" — the character sheet only stores those two in English. Layout checked by rendering sample slides, not yet on a real project.
 
-## Upload PDF — Adu reads the pages (not deployed yet)
+## Upload PDF — Adu reads the pages (deployed)
 - [x] An **"Upload PDF instead"** button now sits under the story box in Adu's window, the Idea form and the Synopsis / Bit Sheet / Scene One-Liner forms. Adu is shown the PDF pages (so broken copy-paste fonts don't matter), copies the story page-batch by page-batch (8 pages at a time), leaves out page numbers / running headers / watermarks / cover, and fills the box so you can read it before continuing. A short note says how many pages and episode headings were found.
 - [x] If the pasted text already looks garbled (broken Odia/Hindi letters), a hint suggests uploading the PDF.
 - Limits: PDF up to about 18 MB. Reading takes a few minutes; if the server restarts meanwhile, upload again.
@@ -1731,36 +1731,36 @@ Plain version: every project is now a set of **drafts**. Opening a project shows
 - Without a pasted list the PPT still works from the character sheet alone.
 - **Honest note:** the AI step that writes the details for the 12 names has only been tested with a scripted fake AI. Please try it on Mahakali and tell me what you see. In the Odia file "Look/Relation" of sheet-only characters stay English.
 
-## Casting PPT v3 — "Find important characters" button (not deployed yet)
+## Casting PPT v3 — "Find important characters" button (deployed)
 - [x] The Casting panel now shows the characters in the PPT (starts with the character sheet's people), grouped by section with a drop-down to move anyone and ✕ to take out.
 - [x] **"🔍 Find other important characters from the script"**: one click, Adu reads the pitch deck, story bible and scene one-liners and lists who else matters, highest priority first (with screen time and importance score). Each has **"＋ Add to PPT"**, plus "Add all". Added people are saved and appear in the Download (English / Odia).
 - [x] Pasting your own list is still possible, tucked under "Or paste my own list".
 - Honest note: the AI part (finding the characters) is only tested with a scripted fake AI; the add/remove/move/download routes were run on a real database. Please try it on Mahakali.
 
-## AI Movies — Import screenplay (PDF / Word) (not deployed yet)
+## AI Movies — Import screenplay (PDF / Word) (deployed)
 - [x] In AI Movies (the page where you paste material), a new button **"📄 Import screenplay (PDF / Word) — start from the Screenplay stage"** sits above the paste box. Pick a PDF, Word (.docx/.doc), .txt, .fdx or .fountain file.
 - [x] **PDF:** Adu reads the pages themselves (8 pages at a time), copying scene headings, action, character names and dialogue exactly as laid out and leaving out page numbers/headers. **Word / text:** read right away.
 - [x] Then the app does the rest by itself: saves it as the project's screenplay (no "which stage is this?" question), and Adu fills the stages behind it (story, synopsis, characters, plot) so the project starts at the Screenplay stage.
 - Honest note: the screenplay-reading and stage-building AI steps were tested with scripted fake AI / mocked browser calls, not the real Gemini on a real screenplay. Please try with your screenplay and tell me what you see.
 
-## Film → "Send to Production" / "Send for AI Production" (not deployed yet)
+## Film → "Send to Production" / "Send for AI Production" (deployed)
 - [x] When a Film (or series) screenplay is fully written, under the "Full screenplay draft done!" banner there are two buttons: **🎬 Send to Production** (opens the Production section for this project) and **🤖 Send for AI Production** (admin).
 - [x] AI Production: the finished screenplay is turned into plain screenplay text and saved as a new **AI Movies** project with the screenplay **locked** (every stage up to Screenplay approved). The app then runs Adu's analysis on it (the story behind it, artists/characters, settings/environments, props) and opens the AI Movies editor. Sending the same screenplay again reuses the project already made. If the screenplay isn't finished, it says how many scenes are still missing.
 - Honest note: the route was run on a real database with a seeded film; the buttons and the Adu analysis step were not clicked through in a browser, and the analysis itself (real Gemini) has not run on a real film.
 
-## AI Movies — Cinematic Director, Production Blueprint and Language & Voice no longer have screens (not deployed yet)
+## AI Movies — Cinematic Director, Production Blueprint and Language & Voice no longer have screens (deployed)
 - [x] **Gone from the menu:** Cinematic Director, Language & Voice, Production Blueprint. (Voice recording / language work is done inside the Screenplay stage.)
 - [x] **Automatic:** the moment an AI Movie's screenplay is locked (approved — by you, by "Import screenplay", or by "Send for AI Production") Adu runs production planning by himself in the background: reads the screenplay into production → Cinematic Director directions for every scene, approved and sent to the shot cutter (only directions; after approval it never rewrites the screenplay) → every scene cut into shots and approved → prompts planned → Blueprint checked and approved (which creates the Timeline).
 - [x] A strip at the top shows "step N of 6" while it runs, ✅ when done, or what is wrong plus a **Run again** button. The money limit still applies: if it is reached, Adu stops and says so; raise the limit and press Run again.
 - [x] The production reader now understands numbered scene headings like "12. INT. TEMPLE - NIGHT"; the text made from a Film screenplay uses "SCENE 3 — INT. … — NIGHT".
 - Honest notes: tested with a scripted fake sequence, and one real run on a seeded 2-scene screenplay (Blueprint approved, 6 shots, Timeline created) — but with no real AI key, so the Cinematic Director step was skipped. The Cinematic Director can only read screenplays written inside the app, not text-only imports / "Send for AI Production" ones; for those it is skipped and the rest still runs. A very long film will take a long time and cost money (shots use the AI cutter); the $5 limit protects you.
 
-## AI Movies — image commands PDF + Storyboard Designer page (not deployed yet)
+## AI Movies — image commands PDF + Storyboard Designer page (deployed)
 - [x] **Image Studio → "📄 Download all image commands (PDF)"**: one PDF with the command (prompt) for every character, environment, property and shot (shots grouped by scene). Commands not planned yet are planned first (free, no AI). A shot with no command yet says so instead of being skipped.
 - [x] **New page "Storyboard Designer"** in the AI Movie menu, between Screenplay and Image Studio. It takes only the locked screenplay and holds only the **shot division** (cut scenes into shots, edit, add, remove, approve). Old links to the Shots / Storyboard / Blueprint screens now open it. Adu also fills it in by himself after the screenplay is locked; you only come here to change something.
 - Honest note: the PDF was checked on a real run (shots section) and with sample data (character / environment / property sections); no real project with characters yet. The page shows the existing shot-division tool — I did not change how shots are cut.
 
-## Storyboard Designer: you approve the shot division; Image Studio shows only approved shots (not deployed yet)
+## Storyboard Designer: you approve the shot division; Image Studio shows only approved shots (deployed)
 - [x] **Image Studio → Shot Frames shows a scene's shots only after you approve that scene in the Storyboard Designer.** Until then it says how many shots are waiting and to go approve them. Approve a scene → its shots appear there at once.
 - [x] **Adu never approves the shot division himself any more.** After the screenplay is locked he cuts every scene into shots and then waits ("👉 Your turn" strip with a button to open the Storyboard Designer). When you approve the LAST scene he carries on by himself: plans the prompts, approves the Blueprint, creates the Timeline. Approving shots in an older project where Adu is not waiting never starts paid work.
 - [x] Shot buttons renamed so they are obvious: **➕ Add shot after this one**, **➕ Add shot at the end of the scene**, **✂ Split shot**, **🔗 Combine with next shot**, **🗑 Remove shot**. (They already existed.) Editing a shot's division puts the scene back to "not approved", so it leaves the Image Studio until you approve it again.
@@ -1773,7 +1773,7 @@ Plain version: every project is now a set of **drafts**. Opening a project shows
 - [x] When you approve the LAST scene, Adu finishes by himself: plans the prompts, approves the Blueprint, creates the Timeline.
 - Checked on a real server: lock → 0 shots made; button → 6 shots, none approved, Image Studio empty; approve scene 1 → its shots appear; approve the last → Blueprint approved.
 
-## Cancel, final screenplays without a Story Bible, and Short film / Film (not deployed yet)
+## Cancel, final screenplays without a Story Bible, and Short film / Film (deployed)
 - [x] **Cancel**: while Adu creates the shot division there is a **✖ Cancel** button (in the Storyboard Designer and in the strip at the top). He stops before the next paid step (the Cinematic Director now stops too); shots already made are kept; press "Create shot division from screenplay" again to carry on (scenes that already have shots are left alone).
 - [x] **A final screenplay is never rewritten and has no Story Bible.** A screenplay from "Import screenplay (PDF / Word)" or "Send for AI Production" becomes a **screenplay-only project**: no Story Bible, no synopsis / characters / three-act / beat sheet, no critics or rounds, no story rebuilt behind it, and nothing runs silently in the background. You land directly in the **Storyboard Designer**; the Story Bible menu entry is hidden for these projects (it stays for stories made from an idea).
 - [x] **"Create shot division from screenplay"** now first **analyses the final screenplay** for what the Image Studio needs — characters (and how they look), environments, properties (one AI call, only if the project does not have them yet) — and then cuts the shots. The Cinematic Director is not run for these projects. The commands (props, environments, characters, shot frames) come after you approve the shots (the "image commands" PDF).
@@ -1781,33 +1781,33 @@ Plain version: every project is now a set of **drafts**. Opening a project shows
 - [x] **New length categories** in the AI Movie story format picker: **Short film / short drama (1–10 minutes, never longer)**, **Film (its own length, 11 minutes or more)**, Web series. The length is saved on the project and handed to the Story Bible, Beat Sheet and Screenplay writers as a hard rule: a 1-minute film is 1 sequence, at most 2 beats and 2 scenes; a 10-minute short film at most 5 sequences, 6 beats, 15 scenes; a beat of a short film may be a single scene.
 - Honest notes: the AI parts (screenplay analysis, the short-film writers) were only tested with scripted answers / the prompts' text, not the real Gemini. Older projects have no length set and behave exactly as before. The Web series choice is unchanged.
 
-## Visual style for the whole film: realistic, cartoon, anime, … (not deployed yet)
+## Visual style for the whole film: realistic, cartoon, anime, … (deployed)
 - [x] **Image Studio → "🎨 Visual style of the film"** (also inside "Look & money limit"): one choice for the whole project — **Realistic (default)**, Cinematic realistic, Cartoon (2D), Anime, 3D animation, Comic book, Painterly, Indian traditional art (mythological painting), Black & white (film noir), or **Custom** (describe the look in your own words).
 - [x] The chosen style is written, in strict wording, into **every** picture command: character, environment and property model sheets, shot frames and shot videos. Changing it refreshes all the commands at once (free) and the "image commands" PDF shows the new style. A non-photographic style no longer also asks for "photographic detail".
 - [x] Why the pictures were cartoon-like: no style was ever set, so the image model chose its own look for a "model sheet". The default is now Realistic ("a photograph, NOT a drawing, NOT a cartoon…").
 - Pictures already made keep their old look; press "Make another version" on the ones you want in the new style. Older projects that had their own free-text look keep it as "Custom".
 - Honest note: checked that the style text reaches every command (tests, a real server and a browser) — but whether the image model actually obeys it (e.g. truly photorealistic faces) needs a real picture generation; please try Realistic on a character and tell me how it looks.
 
-## Small props share one picture; image commands PDF with file names; pictures made elsewhere come back by name (not deployed yet)
+## Small props share one picture; image commands PDF with file names; pictures made elsewhere come back by name (deployed)
 - [x] **Combine small props** (Image Studio → Properties → "🧩 Combine small props into shared pictures"): props without a picture are put together, up to 6 (2–9) per image, as a **Props sheet** (a numbered grid, position 1 = top-left). A sheet is an ordinary item (code PGRP01…): one picture, one cost, one approval. The single props are hidden; shots that used them now use the sheet, and their command names the **position** ("Props sheet 1 (position 2: Mug, position 3: Camera)"). Shows the saving in advance (e.g. 4 props → 1 picture, about $0.12 saved). "Split back" works for sheets nothing was made for; a prop that already has a picture is never swallowed.
 - [x] **Image commands PDF with file names:** every character, environment, props sheet and shot now says "SAVE THE PICTURE AS: CHAR001_Rohan.png" (shots: SC001_SH003.png), with the picture shape, how many props / which positions a sheet holds, a "How to use this PDF" page and a checklist of all file names. Shots appear only once their shot division is approved (the PDF says how many are still waiting).
 - [x] **Import pictures I made elsewhere** (Image Studio, top): choose all the pictures at once (PNG/JPG/WebP, or one .zip). Each is matched by the CODE at the start of its name (so " (1)", "-copy", upper/lower case or another extension still match) to its character / environment / props sheet / shot and stored as a new version waiting for review (or approved at once with the tick box). Importing costs nothing. A picture that cannot be used is listed with the reason (unknown name, no such code, not a picture, a prop that is on a sheet → "upload the sheet", shot division not approved).
 - Checked on a real server and a browser: 4 props → 1 sheet; 9 pictures named from the PDF → 9 connected (all imported, pending, free); a random-named file reported.
 - Honest note: the props-sheet command is only checked as text and with the local imitation of the image service — whether a real image model draws 4 props in a clean numbered grid still has to be seen on a real picture. Pictures generated BEFORE this change are untouched.
 
-## The cast rule: every character and prop is Indian by default (not deployed yet)
+## The cast rule: every character and prop is Indian by default (deployed)
 - [x] **Why a "Hollywood / London" actor appeared:** nothing told the image model who the people are, so it used its usual (Western) faces and objects. Now every project has the **cast rule, ON by default**: each character command says the person is Indian — from India — with an Indian person's features, skin tone, hair and bone structure, and must NOT look European, American, British, Hollywood, East-Asian, African or Middle-Eastern or like a Western film actor. Every prop / props sheet command says the objects are as found in India (Indian designs, no Western brands). Every shot and video command says every person in the frame is Indian — extras and crowd included. **Environments are not touched:** a place is whatever the story says.
 - [x] **Exception only when you say so:** on a character card in the Image Studio: "🌏 Origin: Indian (default) — Change". Type e.g. "British" or "Japanese" and that character's sheet is drawn accordingly, and every shot he is in says "John is British, not Indian" while everyone else stays Indian. Any Indian origin (Indian, Odia, Bengali …) or "Make Indian" puts the default back.
 - [x] **Switch** (Image Studio → Visual style → "People & objects"): "Indian — every character and prop (default)" or "No rule — as the story says". Changing the origin or the switch refreshes all commands (free); the commands PDF shows the new wording.
 - Pictures already made keep their old faces: press "Make another version" for the characters you want again.
 - Honest note: checked that the wording reaches every command (tests, a real server, the PDF) — whether the image model really draws Indian faces needs a real picture; please try "Make another version" on a character and tell me.
 
-## Cast rule corrected: Indian for CHARACTERS only; props sheet text fixed (not deployed yet)
+## Cast rule corrected: Indian for CHARACTERS only; props sheet text fixed (deployed)
 - [x] **The Indian rule now applies only to characters** (and to the people in shots, extras included). **Props, props sheets and environments are no longer touched:** a camera is an ordinary, universal camera. The switch in the Image Studio is now called "Characters".
 - [x] **Fixed "[object Object]"** in the props sheet command: a prop's description was stored as { en, hi } and printed as a machine word. It is now plain text, and sheets saved by the earlier version are repaired automatically from the props themselves.
 - [x] **The props sheet command was tidied:** each prop with its description and position, the visual style, "tidy grid, position 1 top-left, left to right, top to bottom", "draw each object as it normally looks anywhere in the world", "show only the objects: no people, no hands", and one single "nothing is written in the picture" line (before, "no text" was said twice and the single-prop wording "every view" was reused).
 
-## Reference images: add a real logo / brand / title before pictures are made (not deployed yet)
+## Reference images: add a real logo / brand / title before pictures are made (deployed)
 - [x] **Image Studio → "🖼 Reference images (logos, brands, titles)"**: add a real picture (e.g. the Tarang Plus logo) with a name, a type (logo / brand / title / other) and optional "also written as" words. Whenever a character, prop, environment or shot command mentions that name (whole word, at most 2 per picture), the real picture is **attached to the image request** and the command says "show it exactly as given, do not redraw it". Changing/adding/removing a reference refreshes the commands (free).
 - [x] **Adu suggests them:** "Find brands & titles in the screenplay" (also once automatically when the panel is first opened) lists brand/title names it finds, each with an "Add the picture" button.
 - [x] **Commands PDF** now has a "Reference images to attach" section and an "ATTACH THESE REFERENCE IMAGES" line on every picture that needs one (for pictures made elsewhere).
@@ -1815,12 +1815,12 @@ Plain version: every project is now a set of **drafts**. Opening a project shows
 - Pictures already made are unchanged ("Make another version" to redo with the logo).
 - Honest note: tested with tests, a real server, the PDF and a browser. NOT tested with the real Gemini: brand detection, and whether the image model reproduces the logo faithfully.
 
-## First shot picture must use the made characters, props and environment (not deployed yet)
+## First shot picture must use the made characters, props and environment (deployed)
 - [x] **Problem:** a shot picture was drawn with invented people, a jeep and a place instead of the pictures already made. Causes: a shot was linked only to items the *scene* had linked, so a character or prop named in the shot text but missed by the scene links got no reference; and the command did not forbid inventing.
 - [x] **Fix:** a shot now also links any project item its text (or the AI's list) names; the shot command says "build the frame ONLY from the attached pictures, do not invent other main characters, vehicles, buildings or locations"; a shot with NO linked item is refused (with a clear message) instead of being invented, unless "Go ahead even if a reference picture is missing" is ticked.
 - Shots already divided keep their old links: use the shot's edit option to link the right items, or make the shot division again. Honest note: tested with unit tests only, not a real picture.
 
-## Fix: "Unterminated string in JSON" when speaking Odia to the scene voice assistant (not deployed yet)
+## Fix: "Unterminated string in JSON" when speaking Odia to the scene voice assistant (deployed)
 - [x] **Cause:** the voice assistant asked Gemini for at most 8,192 tokens of answer and read it with no second chance. Odia script costs many tokens per word and the model's own thinking shares that limit, so a long Odia answer was cut off mid-sentence and the broken JSON could not be read. (The Production Manager chat had the same weakness with a 2,048 limit; the plain voice-to-text button used 4,096.)
 - [x] **Fix:** all three now start with more room (16,384 / 8,192) and, if an answer is still cut off, retry automatically with double the room (the app's standard safe-JSON helper).
 - Honest note: found by reading the code (the exact failing request was not available); tests pass, but not tried with a real Odia recording.
@@ -1843,7 +1843,7 @@ Plain version: every project is now a set of **drafts**. Opening a project shows
 - [x] **By hand:** every shot card has **"🔗 Link…"** — tick the characters, environments and props it uses, Save. This does NOT reopen the shot-division approval. Commands refresh (free).
 - Honest note: name matching uses the shot's text; a shot that never names its people or things (e.g. "she turns") needs the hand picker. Tested with a local imitation of the image service.
 
-## First frame invented a crowd of new people (not deployed yet)
+## First frame invented a crowd of new people (deployed)
 - [x] **Why:** the shot text only described the jeep and the archway, so no character was linked and the command said nothing about people — the image model filled the frame with its own villagers.
 - [x] **Every frame command now says who may appear:** "The only named people in this frame are: Rohan, … — look exactly like their attached sheets; do not add any other recognisable person". With nobody linked: "do not invent characters and do not fill the frame with a crowd; show a person only if the description names or describes one."
 - [x] **Auto-link** now also links the scene's own characters (up to 3) to a shot whose text names nobody, and tells you which shots it did that for, so you can untick with "🔗 Link…". (Before, such shots got only the place and props.)
@@ -1886,12 +1886,12 @@ Plain version: every project is now a set of **drafts**. Opening a project shows
 - Honest notes: not tried with the real Gemini or a real Odia voice — the AI's understanding is the part to test. The scene HEADING (INT./EXT. … NIGHT) is in the scene list and is not changed by the agent: only the lines. Removing a character removes their dialogue lines; action lines that mention them stay (say so to the agent: "delete line 5").
 - [x] **Scenes too:** the voice agent can now also **add a scene before / after** the current one (place, INT/EXT, time of day, what happens, and whether to have the AI write it) — run through the same code as the "Add a scene" buttons — and **delete the current scene** (it asks you to confirm with a click first: "The voice agent wants to delete scene N. Delete it?"). If you have unsaved typing open, adding a scene asks you to save first so nothing typed is lost. Not changed by the agent: the scene heading's time of day in the scene list; moving scenes.
 
-## The AI Movie voice agent gets the same editing power (not deployed yet)
+## The AI Movie voice agent gets the same editing power (deployed)
 - [x] AI Movie → Screenplay language → "Voice Writer": the 🎤 agent (it shares the Film agent's brain) can now **change** an existing line, **delete** a line, **take a character out** of the scene, **rename** a speaker, or **write the whole scene again** (e.g. day instead of night) — not only add lines. The result goes into the scene's draft (nothing is saved until "Save the scene"); the note says what was added / changed / removed.
 - Not given here: adding / deleting a whole SCENE — an AI Movie screenplay has no scene add/delete of its own (scenes belong to their beat), so the agent is told not to offer it.
 - Test added (aiMovieLanguage: change + remove from the draft). Honest note: not tried with the real Gemini or a real voice.
 
-## The voice agent must keep the screenplay's own language (not deployed yet)
+## The voice agent must keep the screenplay's own language (deployed)
 - [x] **Problem:** the writer spoke to the agent in Hindi and asked to change a scene; the agent wrote the scene again in Hindi (Devanagari) letters although the scene is Odia. Nothing checked the script of what it wrote.
 - [x] **Fix, in the prompt and in code:** whatever language the writer SPEAKS in, the screenplay keeps its rules — scene headings, transitions and CHARACTER names in English capitals (Latin letters); action lines in the scene's action language; dialogue and acting notes in the scene's dialogue language (Odia script for an Odia scene — Hindi/Devanagari never, unless the scene is Hindi). Every line the agent produces (new, changed, whole-scene rewrite, new speaker names) is now CHECKED for the right script; if it is wrong the agent is told so and asked again once; if it is still wrong nothing is changed and the writer is told ("The AI wrote in the wrong script … nothing was changed"). Both the Film and the AI Movie voice agents use this.
 - The AI screenplay writer already had these rules plus a script cleaner (`sanitizeScreenplayElements`); only the voice agent was missing them.
@@ -1907,14 +1907,14 @@ Plain version: every project is now a set of **drafts**. Opening a project shows
 - Still to come (phase 2): find & replace and "rename a character everywhere", split / merge scenes, multi-select, Omit (hide a scene), colours and notes on scenes, Undo for move / delete. Film module only — AI Movie scenes belong to their beats.
 - After moving scenes, a script breakdown, shoot schedule or production shots made earlier may be out of date (the existing warning is shown).
 
-## Add multiple scenes (not deployed yet)
+## Add multiple scenes (deployed)
 - [x] **"＋ Add multiple scenes"** next to "Add a scene before / after" (right-hand panel, Film screenplay): one box where you write what happens in as many scenes as you like — numbered (1. 2. 3.) or one paragraph per scene (blank line between). Pick where: after / before the selected scene, or at the end. It shows how many scenes it found, then creates and writes them one after another ("Writing scene 2 of 3…").
 - [x] **INT/EXT, place and time are not asked for:** one small AI call works them out from your words (`/scenes/plan`); if it fails, plain editable headings are used. Scene length follows how much you wrote.
 - [x] **The AI stays inside your context:** your text becomes the scene's outline word for word and the scene is marked `strictContext`; the scene writer is told to stage ONLY what you described — no new plot events, characters, twists or ending — and not to pad a short description.
 - Checked in a real browser (3 scenes → created at the right places in order, each written, headings from the plan). Tests: sceneContexts splitting, the plan clean-up (multiScenes.test.js).
 - Honest note: whether the real Gemini obeys "stay inside the context" needs a real try; and a very long list (30 scenes max at a time) takes a while because each scene is written one by one.
 
-## Rename a character in the whole script (not deployed yet)
+## Rename a character in the whole script (deployed)
 - [x] **"🔁 Rename a character everywhere"** (right-hand panel, with Add scene before / after / multiple): type the old name (the project's names are suggested) and the new one (e.g. Sula → Sulagna), press **Check** (it only counts: "Found in 7 scenes: 12 speaking lines, 9 mentions in the words, 1 in the scene outline"), then **Rename everywhere**.
 - [x] It changes the speaker of dialogue lines, the name inside action lines, dialogue and acting notes, flashback POV names, each scene's "characters present" and the scene list's outline lines / names. **Only the whole name** changes (SULA, never SULATA); a name with an Odia ending stuck on (SULAଙ୍କ) changes too; the case style is kept (SULA → SULAGNA, Sula → Sulagna).
 - [x] Every changed scene is saved as a NEW version, so ↶ Undo works scene by scene. Refused while the AI is still writing the script or while you have unsaved typing.
@@ -1926,14 +1926,14 @@ Plain version: every project is now a set of **drafts**. Opening a project shows
 - [x] **Cause (my mistake):** the script check I added counted the Odia full stop "।" as Hindi. That sign is U+0964, which sits in the Devanagari block but is the full stop of Odia, Hindi and Bengali alike — so every correct Odia answer was refused with "The AI wrote in the wrong script … nothing was changed".
 - [x] **Fix:** "।" and "॥" (and zero-width joiners) are ignored by the check; real Devanagari letters in an Odia scene, and Odia letters in a Hindi scene, are still refused. Regression test added.
 
-## Voice assistant: shows what it heard (exact English translation), asks you to confirm, then shows every step (not deployed yet)
+## Voice assistant: shows what it heard (exact English translation), asks you to confirm, then shows every step (deployed)
 - [x] **Before anything changes**, the 🎤 agent (Film screenplay and AI Movie "Speak here") now writes down EXACTLY what you said — each language in its own script — and translates it **exactly** into English (not a summary or a guess) and shows both in a panel: "I heard this — is it right?". Buttons: **✓ Yes, do it · ✏ Fix the words** (type the correction, then **🌐 Translate again**) **· 🎙 Speak again · Cancel**. Nothing in the screenplay changes until "Yes, do it" (`POST /api/voice/understand`).
 - [x] After "Yes", the confirmed WORDS (not the audio) go to the agent, and the panel shows each step as it happens, with ticks: "You said …", "Asking the AI to work on scene N …", "Understood. In the scene it changed 3 lines …", "Saved as a new version — ↶ Undo takes it back", "Renaming Sula → Sulagna: 7 scenes …", "Adding scene 2 of 3: EXT. PALACE GATE — writing it …", "Done." Errors show as a red step with the reason.
 - [x] Fixed on the way: the panel used to vanish when the agent added a scene (the voice button was rebuilt when the selected scene changed).
 - Checked in a real browser (fake microphone, scripted server): record → "understanding" → confirm panel with the words and the English → fix words → translate again → Yes → the steps (rename, add scene, done). Test: AI Movie voice route accepts the confirmed instruction.
 - Honest note: the real Gemini's transcription / translation quality (especially Odia) is untested here.
 
-## Screenplay writer login (not deployed yet)
+## Screenplay writer login (deployed)
 - [x] **New role in Team & logins: "Screenplay writer (story & screenplay of one project)".** The admin picks the project (only story projects are offered). He sees the **Story & Screenplay** agent of that project only (Idea → Synopsis → Characters → Bit Sheet → Screenplay) with all its writing tools: write/edit scenes like Word, 🎤 voice assistant (confirm what was heard), scene list menu with drag & drop, add multiple scenes, rename a character everywhere, change language, check full script, undo/redo, download the screenplay. He does NOT see Production, the other projects, "New idea", Send to Production / AI Production, project export, or Team & logins.
 - [x] **Enforced on the server, not only hidden** (`writerAccess.js`, like the Production-only login): every request must be on a list of story/screenplay routes AND about the project he is assigned to — another project, team management, production, pictures/video, budget, deleting or importing projects all return 403 (checked live: own project 200, other project 403, 14 forbidden routes 403; 3 unit tests).
 - [x] **Opens straight at the screenplay** after login, and **resumes where he stopped**: the stage, the episode and the scene (and edit mode) are saved on the server (`writer_progress`, saved 1.2 s after each move and when the tab closes) — so the next login, on any device, opens the same episode and scene (checked in a real browser: worked in episode 2 scene 4, new browser, login → "Second Episode", scene E2S4 selected and scrolled to).
@@ -1942,7 +1942,7 @@ Plain version: every project is now a set of **drafts**. Opening a project shows
 - Not included: AI Movie projects (their projects are separate and cannot be assigned to a login yet); the Auto Screenplay (draft) agent / Draft Dashboard — admin only for now.
 - **Akruti font (Unicode ↔ Akruti conversion): not built yet — waiting for answers** (which Akruti font, which direction, a sample of text / the font file).
 
-## English / Odia (Akruti layout) typing switch (not deployed yet)
+## English / Odia (Akruti layout) typing switch (deployed)
 - [x] Small **EN / ଓଡ଼ିଆ** button at the top right (left of Full/Light). When ON, the keys type Odia letters directly (k → କ, Shift+K → ଖ …) in every text box, including the screenplay editor; the choice is remembered. A ⌨ button shows the on-screen Odia keyboard.
-- The layout is in one small file (`odiaKeys.js`) and now follows the **exact key table the owner supplied** (number row, QWERTY, home and bottom rows; blank Shift positions type normally). Checked in a real browser.
+- The layout is in one small file (`odiaKeys.js`) and follows the **final key table the owner supplied** (including the conjuncts like ତ୍ର, ଞ୍ଚ, ଙ୍ଗ on Shift keys). Blank Shift positions type normally. Checked in a real browser.
 - Still not built: Unicode ↔ Akruti *font* (legacy encoding) conversion — only needed if you want text stored/exported in the old Akruti font encoding.

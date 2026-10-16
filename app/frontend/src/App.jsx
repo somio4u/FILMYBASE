@@ -447,6 +447,7 @@ const LABELS = {
     voiceThinkingLabel: 'Writing it in…',
     voiceWritingLabel: 'Got it — turning that into screenplay lines…',
     voiceAdded: (count, transcript) => `Added ${count} line${count === 1 ? '' : 's'} to the scene. I heard: “${transcript}”. Not right? Hit ↶ Undo.`,
+    voiceChanged: (c, transcript, inEdit) => `${[c.rewrote ? 'wrote the scene again' : null, c.added ? `added ${c.added}` : null, c.changed ? `changed ${c.changed}` : null, c.removed ? `removed ${c.removed}` : null].filter(Boolean).join(', ')} line${(c.added + c.changed + c.removed) === 1 ? '' : 's'}. I heard: “${transcript}”. ${inEdit ? 'Happy? Hit "Save my changes".' : 'Not right? Hit ↶ Undo.'}`,
     voiceMicBlocked: "I can't hear you — allow the microphone for this site in your browser, then try again.",
     voiceNothingHeard: "Didn't catch anything — try again and speak a little longer.",
     voiceTargetCursor: (number) => `Types into your edit of scene ${number}, where your cursor is`,
@@ -1279,6 +1280,7 @@ const LABELS = {
     voiceThinkingLabel: 'ଲେଖୁଛି…',
     voiceWritingLabel: 'ବୁଝିଗଲି — ସ୍କ୍ରିନପ୍ଲେ ଲାଇନ୍ ବନଉଛି…',
     voiceAdded: (count, transcript) => `ସିନ୍‌ରେ ${count}ଟା ଲାଇନ୍ ଯୋଡ଼ିଦେଲି। ମୁଁ ଶୁଣିଲି: “${transcript}”। ଠିକ୍ ନାହିଁ? ↶ ପଛକୁ ଫେର ଦବା।`,
+    voiceChanged: (c, transcript, inEdit) => `${[c.rewrote ? 'ସିନ୍ ପୁଣି ଲେଖିଦେଲି' : null, c.added ? `${c.added}ଟା ଯୋଡ଼ିଲି` : null, c.changed ? `${c.changed}ଟା ବଦଳାଇଲି` : null, c.removed ? `${c.removed}ଟା ହଟାଇଲି` : null].filter(Boolean).join(', ')}। ମୁଁ ଶୁଣିଲି: “${transcript}”। ${inEdit ? 'ଠିକ୍ ଲାଗିଲେ "ମୋ ଚେଞ୍ଜ ସେଭ୍ କର" ଦବା।' : 'ଠିକ୍ ନାହିଁ? ↶ Undo ଦବା।'}`,
     voiceMicBlocked: 'ତୋ କଥା ଶୁଣିପାରୁନି — ବ୍ରାଉଜରରେ ଏ ସାଇଟ୍ ପାଇଁ ମାଇକ୍ ଅନୁମତି ଦେ, ତା\'ପରେ ଆଉ ଥରେ ଚେଷ୍ଟା କର।',
     voiceNothingHeard: 'କିଛି ଶୁଣିପାରିଲିନି — ଆଉ ଥରେ ଟିକେ ଲମ୍ବା କରି କହ।',
     voiceTargetCursor: (number) => `ସିନ୍ ${number} ର ଏଡିଟ୍‌ରେ, ତୋ କର୍ସର୍ ଯେଉଁଠି ଅଛି ସେଠି ଲେଖିବି`,
@@ -3711,10 +3713,12 @@ function VoiceWriterButton({ t, sceneListId, episodeIndex, sceneIndex, sceneNumb
         setMessage({ kind: 'error', text: data.error || t.genericError })
       } else if (data.draft) {
         onDraftLines(data)
-        setMessage({ kind: 'done', text: t.voiceAddedToEdit(data.added, data.transcript) })
+        const c = data.changes
+        setMessage({ kind: 'done', text: c && (c.changed || c.removed || c.rewrote) ? t.voiceChanged(c, data.transcript, true) : t.voiceAddedToEdit(data.added, data.transcript) })
       } else {
         onAdded(data.scene)
-        setMessage({ kind: 'done', text: t.voiceAdded(data.added, data.transcript) })
+        const c = data.changes
+        setMessage({ kind: 'done', text: c && (c.changed || c.removed || c.rewrote) ? t.voiceChanged(c, data.transcript, false) : t.voiceAdded(data.added, data.transcript) })
       }
     } catch {
       setMessage({ kind: 'error', text: t.genericError })
@@ -4140,6 +4144,18 @@ function MovieScreenplayWorkspace({
   }, [editing?.key])
   // Voice lines arrive for the open edit: put them in and make them glow for a moment.
   function insertVoiceLines(data) {
+    // the agent changed or removed lines (or wrote the scene again): the whole edit is replaced by its result
+    if (Array.isArray(data.fullElements)) {
+      setEditing((prev) => prev && {
+        ...prev,
+        elements: data.fullElements.map((e) => ({ type: e.type, character: e.character ?? '', characterModifier: e.characterModifier ?? 'none', parenthetical: e.parenthetical ?? '', text: e.text ?? '' })),
+        voiceGlow: null,
+        version: Date.now(),
+        focusAt: { el: null, end: true },
+        dirty: true,
+      })
+      return
+    }
     const added = (data.elements ?? []).map((e) => ({
       type: e.type,
       character: e.character ?? '',

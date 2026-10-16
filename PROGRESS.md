@@ -1953,7 +1953,7 @@ Plain version: every project is now a set of **drafts**. Opening a project shows
 - [x] **"⛶ Full screen" button** (top right, left of Full/Light): hides the browser's tabs and address bar so the app fills the screen; **Esc** (or the button, now "✕ Exit") brings the tabs back. A browser only allows full screen after a click, so it cannot start automatically after login. Checked in a real browser: on → full screen, off → normal. Not deployed yet.
 - [x] **Odia typing: ଅ followed by ା now becomes ଆ** (press `[` then `k` → ଆ). Works in text boxes and in the screenplay editor. Deployed.
 
-## Money Meter — what every project and every user spends on AI (not deployed yet)
+## Money Meter — what every project and every user spends on AI (deployed)
 - [x] **New third card on the start screen, "💰 Money Meter", shown to the admin only** (other roles never see it, and the server refuses them: 403 for writer/director, 401 when logged out).
 - [x] **Every Gemini text call is now measured** by its real token counts × price (Flash-Lite, Flash, Pro; prices can be changed with env vars) and written to a new table `ai_usage_ledger` with the user who asked and the project (Movie or AI Movie). Pictures/voices/video and the Pro "Story Brain" calls are copied in from the existing project money log, so nothing is counted twice.
 - [x] **The screen:** total spent ($ and ≈ ₹), measured vs earlier, projects table (type, started, last used, active, calls, spent; click a project for its user-wise and kind-wise split), user table (spend, calls, biggest projects), last 30 days.

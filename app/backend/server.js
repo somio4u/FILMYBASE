@@ -37,6 +37,7 @@ import { createProviders } from "./providers.js";
 import { setupProductionMedia } from "./productionMedia.js";
 import { registerDesignTaskRoutes } from "./designTasks.js";
 import { registerSubmissionRoutes, designerGatekeeper, DESIGNER_ROLE } from "./designSubmissions.js";
+import { WRITER_ROLE, writerGatekeeper, ensureWriterSchema, registerWriterRoutes } from "./writerAccess.js";
 import { readStoryFromPdf } from "./pdfReader.js";
 import { BIBLE_PASS_SCORE, brainAsker, newUsage, designStoryBible, generateBrainJson, reviseBibleWithNote, storyBibleToMarkdown } from "./storyBrain.js";
 import { ensureAiMovieStorySchema, getProjectModes, judgedStage, registerAiMovieStoryRoutes } from "./aiMovieStory.js";
@@ -1454,6 +1455,11 @@ function requireRole(...roles) {
       next();
       return;
     }
+    // A "Screenplay writer" login reaches a route only after writerGatekeeper (writerAccess.js) matched it and checked it is his project.
+    if (req.user.role === WRITER_ROLE && req.writerAllowed) {
+      next();
+      return;
+    }
     if (!roles.includes(req.user.role)) {
       res.status(403).json({ error: "You don't have permission to do that." });
       return;
@@ -1574,6 +1580,8 @@ app.use(async (req, res, next) => {
 
 // A "designer" login may use only its own design-task routes (see designSubmissions.js).
 app.use(designerGatekeeper);
+// A "screenplay writer" login may use only the story and screenplay tools of the one project he is assigned to (writerAccess.js).
+app.use(writerGatekeeper(db, sceneListConceptId));
 
 app.post("/api/auth/login", async (req, res) => {
   const { username, password } = req.body;
@@ -1615,7 +1623,7 @@ app.get("/api/auth/me", async (req, res) => {
 app.post("/api/auth/users", requireRole("admin"), async (req, res) => {
   const { name, username, password, role, conceptId } = req.body;
 
-  if (!name || !username || !password || !["director", "production_manager", "admin", PRODUCTION_ONLY_ROLE, DESIGNER_ROLE].includes(role)) {
+  if (!name || !username || !password || !["director", "production_manager", "admin", PRODUCTION_ONLY_ROLE, DESIGNER_ROLE, WRITER_ROLE].includes(role)) {
     res.status(400).json({ error: "Name, username, password, and a valid role are required." });
     return;
   }
@@ -1624,7 +1632,7 @@ app.post("/api/auth/users", requireRole("admin"), async (req, res) => {
   // A "Production only" login isn't assigned a project — it sees only the
   // screenplays it uploads itself.
   if (role !== "admin" && role !== PRODUCTION_ONLY_ROLE && role !== DESIGNER_ROLE && !conceptId) {
-    res.status(400).json({ error: "Director and Production Manager accounts must be assigned to a project." });
+    res.status(400).json({ error: "Director, Production Manager and Screenplay Writer accounts must be assigned to a project." });
     return;
   }
 
@@ -1646,8 +1654,10 @@ app.post("/api/auth/users", requireRole("admin"), async (req, res) => {
 
 app.get("/api/auth/users", requireRole("admin"), async (req, res) => {
   const result = await db.query(
-    `SELECT u.id, u.name, u.username, u.role, u.concept_id, u.created_at, c.title AS project_title
+    `SELECT u.id, u.name, u.username, u.role, u.concept_id, u.created_at, c.title AS project_title,
+            wp.updated_at AS last_worked_at, wp.state AS last_worked_state
      FROM users u LEFT JOIN concepts c ON c.id = u.concept_id
+     LEFT JOIN writer_progress wp ON wp.user_id = u.id
      ORDER BY u.created_at ASC`
   );
   res.json(result.rows);
@@ -20309,12 +20319,14 @@ registerPipelineRoutes(app, db, requireRole, {
   }),
 });
 registerSubmissionRoutes(app, db, requireRole, { store: productionMedia.store, serveMedia: productionMedia.serveMedia });
+registerWriterRoutes(app, db);
 registerAudioCueRoutes(app, db, requireRole, { store: productionMedia.store });
 
 // Schema self-heal runs before the server starts accepting traffic — worst
 // case (the database is briefly unreachable) it logs and the server still
 // starts, rather than blocking startup entirely.
 ensureAiMovieSchema()
+  .then(() => ensureWriterSchema(db))
   .then(() => ensureAllProductionSchemas(db))
   .then(async (failures) => { try { const made = await backfillDrafts(db); await failInterruptedRequests(db); if (made) console.log(`Draft Management: ${made} existing project(s) are now Draft 1 of their project.`); } catch (error) { console.error("Draft backfill failed:", error.message); } return failures; })
   .catch((error) => console.error("Schema setup failed:", error.message))

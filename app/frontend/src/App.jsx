@@ -118,6 +118,9 @@ const LABELS = {
     roleDirector: 'Director',
     roleProductionManager: 'Production Manager',
     roleProductionOnly: 'Production only',
+    roleScreenplayWriter: 'Screenplay writer (story & screenplay of one project)',
+    writerLastWorked: (when, where) => `last worked ${when}${where ? ` — ${where}` : ''}`,
+    writerNeverWorked: 'has not opened it yet',
     newUserMissingFields: (fields) => `Hold on, you still need to fill in: ${fields}.`,
     newUserNeedsProject: 'Pick which project this login can open (or choose "Production only" — that one needs no project).',
     emptyGreeting: "Bro, drop your idea here — let's see where it goes!",
@@ -985,6 +988,9 @@ const LABELS = {
     roleDirector: 'ଡାଇରେକ୍ଟର',
     roleProductionManager: 'ପ୍ରଡକ୍ସନ୍ ମ୍ୟାନେଜର୍',
     roleProductionOnly: 'ଖାଲି ପ୍ରଡକ୍ସନ୍',
+    roleScreenplayWriter: 'ସ୍କ୍ରିନ୍‌ପ୍ଲେ ରାଇଟର୍ (ଗୋଟିଏ ପ୍ରୋଜେକ୍ଟର ଗପ ଓ ସ୍କ୍ରିନ୍‌ପ୍ଲେ)',
+    writerLastWorked: (when, where) => `ଶେଷ କାମ ${when}${where ? ` — ${where}` : ''}`,
+    writerNeverWorked: 'ଏପର୍ଯ୍ୟନ୍ତ ଖୋଲିନି',
     newUserMissingFields: (fields) => `ଟିକେ ରହ, ଏଗୁଡ଼ା ଭରିବା ବାକି: ${fields}।`,
     newUserNeedsProject: 'ଏ ଲଗ୍ ଇନ୍ କେଉଁ ପ୍ରୋଜେକ୍ଟ ଖୋଲିବ ବାଛ (ନହେଲେ "ଖାଲି ପ୍ରଡକ୍ସନ୍" ବାଛ — ସେଥିରେ ପ୍ରୋଜେକ୍ଟ ଲାଗେନି)।',
     emptyGreeting: 'ଭାଇ, ତୋ ଆଇଡିଆ ଏଠି ଲେଖ — ଦେଖିବା କେଉଁଆଡ଼େ ଯାଉଛି!',
@@ -4067,7 +4073,7 @@ function LanguageChanger({ t, sceneListId, episodeIndex, sceneIndex, sceneNumber
 }
 
 function MovieScreenplayWorkspace({
-  sceneList, episodes, t, language, screenplay, scriptTheme, onChangeScriptTheme, onSceneSaved, onReloadScenes, onSceneListChanged, deckId, onDeckChanged, projectCharacterNames,
+  sceneList, episodes, t, language, screenplay, scriptTheme, onChangeScriptTheme, onSceneSaved, onReloadScenes, onSceneListChanged, deckId, onDeckChanged, projectCharacterNames, resume, onProgress,
 }) {
   const groups = sceneList.episodeScenes
     ? sceneList.episodeScenes.map((episodeScene, index) => ({
@@ -4090,6 +4096,36 @@ function MovieScreenplayWorkspace({
   const [scriptZoom, setScriptZoom] = useState(() => { try { const v = Number(localStorage.getItem('filmybase.scriptZoom')); return v >= 0.5 && v <= 2.5 ? v : 1 } catch { return 1 } })
   const changeScriptZoom = (next) => { const v = Math.max(0.5, Math.min(2.5, Math.round(next * 100) / 100)); setScriptZoom(v); try { localStorage.setItem('filmybase.scriptZoom', String(v)) } catch { /* private window */ } }
   const editorRef = useRef(null)
+  // Screenplay writer: reopen at the episode and scene he stopped at, and keep saving where he is
+  const [resumeReady, setResumeReady] = useState(false)
+  const latestProgress = useRef(null)
+  useEffect(() => {
+    if (!onProgress || resume === undefined || resumeReady || groups.length === 0) return
+    if (resume) {
+      const gi = Math.min(Math.max(0, resume.groupIndex ?? 0), groups.length - 1)
+      const si = Math.min(Math.max(0, resume.sceneIndex ?? 0), Math.max(0, (groups[gi]?.scenes?.length ?? 1) - 1))
+      setGroupIndex(gi)
+      // changing the episode resets the selected scene to the first one (another effect): choose the scene again a moment later
+      setTimeout(() => setSelectedIndex(si), 60)
+      if (resume.editMode) setEditMode(true)
+      setTimeout(() => document.getElementById(`movie-script-scene-${si}`)?.scrollIntoView({ block: 'start' }), 600)
+    }
+    setResumeReady(true)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [onProgress, resume, resumeReady, groups.length])
+  useEffect(() => {
+    if (!onProgress || !resumeReady) return undefined
+    latestProgress.current = { stage: 'screenplay', groupIndex, sceneIndex: selectedIndex, editMode }
+    const timer = setTimeout(() => onProgress(latestProgress.current), 1200)
+    return () => clearTimeout(timer)
+  }, [onProgress, resumeReady, groupIndex, selectedIndex, editMode])
+  // closing the tab: save at once, do not wait for the pause
+  useEffect(() => {
+    if (!onProgress) return undefined
+    const flush = () => { if (latestProgress.current) onProgress(latestProgress.current) }
+    window.addEventListener('pagehide', flush)
+    return () => window.removeEventListener('pagehide', flush)
+  }, [onProgress])
   const [activeLineType, setActiveLineType] = useState('action')
   const [agentDelete, setAgentDelete] = useState(null) // scene index the voice agent wants to delete, waiting for the writer's click
   const [ctxMenu, setCtxMenu] = useState(null) // the scene's right-click menu: { x, y, index }
@@ -4102,11 +4138,11 @@ function MovieScreenplayWorkspace({
     if (!ctxMenu) return undefined
     const close = () => setCtxMenu(null)
     const onKey = (event) => { if (event.key === 'Escape') close() }
+    // (not on scroll: the page often scrolls by itself — to the scene just chosen — and that must not close the menu)
     window.addEventListener('click', close)
     window.addEventListener('resize', close)
-    window.addEventListener('scroll', close, true)
     document.addEventListener('keydown', onKey)
-    return () => { window.removeEventListener('click', close); window.removeEventListener('resize', close); window.removeEventListener('scroll', close, true); document.removeEventListener('keydown', onKey) }
+    return () => { window.removeEventListener('click', close); window.removeEventListener('resize', close); document.removeEventListener('keydown', onKey) }
   }, [ctxMenu])
   useEffect(() => {
     if (!editMode) return undefined
@@ -7968,6 +8004,9 @@ function App() {
   // it uploads itself, so it imports, edits and approves its own production
   // work — and sees nothing outside Production Management.
   const isProductionOnly = currentUser?.role === 'production'
+  // A "Screenplay writer" login: the Story & Screenplay tools of ONE assigned project, opened straight at the screenplay where he stopped.
+  const isScreenplayWriter = currentUser?.role === 'screenplay_writer'
+  const hasStoryAccess = currentUser?.role === 'admin' || isScreenplayWriter
   const canEditProduction = currentUser?.role === 'admin' || currentUser?.role === 'production_manager' || isProductionOnly
   const canReviewProduction = currentUser?.role === 'admin' || currentUser?.role === 'director' || isProductionOnly
   // Narrower than canEditProduction: importing/analyzing a script is a
@@ -8015,6 +8054,7 @@ function App() {
   }
 
   async function loadCrewMembers(sceneListId) {
+    if (currentUser?.role === 'screenplay_writer') return // crew is Production Management, not his
     const response = await fetch(`${BACKEND_URL}/api/crew?sceneListId=${sceneListId}`)
     if (!response.ok) return
     setCrewMembers(await response.json())
@@ -8402,7 +8442,7 @@ function App() {
         // fresh login — otherwise a director's browser defaults to the
         // 'story' agent (its initial state) and Story & Screenplay's
         // content renders even though its nav entry is hidden.
-        if (data && data.role !== 'admin') setActiveAgent('production')
+        if (data && data.role !== 'admin') setActiveAgent(data.role === 'screenplay_writer' ? 'story' : 'production')
       })
       .catch(() => setCurrentUser(null))
   }, [])
@@ -8428,7 +8468,7 @@ function App() {
 
       setCurrentUser(data)
       setLoginPassword('')
-      if (data.role !== 'admin') setActiveAgent('production')
+      if (data.role !== 'admin') setActiveAgent(data.role === 'screenplay_writer' ? 'story' : 'production')
     } catch {
       setLoginError(t.genericError)
     }
@@ -9791,7 +9831,7 @@ function App() {
       }
     }
 
-    if (currentUser.role !== 'director' && currentUser.role !== 'production') {
+    if (currentUser.role !== 'director' && currentUser.role !== 'production' && currentUser.role !== 'screenplay_writer') {
       fetch(`${BACKEND_URL}/api/google/status`)
         .then((res) => res.json())
         .then((data) => setGoogleConnected(data.connected))
@@ -12344,6 +12384,36 @@ function App() {
   useEffect(() => {
     setMovieFocusedStage(null)
   }, [movieCurrentStage, conceptId])
+  // ---- Screenplay writer: where he stopped is saved on the server (any device), and the page reopens there ----
+  const [writerResume, setWriterResume] = useState(undefined) // undefined: loading · null: nothing saved yet · object: { stage, groupIndex, sceneIndex, editMode }
+  const [writerResumeApplied, setWriterResumeApplied] = useState(false)
+  const writerProgressRef = useRef({})
+  const saveWriterProgress = useCallback((patch) => {
+    writerProgressRef.current = { ...writerProgressRef.current, ...patch }
+    fetch(`${BACKEND_URL}/api/writer/progress`, {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(writerProgressRef.current), keepalive: true,
+    }).catch(() => {})
+  }, [])
+  useEffect(() => {
+    if (!isScreenplayWriter) return
+    fetch(`${BACKEND_URL}/api/writer/progress`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => { writerProgressRef.current = data?.state ?? {}; setWriterResume(data?.state ?? null) })
+      .catch(() => setWriterResume(null))
+  }, [isScreenplayWriter])
+  // once the project is open: go to the stage he was in (the screenplay when he was writing it)
+  useEffect(() => {
+    if (!isScreenplayWriter || writerResume === undefined || !conceptId || writerResumeApplied) return undefined
+    const timer = setTimeout(() => {
+      const target = writerResume?.stage ?? 'screenplay'
+      if (target !== 'screenplay' || sceneList) setMovieFocusedStage(target)
+      setWriterResumeApplied(true)
+    }, 600)
+    return () => clearTimeout(timer)
+  }, [isScreenplayWriter, writerResume, conceptId, sceneList, writerResumeApplied])
+  useEffect(() => {
+    if (isScreenplayWriter && writerResumeApplied && shownMovieStage) saveWriterProgress({ stage: shownMovieStage })
+  }, [isScreenplayWriter, writerResumeApplied, shownMovieStage, saveWriterProgress])
   // The draft remembers where you were (stage you focused, beat you were on), so Continue reopens exactly there.
   useEffect(() => {
     if (!currentDraft) return undefined
@@ -12585,7 +12655,7 @@ function App() {
     return <DesignerWorkspace currentUser={currentUser} backendUrl={BACKEND_URL} onLogout={handleLogoutClick} />
   }
 
-  if (appMode === null && !isProductionOnly) {
+  if (appMode === null && !isProductionOnly && !isScreenplayWriter) {
     // Picking a mode is a little cinematic moment: the chosen card glows and
     // glides to the centre, the other fades, the AI background warps toward
     // the viewer, then the chosen part of the app fades in.
@@ -13975,6 +14045,11 @@ function App() {
                       <span className="breakdown-item-meta">
                         ({u.username} — {u.role}{u.project_title ? ` — ${u.project_title}` : ''})
                       </span>
+                      {u.role === 'screenplay_writer' && (
+                        <span className="breakdown-item-meta"> · {u.last_worked_at
+                          ? t.writerLastWorked(new Date(u.last_worked_at).toLocaleString(), u.last_worked_state?.stage === 'screenplay' ? `${t.stageScreenplayLabel}: ${(u.last_worked_state.groupIndex ?? 0) + 1}.${(u.last_worked_state.sceneIndex ?? 0) + 1}` : t.stageIdeaLabel)
+                          : t.writerNeverWorked}</span>
+                      )}
                     </span>
                     <button className="breakdown-action-button crew-member-remove" onClick={() => handleDeleteUserClick(u.id)}>
                       {t.removeCrewMemberButton}
@@ -13989,13 +14064,14 @@ function App() {
                     <option value="production_manager">{t.roleProductionManager}</option>
                     <option value="director">{t.roleDirector}</option>
                     <option value="production">{t.roleProductionOnly}</option>
+                    <option value="screenplay_writer">{t.roleScreenplayWriter}</option>
                     <option value="designer">Designer (design tasks only)</option>
                     <option value="admin">{t.roleAdmin}</option>
                   </select>
                   {newUserRole !== 'admin' && newUserRole !== 'production' && newUserRole !== 'designer' && (
                     <select value={newUserConceptId} onChange={(e) => setNewUserConceptId(e.target.value)}>
                       <option value="">{t.assignProjectPlaceholder}</option>
-                      {projectHistory.map((p) => (
+                      {projectHistory.filter((p) => newUserRole !== 'screenplay_writer' || (p.projectType ?? 'story') === 'story').map((p) => (
                         <option key={p.id} value={p.id}>{p.title || p.conceptText?.slice(0, 40) || `#${p.id}`}</option>
                       ))}
                     </select>
@@ -14028,10 +14104,12 @@ function App() {
               {t.importButtonLabel}
             </button>
           )}
+          {!isScreenplayWriter && (
           <button className="import-export-button" onClick={handleExportClick} disabled={!conceptId || isExportingProject}>
             <span className="import-export-icon">{ICONS.download}</span>
             {isExportingProject ? t.exportingProjectLabel : t.exportButtonLabel}
           </button>
+          )}
         </div>
         <input
           type="file"
@@ -14064,7 +14142,7 @@ function App() {
                 {t.masterProjectListLabel}
               </button>
             )}
-            {currentUser.role === 'admin' && (
+            {hasStoryAccess && (
               <button
                 className={activeAgent === 'story' ? 'agent-header active' : 'agent-header'}
                 onClick={() => { setActiveAgent('story'); setIsSidebarOpen(false) }}
@@ -14073,7 +14151,7 @@ function App() {
                 {t.storyAgentLabel}
               </button>
             )}
-            {activeAgent === 'story' && currentUser.role === 'admin' && (
+            {activeAgent === 'story' && hasStoryAccess && (
               <div className="stage-progress agent-substages">
                 <button className={`stage-progress-item stage-${stageIdea}${shownMovieStage === 'idea' ? ' is-shown' : ''}`} onClick={() => handleStageClick('stage-idea')}>
                   <span className="stage-progress-dot" />
@@ -14098,6 +14176,7 @@ function App() {
               </div>
             )}
 
+            {!isScreenplayWriter && (
             <button
               className={activeAgent === 'production' ? 'agent-header active' : 'agent-header'}
               onClick={() => { setActiveAgent('production'); setIsSidebarOpen(false) }}
@@ -14105,7 +14184,8 @@ function App() {
               <span className={activeAgent === 'production' ? 'agent-expand-icon expanded' : 'agent-expand-icon'}>▸</span>
               {t.productionAgentLabel}
             </button>
-            {activeAgent === 'production' && (
+            )}
+            {activeAgent === 'production' && !isScreenplayWriter && (
               <div className="production-main-nav">
                 <button className={`production-main-nav-item stage-${stageBreakdown}`} onClick={() => handleStageClick('stage-breakdown')}>
                   <span className="production-main-nav-icon">{ICONS.pencil}</span>
@@ -15007,6 +15087,8 @@ function App() {
           <MovieScreenplayWorkspace
             sceneList={sceneList}
             episodes={pitchDeck?.episodes}
+            resume={isScreenplayWriter && writerResumeApplied ? writerResume : undefined}
+            onProgress={isScreenplayWriter ? saveWriterProgress : undefined}
             deckId={pitchDeck?.id}
             projectCharacterNames={characterSheet?.characters?.map((c) => c.name)}
             onDeckChanged={(deck) => setPitchDeck(deck)}
@@ -15048,9 +15130,11 @@ function App() {
                   <div className="screenplay-send-options">
                     <p><strong>What next? Send this locked screenplay to:</strong></p>
                     <div className="approval-buttons">
+                      {!isScreenplayWriter && (
                       <button type="button" className="choose-button" onClick={() => { setActiveAgent('production'); setIsSidebarOpen(false) }}>
                         🎬 Send to Production (real shoot)
                       </button>
+                      )}
                       {currentUser?.role === 'admin' && (
                         <button type="button" className="choose-button" onClick={() => handleSendForAiProduction(sceneList.id)} disabled={isSendingToAiProduction}>
                           {isSendingToAiProduction ? 'Sending to AI Production…' : '🤖 Send for AI Production'}

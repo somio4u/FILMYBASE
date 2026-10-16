@@ -1941,3 +1941,8 @@ Plain version: every project is now a set of **drafts**. Opening a project shows
 - [x] Found and fixed on the way (also affected the deployed menu): the scene right-click menu closed itself when the page scrolled — it now stays open.
 - Not included: AI Movie projects (their projects are separate and cannot be assigned to a login yet); the Auto Screenplay (draft) agent / Draft Dashboard — admin only for now.
 - **Akruti font (Unicode ↔ Akruti conversion): not built yet — waiting for answers** (which Akruti font, which direction, a sample of text / the font file).
+
+## English / Odia (Akruti layout) typing switch (not deployed yet)
+- [x] Small **EN / ଓଡ଼ିଆ** button at the top right (left of Full/Light). When ON, the keys type Odia letters directly (k → କ, Shift+K → ଖ …) in every text box, including the screenplay editor; the choice is remembered. A ⌨ button shows the on-screen Odia keyboard.
+- The layout is in one small file (`odiaKeys.js`). It follows the standard Odia layout; **the keyboard picture was too small to read every key, so please compare the on-screen ⌨ with your picture and tell me any wrong key.** Checked in a real browser: English types English, switch ON types Odia.
+- Still not built: Unicode ↔ Akruti *font* (legacy encoding) conversion — only needed if you want text stored/exported in the old Akruti font encoding.

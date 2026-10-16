@@ -4,6 +4,7 @@ import App from './App.jsx'
 import AiBackground from './AiBackground.jsx'
 import ErrorBoundary from './ErrorBoundary.jsx'
 import PerfToggle from './PerfToggle.jsx'
+import OdiaKeyToggle from './OdiaKeyToggle.jsx'
 import { initPerfMode } from './perfMode.js'
 
 initPerfMode()
@@ -14,6 +15,7 @@ createRoot(document.getElementById('root')).render(
       <AiBackground />
       <App />
       <PerfToggle />
+      <OdiaKeyToggle />
     </ErrorBoundary>
   </StrictMode>,
 )

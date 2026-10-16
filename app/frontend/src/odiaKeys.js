@@ -29,6 +29,25 @@ function isTypingTarget(el) {
   return !BAD_INPUT_TYPES.includes((el.type || '').toLowerCase())
 }
 
+const A_LETTER = '\u0B05' // ଅ
+const AA_LETTER = '\u0B06' // ଆ
+const AA_KAR = '\u0B3E' // ା
+
+// If the letter just before the caret is `wanted`, selects it (so the next insert replaces it) and says true.
+export function selectPreviousChar(el, wanted) {
+  if (el.isContentEditable) {
+    const sel = window.getSelection()
+    const node = sel?.anchorNode
+    if (!sel?.isCollapsed || node?.nodeType !== 3 || sel.anchorOffset < 1 || node.data[sel.anchorOffset - 1] !== wanted) return false
+    sel.setBaseAndExtent(node, sel.anchorOffset - 1, node, sel.anchorOffset)
+    return true
+  }
+  const { selectionStart: start, selectionEnd: end, value } = el
+  if (start !== end || start < 1 || value[start - 1] !== wanted) return false
+  el.setSelectionRange(start - 1, start)
+  return true
+}
+
 // Key handler: while Odia mode is on, turns a plain key press into the Odia letter.
 export function odiaKeyHandler(event) {
   if (event.ctrlKey || event.metaKey || event.altKey || event.isComposing) return
@@ -37,5 +56,6 @@ export function odiaKeyHandler(event) {
   const letter = event.shiftKey ? pair[1] : pair[0]
   if (letter === null) return
   event.preventDefault()
+  if (letter === AA_KAR && selectPreviousChar(event.target, A_LETTER)) { document.execCommand('insertText', false, AA_LETTER); return } // ଅ + ା is written ଆ
   if (letter) document.execCommand('insertText', false, letter) // '' = the key types nothing
 }

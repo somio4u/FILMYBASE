@@ -1862,3 +1862,9 @@ Plain version: every project is now a set of **drafts**. Opening a project shows
 - [x] The picture command adds "Place the N people as described and frame the shot so that ALL N are clearly visible".
 - [x] **Picture limit bug fixed:** the command named up to 4 items but 5 pictures were attached, so with 6 items (4 friends + place + jeep) the last one was dropped silently. Now one limit (5) is used everywhere and any item that does not fit is named in the command "in words only".
 - Not built: a shared "group sheet" picture for the friends. Honest note: tested with scripted AI answers only; check SH001 with "Re-analyse ALL scenes" then "Make another version".
+
+## Screenplay "Edit mode": full screen + rename an episode (deploying)
+- [x] **✏ Edit mode** button next to ☀ Light / 🌙 Dark on the Film screenplay page. It makes the whole screenplay area (scene list, the script page, and the right-hand panel with Edit this scene / Undo / Ask AI to change it / Change language / Add a scene before/after) fill the screen, covering the left menu (Story & Screenplay, Idea, Synopsis …). The selected scene opens straight into editing. **✕ Exit edit mode** or **Esc** brings everything back. The 🎤 Speak orb stays on top and still writes into the selected scene (or into your open edit at the cursor).
+- [x] **Rename an episode:** a "✏ Rename" button next to the episode name ("FIRE'S FIRST DEBT"); type your own name, Enter / "Save name". Saved for the language you are reading in (other languages keep theirs). New backend route `POST /api/pitch-deck/:id/episode-title` (checked on a real server).
+- Honest note: the full-screen view was built and compiled but could not be shown in a real browser with a real film here — please open a screenplay and tell me how it looks.
+- Not built yet (asked, waiting for confirmation): editing the script page like a Word document, with an action/dialogue/parenthetical palette on the right.

@@ -7638,3 +7638,23 @@ html[data-perf="light"] .app-shell { background-image: none !important; backgrou
 .synopsis-suggestion.is-rejected { border-left-color: #777; opacity: 0.85; }
 .synopsis-suggestion.is-accepted { border-left-color: #3fa055; }
 .synopsis-suggestion .syn-changed { color: #ff8a8a; }
+
+
+/* Edit mode: the screenplay card fills the whole screen above the left menu; the speak orb (z-index 880) stays above it. */
+.ai-movie-screenplay-current-card.is-edit-mode {
+  position: fixed;
+  inset: 0;
+  z-index: 870;
+  margin: 0;
+  border-radius: 0;
+  overflow: auto;
+  padding: 16px clamp(12px, 2vw, 32px) 48px;
+  background: #0b1020;
+}
+:root[data-theme='light'] .ai-movie-screenplay-current-card.is-edit-mode { background: #f4f5f9; }
+body.is-script-edit-mode { overflow: hidden; }
+.script-edit-mode-hint { margin: 0 0 8px; font-size: 0.85rem; opacity: 0.75; }
+.script-edit-mode-toggle.is-active { outline: 2px solid currentColor; }
+.episode-rename-button { margin-left: 10px; padding: 3px 10px; border-radius: 999px; border: 1px solid var(--border-subtle); background: transparent; color: inherit; cursor: pointer; font-size: 0.8rem; }
+.episode-title-edit { display: inline-flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: center; }
+.episode-title-edit input { min-width: 260px; padding: 8px 12px; border-radius: 8px; border: 1px solid var(--border-subtle); background: var(--bg-input); color: inherit; font: inherit; }

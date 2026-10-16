@@ -8741,6 +8741,28 @@ app.post("/api/pitch-deck/:id/approve", requireRole("admin"), async (req, res) =
   res.json({ id: row.id, status: row.status, feedback: row.feedback, ...row.content });
 });
 
+// Rename one episode (what the person typed is kept for the language they are reading in).
+app.post("/api/pitch-deck/:id/episode-title", requireRole("admin"), async (req, res) => {
+  const index = Number(req.body?.episodeIndex);
+  const title = String(req.body?.title ?? "").replace(/\s+/g, " ").trim().slice(0, 120);
+  const language = ["en", "hi", "or"].includes(req.body?.language) ? req.body.language : "en";
+  if (!Number.isInteger(index) || index < 0 || !title) {
+    res.status(400).json({ error: "Type a name for the episode." });
+    return;
+  }
+  const found = await db.query("SELECT id, content, status, feedback FROM pitch_decks WHERE id = $1", [req.params.id]);
+  const row = found.rows[0];
+  if (!row || !Array.isArray(row.content?.episodes) || !row.content.episodes[index]) {
+    res.status(404).json({ error: "That episode was not found." });
+    return;
+  }
+  const content = row.content;
+  content.episodes[index].title = { ...(content.episodes[index].title ?? {}), [language]: title };
+  if (!content.episodes[index].title.en) content.episodes[index].title.en = title;
+  await db.query("UPDATE pitch_decks SET content = $1 WHERE id = $2", [JSON.stringify(content), row.id]);
+  res.json({ id: row.id, status: row.status, feedback: row.feedback, ...content });
+});
+
 app.post("/api/pitch-deck/:id/request-changes", requireRole("admin"), async (req, res) => {
   const { feedback } = req.body;
 

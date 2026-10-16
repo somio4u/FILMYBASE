@@ -497,6 +497,13 @@ const LABELS = {
     scriptAiWritingLabel: 'AI is writing… hang tight',
     aiMovieShortDuration: (minutes) => aiMovieDurationText(minutes, 'sec', 'min'),
     scriptThemeLight: '☀ Light',
+    editModeOn: '✏ Edit mode',
+    editModeOff: '✕ Exit edit mode',
+    editModeHint: 'Edit mode — full screen. Press Esc or ✕ to leave.',
+    episodeRenameButton: 'Rename',
+    episodeRenameSave: 'Save name',
+    episodeRenameCancel: 'Cancel',
+    episodeRenameLabel: 'Episode name',
     scriptThemeDark: '☾ Dark',
     aiMovieBeatNarrationNote: "Writes one continuous narrator voice-over that runs through every scene of this beat, in order. Any dialogue you've already got stays as it is.",
     aiMovieBeatNarrationPlaceholder: 'Tell me what the narration should say for this beat, e.g. "Narrator explains how war and pollution emptied Earth, people left for colonies, and only the gods and temples remained."',
@@ -1316,6 +1323,13 @@ const LABELS = {
     scriptAiWritingLabel: 'AI ଲେଖୁଛି… ଟିକେ ରହ',
     aiMovieShortDuration: (minutes) => aiMovieDurationText(minutes, 'ସେକେଣ୍ଡ', 'ମିନିଟ୍'),
     scriptThemeLight: '☀ ଲାଇଟ୍',
+    editModeOn: '✏ ଏଡିଟ୍ ମୋଡ୍',
+    editModeOff: '✕ ଏଡିଟ୍ ମୋଡ୍ ବନ୍ଦ',
+    editModeHint: 'ଏଡିଟ୍ ମୋଡ୍ — ପୂରା ସ୍କ୍ରିନ୍। ବାହାରିବାକୁ Esc କିମ୍ବା ✕ ଦବାଅ।',
+    episodeRenameButton: 'ନାମ ବଦଳାଅ',
+    episodeRenameSave: 'ନାମ ସେଭ୍ କର',
+    episodeRenameCancel: 'ବାତିଲ୍',
+    episodeRenameLabel: 'ଏପିସୋଡ୍ ନାମ',
     scriptThemeDark: '☾ ଡାର୍କ',
     aiMovieBeatNarrationNote: 'ଏ ବିଟ୍‌ର ସବୁ ସିନ୍ ଦେଇ କ୍ରମରେ ଚାଲୁଥିବା ଗୋଟେ ଲଗାତାର ନେରେଟର୍ ଭଏସ୍-ଓଭର ଲେଖିଦେବ। ଆଗରୁ ଲେଖା ହେଇଥିବା ଡାଇଲଗ୍ ସେମିତି ରହିବ।',
     aiMovieBeatNarrationPlaceholder: `ଏ ବିଟ୍‌ରେ ନେରେସନ୍ କ'ଣ କହିବ ଲେଖ, ଯେମିତି "ଯୁଦ୍ଧ ଆଉ ପ୍ରଦୂଷଣ କେମିତି ପୃଥିବୀକୁ ଖାଲି କରିଦେଲା, ଲୋକେ କଲୋନିକୁ ଚାଲିଗଲେ, ଆଉ ଖାଲି ଭଗବାନ ଆଉ ମନ୍ଦିର ରହିଗଲେ — ନେରେଟର୍ କହୁଛି।"`,
@@ -3867,7 +3881,7 @@ function LanguageChanger({ t, sceneListId, episodeIndex, sceneIndex, sceneNumber
 }
 
 function MovieScreenplayWorkspace({
-  sceneList, episodes, t, language, screenplay, scriptTheme, onChangeScriptTheme, onSceneSaved, onReloadScenes, onSceneListChanged,
+  sceneList, episodes, t, language, screenplay, scriptTheme, onChangeScriptTheme, onSceneSaved, onReloadScenes, onSceneListChanged, deckId, onDeckChanged,
 }) {
   const groups = sceneList.episodeScenes
     ? sceneList.episodeScenes.map((episodeScene, index) => ({
@@ -3882,6 +3896,31 @@ function MovieScreenplayWorkspace({
   const [turn, setTurn] = useState('open')
   const [selectedIndex, setSelectedIndex] = useState(0)
   const [editing, setEditing] = useState(null)
+  // Edit mode: the whole screenplay area fills the screen (the left menu is covered); leaving it brings everything back.
+  const [editMode, setEditMode] = useState(false)
+  const [renaming, setRenaming] = useState(null) // { index, text } while an episode name is being typed
+  const [renameError, setRenameError] = useState(null)
+  useEffect(() => {
+    if (!editMode) return undefined
+    const onKey = (event) => { if (event.key === 'Escape') setEditMode(false) }
+    document.addEventListener('keydown', onKey)
+    document.body.classList.add('is-script-edit-mode')
+    return () => { document.removeEventListener('keydown', onKey); document.body.classList.remove('is-script-edit-mode') }
+  }, [editMode])
+  async function saveEpisodeName() {
+    if (!renaming || !deckId) return
+    setRenameError(null)
+    try {
+      const response = await fetch(`${BACKEND_URL}/api/pitch-deck/${deckId}/episode-title`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ episodeIndex: renaming.index, title: renaming.text, language }),
+      })
+      const data = await response.json()
+      if (!response.ok) { setRenameError(data.error || t.genericError); return }
+      onDeckChanged?.(data)
+      setRenaming(null)
+    } catch { setRenameError(t.genericError) }
+  }
   const [isSubmittingEdit, setIsSubmittingEdit] = useState(false)
   const [editError, setEditError] = useState(null)
   const [editFixes, setEditFixes] = useState(null)
@@ -4234,11 +4273,10 @@ function MovieScreenplayWorkspace({
     return t.movieScriptCheckSceneLabel(numberOf(s, entry.sceneIndex), s ? movieSlugline(s) : '')
   }
 
-  return (
-    <div className="movie-screenplay">
-      {breakdownStale && <p className="feedback-note movie-breakdown-stale-note">{t.movieBreakdownStaleNote}</p>}
-
-      <div className="ai-movie-screenplay-current-card">
+  // In edit mode the card is moved to <body> so nothing above it (menus, glass panels) can clip or cover it.
+  const screenplayCard = (
+      <div className={`ai-movie-screenplay-current-card${editMode ? ' is-edit-mode' : ''}`}>
+        {editMode && <p className="script-edit-mode-hint">{t.editModeHint}</p>}
         {/* Changing episode: a pane of glass sweeps across the card. */}
         {groups.length > 1 && turn !== 'open' && (
           <div className="glass-sweep-layer" aria-hidden="true">
@@ -4251,7 +4289,19 @@ function MovieScreenplayWorkspace({
               onClick={() => { setTurn('prev'); setGroupIndex((i) => Math.max(0, i - 1)) }}>‹</button>
             <div key={`title-${groupIndex}`} className={`episode-title episode-title-${turn}`}>
               <span className="episode-title-kicker">{t.episodeLabel} {groupIndex + 1} <span>/ {groups.length}</span></span>
-              {group.title && <span className="episode-title-name">{group.title}</span>}
+              {renaming && renaming.index === group.episodeIndex ? (
+                <span className="episode-title-edit">
+                  <input aria-label={t.episodeRenameLabel} value={renaming.text} autoFocus onChange={(e) => setRenaming({ ...renaming, text: e.target.value })} onKeyDown={(e) => { if (e.key === 'Enter') saveEpisodeName(); if (e.key === 'Escape') { e.stopPropagation(); setRenaming(null) } }} />
+                  <button type="button" className="choose-button" onClick={saveEpisodeName} disabled={!renaming.text.trim()}>{t.episodeRenameSave}</button>
+                  <button type="button" className="cancel-button" onClick={() => { setRenaming(null); setRenameError(null) }}>{t.episodeRenameCancel}</button>
+                  {renameError && <span className="feedback-note">{renameError}</span>}
+                </span>
+              ) : (
+                <>
+                  {group.title && <span className="episode-title-name">{group.title}</span>}
+                  {deckId && group.episodeIndex !== null && <button type="button" className="episode-rename-button" title={t.episodeRenameButton} aria-label={t.episodeRenameButton} onClick={() => { setRenaming({ index: group.episodeIndex, text: group.title }); setRenameError(null) }}>✏ {t.episodeRenameButton}</button>}
+                </>
+              )}
             </div>
             <button type="button" className="ai-movie-screenplay-nav-button" aria-label="Next episode" disabled={groupIndex === groups.length - 1}
               onClick={() => { setTurn('next'); setGroupIndex((i) => Math.min(groups.length - 1, i + 1)) }}>›</button>
@@ -4284,6 +4334,10 @@ function MovieScreenplayWorkspace({
                     {mode === 'light' ? t.scriptThemeLight : t.scriptThemeDark}
                   </button>
                 ))}
+                <button type="button" className={`script-theme-option script-edit-mode-toggle${editMode ? ' is-active' : ''}`} aria-pressed={editMode}
+                  onClick={() => { const next = !editMode; setEditMode(next); if (next && !editing && draftOf(sceneIndex)) startEditing(sceneIndex) }}>
+                  {editMode ? t.editModeOff : t.editModeOn}
+                </button>
               </div>
               <div className="script-stage">
                 <div key={`group-${groupIndex}`} className={`script-page script-page-${scriptTheme} script-turn-${turn}`}>
@@ -4509,6 +4563,13 @@ function MovieScreenplayWorkspace({
           </div>
         )}
       </div>
+  )
+
+  return (
+    <div className="movie-screenplay">
+      {breakdownStale && <p className="feedback-note movie-breakdown-stale-note">{t.movieBreakdownStaleNote}</p>}
+
+      {editMode ? createPortal(screenplayCard, document.body) : screenplayCard}
 
       {screenplay && scene && (
         <VoiceWriterButton
@@ -14455,6 +14516,8 @@ function App() {
           <MovieScreenplayWorkspace
             sceneList={sceneList}
             episodes={pitchDeck?.episodes}
+            deckId={pitchDeck?.id}
+            onDeckChanged={(deck) => setPitchDeck(deck)}
             t={t}
             language={language}
             scriptTheme={scriptTheme}

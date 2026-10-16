@@ -1906,3 +1906,10 @@ Plain version: every project is now a set of **drafts**. Opening a project shows
 - Checked on a real server (scene 2 → after scene 5, versions kept, numbers renumbered, bad moves refused) and in a real browser with the whole workspace (right-click menu, ⋮ button, drag with the blue drop line, move up, duplicate, heading form, editor opens from the menu, move refused while typing). 4 unit tests (sceneOrder.test.js).
 - Still to come (phase 2): find & replace and "rename a character everywhere", split / merge scenes, multi-select, Omit (hide a scene), colours and notes on scenes, Undo for move / delete. Film module only — AI Movie scenes belong to their beats.
 - After moving scenes, a script breakdown, shoot schedule or production shots made earlier may be out of date (the existing warning is shown).
+
+## Add multiple scenes (not deployed yet)
+- [x] **"＋ Add multiple scenes"** next to "Add a scene before / after" (right-hand panel, Film screenplay): one box where you write what happens in as many scenes as you like — numbered (1. 2. 3.) or one paragraph per scene (blank line between). Pick where: after / before the selected scene, or at the end. It shows how many scenes it found, then creates and writes them one after another ("Writing scene 2 of 3…").
+- [x] **INT/EXT, place and time are not asked for:** one small AI call works them out from your words (`/scenes/plan`); if it fails, plain editable headings are used. Scene length follows how much you wrote.
+- [x] **The AI stays inside your context:** your text becomes the scene's outline word for word and the scene is marked `strictContext`; the scene writer is told to stage ONLY what you described — no new plot events, characters, twists or ending — and not to pad a short description.
+- Checked in a real browser (3 scenes → created at the right places in order, each written, headings from the plan). Tests: sceneContexts splitting, the plan clean-up (multiScenes.test.js).
+- Honest note: whether the real Gemini obeys "stay inside the context" needs a real try; and a very long list (30 scenes max at a time) takes a while because each scene is written one by one.

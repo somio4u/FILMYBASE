@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useMemo, useCallback, useContext, createCo
 import { createPortal } from 'react-dom'
 import ScriptEditor, { ScriptToolbar } from './ScriptEditor.jsx'
 import { cleanForSave, collectCharacterNames } from './scriptDoc.js'
+import { splitSceneContexts } from './sceneContexts.js'
 import './App.css'
 import { AI_ACTIVITY_EVENT, AI_WARP_EVENT } from './AiBackground.jsx'
 import ProductionStudio, { PRODUCTION_WORKSPACES, LEGACY_VIEW } from './ProductionStudio.jsx'
@@ -515,6 +516,16 @@ const LABELS = {
     headingFormPlace: 'Place',
     headingFormTime: 'Time of day (DAY, NIGHT …)',
     headingFormSave: 'Save heading',
+    sceneMultiButton: '＋ Add multiple scenes',
+    sceneMultiTitle: 'Add multiple scenes',
+    sceneMultiHint: 'Write what happens in each scene — one scene per paragraph (a blank line between), or number them 1. 2. 3. Each scene is written using ONLY what you wrote for it. INT/EXT, place and time are worked out for you and can be edited later.',
+    sceneMultiPlaceholder: '1. The four friends reach the palace gate in the jeep.\n\n2. They find the gate locked; Rohan climbs the wall.\n\n3. …',
+    sceneMultiWhereLabel: 'Where',
+    sceneMultiWhere: { after: 'After the selected scene', before: 'Before the selected scene', end: 'At the end' },
+    sceneMultiCount: (n) => (n === 0 ? 'No scene yet' : `${n} scene${n === 1 ? '' : 's'} found`),
+    sceneMultiGo: (n) => `Create and write ${n} scene${n === 1 ? '' : 's'}`,
+    sceneMultiPlanning: 'Reading your descriptions…',
+    sceneMultiWorking: (i, n) => `Writing scene ${i} of ${n}…`,
     editModeOn: '✏ Edit mode',
     scriptToolbarLang: 'en',
     pageZoomLabel: 'Page zoom',
@@ -1363,6 +1374,16 @@ const LABELS = {
     headingFormPlace: 'ଜାଗା',
     headingFormTime: 'ସମୟ (DAY, NIGHT …)',
     headingFormSave: 'ହେଡିଂ ସେଭ୍ କର',
+    sceneMultiButton: '＋ ଅନେକ ସିନ୍ ଯୋଡ଼',
+    sceneMultiTitle: 'ଅନେକ ସିନ୍ ଯୋଡ଼',
+    sceneMultiHint: 'ପ୍ରତ୍ୟେକ ସିନ୍‌ରେ କ’ଣ ହେଉଛି ଲେଖ — ଏକ ସିନ୍ ପାଇଁ ଏକ ଅନୁଚ୍ଛେଦ (ମଝିରେ ଖାଲି ଲାଇନ୍), କିମ୍ବା 1. 2. 3. ନମ୍ବର ଦିଅ। ପ୍ରତ୍ୟେକ ସିନ୍ ତୁ ଯାହା ଲେଖିଛୁ କେବଳ ସେତିକିରେ ଲେଖାଯିବ। INT/EXT, ଜାଗା, ସମୟ ନିଜେ ବାହାରିବ, ପରେ ବଦଳାଇ ହେବ।',
+    sceneMultiPlaceholder: '1. ଚାରି ବନ୍ଧୁ ଜିପ୍‌ରେ ମହଲ ଫାଟକରେ ପହଞ୍ଚିଲେ।\n\n2. ଫାଟକ ବନ୍ଦ; ରୋହନ କାନ୍ଥ ଉପରେ ଚଢ଼ିଲା।\n\n3. …',
+    sceneMultiWhereLabel: 'କେଉଁଠି',
+    sceneMultiWhere: { after: 'ବାଛିଥିବା ସିନ୍ ପରେ', before: 'ବାଛିଥିବା ସିନ୍ ଆଗରେ', end: 'ଶେଷରେ' },
+    sceneMultiCount: (n) => (n === 0 ? 'ଏପର୍ଯ୍ୟନ୍ତ ସିନ୍ ନାହିଁ' : `${n}ଟି ସିନ୍ ମିଳିଲା`),
+    sceneMultiGo: (n) => `${n}ଟି ସିନ୍ ତିଆରି କରି ଲେଖ`,
+    sceneMultiPlanning: 'ତୁମର ବର୍ଣ୍ଣନା ପଢ଼ୁଛି…',
+    sceneMultiWorking: (i, n) => `${n}ରୁ ${i} ନମ୍ବର ସିନ୍ ଲେଖୁଛି…`,
     editModeOn: '✏ ଏଡିଟ୍ ମୋଡ୍',
     scriptToolbarLang: 'or',
     pageZoomLabel: 'ପେଜ୍ ଜୁମ୍',
@@ -3960,6 +3981,8 @@ function MovieScreenplayWorkspace({
   const [ctxMenu, setCtxMenu] = useState(null) // the scene's right-click menu: { x, y, index }
   const [drag, setDrag] = useState(null) // while a scene is dragged in the list: { from, over, after }
   const [headingForm, setHeadingForm] = useState(null) // { index, intExt, location, timeOfDay }
+  const [multiForm, setMultiForm] = useState(null) // "Add multiple scenes": { text, where }
+  const [multiProgress, setMultiProgress] = useState(null) // { step: 'planning' | 'writing', index, total }
   useEffect(() => {
     if (!ctxMenu) return undefined
     const close = () => setCtxMenu(null)
@@ -4152,6 +4175,37 @@ function MovieScreenplayWorkspace({
       const ok = await createScene({ position, intExt: a.intExt, location: a.location, timeOfDay: a.timeOfDay, oneLiner: a.oneLiner, estimatedMinutes: a.minutes }, a.write !== false)
       if (!ok) break
     }
+  }
+
+  // "Add multiple scenes": one box with what happens in each scene. Headings are worked out; each scene is then made and written
+  // one after another, using only the writer's own words for it.
+  async function createMultipleScenes() {
+    const contexts = splitSceneContexts(multiForm?.text)
+    if (contexts.length === 0) return
+    if (editing?.dirty) { setSceneChangeError(t.editSaveFirst); return }
+    setSceneChangeError(null)
+    setMultiProgress({ step: 'planning', index: 0, total: contexts.length })
+    let plan = []
+    try {
+      const response = await fetch(`${BACKEND_URL}/api/scene-lists/${sceneList.id}/scenes/plan`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ contexts }),
+      })
+      if (response.ok) plan = (await response.json()).scenes ?? []
+    } catch { /* plain headings are used; they can be edited afterwards */ }
+    let position = multiForm.where === 'before' ? sceneIndex : multiForm.where === 'end' ? scenes.length : sceneIndex + 1
+    let made = 0
+    for (let i = 0; i < contexts.length; i += 1) {
+      setMultiProgress({ step: 'writing', index: i + 1, total: contexts.length })
+      const p = plan[i] ?? {}
+      const ok = await createScene({
+        position: position + i, intExt: p.intExt ?? 'INT', location: p.location ?? 'LOCATION', timeOfDay: p.timeOfDay ?? 'DAY',
+        oneLiner: contexts[i], estimatedMinutes: p.estimatedMinutes ?? 2, strictContext: true,
+      }, true)
+      if (!ok) break
+      made += 1
+    }
+    setMultiProgress(null)
+    if (made === contexts.length) setMultiForm(null)
   }
 
   // ---- the scene list: drag to move, right-click menu, duplicate, heading ----
@@ -4713,7 +4767,28 @@ function MovieScreenplayWorkspace({
               {screenplay && (
                 <div className="script-scene-manage">
                   <p className="script-panel-title">{t.sceneManageTitle}</p>
-                  {sceneForm ? (
+                  {multiForm ? (
+                    <div className="script-scene-form script-multi-form">
+                      <p className="script-tools-heading">{t.sceneMultiTitle}</p>
+                      <p className="script-tools-editing-note">{t.sceneMultiHint}</p>
+                      <textarea rows={10} value={multiForm.text} placeholder={t.sceneMultiPlaceholder} disabled={Boolean(multiProgress)} onChange={(event) => setMultiForm({ ...multiForm, text: event.target.value })} />
+                      <label>
+                        {t.sceneMultiWhereLabel}
+                        <select value={multiForm.where} disabled={Boolean(multiProgress)} onChange={(event) => setMultiForm({ ...multiForm, where: event.target.value })}>
+                          {Object.entries(t.sceneMultiWhere).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+                        </select>
+                      </label>
+                      <p className="script-tools-editing-note">{multiProgress ? (multiProgress.step === 'planning' ? t.sceneMultiPlanning : t.sceneMultiWorking(multiProgress.index, multiProgress.total)) : t.sceneMultiCount(splitSceneContexts(multiForm.text).length)}</p>
+                      <div className="script-scene-form-actions">
+                        <button type="button" className="choose-button" onClick={createMultipleScenes} disabled={Boolean(multiProgress) || splitSceneContexts(multiForm.text).length === 0}>
+                          {t.sceneMultiGo(splitSceneContexts(multiForm.text).length)}
+                        </button>
+                        <button type="button" className="cancel-button" onClick={() => setMultiForm(null)} disabled={Boolean(multiProgress)}>
+                          {t.sceneNewCancelButton}
+                        </button>
+                      </div>
+                    </div>
+                  ) : sceneForm ? (
                     <form className="script-scene-form" onSubmit={(event) => { event.preventDefault(); submitNewScene(true) }}>
                       <p className="script-tools-heading">{t.sceneNewTitle(sceneForm.position + 1)}</p>
                       <label>
@@ -4760,6 +4835,9 @@ function MovieScreenplayWorkspace({
                       </button>
                       <button type="button" className="cancel-button" onClick={() => openSceneForm(sceneIndex + 1)} disabled={Boolean(editing) || isAiWriting || isChecking || isChangingScenes}>
                         {t.sceneAddAfterButton}
+                      </button>
+                      <button type="button" className="cancel-button" onClick={() => setMultiForm({ text: '', where: 'after' })} disabled={Boolean(editing) || isAiWriting || isChecking || isChangingScenes}>
+                        {t.sceneMultiButton}
                       </button>
                       <button type="button" className="cancel-button script-scene-delete-button" onClick={deleteSelectedScene} disabled={Boolean(editing) || isAiWriting || isChecking || isChangingScenes || scenes.length < 2}>
                         {t.sceneDeleteButton}

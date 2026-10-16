@@ -7757,3 +7757,5 @@ body.is-script-edit-mode { overflow: hidden; }
 .scene-ctx-menu button.is-danger { color: #ff8c8c; }
 .script-heading-form label { display: grid; gap: 4px; font-size: 0.8rem; }
 .script-heading-form input, .script-heading-form select { padding: 6px 10px; border-radius: 8px; border: 1px solid var(--border-subtle); background: var(--bg-input); color: inherit; font: inherit; }
+
+.script-multi-form textarea { width: 100%; box-sizing: border-box; padding: 10px; border-radius: 8px; border: 1px solid var(--border-subtle); background: var(--bg-input); color: inherit; font: inherit; line-height: 1.5; resize: vertical; }

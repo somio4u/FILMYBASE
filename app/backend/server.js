@@ -2,6 +2,7 @@ import "dotenv/config";
 import express from "express";
 import "express-async-errors";
 import cors from "cors";
+import { cleanPlan, planPrompt } from "./multiScenes.js";
 import { moveIndex, moveInArray, moveCaseSql, validMove } from "./sceneOrder.js";
 import { applyVoiceEdits, changeTotal, cleanSceneActions, wrongScriptLines, SCRIPT_NAMES } from "./voiceEdits.js";
 import { GoogleGenAI, Type } from "@google/genai";
@@ -11170,6 +11171,11 @@ async function generateScreenplaySceneContent(deck, allScenes, sceneIndex, previ
   const castText = castContext.getStore();
   if (castText) contents += `\n\n${castText}`;
 
+  // "Add multiple scenes": the writer's own description is ALL the story this scene has
+  if (targetScene.strictContext) {
+    contents += `\n\nSTRICT: the description of this scene was written by the screenwriter and is the ONLY story content you may use. Stage exactly what it says — every event, person, object and place it names, in the order it gives. Do NOT add new plot events, new named characters, twists, backstory, explanations or an ending that the description does not contain; do not move the story forward beyond it. You may add only the ordinary movement, reactions and the natural words of dialogue that are needed to play out what is described. If the description is short, the scene is short — do not pad it.`;
+  }
+
   if (controllingIdea) {
     contents += `\n\nThe story's Controlling Idea (theme) is: "${controllingIdea.en}" — let the dialogue and action reflect it where natural, without stating it outright.`;
   }
@@ -11772,7 +11778,7 @@ async function lockSceneListForSceneEdit(client, sceneListId, episodeIndex) {
 
 app.post("/api/scene-lists/:id/scenes", requireRole("admin"), async (req, res) => {
   const sceneListId = Number(req.params.id);
-  const { position, intExt, location, timeOfDay, oneLiner, estimatedMinutes, blank, dialogueLanguage: rawLanguage } = req.body;
+  const { position, intExt, location, timeOfDay, oneLiner, estimatedMinutes, blank, strictContext, dialogueLanguage: rawLanguage } = req.body;
   const episodeIndex = req.body.episodeIndex === null || req.body.episodeIndex === undefined ? null : Number(req.body.episodeIndex);
   const dialogueLanguage = ["en", "hi"].includes(rawLanguage) ? rawLanguage : "or";
   if (!String(location ?? "").trim() || !String(oneLiner ?? "").trim()) {
@@ -11805,6 +11811,8 @@ app.post("/api/scene-lists/:id/scenes", requireRole("admin"), async (req, res) =
       estimatedMinutes: Math.max(0.5, Math.min(15, Number(estimatedMinutes) || 2)),
       purpose: neighbour.purpose ?? "plot_advancing",
       addedByUser: true,
+      // the writer's own description is the only story this scene may have (see generateScreenplaySceneContent)
+      ...(strictContext === true ? { strictContext: true } : {}),
     };
     // Scene numbers ("12", "E3S4") stay sequential when they are simple;
     // otherwise the new scene gets the film-industry style "12A".
@@ -11896,6 +11904,32 @@ app.delete("/api/scene-lists/:id/scenes", requireRole("admin"), async (req, res)
   } finally {
     client.release();
   }
+});
+
+// "Add multiple scenes": the writer's descriptions in, a heading (INT/EXT, place, time) and a length for each out. The descriptions are never changed.
+app.post("/api/scene-lists/:id/scenes/plan", requireRole("admin"), async (req, res) => {
+  const contexts = (Array.isArray(req.body?.contexts) ? req.body.contexts : []).map((c) => String(c ?? "").replace(/\s+/g, " ").trim()).filter(Boolean).slice(0, 30);
+  if (contexts.length === 0) { res.status(400).json({ error: "Write what happens in at least one scene." }); return; }
+  let raw = null;
+  try {
+    raw = await generateJsonContent({
+      model: GEMINI_MODEL_NAME,
+      contents: planPrompt(contexts),
+      config: {
+        responseMimeType: "application/json",
+        maxOutputTokens: 4096,
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: { scenes: { type: Type.ARRAY, items: { type: Type.OBJECT, properties: { intExt: { type: Type.STRING }, location: { type: Type.STRING }, timeOfDay: { type: Type.STRING } }, required: ["intExt", "location", "timeOfDay"] } } },
+          required: ["scenes"],
+        },
+      },
+    });
+  } catch (error) {
+    // headings are editable later, so a failed guess never stops the scenes from being made
+    console.error("Planning multiple scenes failed (plain headings used):", error.message);
+  }
+  res.json({ scenes: cleanPlan(raw, contexts), guessed: Boolean(raw) });
 });
 
 // Drag a scene to another place: the scene keeps all its written versions (and Undo / Redo); the scenes in between move over by one.

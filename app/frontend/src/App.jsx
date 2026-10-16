@@ -1,5 +1,7 @@
-import { useState, useEffect, useRef, useContext, createContext, Fragment, lazy, Suspense } from 'react'
+import { useState, useEffect, useRef, useMemo, useCallback, useContext, createContext, Fragment, lazy, Suspense } from 'react'
 import { createPortal } from 'react-dom'
+import ScriptEditor, { ScriptToolbar } from './ScriptEditor.jsx'
+import { cleanForSave, collectCharacterNames } from './scriptDoc.js'
 import './App.css'
 import { AI_ACTIVITY_EVENT, AI_WARP_EVENT } from './AiBackground.jsx'
 import ProductionStudio, { PRODUCTION_WORKSPACES, LEGACY_VIEW } from './ProductionStudio.jsx'
@@ -498,6 +500,12 @@ const LABELS = {
     aiMovieShortDuration: (minutes) => aiMovieDurationText(minutes, 'sec', 'min'),
     scriptThemeLight: '☀ Light',
     editModeOn: '✏ Edit mode',
+    scriptToolbarLang: 'en',
+    pageZoomLabel: 'Page zoom',
+    pageZoomOut: 'Smaller page',
+    pageZoomIn: 'Bigger page',
+    pageZoomReset: 'Back to 100%',
+    editSaveFirst: 'Save or cancel the scene you are editing first.',
     editModeOff: '✕ Exit edit mode',
     editModeHint: 'Edit mode — full screen. Press Esc or ✕ to leave.',
     episodeRenameButton: 'Rename',
@@ -1324,6 +1332,12 @@ const LABELS = {
     aiMovieShortDuration: (minutes) => aiMovieDurationText(minutes, 'ସେକେଣ୍ଡ', 'ମିନିଟ୍'),
     scriptThemeLight: '☀ ଲାଇଟ୍',
     editModeOn: '✏ ଏଡିଟ୍ ମୋଡ୍',
+    scriptToolbarLang: 'or',
+    pageZoomLabel: 'ପେଜ୍ ଜୁମ୍',
+    pageZoomOut: 'ପେଜ୍ ଛୋଟ କର',
+    pageZoomIn: 'ପେଜ୍ ବଡ଼ କର',
+    pageZoomReset: '୧୦୦%କୁ ଫେର',
+    editSaveFirst: 'ଆଗେ ଏହି ସିନ୍ ସେଭ୍ କର କିମ୍ବା ବାତିଲ୍ କର।',
     editModeOff: '✕ ଏଡିଟ୍ ମୋଡ୍ ବନ୍ଦ',
     editModeHint: 'ଏଡିଟ୍ ମୋଡ୍ — ପୂରା ସ୍କ୍ରିନ୍। ବାହାରିବାକୁ Esc କିମ୍ବା ✕ ଦବାଅ।',
     episodeRenameButton: 'ନାମ ବଦଳାଅ',
@@ -3881,7 +3895,7 @@ function LanguageChanger({ t, sceneListId, episodeIndex, sceneIndex, sceneNumber
 }
 
 function MovieScreenplayWorkspace({
-  sceneList, episodes, t, language, screenplay, scriptTheme, onChangeScriptTheme, onSceneSaved, onReloadScenes, onSceneListChanged, deckId, onDeckChanged,
+  sceneList, episodes, t, language, screenplay, scriptTheme, onChangeScriptTheme, onSceneSaved, onReloadScenes, onSceneListChanged, deckId, onDeckChanged, projectCharacterNames,
 }) {
   const groups = sceneList.episodeScenes
     ? sceneList.episodeScenes.map((episodeScene, index) => ({
@@ -3900,6 +3914,11 @@ function MovieScreenplayWorkspace({
   const [editMode, setEditMode] = useState(false)
   const [renaming, setRenaming] = useState(null) // { index, text } while an episode name is being typed
   const [renameError, setRenameError] = useState(null)
+  // the page itself can be made bigger or smaller (not the whole browser)
+  const [scriptZoom, setScriptZoom] = useState(() => { try { const v = Number(localStorage.getItem('filmybase.scriptZoom')); return v >= 0.5 && v <= 2.5 ? v : 1 } catch { return 1 } })
+  const changeScriptZoom = (next) => { const v = Math.max(0.5, Math.min(2.5, Math.round(next * 100) / 100)); setScriptZoom(v); try { localStorage.setItem('filmybase.scriptZoom', String(v)) } catch { /* private window */ } }
+  const editorRef = useRef(null)
+  const [activeLineType, setActiveLineType] = useState('action')
   useEffect(() => {
     if (!editMode) return undefined
     const onKey = (event) => { if (event.key === 'Escape') setEditMode(false) }
@@ -3999,12 +4018,15 @@ function MovieScreenplayWorkspace({
     if (scrollToIt) document.getElementById(`movie-script-scene-${index}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
   }
 
-  function startEditing(index) {
+  function startEditing(index, focusElement = null) {
     const d = draftOf(index)
     if (!d) return
     setEditing({
       key: keyOf(index),
       draftId: d.id,
+      version: Date.now(),
+      focusAt: { el: Number.isInteger(focusElement) ? focusElement : null, end: true },
+      dirty: false,
       elements: d.elements.map((e) => ({
         type: e.type === 'flashback' ? 'flashback' : e.type,
         character: e.character ?? '',
@@ -4104,13 +4126,13 @@ function MovieScreenplayWorkspace({
     setIsChangingScenes(false)
   }
 
-  const updateElement = (i, patch) => setEditing((prev) => prev && { ...prev, elements: prev.elements.map((e, j) => (j === i ? { ...e, ...patch } : e)) })
-  const insertElement = (after, type) =>
-    setEditing((prev) => prev && {
-      ...prev,
-      elements: [...prev.elements.slice(0, after + 1), { type, character: '', characterModifier: 'none', parenthetical: '', text: '' }, ...prev.elements.slice(after + 1)],
-    })
-  const removeElement = (i) => setEditing((prev) => prev && { ...prev, elements: prev.elements.filter((_, j) => j !== i) })
+  const characterNames = useMemo(() => collectCharacterNames({
+    sheetNames: projectCharacterNames ?? [],
+    sceneListNames: sceneList.characterNames ?? [],
+    drafts: Object.values(screenplay?.scenesByKey ?? {}),
+  }), [projectCharacterNames, sceneList.characterNames, screenplay?.scenesByKey])
+  const handleDocChange = useCallback((elements) => setEditing((prev) => (prev ? { ...prev, elements, dirty: true } : prev)), [])
+  const handleDocCursor = useCallback((el) => { editCursorRef.current = el }, [])
   // The line the writer's cursor was last in (the voice orb inserts after it).
   const editCursorRef = useRef(null)
   useEffect(() => {
@@ -4132,6 +4154,9 @@ function MovieScreenplayWorkspace({
         ...prev,
         elements: [...prev.elements.slice(0, at), ...added, ...prev.elements.slice(at)],
         voiceGlow: { from: at, count: added.length, at: Date.now() },
+        version: Date.now(),
+        focusAt: { el: Math.max(0, at + added.length - 1), end: true },
+        dirty: true,
       }
     })
     setTimeout(() => setEditing((prev) => prev && { ...prev, voiceGlow: null }), 4000)
@@ -4145,7 +4170,7 @@ function MovieScreenplayWorkspace({
       const response = await fetch(`${BACKEND_URL}/api/screenplay/scene/${editing.draftId}/edit`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ elements: editing.elements }),
+        body: JSON.stringify({ elements: cleanForSave(editing.elements) }),
       })
       const data = await response.json()
       if (!response.ok) {
@@ -4192,61 +4217,43 @@ function MovieScreenplayWorkspace({
       if (element.type === 'dialogue') {
         const modifier = element.characterModifier && element.characterModifier !== 'none' ? ` (${element.characterModifier})` : ''
         return (
-          <div key={index} className="script-dialogue">
+          <div key={index} className="script-dialogue" data-el={index}>
             <p className="script-character">{element.character}{modifier}</p>
             {parenthetical && <p className="script-parenthetical">({parenthetical})</p>}
             <p className="script-line">{text}</p>
           </div>
         )
       }
-      if (element.type === 'transition') return <p key={index} className="script-transition">{text}</p>
+      if (element.type === 'transition') return <p key={index} data-el={index} className="script-transition">{text}</p>
       if (element.type === 'flashback') {
         return (
-          <p key={index} className="script-action"><strong>FLASH - {element.character}'S POV:</strong> {text}</p>
+          <p key={index} data-el={index} className="script-action"><strong>FLASH - {element.character}'S POV:</strong> {text}</p>
         )
       }
-      return <p key={index} className="script-action">{text}</p>
+      return <p key={index} data-el={index} className="script-action">{text}</p>
     })
   }
 
   function renderEditableScene(index, s) {
     return (
-      <div key={index} id={`movie-script-scene-${index}`} className="script-scene is-selected is-editing">
+      <div key={index} id={`movie-script-scene-${index}`} className="script-scene is-selected is-editing script-scene-doc">
         <p className="script-slug">
           <span className="script-scene-number script-scene-number-left">{numberOf(s, index)}</span>
           {movieSlugline(s)}
           <span className="script-scene-number script-scene-number-right">{numberOf(s, index)}</span>
         </p>
-        {editing.elements.map((element, i) => (
-          <div
-            key={i}
-            className={`script-edit-block script-edit-block-${element.type}${editing.voiceGlow && i >= editing.voiceGlow.from && i < editing.voiceGlow.from + editing.voiceGlow.count ? ' is-voice-new' : ''}`}
-            onFocus={() => { editCursorRef.current = i }}
-          >
-            {element.type === 'dialogue' ? (
-              <div className="script-dialogue">
-                <input className="script-edit-field script-character" value={element.character} onChange={(e) => updateElement(i, { character: e.target.value.toUpperCase() })} placeholder={t.scriptEditCharacterPlaceholder} />
-                <input className="script-edit-field script-parenthetical" value={element.parenthetical} onChange={(e) => updateElement(i, { parenthetical: e.target.value })} placeholder={t.scriptEditParentheticalPlaceholder} />
-                <textarea className="script-edit-field script-line" value={element.text} rows={rowsFor(element.text, 35)} onChange={(e) => updateElement(i, { text: e.target.value })} placeholder={t.scriptEditLinePlaceholder} />
-              </div>
-            ) : element.type === 'transition' ? (
-              <input className="script-edit-field script-transition" value={element.text} onChange={(e) => updateElement(i, { text: e.target.value.toUpperCase() })} />
-            ) : (
-              <textarea className="script-edit-field script-action" value={element.text} rows={rowsFor(element.text, 60)} onChange={(e) => updateElement(i, { text: e.target.value })} placeholder={t.scriptEditActionPlaceholder} />
-            )}
-            <div className="script-edit-controls">
-              <button type="button" onClick={() => insertElement(i, 'action')} title={t.scriptEditAddActionButton}>+ {t.scriptEditActionShort}</button>
-              <button type="button" onClick={() => insertElement(i, 'dialogue')} title={t.scriptEditAddDialogueButton}>+ {t.scriptEditDialogueShort}</button>
-              <button type="button" onClick={() => removeElement(i)} title={t.scriptEditRemoveButton} aria-label={t.scriptEditRemoveButton}>×</button>
-            </div>
-          </div>
-        ))}
-        {editing.elements.length === 0 && (
-          <div className="script-edit-controls is-visible">
-            <button type="button" onClick={() => insertElement(-1, 'action')}>+ {t.scriptEditActionShort}</button>
-            <button type="button" onClick={() => insertElement(-1, 'dialogue')}>+ {t.scriptEditDialogueShort}</button>
-          </div>
-        )}
+        <ScriptEditor
+          ref={editorRef}
+          elements={editing.elements}
+          version={editing.version}
+          glow={editing.voiceGlow}
+          focusAt={editing.focusAt}
+          names={characterNames}
+          onChange={handleDocChange}
+          onCursor={handleDocCursor}
+          onActiveType={setActiveLineType}
+          onSave={submitEdit}
+        />
         <div className="script-edit-submit-bar">
           <p>{t.movieScriptEditSubmitNote}</p>
           <div>
@@ -4339,8 +4346,13 @@ function MovieScreenplayWorkspace({
                   {editMode ? t.editModeOff : t.editModeOn}
                 </button>
               </div>
+              <div className="script-zoom" role="group" aria-label={t.pageZoomLabel}>
+                <button type="button" onClick={() => changeScriptZoom(scriptZoom - 0.1)} aria-label={t.pageZoomOut} disabled={scriptZoom <= 0.5}>−</button>
+                <button type="button" className="script-zoom-value" onClick={() => changeScriptZoom(1)} title={t.pageZoomReset}>{Math.round(scriptZoom * 100)}%</button>
+                <button type="button" onClick={() => changeScriptZoom(scriptZoom + 0.1)} aria-label={t.pageZoomIn} disabled={scriptZoom >= 2.5}>+</button>
+              </div>
               <div className="script-stage">
-                <div key={`group-${groupIndex}`} className={`script-page script-page-${scriptTheme} script-turn-${turn}`}>
+                <div key={`group-${groupIndex}`} className={`script-page script-page-${scriptTheme} script-turn-${turn}`} style={scriptZoom === 1 ? undefined : { zoom: scriptZoom }}>
                   {scenes.map((s, index) => {
                     if (editing?.key === keyOf(index)) return renderEditableScene(index, s)
                     const d = draftOf(index)
@@ -4350,9 +4362,16 @@ function MovieScreenplayWorkspace({
                         id={`movie-script-scene-${index}`}
                         className={`script-scene${index === sceneIndex ? ' is-selected' : ''}${d ? '' : ' is-unwritten'}`}
                         style={{ '--scene-order': index }}
-                        onClick={() => selectScene(index, false)}
+                        onClick={(event) => {
+                          selectScene(index, false)
+                          // in edit mode a click on any written scene opens it for typing right where you clicked
+                          if (editMode && d && editing?.key !== keyOf(index)) {
+                            if (!editing || !editing.dirty) startEditing(index, Number(event.target.closest?.('[data-el]')?.dataset.el))
+                            else setEditError(t.editSaveFirst)
+                          }
+                        }}
                         onDoubleClick={() => d && !editing && startEditing(index)}
-                        title={d ? t.scriptEditDoubleClickHint : undefined}
+                        title={d ? (editMode ? undefined : t.scriptEditDoubleClickHint) : undefined}
                       >
                         <p className="script-slug">
                           <span className="script-scene-number script-scene-number-left">{numberOf(s, index)}</span>
@@ -4453,7 +4472,7 @@ function MovieScreenplayWorkspace({
                 ) : (
                   <>
                     {editing?.key === selectedKey ? (
-                      <p className="script-tools-editing-note">{t.scriptEditEditingNote}</p>
+                      <ScriptToolbar editorRef={editorRef} activeType={activeLineType} lang={t.scriptToolbarLang} onSave={submitEdit} onCancel={() => setEditing(null)} saving={isSubmittingEdit} dirty={Boolean(editing.dirty)} />
                     ) : (
                       <button type="button" className="choose-button script-edit-start-button" onClick={() => startEditing(sceneIndex)} disabled={Boolean(editing) || isAiWriting || isChecking}>
                         {t.scriptEditStartButton}
@@ -14517,6 +14536,7 @@ function App() {
             sceneList={sceneList}
             episodes={pitchDeck?.episodes}
             deckId={pitchDeck?.id}
+            projectCharacterNames={characterSheet?.characters?.map((c) => c.name)}
             onDeckChanged={(deck) => setPitchDeck(deck)}
             t={t}
             language={language}

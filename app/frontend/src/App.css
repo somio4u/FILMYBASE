@@ -7658,3 +7658,78 @@ body.is-script-edit-mode { overflow: hidden; }
 .episode-rename-button { margin-left: 10px; padding: 3px 10px; border-radius: 999px; border: 1px solid var(--border-subtle); background: transparent; color: inherit; cursor: pointer; font-size: 0.8rem; }
 .episode-title-edit { display: inline-flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: center; }
 .episode-title-edit input { min-width: 260px; padding: 8px 12px; border-radius: 8px; border: 1px solid var(--border-subtle); background: var(--bg-input); color: inherit; font: inherit; }
+
+/* ---- The screenplay page as one editable document (ScriptEditor.jsx) ---- */
+.script-doc {
+  outline: none;
+  min-height: 3em;
+  caret-color: var(--script-ink);
+  cursor: text;
+}
+.script-doc p {
+  margin: 0 0 0.35em;
+  min-height: 1.5em;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.script-doc p[data-t='action'] { margin-bottom: 1em; }
+.script-doc p[data-t='character'] { margin: 0.6em 0 0; margin-left: 22ch; text-transform: uppercase; }
+.script-doc p[data-t='parenthetical'] { margin-left: 16ch; max-width: 25ch; }
+.script-doc p[data-t='parenthetical']::before { content: '('; }
+.script-doc p[data-t='parenthetical']::after { content: ')'; }
+.script-doc p[data-t='dialogue'] { margin-left: 10ch; max-width: 35ch; margin-bottom: 0.35em; }
+.script-doc p[data-t='dialogue'] + p[data-t='action'],
+.script-doc p[data-t='dialogue'] + p[data-t='transition'] { margin-top: 1em; }
+.script-doc p[data-t='transition'] { text-align: right; text-transform: uppercase; margin: 1em 0; }
+.script-doc p[data-t='flashback']::before { content: 'FLASH - ' attr(data-ch) '’S POV: '; font-weight: 700; }
+.script-doc p.is-voice-new { background: rgba(138, 180, 248, 0.18); border-radius: 3px; transition: background 1.2s ease; }
+.script-doc ::selection { background: rgba(80, 140, 255, 0.35); }
+
+/* the scene being edited looks like the rest of the page: no tint, no box */
+.script-scene.script-scene-doc {
+  margin: 0;
+  padding: 0 0 2.2em;
+  background: none;
+  box-shadow: none;
+  animation: none;
+  cursor: text;
+}
+.script-scene.script-scene-doc::before { display: none; }
+.ai-movie-screenplay-current-card.is-edit-mode .script-scene.is-selected::before { display: none; }
+
+.script-name-menu {
+  position: fixed;
+  z-index: 950;
+  margin: 0;
+  padding: 4px;
+  list-style: none;
+  min-width: 200px;
+  max-height: 260px;
+  overflow: auto;
+  border-radius: 8px;
+  border: 1px solid var(--border-subtle);
+  background: #1b2036;
+  color: #f2f3f7;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5);
+  font: 600 14px/1.4 'Courier Prime', 'Courier New', monospace;
+}
+.script-name-menu li { padding: 6px 10px; border-radius: 5px; cursor: pointer; }
+.script-name-menu li.is-active { background: rgba(110, 150, 255, 0.35); }
+.script-name-menu li.is-new { opacity: 0.75; font-weight: 400; }
+
+.script-toolbar { display: grid; gap: 8px; margin-bottom: 10px; padding: 12px; border: 1px solid var(--border-subtle); border-radius: 10px; background: var(--bg-surface); }
+.script-toolbar-title { margin: 0; font-weight: 700; }
+.script-toolbar-dirty { font-weight: 400; color: #f0b429; }
+.script-toolbar-sub { margin: 4px 0 0; font-size: 0.8rem; opacity: 0.7; }
+.script-toolbar-types, .script-toolbar-mods { display: flex; flex-wrap: wrap; gap: 6px; }
+.script-toolbar button { padding: 5px 10px; border-radius: 999px; border: 1px solid var(--border-subtle); background: transparent; color: inherit; font: inherit; font-size: 0.85rem; cursor: pointer; }
+.script-toolbar button.is-active { background: rgba(110, 150, 255, 0.3); border-color: rgba(140, 175, 255, 0.8); }
+.script-toolbar button:disabled { opacity: 0.35; cursor: default; }
+.script-toolbar-how { margin: 4px 0 0; padding-left: 18px; font-size: 0.8rem; opacity: 0.75; }
+.script-toolbar-actions { display: flex; gap: 8px; justify-content: flex-end; }
+.script-toolbar-actions button { border-radius: 8px; }
+
+.script-zoom { display: inline-flex; align-items: center; gap: 2px; margin: 8px 0 0 12px; padding: 2px; border: 1px solid var(--border-subtle); border-radius: 999px; background: var(--bg-surface); vertical-align: middle; }
+.script-zoom button { min-width: 30px; padding: 4px 8px; border: 0; border-radius: 999px; background: transparent; color: inherit; font: inherit; cursor: pointer; }
+.script-zoom button:disabled { opacity: 0.35; cursor: default; }
+.script-zoom .script-zoom-value { min-width: 56px; font-variant-numeric: tabular-nums; }

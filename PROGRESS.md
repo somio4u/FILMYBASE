@@ -1897,3 +1897,12 @@ Plain version: every project is now a set of **drafts**. Opening a project shows
 - The AI screenplay writer already had these rules plus a script cleaner (`sanitizeScreenplayElements`); only the voice agent was missing them.
 - A scene already damaged: press ↶ Undo (each voice change is a saved version), or use "Change language" to Odia.
 - 1 new test (wrongScriptLines). Honest note: not tried with the real Gemini or a real voice.
+
+## Scene list like Scrite: right-click menu, drag and drop, duplicate, edit heading (deploying)
+- [x] **Right-click on a scene** (left list; or the ⋮ button next to it, which also works on touch screens) opens the app's own menu instead of the browser's: **Edit scene · Edit heading (INT/EXT, place, time of day) · Add a scene before / after · Duplicate scene · Move up · Move down · Delete scene** (with the usual confirmation).
+- [x] **Drag and drop:** grab a scene row and drop it between any two others (a blue line shows where it will land) — e.g. scene 2 dragged to just after scene 5. The scene keeps ALL its written versions and Undo/Redo; the scenes in between move over by one; scene numbers and the shoot-schedule references are renumbered, all in one safe step (`POST /api/scene-lists/:id/scenes/move`, `sceneOrder.js`).
+- [x] **Duplicate scene** (outline + latest written version, placed right after it) and **Edit heading** (changes only the scene list's heading, the written lines stay) — `.../scenes/duplicate`, `.../scenes/heading`.
+- [x] A move, duplicate or heading change is refused while you have unsaved typing in the editor ("Save or cancel the scene you are editing first").
+- Checked on a real server (scene 2 → after scene 5, versions kept, numbers renumbered, bad moves refused) and in a real browser with the whole workspace (right-click menu, ⋮ button, drag with the blue drop line, move up, duplicate, heading form, editor opens from the menu, move refused while typing). 4 unit tests (sceneOrder.test.js).
+- Still to come (phase 2): find & replace and "rename a character everywhere", split / merge scenes, multi-select, Omit (hide a scene), colours and notes on scenes, Undo for move / delete. Film module only — AI Movie scenes belong to their beats.
+- After moving scenes, a script breakdown, shoot schedule or production shots made earlier may be out of date (the existing warning is shown).

@@ -503,6 +503,18 @@ const LABELS = {
     scriptAiWritingLabel: 'AI is writing… hang tight',
     aiMovieShortDuration: (minutes) => aiMovieDurationText(minutes, 'sec', 'min'),
     scriptThemeLight: '☀ Light',
+    sceneMenuEdit: '✎ Edit scene',
+    sceneMenuHeading: '🏷 Edit heading (INT/EXT, place, time)',
+    sceneMenuDuplicate: '⧉ Duplicate scene',
+    sceneMenuUp: '↑ Move up',
+    sceneMenuDown: '↓ Move down',
+    sceneMenuDelete: '🗑 Delete scene',
+    sceneMenuMore: 'Scene options',
+    sceneDragHint: 'Drag to move this scene. Right-click for more.',
+    headingFormIntExt: 'INT / EXT',
+    headingFormPlace: 'Place',
+    headingFormTime: 'Time of day (DAY, NIGHT …)',
+    headingFormSave: 'Save heading',
     editModeOn: '✏ Edit mode',
     scriptToolbarLang: 'en',
     pageZoomLabel: 'Page zoom',
@@ -1339,6 +1351,18 @@ const LABELS = {
     scriptAiWritingLabel: 'AI ଲେଖୁଛି… ଟିକେ ରହ',
     aiMovieShortDuration: (minutes) => aiMovieDurationText(minutes, 'ସେକେଣ୍ଡ', 'ମିନିଟ୍'),
     scriptThemeLight: '☀ ଲାଇଟ୍',
+    sceneMenuEdit: '✎ ସିନ୍ ଏଡିଟ୍',
+    sceneMenuHeading: '🏷 ହେଡିଂ ବଦଳାଅ (INT/EXT, ଜାଗା, ସମୟ)',
+    sceneMenuDuplicate: '⧉ ସିନ୍ କପି କର',
+    sceneMenuUp: '↑ ଉପରକୁ ନିଅ',
+    sceneMenuDown: '↓ ତଳକୁ ନିଅ',
+    sceneMenuDelete: '🗑 ସିନ୍ ହଟାଅ',
+    sceneMenuMore: 'ସିନ୍ ଅପ୍ସନ୍',
+    sceneDragHint: 'ସିନ୍ ଘୁଞ୍ଚାଇବାକୁ ଟାଣ। ଆହୁରି ପାଇଁ ରାଇଟ୍-କ୍ଲିକ୍।',
+    headingFormIntExt: 'INT / EXT',
+    headingFormPlace: 'ଜାଗା',
+    headingFormTime: 'ସମୟ (DAY, NIGHT …)',
+    headingFormSave: 'ହେଡିଂ ସେଭ୍ କର',
     editModeOn: '✏ ଏଡିଟ୍ ମୋଡ୍',
     scriptToolbarLang: 'or',
     pageZoomLabel: 'ପେଜ୍ ଜୁମ୍',
@@ -3933,6 +3957,19 @@ function MovieScreenplayWorkspace({
   const editorRef = useRef(null)
   const [activeLineType, setActiveLineType] = useState('action')
   const [agentDelete, setAgentDelete] = useState(null) // scene index the voice agent wants to delete, waiting for the writer's click
+  const [ctxMenu, setCtxMenu] = useState(null) // the scene's right-click menu: { x, y, index }
+  const [drag, setDrag] = useState(null) // while a scene is dragged in the list: { from, over, after }
+  const [headingForm, setHeadingForm] = useState(null) // { index, intExt, location, timeOfDay }
+  useEffect(() => {
+    if (!ctxMenu) return undefined
+    const close = () => setCtxMenu(null)
+    const onKey = (event) => { if (event.key === 'Escape') close() }
+    window.addEventListener('click', close)
+    window.addEventListener('resize', close)
+    window.addEventListener('scroll', close, true)
+    document.addEventListener('keydown', onKey)
+    return () => { window.removeEventListener('click', close); window.removeEventListener('resize', close); window.removeEventListener('scroll', close, true); document.removeEventListener('keydown', onKey) }
+  }, [ctxMenu])
   useEffect(() => {
     if (!editMode) return undefined
     const onKey = (event) => { if (event.key === 'Escape') setEditMode(false) }
@@ -4117,6 +4154,64 @@ function MovieScreenplayWorkspace({
     }
   }
 
+  // ---- the scene list: drag to move, right-click menu, duplicate, heading ----
+  async function sceneListCall(path, method, body) {
+    if (editing?.dirty) { setSceneChangeError(t.editSaveFirst); return null }
+    setIsChangingScenes(true)
+    setSceneChangeError(null)
+    try {
+      const response = await fetch(`${BACKEND_URL}/api/scene-lists/${sceneList.id}/scenes${path}`, {
+        method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...body, episodeIndex: group.episodeIndex }),
+      })
+      const data = await response.json()
+      if (!response.ok) { setSceneChangeError(data.error || t.genericError); setIsChangingScenes(false); return null }
+      setEditing(null)
+      setEditFixes(null)
+      await onSceneListChanged?.(data.sceneList)
+      setSelectedIndex(data.sceneIndex ?? 0)
+      setScenesMoved(true)
+      setIsChangingScenes(false)
+      return data
+    } catch {
+      setSceneChangeError(t.genericError)
+      setIsChangingScenes(false)
+      return null
+    }
+  }
+
+  const moveScene = (from, to) => (from === to ? null : sceneListCall('/move', 'POST', { from, to }))
+  const duplicateScene = (index) => sceneListCall('/duplicate', 'POST', { sceneIndex: index })
+  async function saveHeading() {
+    if (!headingForm || !headingForm.location.trim() || !headingForm.timeOfDay.trim()) return
+    const done = await sceneListCall('/heading', 'PATCH', { sceneIndex: headingForm.index, intExt: headingForm.intExt, location: headingForm.location, timeOfDay: headingForm.timeOfDay })
+    if (done) setHeadingForm(null)
+  }
+  function openHeadingForm(index) {
+    const s = scenes[index]
+    setHeadingForm({ index, intExt: s?.intExt === 'EXT' ? 'EXT' : 'INT', location: s?.location?.[language] ?? s?.location?.en ?? '', timeOfDay: String(s?.timeOfDay ?? 'DAY') })
+  }
+  // dropping before / after the scene under the pointer: where it lands in the list once it has left its old place
+  function dropScene() {
+    if (!drag || drag.over === null) { setDrag(null); return }
+    const insertAt = drag.after ? drag.over + 1 : drag.over
+    const to = drag.from < insertAt ? insertAt - 1 : insertAt
+    const from = drag.from
+    setDrag(null)
+    moveScene(from, to)
+  }
+  function runMenu(action, index) {
+    setCtxMenu(null)
+    selectScene(index, false)
+    if (action === 'edit') startEditing(index)
+    else if (action === 'heading') openHeadingForm(index)
+    else if (action === 'before') openSceneForm(index)
+    else if (action === 'after') openSceneForm(index + 1)
+    else if (action === 'duplicate') duplicateScene(index)
+    else if (action === 'up') moveScene(index, index - 1)
+    else if (action === 'down') moveScene(index, index + 1)
+    else if (action === 'delete') { if (window.confirm(t.sceneDeleteConfirm(numberOf(scenes[index], index)))) removeScene(index) }
+  }
+
   async function stepSceneHistory(direction) {
     setIsChangingScenes(true)
     setSceneChangeError(null)
@@ -4143,7 +4238,7 @@ function MovieScreenplayWorkspace({
     await removeScene()
   }
 
-  async function removeScene() {
+  async function removeScene(index = sceneIndex) {
     setAgentDelete(null)
     setIsChangingScenes(true)
     setSceneChangeError(null)
@@ -4151,7 +4246,7 @@ function MovieScreenplayWorkspace({
       const response = await fetch(`${BACKEND_URL}/api/scene-lists/${sceneList.id}/scenes`, {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ episodeIndex: group.episodeIndex, sceneIndex }),
+        body: JSON.stringify({ episodeIndex: group.episodeIndex, sceneIndex: index }),
       })
       const data = await response.json()
       if (!response.ok) {
@@ -4160,7 +4255,7 @@ function MovieScreenplayWorkspace({
         setEditing(null)
         setEditFixes(null)
         await onSceneListChanged?.(data.sceneList)
-        setSelectedIndex(Math.max(0, sceneIndex - 1))
+        setSelectedIndex(Math.max(0, index - 1))
         setScenesMoved(true)
       }
     } catch {
@@ -4370,11 +4465,27 @@ function MovieScreenplayWorkspace({
           </div>
         )}
         <RuntimeSummary total={group.total} target={group.target} t={t} />
+        {headingForm && (
+          <div className="script-agent-ask script-heading-form" role="group" aria-label={t.sceneMenuHeading}>
+            <label>{t.headingFormIntExt}
+              <select value={headingForm.intExt} onChange={(e) => setHeadingForm({ ...headingForm, intExt: e.target.value })}><option value="INT">INT</option><option value="EXT">EXT</option></select>
+            </label>
+            <label>{t.headingFormPlace}
+              <input value={headingForm.location} onChange={(e) => setHeadingForm({ ...headingForm, location: e.target.value })} />
+            </label>
+            <label>{t.headingFormTime}
+              <input value={headingForm.timeOfDay} list="scene-time-of-day" onChange={(e) => setHeadingForm({ ...headingForm, timeOfDay: e.target.value })} />
+              <datalist id="scene-time-of-day"><option value="DAY" /><option value="NIGHT" /><option value="MORNING" /><option value="EVENING" /><option value="DAWN" /><option value="DUSK" /></datalist>
+            </label>
+            <button type="button" className="cancel-button" onClick={() => setHeadingForm(null)}>{t.episodeRenameCancel}</button>
+            <button type="button" className="choose-button" onClick={saveHeading} disabled={isChangingScenes || !headingForm.location.trim() || !headingForm.timeOfDay.trim()}>{t.headingFormSave}</button>
+          </div>
+        )}
         {agentDelete !== null && agentDelete === sceneIndex && (
           <div className="script-agent-ask" role="alert">
             <span>{t.voiceDeleteAsk(numberOf(scene, sceneIndex))}</span>
             <button type="button" className="cancel-button" onClick={() => setAgentDelete(null)}>{t.voiceDeleteKeep}</button>
-            <button type="button" className="choose-button" onClick={removeScene} disabled={isChangingScenes}>{t.voiceDeleteConfirm}</button>
+            <button type="button" className="choose-button" onClick={() => removeScene()} disabled={isChangingScenes}>{t.voiceDeleteConfirm}</button>
           </div>
         )}
 
@@ -4384,14 +4495,33 @@ function MovieScreenplayWorkspace({
               <p className="script-panel-title">{t.scriptScenesTitle}</p>
               <div className="script-navigator-list">
                 {scenes.map((s, index) => (
-                  <button key={index} type="button" className={`script-nav-item${index === sceneIndex ? ' is-active' : ''}${draftOf(index) ? ' is-written' : ''}`} onClick={() => selectScene(index, true)}>
-                    <span className="script-nav-number">{numberOf(s, index)}</span>
-                    <span className="script-nav-heading">{movieSlugline(s)}</span>
-                    <span className="script-nav-duration">
-                      {typeof s.estimatedMinutes === 'number' ? t.aiMovieShortDuration(s.estimatedMinutes) : ''}
-                      {draftOf(index) ? '' : ` · ${t.movieScriptNotWrittenShort}`}
-                    </span>
-                  </button>
+                  <div
+                    key={index}
+                    className={`script-nav-row${drag?.from === index ? ' is-dragging' : ''}${drag && drag.over === index ? (drag.after ? ' is-drop-after' : ' is-drop-before') : ''}`}
+                    draggable
+                    title={t.sceneDragHint}
+                    onDragStart={(event) => { event.dataTransfer.effectAllowed = 'move'; event.dataTransfer.setData('text/plain', String(index)); setDrag({ from: index, over: null, after: false }) }}
+                    onDragOver={(event) => {
+                      if (!drag) return
+                      event.preventDefault()
+                      const rect = event.currentTarget.getBoundingClientRect()
+                      const after = event.clientY > rect.top + rect.height / 2
+                      if (drag.over !== index || drag.after !== after) setDrag({ ...drag, over: index, after })
+                    }}
+                    onDrop={(event) => { event.preventDefault(); dropScene() }}
+                    onDragEnd={() => setDrag(null)}
+                    onContextMenu={(event) => { event.preventDefault(); setCtxMenu({ x: event.clientX, y: event.clientY, index }) }}
+                  >
+                    <button type="button" className={`script-nav-item${index === sceneIndex ? ' is-active' : ''}${draftOf(index) ? ' is-written' : ''}`} onClick={() => selectScene(index, true)}>
+                      <span className="script-nav-number">{numberOf(s, index)}</span>
+                      <span className="script-nav-heading">{movieSlugline(s)}</span>
+                      <span className="script-nav-duration">
+                        {typeof s.estimatedMinutes === 'number' ? t.aiMovieShortDuration(s.estimatedMinutes) : ''}
+                        {draftOf(index) ? '' : ` · ${t.movieScriptNotWrittenShort}`}
+                      </span>
+                    </button>
+                    <button type="button" className="script-nav-more" aria-label={t.sceneMenuMore} title={t.sceneMenuMore} onClick={(event) => { event.stopPropagation(); const r = event.currentTarget.getBoundingClientRect(); setCtxMenu({ x: r.left, y: r.bottom + 4, index }) }}>⋮</button>
+                  </div>
                 ))}
               </div>
             </aside>
@@ -4651,6 +4781,24 @@ function MovieScreenplayWorkspace({
       {breakdownStale && <p className="feedback-note movie-breakdown-stale-note">{t.movieBreakdownStaleNote}</p>}
 
       {editMode ? createPortal(screenplayCard, document.body) : screenplayCard}
+
+      {ctxMenu && createPortal(
+        <ul className="scene-ctx-menu" role="menu" style={{ left: Math.max(8, Math.min(ctxMenu.x, window.innerWidth - 270)), top: Math.max(8, Math.min(ctxMenu.y, window.innerHeight - 380)) }} onClick={(e) => e.stopPropagation()}>
+          {[
+            ['edit', t.sceneMenuEdit, !draftOf(ctxMenu.index)],
+            ['heading', t.sceneMenuHeading, false],
+            ['before', t.sceneAddBeforeButton, false],
+            ['after', t.sceneAddAfterButton, false],
+            ['duplicate', t.sceneMenuDuplicate, false],
+            ['up', t.sceneMenuUp, ctxMenu.index === 0],
+            ['down', t.sceneMenuDown, ctxMenu.index === scenes.length - 1],
+            ['delete', t.sceneMenuDelete, scenes.length <= 1],
+          ].map(([action, label, disabled]) => (
+            <li key={action} role="none"><button type="button" role="menuitem" className={action === 'delete' ? 'is-danger' : ''} disabled={disabled || isChangingScenes} onClick={() => runMenu(action, ctxMenu.index)}>{label}</button></li>
+          ))}
+        </ul>,
+        document.body
+      )}
 
       {screenplay && scene && (
         <VoiceWriterButton

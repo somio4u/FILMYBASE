@@ -7736,3 +7736,24 @@ body.is-script-edit-mode { overflow: hidden; }
 
 .script-agent-ask { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin: 10px 0; padding: 10px 14px; border-radius: 10px; border: 1px solid rgba(240, 180, 41, 0.6); background: rgba(240, 180, 41, 0.12); }
 .script-agent-ask span { flex: 1 1 260px; font-weight: 600; }
+
+/* ---- the scene list: rows you can drag, a ⋮ button, and the right-click menu ---- */
+.script-nav-row { position: relative; display: flex; align-items: stretch; gap: 2px; border-radius: 10px; cursor: grab; }
+.script-nav-row .script-nav-item { flex: 1 1 auto; min-width: 0; }
+.script-nav-row.is-dragging { opacity: 0.4; }
+.script-nav-row.is-drop-before::before,
+.script-nav-row.is-drop-after::after { content: ''; position: absolute; left: 4px; right: 4px; height: 3px; border-radius: 3px; background: #6aa0ff; box-shadow: 0 0 8px rgba(106, 160, 255, 0.9); z-index: 2; }
+.script-nav-row.is-drop-before::before { top: -3px; }
+.script-nav-row.is-drop-after::after { bottom: -3px; }
+.script-nav-more { flex: 0 0 auto; width: 26px; border: 0; border-radius: 8px; background: transparent; color: var(--text-secondary); font-size: 1.1rem; cursor: pointer; opacity: 0; transition: opacity 0.15s; }
+.script-nav-row:hover .script-nav-more, .script-nav-more:focus-visible { opacity: 1; }
+.script-nav-more:hover { background: rgba(255, 255, 255, 0.08); color: var(--text-primary); }
+@media (hover: none) { .script-nav-more { opacity: 0.8; } }
+.scene-ctx-menu { position: fixed; z-index: 960; margin: 0; padding: 6px; list-style: none; width: 260px; border-radius: 10px; border: 1px solid var(--border-subtle); background: #1b2036; box-shadow: 0 14px 36px rgba(0, 0, 0, 0.55); }
+.scene-ctx-menu li { margin: 0; }
+.scene-ctx-menu button { display: block; width: 100%; padding: 8px 12px; border: 0; border-radius: 6px; background: transparent; color: #f2f3f7; text-align: left; font: inherit; font-size: 0.9rem; cursor: pointer; }
+.scene-ctx-menu button:hover:not(:disabled) { background: rgba(110, 150, 255, 0.3); }
+.scene-ctx-menu button:disabled { opacity: 0.35; cursor: default; }
+.scene-ctx-menu button.is-danger { color: #ff8c8c; }
+.script-heading-form label { display: grid; gap: 4px; font-size: 0.8rem; }
+.script-heading-form input, .script-heading-form select { padding: 6px 10px; border-radius: 8px; border: 1px solid var(--border-subtle); background: var(--bg-input); color: inherit; font: inherit; }

@@ -2,6 +2,7 @@ import "dotenv/config";
 import express from "express";
 import "express-async-errors";
 import cors from "cors";
+import { moveIndex, moveInArray, moveCaseSql, validMove } from "./sceneOrder.js";
 import { applyVoiceEdits, changeTotal, cleanSceneActions, wrongScriptLines, SCRIPT_NAMES } from "./voiceEdits.js";
 import { GoogleGenAI, Type } from "@google/genai";
 import { Pool } from "pg";
@@ -11891,6 +11892,122 @@ app.delete("/api/scene-lists/:id/scenes", requireRole("admin"), async (req, res)
   } catch (error) {
     await client.query("ROLLBACK").catch(() => {});
     console.error("Deleting a scene failed:", error.message);
+    res.status(500).json({ error: error.message });
+  } finally {
+    client.release();
+  }
+});
+
+// Drag a scene to another place: the scene keeps all its written versions (and Undo / Redo); the scenes in between move over by one.
+app.post("/api/scene-lists/:id/scenes/move", requireRole("admin"), async (req, res) => {
+  const sceneListId = Number(req.params.id);
+  const episodeIndex = req.body.episodeIndex === null || req.body.episodeIndex === undefined ? null : Number(req.body.episodeIndex);
+  const from = Number(req.body.from);
+  const to = Number(req.body.to);
+  const client = await db.connect();
+  try {
+    await client.query("BEGIN");
+    const locked = await lockSceneListForSceneEdit(client, sceneListId, episodeIndex);
+    if (locked.error) { await client.query("ROLLBACK"); res.status(locked.status).json({ error: locked.error }); return; }
+    const { content, scenes } = locked;
+    if (!validMove(scenes.length, from, to)) { await client.query("ROLLBACK"); res.status(400).json({ error: "That move is not possible." }); return; }
+    const { lo, hi, sql } = moveCaseSql(from, to);
+    for (const table of ["screenplay_scenes", "screenplay_scene_redo"]) {
+      await client.query(
+        `UPDATE ${table} SET scene_index = ${sql} WHERE scene_list_id = $1 AND episode_index IS NOT DISTINCT FROM $2 AND scene_index BETWEEN $3 AND $4`,
+        [sceneListId, episodeIndex, lo, hi]
+      );
+    }
+    const schedules = await client.query("SELECT id, content FROM shoot_schedules WHERE scene_list_id = $1", [sceneListId]);
+    for (const row of schedules.rows) {
+      if (!Array.isArray(row.content?.scheduleDays)) continue;
+      const scheduleDays = row.content.scheduleDays.map((day) => ({
+        ...day,
+        sceneRefs: (day.sceneRefs ?? []).map((ref) => (episodeIndex === null || ref.episodeIndex === episodeIndex ? { ...ref, sceneIndex: moveIndex(ref.sceneIndex, from, to) } : ref)),
+      }));
+      await client.query("UPDATE shoot_schedules SET content = $1 WHERE id = $2", [JSON.stringify({ ...row.content, scheduleDays }), row.id]);
+    }
+    const moved = moveInArray(scenes, from, to);
+    const nextScenes = moved.every((s) => s.sceneNumber) ? renumberSimpleScenes(moved) : moved;
+    const nextContent = withRecountedMinutes(withSceneArray(content, episodeIndex, nextScenes), episodeIndex);
+    await client.query("UPDATE scene_lists SET content = $1 WHERE id = $2", [JSON.stringify(nextContent), sceneListId]);
+    await client.query("COMMIT");
+    res.json({ sceneList: nextContent, sceneIndex: to });
+  } catch (error) {
+    await client.query("ROLLBACK").catch(() => {});
+    console.error("Moving a scene failed:", error.message);
+    res.status(500).json({ error: error.message });
+  } finally {
+    client.release();
+  }
+});
+
+// A copy of a scene (its outline and its latest written version) right after it, to try another version.
+app.post("/api/scene-lists/:id/scenes/duplicate", requireRole("admin"), async (req, res) => {
+  const sceneListId = Number(req.params.id);
+  const episodeIndex = req.body.episodeIndex === null || req.body.episodeIndex === undefined ? null : Number(req.body.episodeIndex);
+  const sceneIndex = Number(req.body.sceneIndex);
+  const client = await db.connect();
+  try {
+    await client.query("BEGIN");
+    const locked = await lockSceneListForSceneEdit(client, sceneListId, episodeIndex);
+    if (locked.error) { await client.query("ROLLBACK"); res.status(locked.status).json({ error: locked.error }); return; }
+    const { content, scenes } = locked;
+    if (!Number.isInteger(sceneIndex) || sceneIndex < 0 || sceneIndex >= scenes.length) { await client.query("ROLLBACK"); res.status(400).json({ error: "That scene doesn't exist." }); return; }
+    const at = sceneIndex + 1;
+    const copy = { ...JSON.parse(JSON.stringify(scenes[sceneIndex])), addedByUser: true };
+    const everyNumbered = scenes.every((s) => s.sceneNumber);
+    const simpleNumbers = everyNumbered && scenes.every((s) => /^(.*?)(\d+)$/.test(String(s.sceneNumber)));
+    if (everyNumbered && !simpleNumbers) copy.sceneNumber = `${scenes[sceneIndex].sceneNumber}A`;
+    let nextScenes = [...scenes.slice(0, at), copy, ...scenes.slice(at)];
+    if (simpleNumbers) nextScenes = renumberSimpleScenes(nextScenes);
+    await shiftScenePositions(client, sceneListId, episodeIndex, at, 1);
+    const latest = await client.query(
+      `SELECT content FROM screenplay_scenes WHERE scene_list_id = $1 AND episode_index IS NOT DISTINCT FROM $2 AND scene_index = $3 ORDER BY created_at DESC, id DESC LIMIT 1`,
+      [sceneListId, episodeIndex, sceneIndex]
+    );
+    if (latest.rows[0]) {
+      await client.query(
+        "INSERT INTO screenplay_scenes (scene_list_id, episode_index, scene_index, content) VALUES ($1, $2, $3, $4)",
+        [sceneListId, episodeIndex, at, JSON.stringify({ ...latest.rows[0].content, editedByUser: true })]
+      );
+    }
+    const nextContent = withRecountedMinutes(withSceneArray(content, episodeIndex, nextScenes), episodeIndex);
+    await client.query("UPDATE scene_lists SET content = $1 WHERE id = $2", [JSON.stringify(nextContent), sceneListId]);
+    await client.query("COMMIT");
+    res.json({ sceneList: nextContent, sceneIndex: at });
+  } catch (error) {
+    await client.query("ROLLBACK").catch(() => {});
+    console.error("Duplicating a scene failed:", error.message);
+    res.status(500).json({ error: error.message });
+  } finally {
+    client.release();
+  }
+});
+
+// The scene heading (INT./EXT., the place, the time of day) — only the scene list's own outline changes; the written lines stay.
+app.patch("/api/scene-lists/:id/scenes/heading", requireRole("admin"), async (req, res) => {
+  const sceneListId = Number(req.params.id);
+  const episodeIndex = req.body.episodeIndex === null || req.body.episodeIndex === undefined ? null : Number(req.body.episodeIndex);
+  const sceneIndex = Number(req.body.sceneIndex);
+  const location = String(req.body.location ?? "").replace(/\s+/g, " ").trim().slice(0, 120);
+  const timeOfDay = String(req.body.timeOfDay ?? "").replace(/\s+/g, " ").trim().toUpperCase().slice(0, 30);
+  if (!location || !timeOfDay) { res.status(400).json({ error: "Give the place and the time of day (DAY, NIGHT …)." }); return; }
+  const client = await db.connect();
+  try {
+    await client.query("BEGIN");
+    const locked = await lockSceneListForSceneEdit(client, sceneListId, episodeIndex);
+    if (locked.error) { await client.query("ROLLBACK"); res.status(locked.status).json({ error: locked.error }); return; }
+    const { content, scenes } = locked;
+    if (!Number.isInteger(sceneIndex) || sceneIndex < 0 || sceneIndex >= scenes.length) { await client.query("ROLLBACK"); res.status(400).json({ error: "That scene doesn't exist." }); return; }
+    const nextScenes = scenes.map((s, i) => (i === sceneIndex ? { ...s, intExt: req.body.intExt === "EXT" ? "EXT" : "INT", location: { en: location, or: location, hi: location }, timeOfDay } : s));
+    const nextContent = withSceneArray(content, episodeIndex, nextScenes);
+    await client.query("UPDATE scene_lists SET content = $1 WHERE id = $2", [JSON.stringify(nextContent), sceneListId]);
+    await client.query("COMMIT");
+    res.json({ sceneList: nextContent, sceneIndex });
+  } catch (error) {
+    await client.query("ROLLBACK").catch(() => {});
+    console.error("Changing a scene heading failed:", error.message);
     res.status(500).json({ error: error.message });
   } finally {
     client.release();

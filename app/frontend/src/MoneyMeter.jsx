@@ -8,9 +8,10 @@ const DAY = 24 * 3600 * 1000
 export default function MoneyMeter({ backendUrl, onBack }) {
   const [data, setData] = useState(null)
   const [error, setError] = useState('')
-  const [tab, setTab] = useState('projects')
+  const [tab, setTab] = useState('live')
   const [open, setOpen] = useState(null)
   const [onlySpent, setOnlySpent] = useState(true)
+  const [live, setLive] = useState(null)
 
   const load = async () => {
     setError('')
@@ -21,11 +22,26 @@ export default function MoneyMeter({ backendUrl, onBack }) {
     } catch (e) { setError(e.message) }
   }
   useEffect(() => { load() }, [])
+  // the Live tab: what is running right now and the latest calls, refreshed every 15 seconds while it is open
+  useEffect(() => {
+    if (tab !== 'live') return undefined
+    let stop = false
+    const pull = async () => {
+      try {
+        const res = await fetch(`${backendUrl}/api/admin/usage/live`)
+        if (res.ok && !stop) setLive(await res.json())
+      } catch { /* try again on the next tick */ }
+    }
+    pull()
+    const timer = setInterval(pull, 15000)
+    return () => { stop = true; clearInterval(timer) }
+  }, [tab, backendUrl])
 
   const rate = data?.inrPerUsd ?? 88
   const usd = (v) => `$${(v ?? 0).toFixed((v ?? 0) >= 100 ? 0 : 2)}`
   const inr = (v) => `≈ ₹${Math.round((v ?? 0) * rate).toLocaleString('en-IN')}`
   const when = (iso) => (iso ? new Date(iso).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' }) : '—')
+  const time = (iso) => (iso ? new Date(iso).toLocaleString(undefined, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '—')
   const active = (iso) => iso && Date.now() - new Date(iso).getTime() < 7 * DAY
 
   const projects = useMemo(() => (data?.projects ?? []).filter((p) => p.type !== 'none' || p.totalUsd > 0).filter((p) => !onlySpent || p.totalUsd > 0), [data, onlySpent])
@@ -53,10 +69,44 @@ export default function MoneyMeter({ backendUrl, onBack }) {
           </div>
 
           <div className="mm-tabs" role="tablist">
-            {[['projects', 'By project'], ['users', 'By user'], ['days', 'Last 30 days']].map(([k, label]) => (
+            {[['live', 'Live'], ['projects', 'By project'], ['users', 'By user'], ['days', 'Last 30 days']].map(([k, label]) => (
               <button key={k} type="button" role="tab" aria-selected={tab === k} className={tab === k ? 'on' : ''} onClick={() => setTab(k)}>{label}</button>
             ))}
           </div>
+
+          {tab === 'live' && (
+            <div className="mm-live-view">
+              {!live && <p className="mm-muted">Loading…</p>}
+              {live && (
+                <>
+                  <h3>Running right now</h3>
+                  {live.running.length ? (
+                    <div className="mm-table-wrap"><table className="mm-table">
+                      <thead><tr><th>What</th><th>Project / task</th><th>Step</th><th>Started by</th><th>Last sign of life</th></tr></thead>
+                      <tbody>{live.running.map((r, i) => <tr key={i}><td>{r.what}</td><td><b>{r.projectName}</b></td><td>{r.step ?? '—'}</td><td>{r.who ?? '—'}</td><td>{time(r.lastSeen)}</td></tr>)}</tbody>
+                    </table></div>
+                  ) : <p className="mm-muted">Nothing is running at this moment.</p>}
+
+                  <h3>Spent in the last hour</h3>
+                  {live.lastHour.length ? (
+                    <div className="mm-table-wrap"><table className="mm-table">
+                      <thead><tr><th>Project</th><th>User</th><th className="r">Calls</th><th className="r">Spent</th></tr></thead>
+                      <tbody>{live.lastHour.map((r, i) => <tr key={i}><td><b>{r.project}</b></td><td>{r.user}</td><td className="r">{r.calls}</td><td className="r"><b>{usd(r.usd)}</b></td></tr>)}</tbody>
+                    </table></div>
+                  ) : <p className="mm-muted">No AI call in the last hour.</p>}
+
+                  <h3>Latest calls (newest first)</h3>
+                  {live.recent.length ? (
+                    <div className="mm-table-wrap"><table className="mm-table">
+                      <thead><tr><th>Time</th><th>User</th><th>Project</th><th>Kind / model</th><th className="r">Tokens in / out</th><th className="r">Cost</th></tr></thead>
+                      <tbody>{live.recent.map((r, i) => <tr key={i}><td>{time(r.at)}</td><td>{r.user}</td><td>{r.project}</td><td>{KIND_LABEL[r.kind] ?? r.kind}<small> · {String(r.model ?? '').replace('gemini-', '')}</small></td><td className="r">{r.promptTokens ?? '—'} / {r.outputTokens ?? '—'}</td><td className="r"><b>${r.usd.toFixed(4)}</b></td></tr>)}</tbody>
+                    </table></div>
+                  ) : <p className="mm-muted">No call has been recorded yet. Every AI call from now on appears here.</p>}
+                  <p className="mm-muted">Refreshes by itself every 15 seconds while this tab is open.</p>
+                </>
+              )}
+            </div>
+          )}
 
           {tab === 'projects' && (
             <>

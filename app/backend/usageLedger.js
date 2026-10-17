@@ -321,9 +321,47 @@ export async function usageReport(db, env = process.env) {
   };
 }
 
+// What is running right now, and the latest calls — the live record.
+export async function liveActivity(db) {
+  const q = async (sql, params = []) => (await db.query(sql, params)).rows;
+  const safe = async (sql) => { try { return await q(sql); } catch { return []; } };
+  const running = [];
+  for (const r of await safe(`SELECT r.id, r.progress_stage, r.created_at, r.updated_at, COALESCE(NULLIF(c.title,''), left(r.concept_text, 50)) AS name, r.concept_id, u.name AS who
+      FROM auto_pipeline_runs r LEFT JOIN concepts c ON c.id = r.concept_id LEFT JOIN users u ON u.id = r.created_by
+      WHERE r.status = 'running' AND r.updated_at > now() - interval '6 hours' ORDER BY r.updated_at DESC`))
+    running.push({ what: "Automatic pipeline (writing a whole project)", name: r.name, step: r.progress_stage, since: r.created_at, lastSeen: r.updated_at, who: r.who, projectKey: r.concept_id ? `story:${r.concept_id}` : null });
+  for (const r of await safe(`SELECT p.id, COALESCE(NULLIF(p.title,''), 'AI Movie #' || p.id) AS name, p.auto_production_job AS job, p.updated_at, u.name AS who
+      FROM ai_movie_projects p LEFT JOIN users u ON u.id = p.created_by
+      WHERE p.auto_production_job->>'status' = 'running' AND p.updated_at > now() - interval '6 hours' ORDER BY p.updated_at DESC`))
+    running.push({ what: "AI Movie auto production", name: r.name, step: r.job?.label ? `${r.job.label} (${r.job.step}/${r.job.steps})` : null, since: null, lastSeen: r.updated_at, who: r.who, projectKey: `ai_movie:${r.id}` });
+  for (const r of await safe(`SELECT q.id, q.module, q.created_at, q.updated_at, q.instruction, u.name AS who
+      FROM draft_revision_requests q LEFT JOIN users u ON u.id = q.created_by
+      WHERE q.status = 'working' AND q.updated_at > now() - interval '6 hours' ORDER BY q.updated_at DESC`))
+    running.push({ what: `Draft agent (${r.module})`, name: String(r.instruction ?? "").slice(0, 60), step: null, since: r.created_at, lastSeen: r.updated_at, who: r.who, projectKey: null });
+
+  const names = new Map();
+  for (const c of await safe("SELECT id, COALESCE(NULLIF(title,''), left(concept_text, 50)) AS name FROM concepts")) names.set(`story:${c.id}`, c.name);
+  for (const p of await safe("SELECT id, COALESCE(NULLIF(title,''), 'AI Movie #' || id) AS name FROM ai_movie_projects")) names.set(`ai_movie:${p.id}`, p.name);
+
+  const recentRows = await safe(`SELECT created_at, user_name, project_type, project_id, kind, model, provider, prompt_tokens, output_tokens, cost_usd::float AS usd, route
+    FROM ai_usage_ledger ORDER BY id DESC LIMIT 60`);
+  const lastHour = await safe(`SELECT project_type, project_id, user_name, count(*)::int AS calls, sum(cost_usd)::float AS usd
+    FROM ai_usage_ledger WHERE created_at > now() - interval '1 hour' GROUP BY project_type, project_id, user_name ORDER BY sum(cost_usd) DESC`);
+  const projectName = (t, id) => (t && id ? names.get(`${t}:${id}`) ?? `${t} #${id}` : "Not tied to one project");
+  return {
+    running: running.map((r) => ({ ...r, projectName: r.projectKey ? names.get(r.projectKey) ?? r.name : r.name })),
+    recent: recentRows.map((r) => ({ at: r.created_at, user: r.user_name ?? "background / system", project: projectName(r.project_type, r.project_id), kind: r.kind, model: r.model ?? r.provider, promptTokens: r.prompt_tokens, outputTokens: r.output_tokens, usd: r4(r.usd), route: r.route })),
+    lastHour: lastHour.map((r) => ({ project: projectName(r.project_type, r.project_id), user: r.user_name ?? "background / system", calls: r.calls, usd: r4(r.usd) })),
+  };
+}
+
 export function registerUsageRoutes(app, db, requireRole) {
   app.get("/api/admin/usage", requireRole("admin"), async (req, res) => {
     try { res.json(await usageReport(db)); }
     catch (error) { console.error("Money Meter report failed:", error); res.status(500).json({ error: "Could not build the spend report." }); }
+  });
+  app.get("/api/admin/usage/live", requireRole("admin"), async (req, res) => {
+    try { res.json(await liveActivity(db)); }
+    catch (error) { console.error("Money Meter live view failed:", error); res.status(500).json({ error: "Could not build the live view." }); }
   });
 }

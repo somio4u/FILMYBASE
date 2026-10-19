@@ -533,6 +533,19 @@ const LABELS = {
     sceneMultiGo: (n) => `Create and write ${n} scene${n === 1 ? '' : 's'}`,
     sceneMultiPlanning: 'Reading your descriptions…',
     sceneMultiWorking: (i, n) => `Writing scene ${i} of ${n}…`,
+    sceneImportButton: '📥 Import episodes from a Word file',
+    sceneImportTitle: 'Import episodes from a Word file',
+    sceneImportHint: 'Upload the finished screenplay as a Word (.docx) or text file. Tick the episodes to replace: their scenes and screenplay are swapped for the file\'s. A PDF cannot be read accurately for Odia — use the Word file. Nothing is lost: ↩ Undo this import brings the old version back.',
+    sceneImportPick: 'Choose the Word file',
+    sceneImportReading: 'Reading the file…',
+    sceneImportEpisode: (e) => `Episode ${e.number}${e.title ? ` — ${e.title}` : ''}: ${e.sceneCount} scene${e.sceneCount === 1 ? '' : 's'}, ${e.minutes} min`,
+    sceneImportNow: (n) => `(now ${n} scene${n === 1 ? '' : 's'})`,
+    sceneImportMissing: '(this episode is not in the project — it will be skipped)',
+    sceneImportGo: (n) => `Replace ${n} episode${n === 1 ? '' : 's'} with the file`,
+    sceneImportDone: (n) => `Done — ${n} episode${n === 1 ? '' : 's'} replaced. Use Undo if it is not right.`,
+    sceneImportUndo: '↩ Undo this import',
+    sceneImportUndone: 'The earlier version is back.',
+    sceneImportWarnSchedule: 'Scenes in the shoot schedule that no longer exist are removed from it.',
     sceneRenameButton: '🔁 Rename a character everywhere',
     sceneRenameTitle: 'Rename a character in the whole script',
     sceneRenameHint: 'Changes the name in every scene: who speaks, and the name inside action lines, dialogue and acting notes. Only the whole name changes (SULA, not SULATA). Each scene is saved as a new version, so ↶ Undo works.',
@@ -1406,6 +1419,19 @@ const LABELS = {
     sceneMultiGo: (n) => `${n}ଟି ସିନ୍ ତିଆରି କରି ଲେଖ`,
     sceneMultiPlanning: 'ତୁମର ବର୍ଣ୍ଣନା ପଢ଼ୁଛି…',
     sceneMultiWorking: (i, n) => `${n}ରୁ ${i} ନମ୍ବର ସିନ୍ ଲେଖୁଛି…`,
+    sceneImportButton: '📥 Word ଫାଇଲରୁ ଏପିସୋଡ୍ ଆମଦାନି',
+    sceneImportTitle: 'Word ଫାଇଲରୁ ଏପିସୋଡ୍ ଆମଦାନି',
+    sceneImportHint: 'ସମ୍ପୂର୍ଣ୍ଣ ସ୍କ୍ରିନପ୍ଲେକୁ Word (.docx) କିମ୍ବା text ଫାଇଲ୍ ଭାବେ ଅପଲୋଡ୍ କରନ୍ତୁ। ବଦଳାଇବାକୁ ଥିବା ଏପିସୋଡ୍‌ଗୁଡ଼ିକୁ ଟିକ୍ କରନ୍ତୁ। ଓଡ଼ିଆ ପାଇଁ PDF ଠିକ୍ ପଢ଼ାଯାଏ ନାହିଁ — Word ଫାଇଲ୍ ଦିଅନ୍ତୁ। କିଛି ହଜିବ ନାହିଁ: ↩ ଏହି ଆମଦାନି ପଛକୁ ନିଅ ଦବାଇଲେ ପୁରୁଣା ସଂସ୍କରଣ ଫେରିଆସିବ।',
+    sceneImportPick: 'Word ଫାଇଲ୍ ବାଛନ୍ତୁ',
+    sceneImportReading: 'ଫାଇଲ୍ ପଢ଼ାଯାଉଛି…',
+    sceneImportEpisode: (e) => `ଏପିସୋଡ୍ ${e.number}${e.title ? ` — ${e.title}` : ''}: ${e.sceneCount} ଦୃଶ୍ୟ, ${e.minutes} ମିନିଟ୍`,
+    sceneImportNow: (n) => `(ଏବେ ${n} ଦୃଶ୍ୟ)`,
+    sceneImportMissing: '(ଏହି ଏପିସୋଡ୍ ପ୍ରୋଜେକ୍ଟରେ ନାହିଁ — ଛାଡ଼ି ଦିଆଯିବ)',
+    sceneImportGo: (n) => `${n} ଏପିସୋଡ୍ ଫାଇଲ୍ ଅନୁସାରେ ବଦଳାଅ`,
+    sceneImportDone: (n) => `ହୋଇଗଲା — ${n} ଏପିସୋଡ୍ ବଦଳିଲା। ଠିକ୍ ନହେଲେ Undo ଦବାନ୍ତୁ।`,
+    sceneImportUndo: '↩ ଏହି ଆମଦାନି ପଛକୁ ନିଅ',
+    sceneImportUndone: 'ପୁରୁଣା ସଂସ୍କରଣ ଫେରିଆସିଲା।',
+    sceneImportWarnSchedule: 'ଆଉ ନଥିବା ଦୃଶ୍ୟଗୁଡ଼ିକ ସୁଟିଂ ସୂଚୀରୁ ହଟାଯିବ।',
     sceneRenameButton: '🔁 ଚରିତ୍ର ନାମ ସବୁଠି ବଦଳାଅ',
     sceneRenameTitle: 'ପୂରା ସ୍କ୍ରିପ୍ଟରେ ଚରିତ୍ରର ନାମ ବଦଳାଅ',
     sceneRenameHint: 'ପ୍ରତ୍ୟେକ ସିନ୍‌ରେ ନାମ ବଦଳେ: କିଏ କହୁଛି, ଆକ୍ସନ୍ ଲାଇନ୍, ଡାଇଲଗ୍ ଓ ଆକ୍ଟିଂ ନୋଟ୍ ଭିତରେ ମଧ୍ୟ। କେବଳ ପୂରା ନାମ ବଦଳେ (SULA, SULATA ନୁହେଁ)। ପ୍ରତ୍ୟେକ ସିନ୍ ନୂଆ ଭର୍ସନ୍ ଭାବେ ସେଭ୍ ହୁଏ, ତେଣୁ ↶ Undo ଚାଲେ।',
@@ -4140,6 +4166,7 @@ function MovieScreenplayWorkspace({
   const [headingForm, setHeadingForm] = useState(null) // { index, intExt, location, timeOfDay }
   const [multiForm, setMultiForm] = useState(null) // "Add multiple scenes": { text, where }
   const [renameForm, setRenameForm] = useState(null) // "Rename a character everywhere": { from, to, found, done }
+  const [importForm, setImportForm] = useState(null) // "Import episodes from a Word file": { file, preview, picked, busy, done, lastImport }
   const [multiProgress, setMultiProgress] = useState(null) // { step: 'planning' | 'writing', index, total }
   useEffect(() => {
     if (!ctxMenu) return undefined
@@ -4379,6 +4406,68 @@ function MovieScreenplayWorkspace({
       setIsChangingScenes(false)
       return null
     }
+  }
+
+  // "Import episodes from a Word file": read the file (preview), then replace the ticked episodes; Undo brings the old ones back
+  async function sendImportFile(file, extra) {
+    const body = new FormData()
+    body.append('file', file)
+    for (const [key, value] of Object.entries(extra ?? {})) body.append(key, value)
+    const response = await fetch(`${BACKEND_URL}/api/scene-lists/${sceneList.id}/screenplay-import`, { method: 'POST', body })
+    return { ok: response.ok, data: await response.json().catch(() => ({})) }
+  }
+  async function previewImport(file) {
+    if (!file) return
+    setSceneChangeError(null)
+    setImportForm((form) => ({ ...form, file, preview: null, busy: true, done: null }))
+    try {
+      const { ok, data } = await sendImportFile(file)
+      if (!ok) { setSceneChangeError(data.error || t.genericError); setImportForm((form) => ({ ...form, file: null, busy: false })); return }
+      const picked = data.episodes.filter((e) => e.exists).map((e) => e.number)
+      setImportForm((form) => ({ ...form, preview: data, picked, busy: false, lastImport: data.lastImport }))
+    } catch {
+      setSceneChangeError(t.genericError)
+      setImportForm((form) => ({ ...form, file: null, busy: false }))
+    }
+  }
+  async function applyImport() {
+    if (editing?.dirty) { setSceneChangeError(t.editSaveFirst); return }
+    setSceneChangeError(null)
+    setImportForm((form) => ({ ...form, busy: true }))
+    try {
+      const { ok, data } = await sendImportFile(importForm.file, { apply: '1', episodes: JSON.stringify(importForm.picked) })
+      if (!ok) { setSceneChangeError(data.error || t.genericError); setImportForm((form) => ({ ...form, busy: false })); return }
+      setEditing(null)
+      setEditFixes(null)
+      await onSceneListChanged?.(data.sceneList)
+      setImportForm({ file: null, preview: null, picked: [], busy: false, done: t.sceneImportDone(data.imported.length), lastImport: data.lastImport })
+    } catch {
+      setSceneChangeError(t.genericError)
+      setImportForm((form) => ({ ...form, busy: false }))
+    }
+  }
+  async function undoImport() {
+    setSceneChangeError(null)
+    setImportForm((form) => ({ ...form, busy: true }))
+    try {
+      const response = await fetch(`${BACKEND_URL}/api/scene-lists/${sceneList.id}/screenplay-import/undo`, { method: 'POST' })
+      const data = await response.json().catch(() => ({}))
+      if (!response.ok) { setSceneChangeError(data.error || t.genericError); setImportForm((form) => ({ ...form, busy: false })); return }
+      setEditing(null)
+      setEditFixes(null)
+      await onSceneListChanged?.(data.sceneList)
+      setImportForm({ file: null, preview: null, picked: [], busy: false, done: t.sceneImportUndone, lastImport: data.lastImport })
+    } catch {
+      setSceneChangeError(t.genericError)
+      setImportForm((form) => ({ ...form, busy: false }))
+    }
+  }
+  async function openImportForm() {
+    setImportForm({ file: null, preview: null, picked: [], busy: false, done: null, lastImport: null })
+    try {
+      const response = await fetch(`${BACKEND_URL}/api/scene-lists/${sceneList.id}/screenplay-import`)
+      if (response.ok) { const data = await response.json(); setImportForm((form) => (form ? { ...form, lastImport: data.lastImport } : form)) }
+    } catch { /* the Undo button just stays hidden */ }
   }
 
   // "Add multiple scenes": one box with what happens in each scene. Headings are worked out; each scene is then made and written
@@ -4990,6 +5079,32 @@ function MovieScreenplayWorkspace({
                         <button type="button" className="cancel-button" onClick={() => setRenameForm(null)} disabled={isChangingScenes}>{t.sceneNewCancelButton}</button>
                       </div>
                     </div>
+                  ) : importForm ? (
+                    <div className="script-scene-form script-import-form">
+                      <p className="script-tools-heading">{t.sceneImportTitle}</p>
+                      <p className="script-tools-editing-note">{t.sceneImportHint}</p>
+                      <input type="file" accept=".docx,.txt,.md" disabled={importForm.busy} onChange={(event) => { previewImport(event.target.files?.[0]); event.target.value = '' }} />
+                      {importForm.busy && !importForm.preview && <p className="script-tools-editing-note">{t.sceneImportReading}</p>}
+                      {importForm.preview && (
+                        <>
+                          {importForm.preview.episodes.map((e) => (
+                            <label key={e.number} className="script-import-episode">
+                              <input type="checkbox" disabled={!e.exists || importForm.busy} checked={importForm.picked.includes(e.number)}
+                                onChange={(event) => setImportForm({ ...importForm, picked: event.target.checked ? [...importForm.picked, e.number] : importForm.picked.filter((n) => n !== e.number) })} />
+                              {' '}{t.sceneImportEpisode(e)} {e.exists ? t.sceneImportNow(e.currentSceneCount) : t.sceneImportMissing}
+                            </label>
+                          ))}
+                          {importForm.preview.warnings?.map((w, i) => <p key={i} className="script-tools-editing-note">⚠ {w}</p>)}
+                          <p className="script-tools-editing-note">{t.sceneImportWarnSchedule}</p>
+                          <button type="button" className="choose-button" disabled={importForm.busy || importForm.picked.length === 0} onClick={applyImport}>{t.sceneImportGo(importForm.picked.length)}</button>
+                        </>
+                      )}
+                      {importForm.done && <p className="dossier-message" role="status">{importForm.done}</p>}
+                      <div className="script-scene-manage-buttons">
+                        {importForm.lastImport && <button type="button" className="cancel-button" disabled={importForm.busy} onClick={undoImport}>{t.sceneImportUndo}</button>}
+                        <button type="button" className="cancel-button" onClick={() => setImportForm(null)} disabled={importForm.busy}>{t.sceneNewCancelButton}</button>
+                      </div>
+                    </div>
                   ) : multiForm ? (
                     <div className="script-scene-form script-multi-form">
                       <p className="script-tools-heading">{t.sceneMultiTitle}</p>
@@ -5065,6 +5180,12 @@ function MovieScreenplayWorkspace({
                       <button type="button" className="cancel-button" onClick={() => setRenameForm({ from: '', to: '', found: null, done: null })} disabled={Boolean(editing) || isAiWriting || isChecking || isChangingScenes}>
                         {t.sceneRenameButton}
                       </button>
+                      {/* admin only: the screenplay writer's login (the only one with onProgress) has no access to this */}
+                      {!onProgress && Array.isArray(sceneList.episodeScenes) && (
+                        <button type="button" className="cancel-button" onClick={openImportForm} disabled={Boolean(editing) || isAiWriting || isChecking || isChangingScenes}>
+                          {t.sceneImportButton}
+                        </button>
+                      )}
                       <button type="button" className="cancel-button script-scene-delete-button" onClick={deleteSelectedScene} disabled={Boolean(editing) || isAiWriting || isChecking || isChangingScenes || scenes.length < 2}>
                         {t.sceneDeleteButton}
                       </button>

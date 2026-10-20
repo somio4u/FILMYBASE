@@ -458,6 +458,11 @@ const LABELS = {
     screenplayDownloadEpisode: (number) => `⬇ Grab Episode ${number}`,
     screenplayDownloadAllEpisodes: '⬇ Grab all episodes',
     screenplayDownloadFilm: '⬇ Grab the screenplay',
+    approvalButtonEpisode: (n) => `⬇ Episode ${n} — approval format (Word)`,
+    approvalButtonFilm: '⬇ Approval format (Word)',
+    approvalButtonAll: '⬇ All episodes — approval format (zip)',
+    approvalRunning: (done, total) => (total ? `Preparing… ${done} of ${total} scenes` : 'Preparing…'),
+    approvalNote: 'For approval, not for the shoot. The AI retells each scene in Hinglish with the cue lines; the first time takes a few minutes, later downloads are quick.',
     downloadFormatWord: 'Word',
     scriptRequestChangesWhileEditingNote: 'Want the AI to change it? First save or cancel your edit below the scene.',
     productionStatusLoadError: "Couldn't load the production status — refresh and try again.",
@@ -1370,6 +1375,11 @@ const LABELS = {
     screenplayDownloadEpisode: (number) => `⬇ ଏପିସୋଡ୍ ${number} ଡାଉନଲୋଡ୍ କର`,
     screenplayDownloadAllEpisodes: '⬇ ସବୁ ଏପିସୋଡ୍ ଡାଉନଲୋଡ୍ କର',
     screenplayDownloadFilm: '⬇ ପୂରା ସ୍କ୍ରିପ୍ଟ ଡାଉନଲୋଡ୍ କର',
+    approvalButtonEpisode: (n) => `⬇ ଏପିସୋଡ୍ ${n} — ଅନୁମୋଦନ ଫର୍ମାଟ୍ (Word)`,
+    approvalButtonFilm: '⬇ ଅନୁମୋଦନ ଫର୍ମାଟ୍ (Word)',
+    approvalButtonAll: '⬇ ସବୁ ଏପିସୋଡ୍ — ଅନୁମୋଦନ ଫର୍ମାଟ୍ (zip)',
+    approvalRunning: (done, total) => (total ? `ପ୍ରସ୍ତୁତ ହେଉଛି… ${total} ମଧ୍ୟରୁ ${done} ଦୃଶ୍ୟ` : 'ପ୍ରସ୍ତୁତ ହେଉଛି…'),
+    approvalNote: 'ଅନୁମୋଦନ ପାଇଁ, ସୁଟିଂ ପାଇଁ ନୁହେଁ। AI ପ୍ରତ୍ୟେକ ଦୃଶ୍ୟକୁ Hinglish ରେ କ୍ୟୁ ଲାଇନ୍ ସହ ଲେଖେ; ପ୍ରଥମ ଥର କିଛି ମିନିଟ୍ ଲାଗେ, ପରେ ଶୀଘ୍ର।',
     downloadFormatWord: 'Word',
     scriptRequestChangesWhileEditingNote: 'AI କୁ ବଦଳେଇବାକୁ କହିବୁ? ଆଗେ ତଳେ ତୋ ଏଡିଟ୍ ସେଭ୍ କର, ନ ହେଲେ ବାତିଲ୍ କର।',
     productionStatusLoadError: 'ପ୍ରଡକ୍ସନ୍ ଷ୍ଟାଟସ୍ ଲୋଡ୍ ହେଲାନି — ପେଜ୍ ରିଫ୍ରେସ୍ କରି ଆଉ ଥରେ ଦେଖ।',
@@ -2440,6 +2450,45 @@ function lineDiff(before, after) {
   while (i < n) out.push({ kind: 'del', line: before[i++] })
   while (j < m) out.push({ kind: 'add', line: after[j++] })
   return out
+}
+
+// Admin: the episode (or every episode) as a Word file in the narrated Hinglish "approval format". The AI retells each scene on the
+// server, so this runs as a background job: start it, watch the progress, and the file downloads by itself when it is ready.
+function ApprovalFormatButton({ sceneListId, episodeIndex, all, label, t }) {
+  const [state, setState] = useState(null) // { done, total } while it works, { error } after a failure
+  async function start() {
+    setState({ done: 0, total: 0 })
+    const base = `${BACKEND_URL}/api/scene-lists/${sceneListId}/approval-format`
+    try {
+      const response = await fetch(base, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(all ? { all: true } : { episodeIndex }) })
+      const started = await response.json().catch(() => ({}))
+      if (!response.ok) throw new Error(started.error || t.genericError)
+      for (;;) {
+        await new Promise((resolve) => setTimeout(resolve, 2000))
+        const poll = await fetch(`${base}/${started.jobId}`)
+        const status = await poll.json().catch(() => ({}))
+        if (!poll.ok) throw new Error(status.error || t.genericError)
+        if (status.status === 'error') throw new Error(status.error || t.genericError)
+        if (status.status === 'running') { setState({ done: status.done, total: status.total }); continue }
+        break
+      }
+      const link = document.createElement('a')
+      link.href = `${base}/${started.jobId}/file`
+      link.click()
+      setState(null)
+    } catch (error) {
+      setState({ error: error.message || t.genericError })
+    }
+  }
+  const running = state && !state.error
+  return (
+    <span className="approval-format-download">
+      <button type="button" className="cancel-button" onClick={start} disabled={running} title={t.approvalNote}>
+        {running ? t.approvalRunning(state.done, state.total) : label}
+      </button>
+      {state?.error && <span className="feedback-note"> {state.error}</span>}
+    </span>
+  )
 }
 
 // Admin: a short review of what changed in ONE episode (or the whole film), shown at the end of that episode.
@@ -5206,6 +5255,11 @@ function MovieScreenplayWorkspace({
                       excelUrl={`${episodeUrl}format=docx`}
                       excelLabel={t.downloadFormatWord}
                     />
+                    {/* admin only (the writer's login has no access): the narrated "approval format", not the shoot format */}
+                    {!onProgress && (
+                      <ApprovalFormatButton key={`approval-${group.episodeIndex}`} sceneListId={sceneList.id} episodeIndex={group.episodeIndex} t={t}
+                        label={group.episodeIndex === null ? t.approvalButtonFilm : t.approvalButtonEpisode(group.episodeIndex + 1)} />
+                    )}
                     {group.episodeIndex !== null && group.episodeIndex === groups.length - 1 && (
                       <DownloadChoiceButton
                         t={t}
@@ -5214,6 +5268,9 @@ function MovieScreenplayWorkspace({
                         excelUrl={`${base}?format=docx`}
                         excelLabel={t.downloadFormatWord}
                       />
+                    )}
+                    {!onProgress && group.episodeIndex !== null && group.episodeIndex === groups.length - 1 && (
+                      <ApprovalFormatButton key="approval-all" sceneListId={sceneList.id} all t={t} label={t.approvalButtonAll} />
                     )}
                   </div>
                 )

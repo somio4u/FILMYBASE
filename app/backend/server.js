@@ -39,6 +39,7 @@ import { registerDesignTaskRoutes } from "./designTasks.js";
 import { registerSubmissionRoutes, designerGatekeeper, DESIGNER_ROLE } from "./designSubmissions.js";
 import { WRITER_ROLE, writerGatekeeper, ensureWriterSchema, registerWriterRoutes } from "./writerAccess.js";
 import { usageContext, installGeminiMetering, ensureUsageSchema, registerUsageRoutes, setSceneListResolver } from "./usageLedger.js";
+import { ensureApprovalFormatSchema, registerApprovalFormatRoutes } from "./approvalFormat.js";
 import { actorOf, trackSceneAuthors } from "./sceneAuthors.js";
 import { registerChangeHistoryRoutes } from "./changeHistory.js";
 import { ensureScreenplayImportSchema, registerScreenplayImportRoutes } from "./screenplayImportRoutes.js";
@@ -20372,6 +20373,21 @@ registerUsageRoutes(app, db, requireRole);
 setSceneListResolver(sceneListConceptId);
 registerAudioCueRoutes(app, db, requireRole, { store: productionMedia.store });
 registerChangeHistoryRoutes(app, db, requireRole);
+// "Approval format" Word file (narrated Hinglish retelling of the episodes; see approvalFormat.js) — the AI only retells each scene
+registerApprovalFormatRoutes(app, db, {
+  requireRole,
+  sceneListConceptId,
+  askModel: (systemInstruction, contents) => generateJsonContent({
+    model: AI_MOVIE_DIALOGUE_MODEL_NAME,
+    contents,
+    config: {
+      systemInstruction,
+      responseMimeType: "application/json",
+      maxOutputTokens: 16384,
+      responseSchema: { type: Type.OBJECT, properties: { paragraphs: { type: Type.ARRAY, items: { type: Type.STRING } } }, required: ["paragraphs"] },
+    },
+  }),
+});
 registerScreenplayImportRoutes(app, db, { requireRole, upload: screenplayUpload, extractText: extractTextFromUploadedScreenplay, lockSceneListForSceneEdit, withSceneArray, withRecountedMinutes });
 
 // Schema self-heal runs before the server starts accepting traffic — worst
@@ -20381,6 +20397,7 @@ ensureAiMovieSchema()
   .then(() => ensureWriterSchema(db))
   .then(() => ensureUsageSchema(db))
   .then(() => ensureScreenplayImportSchema(db))
+  .then(() => ensureApprovalFormatSchema(db))
   .then(() => ensureAllProductionSchemas(db))
   .then(async (failures) => { try { const made = await backfillDrafts(db); await failInterruptedRequests(db); if (made) console.log(`Draft Management: ${made} existing project(s) are now Draft 1 of their project.`); } catch (error) { console.error("Draft backfill failed:", error.message); } return failures; })
   .catch((error) => console.error("Schema setup failed:", error.message))

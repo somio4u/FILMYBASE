@@ -1920,7 +1920,7 @@ app.get("/api/projects/master-list", requireRole("admin"), async (req, res) => {
   );
 
   const assignmentsResult = await db.query(
-    "SELECT concept_id, name, role FROM users WHERE concept_id IS NOT NULL AND role IN ('director', 'production_manager')"
+    "SELECT concept_id, name, role FROM users WHERE concept_id IS NOT NULL AND role IN ('director', 'production_manager', 'screenplay_writer')"
   );
   const assignedUsersByConceptId = new Map();
   assignmentsResult.rows.forEach((row) => {
@@ -1941,7 +1941,8 @@ app.get("/api/projects/master-list", requireRole("admin"), async (req, res) => {
         lastWorkedAt: orderedProjects.worked.get(Number(row.id)) ? new Date(orderedProjects.worked.get(Number(row.id))).toISOString() : row.created_at,
         screenplayReady: row.screenplay_ready,
         assignedUsers,
-        stage: row.screenplay_ready && assignedUsers.length > 0 ? "ongoing" : "in_development",
+        // a screenplay writer is shown on the card but does not move the project to "Ongoing" — that still needs a director / AD
+        stage: row.screenplay_ready && assignedUsers.some((u) => u.role !== "screenplay_writer") ? "ongoing" : "in_development",
       };
     })
   );

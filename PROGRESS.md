@@ -1980,3 +1980,7 @@ Plain version: every project is now a set of **drafts**. Opening a project shows
 - [x] Built from the version history the app already keeps (`screenplay_scenes`), so it **also covers work done before today** (episodes 2–8 of Mahakali included). It does **not** say who changed a scene — that is in Work details, from its deploy day.
 - [x] Routes `/api/scene-lists/:id/change-history` (+ `/scene`), admin only (401 logged out). Checked live on seeded data; 3 unit tests. Not clicked in a real browser yet.
 - **Next step:** owner says "deploy".
+
+## Fix: screenplay writer now shows on the project card (built, not deployed yet)
+- [x] The "All your projects" cards only listed Director and AD; a screenplay writer assigned to a project was left out, so the card said "No one on this yet". Now the writer shows as **"Writer: Name"** (Odia: ଲେଖକ). A writer alone does **not** move the project to "Rolling / Pre-production" (that still needs a Director or AD). Checked live.
+- **Next step:** owner says "deploy".

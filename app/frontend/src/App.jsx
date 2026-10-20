@@ -160,6 +160,7 @@ const LABELS = {
     inDevelopmentProjectsHeading: 'Still cooking',
     noProjectsInStageNote: 'Nothing here yet.',
     noOneAssignedNote: 'No one on this yet',
+    writerRoleLabel: 'Writer',
     adRoleLabel: 'AD',
     directorRoleLabel: 'Director',
     newProductionButton: 'Start a new production',
@@ -1063,6 +1064,7 @@ const LABELS = {
     inDevelopmentProjectsHeading: 'ଏବେ ବି ତିଆରି ହେଉଛି',
     noProjectsInStageNote: 'ଏଠି ଏଯାଏଁ କିଛି ନାହିଁ।',
     noOneAssignedNote: 'ଏଯାଏଁ କାହାକୁ ଦିଆଯାଇନି',
+    writerRoleLabel: 'ଲେଖକ',
     adRoleLabel: 'AD',
     directorRoleLabel: 'ଡାଇରେକ୍ଟର',
     newProductionButton: 'ନୂଆ ପ୍ରଡକ୍ସନ୍ ଆରମ୍ଭ କର',
@@ -14600,7 +14602,7 @@ function App() {
                         <div className="master-list-assignments">
                           {project.assignedUsers.map((u, i) => (
                             <span key={i} className="master-list-assignment-badge">
-                              {u.role === 'production_manager' ? t.adRoleLabel : t.directorRoleLabel}: {u.name}
+                              {u.role === 'production_manager' ? t.adRoleLabel : u.role === 'screenplay_writer' ? t.writerRoleLabel : t.directorRoleLabel}: {u.name}
                             </span>
                           ))}
                         </div>
@@ -14654,7 +14656,7 @@ function App() {
                           {project.assignedUsers.length === 0 && <span className="breakdown-item-meta">{t.noOneAssignedNote}</span>}
                           {project.assignedUsers.map((u, i) => (
                             <span key={i} className="master-list-assignment-badge">
-                              {u.role === 'production_manager' ? t.adRoleLabel : t.directorRoleLabel}: {u.name}
+                              {u.role === 'production_manager' ? t.adRoleLabel : u.role === 'screenplay_writer' ? t.writerRoleLabel : t.directorRoleLabel}: {u.name}
                             </span>
                           ))}
                         </div>

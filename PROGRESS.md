@@ -1974,3 +1974,9 @@ Plain version: every project is now a set of **drafts**. Opening a project shows
 - [x] Recorded by the server (new table `writer_activity`) when his request succeeds; "open" is noted when he moves to another episode. Admin-only report (`/api/admin/writer-activity`, writer gets 403). Checked live. 1 unit test.
 - Honest limit: **the record starts from the day this is deployed** — earlier work was never stored per person, so it cannot be reconstructed.
 - **Next step:** owner says "deploy".
+
+## Change history screen (built, not deployed yet)
+- [x] **New admin button "🕘 Change history"** (scene-management panel of a series or film). Episodes list → click one → its scenes (how many changes, last change) → click a scene → every version of it, oldest first, each shown against the one before (added lines green "+", removed lines red "−"), with when and how it came to be (AI wrote it / edited by hand / imported from a file).
+- [x] Built from the version history the app already keeps (`screenplay_scenes`), so it **also covers work done before today** (episodes 2–8 of Mahakali included). It does **not** say who changed a scene — that is in Work details, from its deploy day.
+- [x] Routes `/api/scene-lists/:id/change-history` (+ `/scene`), admin only (401 logged out). Checked live on seeded data; 3 unit tests. Not clicked in a real browser yet.
+- **Next step:** owner says "deploy".

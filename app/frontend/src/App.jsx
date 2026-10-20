@@ -130,6 +130,15 @@ const LABELS = {
     workFirstLast: (a, b) => `first ${a} · last ${b}`,
     workActions: { write: 'wrote a scene (AI)', edit: 'edited a scene', changes: 'asked the AI for changes', undo: 'undo', redo: 'redo', voice: 'spoke a scene', add: 'added a scene', delete: 'deleted a scene', move: 'moved a scene', heading: 'changed a scene heading', duplicate: 'copied a scene', rename: 'renamed a character', convert: 'changed the language', open: 'opened' },
     workRecent: 'Latest actions',
+    historyButton: '🕘 Change history',
+    historyTitle: 'Change history of this screenplay',
+    historyHint: 'Every change to a scene is kept as a version, so this shows the work done earlier too. Click an episode, then a scene, to see what changed. (It does not say who changed it; that is in Work details, from the day it was added.)',
+    historyEpisodeLine: (e) => `${e.totalChanges} change${e.totalChanges === 1 ? '' : 's'} in ${e.changedScenes} of ${e.sceneCount} scenes`,
+    historyNever: 'no scene changed after it was first written',
+    historySceneLine: (s) => (s.changes === 0 ? 'not changed' : `${s.changes} change${s.changes === 1 ? '' : 's'}, last ${new Date(s.lastAt).toLocaleString()}`),
+    historySource: { ai: 'AI wrote it', edited: 'edited by hand', imported: 'imported from a file' },
+    historyVersion: (n, at, source) => `Version ${n} — ${at} — ${source}`,
+    historyBack: '← Back',
     newUserMissingFields: (fields) => `Hold on, you still need to fill in: ${fields}.`,
     newUserNeedsProject: 'Pick which project this login can open (or choose "Production only" — that one needs no project).',
     emptyGreeting: "Bro, drop your idea here — let's see where it goes!",
@@ -1024,6 +1033,15 @@ const LABELS = {
     workFirstLast: (a, b) => `ପ୍ରଥମ ${a} · ଶେଷ ${b}`,
     workActions: { write: 'ଦୃଶ୍ୟ ଲେଖିଲା (AI)', edit: 'ଦୃଶ୍ୟ ବଦଳାଇଲା', changes: 'AI ଠାରୁ ବଦଳ ମାଗିଲା', undo: 'undo', redo: 'redo', voice: 'କହି ଦୃଶ୍ୟ ଲେଖିଲା', add: 'ଦୃଶ୍ୟ ଯୋଡ଼ିଲା', delete: 'ଦୃଶ୍ୟ ହଟାଇଲା', move: 'ଦୃଶ୍ୟ ଘୁଞ୍ଚାଇଲା', heading: 'ଦୃଶ୍ୟ ହେଡିଂ ବଦଳାଇଲା', duplicate: 'ଦୃଶ୍ୟ କପି କଲା', rename: 'ଚରିତ୍ର ନାମ ବଦଳାଇଲା', convert: 'ଭାଷା ବଦଳାଇଲା', open: 'ଖୋଲିଲା' },
     workRecent: 'ଶେଷ କାମଗୁଡ଼ିକ',
+    historyButton: '🕘 ବଦଳର ଇତିହାସ',
+    historyTitle: 'ଏହି ସ୍କ୍ରିନପ୍ଲେର ବଦଳର ଇତିହାସ',
+    historyHint: 'ଦୃଶ୍ୟର ପ୍ରତ୍ୟେକ ବଦଳ ଗୋଟିଏ ସଂସ୍କରଣ ଭାବେ ରହେ, ତେଣୁ ପୂର୍ବର କାମ ମଧ୍ୟ ଏଠାରେ ଦିଶେ। ଏପିସୋଡ୍, ତା\'ପରେ ଦୃଶ୍ୟ ଉପରେ କ୍ଲିକ୍ କରନ୍ତୁ। (କିଏ ବଦଳାଇଲା ତାହା ଏଠାରେ ନାହିଁ; ତାହା "କାମର ବିବରଣୀ"ରେ, ଯୋଡ଼ାଗଲା ଦିନରୁ।)',
+    historyEpisodeLine: (e) => `${e.sceneCount} ମଧ୍ୟରୁ ${e.changedScenes} ଦୃଶ୍ୟରେ ${e.totalChanges} ବଦଳ`,
+    historyNever: 'ପ୍ରଥମ ଥର ଲେଖିବା ପରେ କୌଣସି ଦୃଶ୍ୟ ବଦଳିନି',
+    historySceneLine: (s) => (s.changes === 0 ? 'ବଦଳିନି' : `${s.changes} ବଦଳ, ଶେଷ ${new Date(s.lastAt).toLocaleString()}`),
+    historySource: { ai: 'AI ଲେଖିଥିଲା', edited: 'ହାତରେ ବଦଳାଯାଇଛି', imported: 'ଫାଇଲରୁ ଆମଦାନି' },
+    historyVersion: (n, at, source) => `ସଂସ୍କରଣ ${n} — ${at} — ${source}`,
+    historyBack: '← ପଛକୁ',
     newUserMissingFields: (fields) => `ଟିକେ ରହ, ଏଗୁଡ଼ା ଭରିବା ବାକି: ${fields}।`,
     newUserNeedsProject: 'ଏ ଲଗ୍ ଇନ୍ କେଉଁ ପ୍ରୋଜେକ୍ଟ ଖୋଲିବ ବାଛ (ନହେଲେ "ଖାଲି ପ୍ରଡକ୍ସନ୍" ବାଛ — ସେଥିରେ ପ୍ରୋଜେକ୍ଟ ଲାଗେନି)।',
     emptyGreeting: 'ଭାଇ, ତୋ ଆଇଡିଆ ଏଠି ଲେଖ — ଦେଖିବା କେଉଁଆଡ଼େ ଯାଉଛି!',
@@ -2387,6 +2405,25 @@ function ScreenplayElements({ elements, language }) {
 // `editingNote` is set while this scene is open in the manual editor: asking
 // the AI for changes then would be hidden behind (and later overwritten by)
 // the editor's older copy, so it waits until the edit is saved or cancelled.
+// A line-by-line comparison of two versions of a scene: [{ kind: 'same' | 'add' | 'del', line }] (longest common run of lines kept)
+function lineDiff(before, after) {
+  const n = before.length
+  const m = after.length
+  const keep = Array.from({ length: n + 1 }, () => new Array(m + 1).fill(0))
+  for (let i = n - 1; i >= 0; i--) for (let j = m - 1; j >= 0; j--) keep[i][j] = before[i] === after[j] ? keep[i + 1][j + 1] + 1 : Math.max(keep[i + 1][j], keep[i][j + 1])
+  const out = []
+  let i = 0
+  let j = 0
+  while (i < n && j < m) {
+    if (before[i] === after[j]) { out.push({ kind: 'same', line: after[j] }); i++; j++ }
+    else if (keep[i + 1][j] >= keep[i][j + 1]) { out.push({ kind: 'del', line: before[i] }); i++ }
+    else { out.push({ kind: 'add', line: after[j] }); j++ }
+  }
+  while (i < n) out.push({ kind: 'del', line: before[i++] })
+  while (j < m) out.push({ kind: 'add', line: after[j++] })
+  return out
+}
+
 function ScreenplayBlock({ episodeIndex, sceneIndex, t, language, screenplay, toolsOnly = false, editingNote = null }) {
   if (!screenplay) return null
 
@@ -4182,6 +4219,7 @@ function MovieScreenplayWorkspace({
   const [headingForm, setHeadingForm] = useState(null) // { index, intExt, location, timeOfDay }
   const [multiForm, setMultiForm] = useState(null) // "Add multiple scenes": { text, where }
   const [renameForm, setRenameForm] = useState(null) // "Rename a character everywhere": { from, to, found, done }
+  const [historyForm, setHistoryForm] = useState(null) // "Change history": { episodes, episode, scene, versions }
   const [importForm, setImportForm] = useState(null) // "Import episodes from a Word file": { file, preview, picked, busy, done, lastImport }
   const [multiProgress, setMultiProgress] = useState(null) // { step: 'planning' | 'writing', index, total }
   useEffect(() => {
@@ -4422,6 +4460,27 @@ function MovieScreenplayWorkspace({
       setIsChangingScenes(false)
       return null
     }
+  }
+
+  // "Change history" (admin): episodes -> scenes -> the versions of one scene, each shown against the one before it
+  async function openHistory() {
+    setSceneChangeError(null)
+    setHistoryForm({ episodes: null, episode: null, scene: null, versions: null })
+    try {
+      const response = await fetch(`${BACKEND_URL}/api/scene-lists/${sceneList.id}/change-history`)
+      const data = await response.json().catch(() => ({}))
+      if (!response.ok) { setSceneChangeError(data.error || t.genericError); setHistoryForm(null); return }
+      setHistoryForm({ episodes: data.episodes, episode: null, scene: null, versions: null })
+    } catch { setSceneChangeError(t.genericError); setHistoryForm(null) }
+  }
+  async function openHistoryScene(episode, scene) {
+    setHistoryForm((form) => ({ ...form, episode, scene, versions: null }))
+    try {
+      const query = `sceneIndex=${scene.sceneIndex}${episode.episodeIndex === null ? '' : `&episodeIndex=${episode.episodeIndex}`}`
+      const response = await fetch(`${BACKEND_URL}/api/scene-lists/${sceneList.id}/change-history/scene?${query}`)
+      const data = await response.json().catch(() => ({}))
+      setHistoryForm((form) => (form ? { ...form, versions: response.ok ? data.versions : [] } : form))
+    } catch { setHistoryForm((form) => (form ? { ...form, versions: [] } : form)) }
   }
 
   // "Import episodes from a Word file": read the file (preview), then replace the ticked episodes; Undo brings the old ones back
@@ -5095,6 +5154,55 @@ function MovieScreenplayWorkspace({
                         <button type="button" className="cancel-button" onClick={() => setRenameForm(null)} disabled={isChangingScenes}>{t.sceneNewCancelButton}</button>
                       </div>
                     </div>
+                  ) : historyForm ? (
+                    <div className="script-scene-form script-history-form">
+                      <p className="script-tools-heading">{t.historyTitle}</p>
+                      <p className="script-tools-editing-note">{t.historyHint}</p>
+                      {!historyForm.episodes && <p className="script-tools-editing-note">…</p>}
+                      {historyForm.episodes && !historyForm.episode && historyForm.episodes.map((e) => (
+                        <p key={String(e.episodeIndex)}>
+                          <button type="button" className="cancel-button" onClick={() => setHistoryForm({ ...historyForm, episode: e })}>
+                            {e.episodeIndex === null ? t.workEpisode(null) : t.workEpisode(e.episodeIndex)}
+                          </button>
+                          {' '}{e.totalChanges === 0 ? t.historyNever : `${t.historyEpisodeLine(e)} · ${t.workFirstLast(new Date(e.firstAt).toLocaleString(), new Date(e.lastAt).toLocaleString())}`}
+                        </p>
+                      ))}
+                      {historyForm.episode && !historyForm.scene && (
+                        <>
+                          <p className="script-tools-heading">{t.workEpisode(historyForm.episode.episodeIndex)}</p>
+                          {historyForm.episode.scenes.map((sc) => (
+                            <p key={sc.sceneIndex}>
+                              <button type="button" className="cancel-button" disabled={sc.versions === 0} onClick={() => openHistoryScene(historyForm.episode, sc)}>{sc.sceneNumber}</button>
+                              {' '}{sc.location} — {t.historySceneLine(sc)}
+                            </p>
+                          ))}
+                          <button type="button" className="cancel-button" onClick={() => setHistoryForm({ ...historyForm, episode: null })}>{t.historyBack}</button>
+                        </>
+                      )}
+                      {historyForm.scene && (
+                        <>
+                          <p className="script-tools-heading">{t.workEpisode(historyForm.episode.episodeIndex)} — {historyForm.scene.sceneNumber} {historyForm.scene.location}</p>
+                          {!historyForm.versions && <p className="script-tools-editing-note">…</p>}
+                          {historyForm.versions?.map((v, i) => {
+                            const diff = lineDiff(i === 0 ? [] : historyForm.versions[i - 1].lines, v.lines)
+                            return (
+                              <div key={v.id} className="script-history-version">
+                                <p className="script-tools-editing-note"><strong>{t.historyVersion(i + 1, new Date(v.at).toLocaleString(), t.historySource[v.source] ?? v.source)}</strong></p>
+                                {diff.map((d, j) => (
+                                  <p key={j} style={{ margin: '2px 0', background: d.kind === 'add' ? 'rgba(46,160,67,0.18)' : d.kind === 'del' ? 'rgba(248,81,73,0.18)' : 'transparent', textDecoration: d.kind === 'del' ? 'line-through' : 'none' }}>
+                                    {d.kind === 'add' ? '+ ' : d.kind === 'del' ? '− ' : '  '}{d.line}
+                                  </p>
+                                ))}
+                              </div>
+                            )
+                          })}
+                          <button type="button" className="cancel-button" onClick={() => setHistoryForm({ ...historyForm, scene: null, versions: null })}>{t.historyBack}</button>
+                        </>
+                      )}
+                      <div className="script-scene-manage-buttons">
+                        <button type="button" className="cancel-button" onClick={() => setHistoryForm(null)}>{t.sceneNewCancelButton}</button>
+                      </div>
+                    </div>
                   ) : importForm ? (
                     <div className="script-scene-form script-import-form">
                       <p className="script-tools-heading">{t.sceneImportTitle}</p>
@@ -5200,6 +5308,11 @@ function MovieScreenplayWorkspace({
                       {!onProgress && Array.isArray(sceneList.episodeScenes) && (
                         <button type="button" className="cancel-button" onClick={openImportForm} disabled={Boolean(editing) || isAiWriting || isChecking || isChangingScenes}>
                           {t.sceneImportButton}
+                        </button>
+                      )}
+                      {!onProgress && (
+                        <button type="button" className="cancel-button" onClick={openHistory} disabled={Boolean(editing) || isAiWriting || isChecking || isChangingScenes}>
+                          {t.historyButton}
                         </button>
                       )}
                       <button type="button" className="cancel-button script-scene-delete-button" onClick={deleteSelectedScene} disabled={Boolean(editing) || isAiWriting || isChecking || isChangingScenes || scenes.length < 2}>

@@ -39,6 +39,7 @@ import { registerDesignTaskRoutes } from "./designTasks.js";
 import { registerSubmissionRoutes, designerGatekeeper, DESIGNER_ROLE } from "./designSubmissions.js";
 import { WRITER_ROLE, writerGatekeeper, ensureWriterSchema, registerWriterRoutes } from "./writerAccess.js";
 import { usageContext, installGeminiMetering, ensureUsageSchema, registerUsageRoutes, setSceneListResolver } from "./usageLedger.js";
+import { registerChangeHistoryRoutes } from "./changeHistory.js";
 import { ensureScreenplayImportSchema, registerScreenplayImportRoutes } from "./screenplayImportRoutes.js";
 import { readStoryFromPdf } from "./pdfReader.js";
 import { BIBLE_PASS_SCORE, brainAsker, newUsage, designStoryBible, generateBrainJson, reviseBibleWithNote, storyBibleToMarkdown } from "./storyBrain.js";
@@ -20329,6 +20330,7 @@ registerWriterRoutes(app, db, requireRole);
 registerUsageRoutes(app, db, requireRole);
 setSceneListResolver(sceneListConceptId);
 registerAudioCueRoutes(app, db, requireRole, { store: productionMedia.store });
+registerChangeHistoryRoutes(app, db, requireRole);
 registerScreenplayImportRoutes(app, db, { requireRole, upload: screenplayUpload, extractText: extractTextFromUploadedScreenplay, lockSceneListForSceneEdit, withSceneArray, withRecountedMinutes });
 
 // Schema self-heal runs before the server starts accepting traffic — worst

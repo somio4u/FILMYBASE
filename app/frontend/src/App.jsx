@@ -546,6 +546,7 @@ const LABELS = {
     headingFormPlace: 'Place',
     headingFormTime: 'Time of day (DAY, NIGHT …)',
     headingFormSave: 'Save heading',
+    headingClickHint: 'Click to change INT/EXT, place or time of day',
     sceneMultiButton: '＋ Add multiple scenes',
     sceneMultiTitle: 'Add multiple scenes',
     sceneMultiHint: 'Write what happens in each scene — one scene per paragraph (a blank line between), or number them 1. 2. 3. Each scene is written using ONLY what you wrote for it. INT/EXT, place and time are worked out for you and can be edited later.',
@@ -1455,6 +1456,7 @@ const LABELS = {
     headingFormPlace: 'ଜାଗା',
     headingFormTime: 'ସମୟ (DAY, NIGHT …)',
     headingFormSave: 'ହେଡିଂ ସେଭ୍ କର',
+    headingClickHint: 'INT/EXT, ଜାଗା କିମ୍ବା ସମୟ ବଦଳାଇବାକୁ କ୍ଲିକ୍ କର',
     sceneMultiButton: '＋ ଅନେକ ସିନ୍ ଯୋଡ଼',
     sceneMultiTitle: 'ଅନେକ ସିନ୍ ଯୋଡ଼',
     sceneMultiHint: 'ପ୍ରତ୍ୟେକ ସିନ୍‌ରେ କ’ଣ ହେଉଛି ଲେଖ — ଏକ ସିନ୍ ପାଇଁ ଏକ ଅନୁଚ୍ଛେଦ (ମଝିରେ ଖାଲି ଲାଇନ୍), କିମ୍ବା 1. 2. 3. ନମ୍ବର ଦିଅ। ପ୍ରତ୍ୟେକ ସିନ୍ ତୁ ଯାହା ଲେଖିଛୁ କେବଳ ସେତିକିରେ ଲେଖାଯିବ। INT/EXT, ଜାଗା, ସମୟ ନିଜେ ବାହାରିବ, ପରେ ବଦଳାଇ ହେବ।',
@@ -4930,14 +4932,42 @@ function MovieScreenplayWorkspace({
     })
   }
 
+  // The heading form opens right inside the scene it belongs to (not at the top of the page)
+  function renderHeadingForm(index) {
+    if (headingForm?.index !== index) return null
+    return (
+      <div className="script-agent-ask script-heading-form" role="group" aria-label={t.sceneMenuHeading} onClick={(event) => event.stopPropagation()}>
+        <label>{t.headingFormIntExt}
+          <select value={headingForm.intExt} onChange={(e) => setHeadingForm({ ...headingForm, intExt: e.target.value })}><option value="INT">INT</option><option value="EXT">EXT</option></select>
+        </label>
+        <label>{t.headingFormPlace}
+          <input value={headingForm.location} onChange={(e) => setHeadingForm({ ...headingForm, location: e.target.value })} />
+        </label>
+        <label>{t.headingFormTime}
+          <input value={headingForm.timeOfDay} list="scene-time-of-day" onChange={(e) => setHeadingForm({ ...headingForm, timeOfDay: e.target.value })} />
+          <datalist id="scene-time-of-day"><option value="DAY" /><option value="NIGHT" /><option value="MORNING" /><option value="EVENING" /><option value="DAWN" /><option value="DUSK" /></datalist>
+        </label>
+        <button type="button" className="cancel-button" onClick={() => setHeadingForm(null)}>{t.episodeRenameCancel}</button>
+        <button type="button" className="choose-button" onClick={saveHeading} disabled={isChangingScenes || !headingForm.location.trim() || !headingForm.timeOfDay.trim()}>{t.headingFormSave}</button>
+      </div>
+    )
+  }
+  // In edit mode the heading is clickable, like any line of the scene
+  const slugClick = (index) => (editMode ? (event) => { event.stopPropagation(); selectScene(index, false); openHeadingForm(index) } : undefined)
+  // a heading form opened from the scene menu: bring its scene into view
+  useEffect(() => {
+    if (headingForm) document.getElementById(`movie-script-scene-${headingForm.index}`)?.scrollIntoView({ block: 'nearest' })
+  }, [headingForm?.index])
+
   function renderEditableScene(index, s) {
     return (
       <div key={index} id={`movie-script-scene-${index}`} className="script-scene is-selected is-editing script-scene-doc">
-        <p className="script-slug">
+        <p className="script-slug" onClick={slugClick(index)} title={editMode ? t.headingClickHint : undefined} style={editMode ? { cursor: 'pointer' } : undefined}>
           <span className="script-scene-number script-scene-number-left">{numberOf(s, index)}</span>
           {movieSlugline(s)}
           <span className="script-scene-number script-scene-number-right">{numberOf(s, index)}</span>
         </p>
+        {renderHeadingForm(index)}
         <ScriptEditor
           ref={editorRef}
           elements={editing.elements}
@@ -5009,22 +5039,6 @@ function MovieScreenplayWorkspace({
           </div>
         )}
         <RuntimeSummary total={group.total} target={group.target} t={t} />
-        {headingForm && (
-          <div className="script-agent-ask script-heading-form" role="group" aria-label={t.sceneMenuHeading}>
-            <label>{t.headingFormIntExt}
-              <select value={headingForm.intExt} onChange={(e) => setHeadingForm({ ...headingForm, intExt: e.target.value })}><option value="INT">INT</option><option value="EXT">EXT</option></select>
-            </label>
-            <label>{t.headingFormPlace}
-              <input value={headingForm.location} onChange={(e) => setHeadingForm({ ...headingForm, location: e.target.value })} />
-            </label>
-            <label>{t.headingFormTime}
-              <input value={headingForm.timeOfDay} list="scene-time-of-day" onChange={(e) => setHeadingForm({ ...headingForm, timeOfDay: e.target.value })} />
-              <datalist id="scene-time-of-day"><option value="DAY" /><option value="NIGHT" /><option value="MORNING" /><option value="EVENING" /><option value="DAWN" /><option value="DUSK" /></datalist>
-            </label>
-            <button type="button" className="cancel-button" onClick={() => setHeadingForm(null)}>{t.episodeRenameCancel}</button>
-            <button type="button" className="choose-button" onClick={saveHeading} disabled={isChangingScenes || !headingForm.location.trim() || !headingForm.timeOfDay.trim()}>{t.headingFormSave}</button>
-          </div>
-        )}
         {agentDelete !== null && agentDelete === sceneIndex && (
           <div className="script-agent-ask" role="alert">
             <span>{t.voiceDeleteAsk(numberOf(scene, sceneIndex))}</span>
@@ -5110,11 +5124,12 @@ function MovieScreenplayWorkspace({
                         onDoubleClick={() => d && !editing && startEditing(index)}
                         title={d ? (editMode ? undefined : t.scriptEditDoubleClickHint) : undefined}
                       >
-                        <p className="script-slug">
+                        <p className="script-slug" onClick={slugClick(index)} title={editMode ? t.headingClickHint : undefined} style={editMode ? { cursor: 'pointer' } : undefined}>
                           <span className="script-scene-number script-scene-number-left">{numberOf(s, index)}</span>
                           {movieSlugline(s)}
                           <span className="script-scene-number script-scene-number-right">{numberOf(s, index)}</span>
                         </p>
+                        {renderHeadingForm(index)}
                         {d && Array.isArray(d.elements) ? (
                           renderElements(d.elements)
                         ) : (

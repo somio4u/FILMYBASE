@@ -2000,3 +2000,9 @@ Plain version: every project is now a set of **drafts**. Opening a project shows
 - Not covered: closing the browser tab while a scene is still being typed (the last typed seconds can be lost — move to another scene or press Save all changes first).
 - New server route `/api/screenplay/scene/:id/draft` (writer login allowed); unit tests updated.
 - **Next step:** owner says "deploy".
+
+## Scene heading opens inside the scene (built, not deployed yet)
+- [x] **The "Edit heading" panel (INT/EXT, place, time of day, Cancel, Save heading) now opens right inside the scene it belongs to**, just under that scene's heading — no more jumping to the top of the page. Works from the scene's right-click menu too (the scene scrolls into view).
+- [x] **In edit mode the scene heading is clickable**, like any dialogue or action line: click the heading of scene 10 and the panel opens there. Your unsaved typing in an open scene is saved as a draft first.
+- [x] Checked in a real browser on a 12-scene episode: click heading of scene 10 → panel appears under scene 10 (not at the top) → change place → Save heading → heading updated, panel closed.
+- **Next step:** owner says "deploy".

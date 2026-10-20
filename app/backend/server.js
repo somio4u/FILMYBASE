@@ -20325,7 +20325,7 @@ registerPipelineRoutes(app, db, requireRole, {
   }),
 });
 registerSubmissionRoutes(app, db, requireRole, { store: productionMedia.store, serveMedia: productionMedia.serveMedia });
-registerWriterRoutes(app, db);
+registerWriterRoutes(app, db, requireRole);
 registerUsageRoutes(app, db, requireRole);
 setSceneListResolver(sceneListConceptId);
 registerAudioCueRoutes(app, db, requireRole, { store: productionMedia.store });

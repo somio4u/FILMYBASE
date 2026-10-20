@@ -122,6 +122,14 @@ const LABELS = {
     roleScreenplayWriter: 'Screenplay writer (story & screenplay of one project)',
     writerLastWorked: (when, where) => `last worked ${when}${where ? ` — ${where}` : ''}`,
     writerNeverWorked: 'has not opened it yet',
+    workDetailsButton: '📋 Work details',
+    workDetailsNone: 'No work recorded yet (the record starts from the day this was added).',
+    workDetailsNote: 'Recorded from the day this was added; earlier work is not in this list.',
+    workEpisode: (i) => (i === null || i === undefined ? 'Whole script / film' : `Episode ${i + 1}`),
+    workEpisodeLine: (e) => `${e.changes} change${e.changes === 1 ? '' : 's'} in ${e.scenes} scene${e.scenes === 1 ? '' : 's'}, opened ${e.opens}×`,
+    workFirstLast: (a, b) => `first ${a} · last ${b}`,
+    workActions: { write: 'wrote a scene (AI)', edit: 'edited a scene', changes: 'asked the AI for changes', undo: 'undo', redo: 'redo', voice: 'spoke a scene', add: 'added a scene', delete: 'deleted a scene', move: 'moved a scene', heading: 'changed a scene heading', duplicate: 'copied a scene', rename: 'renamed a character', convert: 'changed the language', open: 'opened' },
+    workRecent: 'Latest actions',
     newUserMissingFields: (fields) => `Hold on, you still need to fill in: ${fields}.`,
     newUserNeedsProject: 'Pick which project this login can open (or choose "Production only" — that one needs no project).',
     emptyGreeting: "Bro, drop your idea here — let's see where it goes!",
@@ -1008,6 +1016,14 @@ const LABELS = {
     roleScreenplayWriter: 'ସ୍କ୍ରିନ୍‌ପ୍ଲେ ରାଇଟର୍ (ଗୋଟିଏ ପ୍ରୋଜେକ୍ଟର ଗପ ଓ ସ୍କ୍ରିନ୍‌ପ୍ଲେ)',
     writerLastWorked: (when, where) => `ଶେଷ କାମ ${when}${where ? ` — ${where}` : ''}`,
     writerNeverWorked: 'ଏପର୍ଯ୍ୟନ୍ତ ଖୋଲିନି',
+    workDetailsButton: '📋 କାମର ବିବରଣୀ',
+    workDetailsNone: 'ଏପର୍ଯ୍ୟନ୍ତ କିଛି କାମ ରେକର୍ଡ ହୋଇନାହିଁ (ଏହା ଯୋଡ଼ାଗଲା ଦିନରୁ ରେକର୍ଡ ଆରମ୍ଭ)।',
+    workDetailsNote: 'ଏହା ଯୋଡ଼ାଗଲା ଦିନରୁ ରେକର୍ଡ ହୋଇଛି; ପୂର୍ବର କାମ ଏଥିରେ ନାହିଁ।',
+    workEpisode: (i) => (i === null || i === undefined ? 'ସମ୍ପୂର୍ଣ୍ଣ ସ୍କ୍ରିପ୍ଟ / ଫିଲ୍ମ' : `ଏପିସୋଡ୍ ${i + 1}`),
+    workEpisodeLine: (e) => `${e.scenes} ଦୃଶ୍ୟରେ ${e.changes} ବଦଳ, ${e.opens} ଥର ଖୋଲିଛି`,
+    workFirstLast: (a, b) => `ପ୍ରଥମ ${a} · ଶେଷ ${b}`,
+    workActions: { write: 'ଦୃଶ୍ୟ ଲେଖିଲା (AI)', edit: 'ଦୃଶ୍ୟ ବଦଳାଇଲା', changes: 'AI ଠାରୁ ବଦଳ ମାଗିଲା', undo: 'undo', redo: 'redo', voice: 'କହି ଦୃଶ୍ୟ ଲେଖିଲା', add: 'ଦୃଶ୍ୟ ଯୋଡ଼ିଲା', delete: 'ଦୃଶ୍ୟ ହଟାଇଲା', move: 'ଦୃଶ୍ୟ ଘୁଞ୍ଚାଇଲା', heading: 'ଦୃଶ୍ୟ ହେଡିଂ ବଦଳାଇଲା', duplicate: 'ଦୃଶ୍ୟ କପି କଲା', rename: 'ଚରିତ୍ର ନାମ ବଦଳାଇଲା', convert: 'ଭାଷା ବଦଳାଇଲା', open: 'ଖୋଲିଲା' },
+    workRecent: 'ଶେଷ କାମଗୁଡ଼ିକ',
     newUserMissingFields: (fields) => `ଟିକେ ରହ, ଏଗୁଡ଼ା ଭରିବା ବାକି: ${fields}।`,
     newUserNeedsProject: 'ଏ ଲଗ୍ ଇନ୍ କେଉଁ ପ୍ରୋଜେକ୍ଟ ଖୋଲିବ ବାଛ (ନହେଲେ "ଖାଲି ପ୍ରଡକ୍ସନ୍" ବାଛ — ସେଥିରେ ପ୍ରୋଜେକ୍ଟ ଲାଗେନି)।',
     emptyGreeting: 'ଭାଇ, ତୋ ଆଇଡିଆ ଏଠି ଲେଖ — ଦେଖିବା କେଉଁଆଡ଼େ ଯାଉଛି!',
@@ -8004,6 +8020,7 @@ function App() {
   const [aiMovieStageError, setAiMovieStageError] = useState(null)
 
   const [showManageUsers, setShowManageUsers] = useState(false)
+  const [workDetails, setWorkDetails] = useState(null) // admin: { userId, episodes, recent } of the writer whose "Work details" is open
   const [users, setUsers] = useState([])
   const [newUserName, setNewUserName] = useState('')
   const [newUserUsername, setNewUserUsername] = useState('')
@@ -9880,6 +9897,14 @@ function App() {
   async function loadUsers() {
     const response = await fetch(`${BACKEND_URL}/api/auth/users`)
     if (response.ok) setUsers(await response.json())
+  }
+
+  async function toggleWorkDetails(userId) {
+    if (workDetails?.userId === userId) { setWorkDetails(null); return }
+    try {
+      const response = await fetch(`${BACKEND_URL}/api/admin/writer-activity?userId=${userId}`)
+      if (response.ok) setWorkDetails({ userId, ...(await response.json()) })
+    } catch { /* the panel just stays closed */ }
   }
 
   async function handleToggleManageUsers() {
@@ -14188,9 +14213,32 @@ function App() {
                           : t.writerNeverWorked}</span>
                       )}
                     </span>
+                    {u.role === 'screenplay_writer' && (
+                      <button className="breakdown-action-button" onClick={() => toggleWorkDetails(u.id)}>{t.workDetailsButton}</button>
+                    )}
                     <button className="breakdown-action-button crew-member-remove" onClick={() => handleDeleteUserClick(u.id)}>
                       {t.removeCrewMemberButton}
                     </button>
+                    {workDetails?.userId === u.id && (
+                      <div className="work-details" style={{ flexBasis: '100%' }}>
+                        {workDetails.episodes.length === 0 ? <p className="breakdown-item-meta">{t.workDetailsNone}</p> : (
+                          <>
+                            {workDetails.episodes.map((e) => (
+                              <p key={String(e.episode_index)} className="breakdown-item-meta">
+                                <strong>{t.workEpisode(e.episode_index)}</strong> — {t.workEpisodeLine(e)} — {t.workFirstLast(new Date(e.first_at).toLocaleString(), new Date(e.last_at).toLocaleString())}
+                              </p>
+                            ))}
+                            <p className="breakdown-item-meta"><strong>{t.workRecent}</strong></p>
+                            {workDetails.recent.map((r, i) => (
+                              <p key={i} className="breakdown-item-meta">
+                                {new Date(r.at).toLocaleString()} — {t.workEpisode(r.episode_index)}{r.scene_index !== null ? `, ${r.scene_index + 1}` : ''}: {t.workActions[r.action] ?? r.action}
+                              </p>
+                            ))}
+                            <p className="breakdown-item-meta">{t.workDetailsNote}</p>
+                          </>
+                        )}
+                      </div>
+                    )}
                   </div>
                 ))}
                 <form className="crew-add-form" onSubmit={handleCreateUserSubmit}>

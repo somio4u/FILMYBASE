@@ -1968,3 +1968,9 @@ Plain version: every project is now a set of **drafts**. Opening a project shows
 - [x] Checked on the real Mahakali Word file: episodes 4–8 found with 8, 8, 7, 8, 9 scenes (16, 17, 15, 18, 19 minutes). 5 unit tests in `tests/screenplayImport.test.js`. Not clicked in a real browser yet (the page builds; the server routes were checked live).
 - [x] Stray `*` marks in the Episode 8 song lines removed from the exported PDF/Word (`exports/`).
 - **Next step:** after the owner says "deploy" → merge to main; then try the import with the Mahakali Word file on the live app.
+
+## Writer "Work details" for the admin (built, not deployed yet)
+- [x] **Team & logins → each screenplay writer now has a "📋 Work details" button**: per episode — how many changes, in how many scenes, how many times he opened it, first and last time — plus his latest 40 actions (wrote/edited/undid/added/deleted/moved a scene, renamed a character, changed language, opened an episode).
+- [x] Recorded by the server (new table `writer_activity`) when his request succeeds; "open" is noted when he moves to another episode. Admin-only report (`/api/admin/writer-activity`, writer gets 403). Checked live. 1 unit test.
+- Honest limit: **the record starts from the day this is deployed** — earlier work was never stored per person, so it cannot be reconstructed.
+- **Next step:** owner says "deploy".

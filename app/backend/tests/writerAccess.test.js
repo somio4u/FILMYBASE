@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { matchWriterRoute, cleanProgress, WRITER_ROLE } from "../writerAccess.js";
+import { matchWriterRoute, cleanProgress, workOf, WRITER_ROLE } from "../writerAccess.js";
 
 const ok = (method, path) => Boolean(matchWriterRoute(method, path));
 
@@ -34,4 +34,15 @@ test("the place where he stopped is saved clean: known stage, whole numbers only
   assert.deepEqual(cleanProgress({ stage: "screenplay", groupIndex: 1, sceneIndex: 7, editMode: true, scrollTop: 1200.4, evil: "x" }), { stage: "screenplay", groupIndex: 1, sceneIndex: 7, editMode: true, scrollTop: 1200 });
   assert.deepEqual(cleanProgress({ stage: "production", groupIndex: -3, sceneIndex: "9", editMode: "yes" }), { stage: "screenplay", groupIndex: 0, sceneIndex: 0, editMode: false, scrollTop: 0 });
   assert.deepEqual(cleanProgress(null), { stage: "screenplay", groupIndex: 0, sceneIndex: 0, editMode: false, scrollTop: 0 });
+});
+
+test("what a writer did is named in plain terms, with the episode", () => {
+  assert.deepEqual(workOf("POST", "/api/screenplay/scene/undo", { episodeIndex: 3, sceneIndex: 2 }), { action: "undo", episodeIndex: 3, sceneIndex: 2 });
+  assert.deepEqual(workOf("DELETE", "/api/scene-lists/7/scenes", { episodeIndex: 1, sceneIndex: 0 }), { action: "delete", episodeIndex: 1, sceneIndex: 0 });
+  assert.equal(workOf("POST", "/api/scene-lists/7/scenes/move", { episodeIndex: 1 }).action, "move");
+  assert.equal(workOf("POST", "/api/screenplay/scene/55/edit", {}).sceneRowId, 55);
+  assert.deepEqual(workOf("POST", "/api/scene-lists/7/rename-character", {}), { action: "rename", episodeIndex: null, sceneIndex: null });
+  assert.equal(workOf("POST", "/api/scene-lists/7/scenes/plan", {}), null);
+  assert.equal(workOf("POST", "/api/pitch-deck", {}), null);
+  assert.equal(workOf("POST", "/api/scene-lists/7/rename-character", { preview: true }), null);
 });

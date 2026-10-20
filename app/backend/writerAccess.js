@@ -100,8 +100,52 @@ export function writerGatekeeper(db, sceneListConceptId) {
       }
     }
     req.writerAllowed = true;
+    // note what he changed (which episode) once the request has succeeded — shown to the admin as "Work details"
+    if (req.method !== "GET") {
+      res.on("finish", () => {
+        if (res.statusCode < 400) recordWriterWork(db, req).catch((error) => console.error("Writer activity not saved:", error.message));
+      });
+    }
     next();
   };
+}
+
+// What a successful writer request did, in plain terms: { action, episodeIndex, sceneIndex } — null if it is not screenplay work.
+export function workOf(method, path, body) {
+  const b = body && typeof body === "object" ? body : {};
+  const place = (action) => ({
+    action,
+    episodeIndex: Number.isInteger(b.episodeIndex) ? b.episodeIndex : null,
+    sceneIndex: Number.isInteger(b.sceneIndex) ? b.sceneIndex : null,
+  });
+  let m;
+  if (method === "POST" && path === "/api/screenplay/scene") return place("write");
+  if (method === "POST" && (m = path.match(/^\/api\/screenplay\/scene\/(undo|redo|voice)$/))) return place(m[1]);
+  if (method === "POST" && (m = path.match(/^\/api\/screenplay\/scene\/(\d+)\/(edit|request-changes)$/))) return { ...place(m[2] === "edit" ? "edit" : "changes"), sceneRowId: Number(m[1]) };
+  if ((m = path.match(/^\/api\/scene-lists\/\d+\/scenes(?:\/(move|duplicate|heading))?$/))) {
+    const action = m[1] ?? (method === "DELETE" ? "delete" : method === "POST" ? "add" : null);
+    return action ? place(action) : null;
+  }
+  if (method === "POST" && /^\/api\/scene-lists\/\d+\/rename-character$/.test(path)) return b.preview === true ? null : { action: "rename", episodeIndex: null, sceneIndex: null };
+  if (method === "POST" && /^\/api\/scene-lists\/\d+\/convert-language$/.test(path)) return { action: "convert", episodeIndex: null, sceneIndex: null };
+  return null;
+}
+
+async function logWork(db, user, entry) {
+  await db.query(
+    "INSERT INTO writer_activity (user_id, concept_id, episode_index, scene_index, action) VALUES ($1, $2, $3, $4, $5)",
+    [user.id, user.concept_id ?? null, entry.episodeIndex, entry.sceneIndex, entry.action]
+  );
+}
+
+async function recordWriterWork(db, req) {
+  const work = workOf(req.method, req.path, req.body);
+  if (!work) return;
+  if (work.sceneRowId) {
+    const row = (await db.query("SELECT episode_index, scene_index FROM screenplay_scenes WHERE id = $1", [work.sceneRowId])).rows[0];
+    if (row) { work.episodeIndex = row.episode_index; work.sceneIndex = row.scene_index; }
+  }
+  await logWork(db, req.user, work);
 }
 
 export async function ensureWriterSchema(db) {
@@ -111,6 +155,17 @@ export async function ensureWriterSchema(db) {
     state JSONB NOT NULL DEFAULT '{}',
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
   )`);
+  // one line per thing a writer did (or episode he opened): the admin's "Work details"
+  await db.query(`CREATE TABLE IF NOT EXISTS writer_activity (
+    id SERIAL PRIMARY KEY,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    concept_id INTEGER,
+    episode_index INTEGER,
+    scene_index INTEGER,
+    action TEXT NOT NULL,
+    at TIMESTAMPTZ NOT NULL DEFAULT now()
+  )`);
+  await db.query("CREATE INDEX IF NOT EXISTS writer_activity_user_at ON writer_activity (user_id, at DESC)");
 }
 
 const STAGES = ["idea", "synopsis", "characters", "bitsheet", "screenplay"];
@@ -128,7 +183,26 @@ export function cleanProgress(raw) {
   };
 }
 
-export function registerWriterRoutes(app, db) {
+export function registerWriterRoutes(app, db, requireRole) {
+  // Admin: for each screenplay writer, the episodes he worked on (edits, scenes touched, first/last time) and his latest actions.
+  app.get("/api/admin/writer-activity", requireRole("admin"), async (req, res) => {
+    const userId = Number(req.query.userId);
+    const where = Number.isInteger(userId) ? "AND a.user_id = $1" : "";
+    const args = Number.isInteger(userId) ? [userId] : [];
+    const episodes = (await db.query(
+      `SELECT a.user_id, a.episode_index,
+              count(*) FILTER (WHERE a.action <> 'open')::int AS changes,
+              count(*) FILTER (WHERE a.action = 'open')::int AS opens,
+              count(DISTINCT a.scene_index) FILTER (WHERE a.action <> 'open' AND a.scene_index IS NOT NULL)::int AS scenes,
+              min(a.at) AS first_at, max(a.at) AS last_at
+       FROM writer_activity a WHERE true ${where}
+       GROUP BY a.user_id, a.episode_index ORDER BY a.user_id, max(a.at) DESC`, args)).rows;
+    const recent = (await db.query(
+      `SELECT a.user_id, a.episode_index, a.scene_index, a.action, a.at
+       FROM writer_activity a WHERE true ${where} ORDER BY a.at DESC, a.id DESC LIMIT 40`, args)).rows;
+    res.json({ episodes, recent });
+  });
+
   app.get("/api/writer/progress", async (req, res) => {
     if (!req.user) { res.status(401).json({ error: "Please log in." }); return; }
     const row = (await db.query("SELECT concept_id, state, updated_at FROM writer_progress WHERE user_id = $1", [req.user.id])).rows[0];
@@ -138,6 +212,10 @@ export function registerWriterRoutes(app, db) {
     if (!req.user) { res.status(401).json({ error: "Please log in." }); return; }
     if (req.user.role !== WRITER_ROLE) { res.json({ saved: false }); return; } // only a writer's place is remembered
     const state = cleanProgress(req.body);
+    const before = (await db.query("SELECT state FROM writer_progress WHERE user_id = $1", [req.user.id])).rows[0]?.state;
+    if (state.stage === "screenplay" && (before?.stage !== "screenplay" || before?.groupIndex !== state.groupIndex)) {
+      await logWork(db, req.user, { action: "open", episodeIndex: state.groupIndex, sceneIndex: state.sceneIndex });
+    }
     await db.query(
       `INSERT INTO writer_progress (user_id, concept_id, state, updated_at) VALUES ($1, $2, $3, now())
        ON CONFLICT (user_id) DO UPDATE SET concept_id = EXCLUDED.concept_id, state = EXCLUDED.state, updated_at = now()`,

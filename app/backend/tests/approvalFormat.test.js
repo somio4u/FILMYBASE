@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import AdmZip from "adm-zip";
-import { buildApprovalDoc, cleanParagraphs, sceneHash, sceneHeaderLine, sceneToPlainInput, transitionLines, zipOf, APPROVAL_SYSTEM_PROMPT } from "../approvalFormat.js";
+import { buildApprovalDoc, cleanParagraphs, fileSafe, sceneHash, sceneHeaderLine, sceneToPlainInput, transitionLines, zipOf, APPROVAL_SYSTEM_PROMPT } from "../approvalFormat.js";
 
 test("the scene heading line carries number, in/out, time, place and the characters", () => {
   assert.equal(
@@ -62,4 +62,10 @@ test("the Word file has the title, scene lines, durations, paragraphs and the fo
 test("all episodes go in one zip", () => {
   const zip = new AdmZip(zipOf([{ name: "a.docx", buffer: Buffer.from("x") }, { name: "b.docx", buffer: Buffer.from("y") }]));
   assert.deepEqual(zip.getEntries().map((e) => e.entryName).sort(), ["a.docx", "b.docx"]);
+});
+
+test("a project title becomes a clean file name", () => {
+  assert.equal(fileSafe("[DA-UI] Film"), "DA-UI-Film");
+  assert.equal(fileSafe("MAHA KALI"), "MAHA-KALI");
+  assert.equal(fileSafe("!!!"), "SCREENPLAY");
 });

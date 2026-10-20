@@ -2022,3 +2022,8 @@ Plain version: every project is now a set of **drafts**. Opening a project shows
 - Sample for the owner: `exports/Maha-Kali-EP-04-approval-format-SAMPLE.docx` (Episode 4, first 3 scenes, retold by hand to show the layout; the AI's own wording will differ).
 - Episodes 1–3 and the real Maha Kali data live only in the owner's live app, so the files for all 8 episodes come from the new buttons there.
 - **Next step:** owner says "deploy", then presses the buttons on Maha Kali and sends the first file for review.
+
+## Fix: approval-format download showed "Please log in." on the phone (built, not deployed yet)
+- [x] The file was ready but the download opened a plain link to the server (onrender.com), which did not carry the login on the owner's phone → `{"error":"Please log in."}`. The button now fetches the file like every other request (with the login) and saves it itself, with a proper file name (e.g. `MAHA-KALI-EP-04-approval.docx`; titles with `[ ]` no longer give a leading dash). Checked in a real browser: the file downloads, the page stays in the app.
+- The AI work is not lost: every retold scene is remembered, so pressing the button again gives the file at once (no new "Preparing 8 scenes").
+- **Next step:** owner says "deploy"; then press the Episode button again.

@@ -2463,6 +2463,7 @@ function ApprovalFormatButton({ sceneListId, episodeIndex, all, label, t }) {
       const response = await fetch(base, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(all ? { all: true } : { episodeIndex }) })
       const started = await response.json().catch(() => ({}))
       if (!response.ok) throw new Error(started.error || t.genericError)
+      let filename = 'approval-format.docx'
       for (;;) {
         await new Promise((resolve) => setTimeout(resolve, 2000))
         const poll = await fetch(`${base}/${started.jobId}`)
@@ -2470,11 +2471,20 @@ function ApprovalFormatButton({ sceneListId, episodeIndex, all, label, t }) {
         if (!poll.ok) throw new Error(status.error || t.genericError)
         if (status.status === 'error') throw new Error(status.error || t.genericError)
         if (status.status === 'running') { setState({ done: status.done, total: status.total }); continue }
+        filename = status.filename || filename
         break
       }
+      // the file is fetched like every other request here (with the login), then saved — a plain link to the server would not carry the login on some phones
+      const file = await fetch(`${base}/${started.jobId}/file`)
+      if (!file.ok) throw new Error((await file.json().catch(() => ({}))).error || t.genericError)
+      const url = URL.createObjectURL(await file.blob())
       const link = document.createElement('a')
-      link.href = `${base}/${started.jobId}/file`
+      link.href = url
+      link.download = filename
+      document.body.appendChild(link)
       link.click()
+      link.remove()
+      setTimeout(() => URL.revokeObjectURL(url), 60000)
       setState(null)
     } catch (error) {
       setState({ error: error.message || t.genericError })

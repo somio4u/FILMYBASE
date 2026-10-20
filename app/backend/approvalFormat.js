@@ -32,6 +32,8 @@ export const APPROVAL_STYLE_SAMPLE = `SAMPLE OF THE STYLE (different story — c
 We open the scene from Gopal house hall. Gopal aur Meera America se aane wali Diya ka intezaar kar rahe hain. Doorbell rings. Meera darwaza kholti hai. We REVEAL DIYA – elegant saree, pearl jewellery aur graceful personality. Gopal says, “Welcome Diya ji! Aapka safar kaisa raha?” Diya muskurakar says, “Jahan pahunchna zaroori ho, wahan pahunchne ka raasta mil hi jaata hai.” Durga ki aankhon mein aansu aa jaate hain. Durga says, “Maa, mere Bhaiya ka phone nahin lag raha. Woh kahan hain?” DURGA IS SHOCKED. DRAMATIC BUILD UP. TRACK TROLLEY TREATMENT.`;
 
 const pad2 = (n) => String(n).padStart(2, "0");
+// a project title as part of a file name: letters and digits, single dashes, none at the ends
+export const fileSafe = (title) => String(title ?? "").replace(/[^A-Za-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "SCREENPLAY";
 
 // the scene as the AI reads it (its own words and lines, in order)
 export function sceneToPlainInput({ heading, location, characters, elements }) {
@@ -209,10 +211,10 @@ export function registerApprovalFormatRoutes(app, db, tools) {
           };
         });
         const episodeNumber = ei === null ? 1 : ei + 1;
-        files.push({ name: `${data.title.replace(/[^A-Za-z0-9]+/g, "-")}-EP-${pad2(episodeNumber)}-approval.docx`, buffer: await buildApprovalDoc({ title: data.title, episodeNumber, scenes }) });
+        files.push({ name: `${fileSafe(data.title)}-EP-${pad2(episodeNumber)}-approval.docx`, buffer: await buildApprovalDoc({ title: data.title, episodeNumber, scenes }) });
       }
       if (files.length === 1) { job.buffer = files[0].buffer; job.filename = files[0].name; job.type = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"; }
-      else { job.buffer = zipOf(files); job.filename = `${data.title.replace(/[^A-Za-z0-9]+/g, "-")}-all-episodes-approval.zip`; job.type = "application/zip"; }
+      else { job.buffer = zipOf(files); job.filename = `${fileSafe(data.title)}-all-episodes-approval.zip`; job.type = "application/zip"; }
       job.status = "done";
     } catch (error) {
       console.error("Approval format failed:", error.message);
@@ -239,7 +241,7 @@ export function registerApprovalFormatRoutes(app, db, tools) {
   app.get("/api/scene-lists/:id/approval-format/:jobId", requireRole("admin"), (req, res) => {
     const job = jobs.get(req.params.jobId);
     if (!job || job.sceneListId !== Number(req.params.id)) { res.status(404).json({ error: "That download is no longer available. Please start it again." }); return; }
-    res.json({ status: job.status, done: job.done, total: job.total, error: job.error ?? null });
+    res.json({ status: job.status, done: job.done, total: job.total, error: job.error ?? null, filename: job.filename ?? null });
   });
 
   app.get("/api/scene-lists/:id/approval-format/:jobId/file", requireRole("admin"), (req, res) => {

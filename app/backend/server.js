@@ -11474,7 +11474,8 @@ function cleanMovieEditedElements(elements) {
 }
 
 async function insertMovieScreenplayVersion(previousRow, elements, extra = {}) {
-  const content = { ...previousRow.content, elements, ...extra };
+  // a version made by the AI is never a "draft" (a draft = the writer's own text, saved at once, AI check still to come)
+  const content = { ...previousRow.content, elements, draft: undefined, ...extra };
   const inserted = await db.query(
     "INSERT INTO screenplay_scenes (scene_list_id, episode_index, scene_index, content) VALUES ($1, $2, $3, $4) RETURNING id, episode_index, scene_index, status, feedback, created_at",
     [previousRow.scene_list_id, previousRow.episode_index, previousRow.scene_index, JSON.stringify(content)]
@@ -11507,6 +11508,42 @@ app.post("/api/screenplay/scene/:id/edit", requireRole("admin"), async (req, res
     console.error(`Movie screenplay scene ${req.params.id} edit failed:`, error.message);
     res.status(502).json({ error: error.message });
   }
+});
+
+// "Draft": the writer's own words are saved at once, with no AI, so he can go on to the next scene without waiting. The AI's spelling /
+// grammar / language check comes later (Save my changes on the scene, or Save all changes). Repeated drafts of a scene that is still a
+// draft replace each other, so the version history does not fill up with every autosave.
+app.post("/api/screenplay/scene/:id/draft", requireRole("admin"), async (req, res) => {
+  const elements = cleanMovieEditedElements(req.body.elements);
+  if (elements.length === 0) {
+    res.status(400).json({ error: "The scene is empty -- write at least one line first." });
+    return;
+  }
+  const existing = await db.query("SELECT id, scene_list_id, episode_index, scene_index, content FROM screenplay_scenes WHERE id = $1", [req.params.id]);
+  const previousRow = existing.rows[0];
+  if (!previousRow) {
+    res.status(404).json({ error: "Screenplay scene not found" });
+    return;
+  }
+  const latest = await db.query(
+    "SELECT id FROM screenplay_scenes WHERE scene_list_id = $1 AND episode_index IS NOT DISTINCT FROM $2 AND scene_index = $3 ORDER BY created_at DESC, id DESC LIMIT 1",
+    [previousRow.scene_list_id, previousRow.episode_index, previousRow.scene_index]
+  );
+  if (latest.rows[0]?.id !== previousRow.id) {
+    res.status(409).json({ error: "A newer version of this scene exists." });
+    return;
+  }
+  if (previousRow.content?.draft === true) {
+    const content = { ...previousRow.content, elements, editedByUser: true, draft: true };
+    const updated = await db.query(
+      "UPDATE screenplay_scenes SET content = $1 WHERE id = $2 RETURNING id, episode_index, scene_index, status, feedback, created_at",
+      [JSON.stringify(content), previousRow.id]
+    );
+    const row = updated.rows[0];
+    res.json({ scene: { id: row.id, episodeIndex: row.episode_index, sceneIndex: row.scene_index, status: row.status, feedback: row.feedback, createdAt: row.created_at, ...content } });
+    return;
+  }
+  res.json({ scene: await insertMovieScreenplayVersion(previousRow, elements, { editedByUser: true, draft: true }) });
 });
 
 // Full script check: in the background, a few scenes per AI call, grouped

@@ -517,6 +517,14 @@ const LABELS = {
     scriptEditSubmitNote: `Hit "Save my changes" — the AI cleans up spelling, grammar and language (say, English typed into the Hindi version), keeps your words and what happens, and updates the other language to match.`,
     scriptEditSubmitButton: 'Save my changes',
     scriptEditSubmittingLabel: 'Hang on, checking your scene…',
+    draftSavedNote: 'Draft — your words are saved. The AI spelling / grammar check is still to come (Save my changes, or Save all changes at the end).',
+    bgSavingNote: 'The AI is checking this scene in the background — you can keep working on other scenes.',
+    bgSavingBusy: 'The AI is still checking this scene — open it again in a moment.',
+    bgSaveFailed: 'The AI check of this scene did not finish; your words are safe as a draft. Try Save my changes again.',
+    draftSaveFailed: 'Your last edit could not be saved as a draft. Try again.',
+    saveAllButton: (n) => `💾 Save all changes (${n})`,
+    saveAllRunning: (done, total) => `Checking ${done} of ${total} scenes in the background…`,
+    saveAllNote: 'Your edits are already saved as drafts. This runs the AI spelling / grammar / language check on all of them in the background — keep working meanwhile.',
     scriptEditFixesTitle: 'What the AI fixed',
     scriptEditNoFixesNote: 'All good — nothing to fix.',
     aiMovieStageNotOpenYetNote: 'This step opens once you approve the one before it.',
@@ -1418,6 +1426,14 @@ const LABELS = {
     scriptEditSubmitNote: `"ମୋ ଚେଞ୍ଜ ସେଭ୍ କର" ଦବା — AI ବନାନ, ଗ୍ରାମାର୍ ଆଉ ଭାଷା ଠିକ୍ କରିଦେବ (ଯେମିତି ହିନ୍ଦୀ ଭର୍ସନ୍‌ରେ ଇଂରାଜୀ ଟାଇପ୍ ହେଇଥିଲେ), ତୋ ଶବ୍ଦ ଆଉ ଘଟଣା ସେମିତି ରଖିବ, ଆଉ ଅନ୍ୟ ଭାଷାକୁ ବି ମେଳେଇଦେବ।`,
     scriptEditSubmitButton: 'ମୋ ଚେଞ୍ଜ ସେଭ୍ କର',
     scriptEditSubmittingLabel: 'ଟିକେ ରହ, ତୋ ସିନ୍ ଚେକ୍ କରୁଛି…',
+    draftSavedNote: 'ଡ୍ରାଫ୍ଟ — ତୁମ ଲେଖା ସେଭ୍ ହୋଇଯାଇଛି। AI ର ବନାନ / ଗ୍ରାମାର୍ ଚେକ୍ ବାକି (ମୋ ଚେଞ୍ଜ ସେଭ୍ କର, କିମ୍ବା ଶେଷରେ ସବୁ ଚେଞ୍ଜ ସେଭ୍ କର)।',
+    bgSavingNote: 'AI ଏହି ସିନ୍ ପଛରେ ଚେକ୍ କରୁଛି — ତୁମେ ଅନ୍ୟ ସିନ୍‌ରେ କାମ ଜାରି ରଖ।',
+    bgSavingBusy: 'AI ଏବେ ବି ଏହି ସିନ୍ ଚେକ୍ କରୁଛି — ଟିକେ ପରେ ପୁଣି ଖୋଲ।',
+    bgSaveFailed: 'ଏହି ସିନ୍‌ର AI ଚେକ୍ ସରିଲା ନାହିଁ; ତୁମ ଲେଖା ଡ୍ରାଫ୍ଟରେ ସୁରକ୍ଷିତ। ପୁଣି "ମୋ ଚେଞ୍ଜ ସେଭ୍ କର" ଦବା।',
+    draftSaveFailed: 'ତୁମର ଶେଷ ଏଡିଟ୍ ଡ୍ରାଫ୍ଟରେ ସେଭ୍ ହେଲା ନାହିଁ। ପୁଣି ଚେଷ୍ଟା କର।',
+    saveAllButton: (n) => `💾 ସବୁ ଚେଞ୍ଜ ସେଭ୍ କର (${n})`,
+    saveAllRunning: (done, total) => `${total} ମଧ୍ୟରୁ ${done} ସିନ୍ ପଛରେ ଚେକ୍ ହେଉଛି…`,
+    saveAllNote: 'ତୁମ ଏଡିଟ୍ ଆଗରୁ ଡ୍ରାଫ୍ଟରେ ସେଭ୍। ଏହା ସବୁ ଉପରେ AI ର ବନାନ / ଗ୍ରାମାର୍ / ଭାଷା ଚେକ୍ ପଛରେ ଚଳାଏ — ସେତେବେଳେ ତୁମେ କାମ କର।',
     scriptEditFixesTitle: "AI କ'ଣ ଠିକ୍ କଲା",
     scriptEditNoFixesNote: 'ସବୁ ଠିକ୍ ଅଛି — କିଛି ଠିକ୍ କରିବାକୁ ପଡ଼ିଲାନି।',
     aiMovieStageNotOpenYetNote: 'ଆଗ ଷ୍ଟେପ୍ ଅପ୍ରୁଭ୍ କଲେ ଏଇଟା ଖୋଲିବ।',
@@ -4315,7 +4331,9 @@ function MovieScreenplayWorkspace({
       setRenaming(null)
     } catch { setRenameError(t.genericError) }
   }
-  const [isSubmittingEdit, setIsSubmittingEdit] = useState(false)
+  const [bgSaving, setBgSaving] = useState({}) // scene key -> true while the AI check of that scene runs in the background
+  const [bgFailed, setBgFailed] = useState({}) // scene key -> true when its AI check failed (the words stay as a draft)
+  const [saveAll, setSaveAll] = useState(null) // { done, total } while "Save all changes" is working
   const [editError, setEditError] = useState(null)
   const [editFixes, setEditFixes] = useState(null)
   const [check, setCheck] = useState(null)
@@ -4339,7 +4357,7 @@ function MovieScreenplayWorkspace({
   const draft = draftOf(sceneIndex)
   const allDrafts = Object.values(screenplay?.scenesByKey ?? {}).filter((d) => Array.isArray(d?.elements) && d.elements.length > 0)
   const isAiWriting =
-    Boolean(screenplay?.generatingKey) || Boolean(screenplay?.submittingFeedbackKey) || isSubmittingEdit
+    Boolean(screenplay?.generatingKey) || Boolean(screenplay?.submittingFeedbackKey)
 
   async function refreshBreakdownFreshness() {
     try {
@@ -4396,6 +4414,7 @@ function MovieScreenplayWorkspace({
   function startEditing(index, focusElement = null) {
     const d = draftOf(index)
     if (!d) return
+    if (bgSaving[keyOf(index)]) { setSelectedIndex(index); setEditError(t.bgSavingBusy); return }
     setEditing({
       key: keyOf(index),
       draftId: d.id,
@@ -4413,6 +4432,95 @@ function MovieScreenplayWorkspace({
     setEditError(null)
     setEditFixes(null)
     setSelectedIndex(index)
+  }
+
+  // The words in an open edit, as the server wants them
+  const elementsForSave = (elements) => cleanForSave(elements)
+  const editableElementsOf = (d) => d.elements.map((e) => ({
+    type: e.type === 'flashback' ? 'flashback' : e.type,
+    character: e.character ?? '',
+    characterModifier: e.characterModifier ?? 'none',
+    parenthetical: screenplayText(e.parenthetical, language),
+    text: screenplayText(e.text, language),
+  }))
+
+  // a draft that replaces an earlier draft is not a new version: keep the Undo count as it was
+  const keepUndoCount = (key, scene) => {
+    const before = screenplay?.scenesByKey?.[key]
+    return before?.draft === true ? { ...scene, undoSteps: before.undoSteps ?? 0, redoSteps: before.redoSteps ?? 0 } : scene
+  }
+
+  // Leaving a scene (another scene, another episode, a scene-list change): what was typed is saved at once as a DRAFT — no AI, no waiting.
+  // Resolves true when there is nothing left unsaved.
+  async function flushEdit() {
+    const open = editing
+    if (!open) return true
+    if (!open.dirty) { setEditing(null); return true }
+    try {
+      const response = await fetch(`${BACKEND_URL}/api/screenplay/scene/${open.draftId}/draft`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ elements: elementsForSave(open.elements) }),
+      })
+      const data = await response.json().catch(() => ({}))
+      if (!response.ok) { setEditError(response.status === 400 ? null : (data.error || t.draftSaveFailed)); if (response.status !== 400) return false; setEditing(null); return true }
+      onSceneSaved?.(open.key, keepUndoCount(open.key, data.scene))
+      setEditing(null)
+      return true
+    } catch {
+      setEditError(t.draftSaveFailed)
+      return false
+    }
+  }
+
+  // "Save my changes": the editor closes at once; the AI spelling / grammar / language check runs in the background.
+  async function saveSceneInBackground(key, draftId, elements) {
+    setBgSaving((prev) => ({ ...prev, [key]: true }))
+    try {
+      const response = await fetch(`${BACKEND_URL}/api/screenplay/scene/${draftId}/edit`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ elements: elementsForSave(elements) }),
+      })
+      const data = await response.json().catch(() => ({}))
+      if (!response.ok) throw new Error(data.error || 'failed')
+      onSceneSaved?.(key, data.scene)
+      setEditFixes({ key, fixes: data.fixes ?? [] })
+      refreshBreakdownFreshness()
+      return true
+    } catch {
+      setBgFailed((prev) => ({ ...prev, [key]: true }))
+      // the words must not be lost: keep them as a draft
+      try {
+        const response = await fetch(`${BACKEND_URL}/api/screenplay/scene/${draftId}/draft`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ elements: elementsForSave(elements) }),
+        })
+        if (response.ok) onSceneSaved?.(key, keepUndoCount(key, (await response.json()).scene))
+      } catch { /* the draft from leaving the scene is already there */ }
+      return false
+    } finally {
+      setBgSaving((prev) => { const next = { ...prev }; delete next[key]; return next })
+    }
+  }
+
+  function submitEdit() {
+    if (!editing) return
+    const { key, draftId, elements } = editing
+    setEditing(null)
+    setEditError(null)
+    setBgFailed((prev) => { const next = { ...prev }; delete next[key]; return next })
+    saveSceneInBackground(key, draftId, elements)
+  }
+
+  // "Save all changes": every scene still waiting for its AI check, one after another, in the background
+  const pendingDraftCount = Object.entries(screenplay?.scenesByKey ?? {}).filter(([k, d]) => d?.draft === true && !bgSaving[k]).length + (editing?.dirty ? 1 : 0)
+  async function saveAllChanges() {
+    if (saveAll) return
+    if (!(await flushEdit())) return
+    const queue = Object.entries(screenplay?.scenesByKey ?? {}).filter(([k, d]) => d?.draft === true && Array.isArray(d.elements) && d.elements.length > 0 && !bgSaving[k])
+    if (queue.length === 0) return
+    setSaveAll({ done: 0, total: queue.length })
+    for (const [key, d] of queue) {
+      await saveSceneInBackground(key, d.id, editableElementsOf(d))
+      setSaveAll((prev) => prev && { ...prev, done: prev.done + 1 })
+    }
+    setSaveAll(null)
   }
 
   function openSceneForm(position) {
@@ -4464,10 +4572,10 @@ function MovieScreenplayWorkspace({
 
   // The voice agent asked for scene-list changes: new scenes are made at once (like the "Add a scene" buttons); a deletion waits for a click.
   async function runAgentSceneActions(actions, report, V = (en) => en) {
-    // adding a scene closes the open edit: never throw away typed-but-unsaved words
-    if (editing?.dirty && (actions ?? []).some((a) => a.action === 'add_scene' || a.action === 'rename_everywhere')) {
-      setSceneChangeError(t.editSaveFirst)
-      report?.done(report.step(''), V('Save the scene you are editing first, then say it again.', 'ଆଗେ ଯେଉଁ ସିନ୍ ଏଡିଟ୍ କରୁଛୁ ତାକୁ ସେଭ୍ କର, ତା\'ପରେ ପୁଣି କହ।'), 'error')
+    // adding a scene closes the open edit: typed-but-unsaved words are first saved as a draft, never thrown away
+    if (editing?.dirty && (actions ?? []).some((a) => a.action === 'add_scene' || a.action === 'rename_everywhere') && !(await flushEdit())) {
+      setSceneChangeError(t.draftSaveFailed)
+      report?.done(report.step(''), V('Your edit could not be saved as a draft, so nothing was changed. Try again.', 'ତୁମ ଏଡିଟ୍ ଡ୍ରାଫ୍ଟରେ ସେଭ୍ ହେଲା ନାହିଁ, ତେଣୁ କିଛି ବଦଳିନି। ପୁଣି ଚେଷ୍ଟା କର।'), 'error')
       return
     }
     const total = (actions ?? []).filter((a) => a.action === 'add_scene').length
@@ -4501,7 +4609,7 @@ function MovieScreenplayWorkspace({
 
   // "Rename a character everywhere": check how many places, then change them (each scene becomes a new version, so Undo works)
   async function renameCharacterEverywhere(from, to, preview) {
-    if (editing?.dirty && !preview) { setSceneChangeError(t.editSaveFirst); return null }
+    if (editing?.dirty && !preview && !(await flushEdit())) return null
     setIsChangingScenes(true)
     setSceneChangeError(null)
     try {
@@ -4547,7 +4655,7 @@ function MovieScreenplayWorkspace({
     }
   }
   async function applyImport() {
-    if (editing?.dirty) { setSceneChangeError(t.editSaveFirst); return }
+    if (editing?.dirty && !(await flushEdit())) return
     setSceneChangeError(null)
     setImportForm((form) => ({ ...form, busy: true }))
     try {
@@ -4591,7 +4699,7 @@ function MovieScreenplayWorkspace({
   async function createMultipleScenes() {
     const contexts = splitSceneContexts(multiForm?.text)
     if (contexts.length === 0) return
-    if (editing?.dirty) { setSceneChangeError(t.editSaveFirst); return }
+    if (editing?.dirty && !(await flushEdit())) return
     setSceneChangeError(null)
     setMultiProgress({ step: 'planning', index: 0, total: contexts.length })
     let plan = []
@@ -4619,7 +4727,7 @@ function MovieScreenplayWorkspace({
 
   // ---- the scene list: drag to move, right-click menu, duplicate, heading ----
   async function sceneListCall(path, method, body) {
-    if (editing?.dirty) { setSceneChangeError(t.editSaveFirst); return null }
+    if (editing?.dirty && !(await flushEdit())) return null
     setIsChangingScenes(true)
     setSceneChangeError(null)
     try {
@@ -4775,31 +4883,6 @@ function MovieScreenplayWorkspace({
     setTimeout(() => setEditing((prev) => prev && { ...prev, voiceGlow: null }), 4000)
   }
 
-  async function submitEdit() {
-    if (!editing) return
-    setIsSubmittingEdit(true)
-    setEditError(null)
-    try {
-      const response = await fetch(`${BACKEND_URL}/api/screenplay/scene/${editing.draftId}/edit`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ elements: cleanForSave(editing.elements) }),
-      })
-      const data = await response.json()
-      if (!response.ok) {
-        setEditError(data.error || t.genericError)
-      } else {
-        onSceneSaved?.(editing.key, data.scene)
-        setEditFixes({ key: editing.key, fixes: data.fixes ?? [] })
-        setEditing(null)
-        refreshBreakdownFreshness()
-      }
-    } catch {
-      setEditError(t.genericError)
-    }
-    setIsSubmittingEdit(false)
-  }
-
   async function startCheck() {
     // Same batching as the server: scenes are checked 4 at a time, one language per batch.
     const perLanguage = {}
@@ -4870,10 +4953,8 @@ function MovieScreenplayWorkspace({
         <div className="script-edit-submit-bar">
           <p>{t.movieScriptEditSubmitNote}</p>
           <div>
-            <button type="button" className="cancel-button" onClick={() => setEditing(null)} disabled={isSubmittingEdit}>{t.aiMovieReviseSceneCancelButton}</button>
-            <button type="button" className="choose-button" onClick={submitEdit} disabled={isSubmittingEdit}>
-              {isSubmittingEdit ? t.scriptEditSubmittingLabel : t.scriptEditSubmitButton}
-            </button>
+            <button type="button" className="cancel-button" onClick={() => setEditing(null)}>{t.aiMovieReviseSceneCancelButton}</button>
+            <button type="button" className="choose-button" onClick={submitEdit}>{t.scriptEditSubmitButton}</button>
           </div>
           {editError && <p className="feedback-note">{editError}</p>}
         </div>
@@ -4906,7 +4987,7 @@ function MovieScreenplayWorkspace({
         {groups.length > 1 && (
           <div className="ai-movie-screenplay-nav episode-title-bar">
             <button type="button" className="ai-movie-screenplay-nav-button" aria-label="Previous episode" disabled={groupIndex === 0}
-              onClick={() => { setTurn('prev'); setGroupIndex((i) => Math.max(0, i - 1)) }}>‹</button>
+              onClick={async () => { if (!(await flushEdit())) return; setTurn('prev'); setGroupIndex((i) => Math.max(0, i - 1)) }}>‹</button>
             <div key={`title-${groupIndex}`} className={`episode-title episode-title-${turn}`}>
               <span className="episode-title-kicker">{t.episodeLabel} {groupIndex + 1} <span>/ {groups.length}</span></span>
               {renaming && renaming.index === group.episodeIndex ? (
@@ -4924,7 +5005,7 @@ function MovieScreenplayWorkspace({
               )}
             </div>
             <button type="button" className="ai-movie-screenplay-nav-button" aria-label="Next episode" disabled={groupIndex === groups.length - 1}
-              onClick={() => { setTurn('next'); setGroupIndex((i) => Math.min(groups.length - 1, i + 1)) }}>›</button>
+              onClick={async () => { if (!(await flushEdit())) return; setTurn('next'); setGroupIndex((i) => Math.min(groups.length - 1, i + 1)) }}>›</button>
           </div>
         )}
         <RuntimeSummary total={group.total} target={group.target} t={t} />
@@ -5021,8 +5102,9 @@ function MovieScreenplayWorkspace({
                           selectScene(index, false)
                           // in edit mode a click on any written scene opens it for typing right where you clicked
                           if (editMode && d && editing?.key !== keyOf(index)) {
-                            if (!editing || !editing.dirty) startEditing(index, Number(event.target.closest?.('[data-el]')?.dataset.el))
-                            else setEditError(t.editSaveFirst)
+                            const focusElement = Number(event.target.closest?.('[data-el]')?.dataset.el)
+                            if (!editing || !editing.dirty) startEditing(index, focusElement)
+                            else flushEdit().then((saved) => { if (saved) startEditing(index, focusElement) })
                           }
                         }}
                         onDoubleClick={() => d && !editing && startEditing(index)}
@@ -5043,6 +5125,17 @@ function MovieScreenplayWorkspace({
                   })}
                 </div>
               </div>
+                {/* "Save all changes": every scene still waiting for its AI check, in the background */}
+                {(pendingDraftCount > 0 || saveAll) && (
+                  <div className="script-check">
+                    <div className="script-check-row">
+                      <button type="button" className="choose-button" onClick={saveAllChanges} disabled={Boolean(saveAll)}>
+                        {saveAll ? t.saveAllRunning(saveAll.done, saveAll.total) : t.saveAllButton(pendingDraftCount)}
+                      </button>
+                    </div>
+                    <p className="script-check-note">{t.saveAllNote}</p>
+                  </div>
+                )}
                 {/* The whole-script check sits at the very end: after the last episode. */}
                 {allDrafts.length > 0 && groupIndex === groups.length - 1 && (
                   <div className={`script-check${isChecking ? ' is-running' : ''}`}>
@@ -5127,7 +5220,7 @@ function MovieScreenplayWorkspace({
                 ) : (
                   <>
                     {editing?.key === selectedKey ? (
-                      <ScriptToolbar editorRef={editorRef} activeType={activeLineType} lang={t.scriptToolbarLang} onSave={submitEdit} onCancel={() => setEditing(null)} saving={isSubmittingEdit} dirty={Boolean(editing.dirty)} />
+                      <ScriptToolbar editorRef={editorRef} activeType={activeLineType} lang={t.scriptToolbarLang} onSave={submitEdit} onCancel={() => setEditing(null)} saving={false} dirty={Boolean(editing.dirty)} />
                     ) : (
                       <button type="button" className="choose-button script-edit-start-button" onClick={() => startEditing(sceneIndex)} disabled={Boolean(editing) || isAiWriting || isChecking}>
                         {t.scriptEditStartButton}
@@ -5149,6 +5242,9 @@ function MovieScreenplayWorkspace({
                         {t.sceneRedoButton}{draft.redoSteps > 0 ? ` (${draft.redoSteps})` : ''}
                       </button>
                     </div>
+                    {bgSaving[selectedKey] && <p className="script-tools-editing-note">⏳ {t.bgSavingNote}</p>}
+                    {!bgSaving[selectedKey] && bgFailed[selectedKey] && <p className="feedback-note">{t.bgSaveFailed}</p>}
+                    {!bgSaving[selectedKey] && !bgFailed[selectedKey] && draft?.draft === true && <p className="script-tools-editing-note">✎ {t.draftSavedNote}</p>}
                     {editFixes?.key === selectedKey && (
                       <div className="script-edit-fixes">
                         <p className="script-panel-title">{t.scriptEditFixesTitle}</p>

@@ -37,7 +37,7 @@ export const WRITER_ROUTES = [
   ["^(GET)$", /^\/api\/screenplay\/scenes$/, "querySceneList"],
   ["^(POST)$", /^\/api\/screenplay\/scene$/, "bodySceneList"],
   ["^(POST)$", /^\/api\/screenplay\/scene\/(undo|redo|voice)$/, "bodySceneList"],
-  ["^(POST)$", /^\/api\/screenplay\/scene\/(\d+)\/(edit|request-changes)$/, "screenplayScene"],
+  ["^(POST)$", /^\/api\/screenplay\/scene\/(\d+)\/(edit|draft|request-changes)$/, "screenplayScene"],
   // the voice assistant and the 🎤 buttons
   ["^(POST)$", /^\/api\/voice\/understand$/, null],
   ["^(POST)$", /^\/api\/transcribe$/, null],
@@ -121,7 +121,7 @@ export function workOf(method, path, body) {
   let m;
   if (method === "POST" && path === "/api/screenplay/scene") return place("write");
   if (method === "POST" && (m = path.match(/^\/api\/screenplay\/scene\/(undo|redo|voice)$/))) return place(m[1]);
-  if (method === "POST" && (m = path.match(/^\/api\/screenplay\/scene\/(\d+)\/(edit|request-changes)$/))) return { ...place(m[2] === "edit" ? "edit" : "changes"), sceneRowId: Number(m[1]) };
+  if (method === "POST" && (m = path.match(/^\/api\/screenplay\/scene\/(\d+)\/(edit|draft|request-changes)$/))) return { ...place(m[2] === "request-changes" ? "changes" : "edit"), sceneRowId: Number(m[1]) };
   if ((m = path.match(/^\/api\/scene-lists\/\d+\/scenes(?:\/(move|duplicate|heading))?$/))) {
     const action = m[1] ?? (method === "DELETE" ? "delete" : method === "POST" ? "add" : null);
     return action ? place(action) : null;

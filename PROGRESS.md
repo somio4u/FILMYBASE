@@ -1990,3 +1990,13 @@ Plain version: every project is now a set of **drafts**. Opening a project shows
 - [x] **"Send to Production (real shoot)" and "Send for AI Production" now appear only at the end of the LAST episode** (the "Full screenplay draft done!" banner moved with them). Checked in a real browser on a 3-episode series: episodes 1 and 2 show only the review panel, episode 3 shows the review panel and the Send buttons.
 - [x] The earlier "Change history" button inside the scene panel is removed (this panel replaces it).
 - **Next step:** owner says "deploy".
+
+## Continuous editing: drafts save by themselves, no waiting (built, not deployed yet)
+- [x] **Moving away from a scene you are editing saves your words at once as a DRAFT** (no AI, no wait): clicking another scene, the ‹ › episode arrows, adding/moving/deleting scenes, rename-everywhere, import. The old "Save or cancel the scene you are editing first" block is gone, and switching episode no longer throws away typed words. Repeated drafts of a scene replace each other, so the version history does not fill with autosaves.
+- [x] **"Save my changes" now closes the editor at once; the AI spelling/grammar/language check runs in the background.** You can edit another scene meanwhile (only the scene being checked waits — opening it again says "still being checked"). If the AI check fails, your words stay as a draft and a note says so.
+- [x] **New "💾 Save all changes (N)" button at the end of the script** (shows how many scenes still wait for their AI check; also remembers drafts after a reload). It runs the AI check on all of them one after another in the background, with "Checking 1 of 5…".
+- [x] A scene waiting for its AI check shows "✎ Draft — your words are saved…" in its side panel.
+- [x] Checked in a real browser (3 clicks: edit scene 1 → click scene 2 → edit → next episode: both drafts in the database, nothing blocked; Save all ran in the background while moving between episodes; the AI answer was imitated — real Gemini not run).
+- Not covered: closing the browser tab while a scene is still being typed (the last typed seconds can be lost — move to another scene or press Save all changes first).
+- New server route `/api/screenplay/scene/:id/draft` (writer login allowed); unit tests updated.
+- **Next step:** owner says "deploy".

@@ -39,6 +39,7 @@ import { registerDesignTaskRoutes } from "./designTasks.js";
 import { registerSubmissionRoutes, designerGatekeeper, DESIGNER_ROLE } from "./designSubmissions.js";
 import { WRITER_ROLE, writerGatekeeper, ensureWriterSchema, registerWriterRoutes } from "./writerAccess.js";
 import { usageContext, installGeminiMetering, ensureUsageSchema, registerUsageRoutes, setSceneListResolver } from "./usageLedger.js";
+import { actorOf, trackSceneAuthors } from "./sceneAuthors.js";
 import { registerChangeHistoryRoutes } from "./changeHistory.js";
 import { ensureScreenplayImportSchema, registerScreenplayImportRoutes } from "./screenplayImportRoutes.js";
 import { readStoryFromPdf } from "./pdfReader.js";
@@ -1589,6 +1590,8 @@ app.use(async (req, res, next) => {
 app.use(designerGatekeeper);
 // A "screenplay writer" login may use only the story and screenplay tools of the one project he is assigned to (writerAccess.js).
 app.use(writerGatekeeper(db, sceneListConceptId));
+// every screenplay version made by a logged-in person's request is marked with who made it (sceneAuthors.js)
+app.use(trackSceneAuthors(db));
 
 app.post("/api/auth/login", async (req, res) => {
   const { username, password } = req.body;
@@ -11534,7 +11537,7 @@ app.post("/api/screenplay/scene/:id/draft", requireRole("admin"), async (req, re
     return;
   }
   if (previousRow.content?.draft === true) {
-    const content = { ...previousRow.content, elements, editedByUser: true, draft: true };
+    const content = { ...previousRow.content, elements, editedByUser: true, draft: true, madeBy: actorOf(req.user) };
     const updated = await db.query(
       "UPDATE screenplay_scenes SET content = $1 WHERE id = $2 RETURNING id, episode_index, scene_index, status, feedback, created_at",
       [JSON.stringify(content), previousRow.id]

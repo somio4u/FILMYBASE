@@ -2006,3 +2006,9 @@ Plain version: every project is now a set of **drafts**. Opening a project shows
 - [x] **In edit mode the scene heading is clickable**, like any dialogue or action line: click the heading of scene 10 and the panel opens there. Your unsaved typing in an open scene is saved as a draft first.
 - [x] Checked in a real browser on a 12-scene episode: click heading of scene 10 → panel appears under scene 10 (not at the top) → change place → Save heading → heading updated, panel closed.
 - **Next step:** owner says "deploy".
+
+## Review changes now says WHO made each change (built, not deployed yet)
+- [x] Every screenplay version made by a logged-in person is now marked with that person (`content.madeBy`): writing a scene with the AI, editing by hand, a draft, importing a Word file, renaming a character… A small server step (`sceneAuthors.js`) does it for all those requests, so nothing else had to change.
+- [x] **Review changes (end of each episode) now reads e.g. "E4S1 … — Edited by hand by Kumar", "Imported from a file by admin (Somio)", "Created by AI by Kumar"** — and a line "Changes by: Kumar 3, admin (Somio) 1" per episode. The open scene's last change shows the name too. Writers by name; the admin as "admin (name)".
+- Honest limits: **versions made before this was deployed carry no name** (nothing was stored) — they show without "by …". Work done by background jobs that run after the page has answered (e.g. the full-script check, change-language of the whole script) is not named. Checked live with a writer and an admin on a seeded 8-episode project and on screen; 1 more unit test.
+- **Next step:** owner says "deploy".

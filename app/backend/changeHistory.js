@@ -1,6 +1,8 @@
 // "Change history" (admin): what changed in a project's screenplay, episode by episode, from the version history the app already
 // keeps — every change to a scene is a new row in screenplay_scenes, so this works for work done long before this screen existed.
-// (The rows do not say WHO changed a scene; that is recorded separately, from the day "Work details" was added.)
+// Who made a version (content.madeBy, see sceneAuthors.js) is shown where it was recorded; older versions carry no name.
+
+import { byLabel } from "./sceneAuthors.js";
 
 // a scene's text as plain lines, for reading and comparing
 export function linesOf(content) {
@@ -27,10 +29,11 @@ export function summariseHistory(sceneList, rows) {
   const byScene = new Map();
   for (const r of rows) {
     const key = `${r.episode_index ?? "film"}-${r.scene_index}`;
-    const entry = byScene.get(key) ?? { versions: 0, firstAt: r.created_at, lastAt: r.created_at, lastSource: null };
+    const entry = byScene.get(key) ?? { versions: 0, firstAt: r.created_at, lastAt: r.created_at, lastSource: null, lastBy: null, list: [] };
     entry.versions += 1;
+    entry.list.push(r);
     if (r.created_at < entry.firstAt) entry.firstAt = r.created_at;
-    if (r.created_at >= entry.lastAt) { entry.lastAt = r.created_at; entry.lastSource = r.source; }
+    if (r.created_at >= entry.lastAt) { entry.lastAt = r.created_at; entry.lastSource = r.source; entry.lastBy = r.by ?? null; }
     byScene.set(key, entry);
   }
   return groups.map((g) => {
@@ -45,14 +48,23 @@ export function summariseHistory(sceneList, rows) {
         firstAt: e?.firstAt ?? null,
         lastAt: e?.lastAt ?? null,
         lastSource: e?.lastSource ?? null,
+        lastBy: e?.lastBy ?? null,
       };
     });
+    // who made the changes (every version after a scene's first): { label, changes } most active first
+    const tally = new Map();
+    g.scenes.forEach((_, i) => {
+      const list = (byScene.get(`${g.episodeIndex ?? "film"}-${i}`)?.list ?? []).slice().sort((a, b) => a.created_at - b.created_at);
+      list.slice(1).forEach((v) => { if (v.by) tally.set(v.by, (tally.get(v.by) ?? 0) + 1); });
+    });
+    const people = [...tally.entries()].map(([label, changes]) => ({ label, changes })).sort((a, b) => b.changes - a.changes);
     const dated = scenes.filter((s) => s.lastAt);
     return {
       episodeIndex: g.episodeIndex,
       sceneCount: scenes.length,
       changedScenes: scenes.filter((s) => s.changes > 0).length,
       totalChanges: scenes.reduce((n, s) => n + s.changes, 0),
+      people,
       firstAt: dated.length ? dated.reduce((a, s) => (s.firstAt < a ? s.firstAt : a), dated[0].firstAt) : null,
       lastAt: dated.length ? dated.reduce((a, s) => (s.lastAt > a ? s.lastAt : a), dated[0].lastAt) : null,
       scenes,
@@ -66,7 +78,7 @@ export function registerChangeHistoryRoutes(app, db, requireRole) {
     const list = (await db.query("SELECT content FROM scene_lists WHERE id = $1", [id])).rows[0];
     if (!list) { res.status(404).json({ error: "Scene list not found" }); return; }
     const rows = (await db.query("SELECT episode_index, scene_index, content, created_at FROM screenplay_scenes WHERE scene_list_id = $1", [id])).rows
-      .map((r) => ({ ...r, source: sourceOf(r.content) }));
+      .map((r) => ({ ...r, source: sourceOf(r.content), by: byLabel(r.content?.madeBy) }));
     res.json({ episodes: summariseHistory(list.content, rows) });
   });
 
@@ -80,6 +92,6 @@ export function registerChangeHistoryRoutes(app, db, requireRole) {
       `SELECT id, content, created_at FROM screenplay_scenes
        WHERE scene_list_id = $1 AND episode_index IS NOT DISTINCT FROM $2 AND scene_index = $3 ORDER BY created_at, id`,
       [id, episodeIndex, sceneIndex])).rows;
-    res.json({ versions: rows.map((r) => ({ id: r.id, at: r.created_at, source: sourceOf(r.content), lines: linesOf(r.content) })) });
+    res.json({ versions: rows.map((r) => ({ id: r.id, at: r.created_at, source: sourceOf(r.content), by: byLabel(r.content?.madeBy), lines: linesOf(r.content) })) });
   });
 }

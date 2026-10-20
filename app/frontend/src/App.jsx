@@ -134,7 +134,9 @@ const LABELS = {
     historyEpisodeLine: (e) => `${e.totalChanges} change${e.totalChanges === 1 ? '' : 's'} in ${e.changedScenes} of ${e.sceneCount} scenes`,
     historyNever: 'no scene changed after it was first written',
     historySceneLine: (s) => (s.changes === 0 ? 'not changed' : `${s.changes} change${s.changes === 1 ? '' : 's'}, last ${new Date(s.lastAt).toLocaleString()}`),
-    historySource: { ai: 'AI wrote it', edited: 'edited by hand', imported: 'imported from a file' },
+    historySource: { ai: 'Created by AI', edited: 'Edited by hand', imported: 'Imported from a file' },
+    historyBy: (who) => (who ? ` by ${who}` : ''),
+    reviewPeople: (people) => `Changes by: ${people.map((p) => `${p.label} ${p.changes}`).join(', ')}`,
     historyVersion: (n, at, source) => `Version ${n} — ${at} — ${source}`,
     newUserMissingFields: (fields) => `Hold on, you still need to fill in: ${fields}.`,
     newUserNeedsProject: 'Pick which project this login can open (or choose "Production only" — that one needs no project).',
@@ -1044,7 +1046,9 @@ const LABELS = {
     historyEpisodeLine: (e) => `${e.sceneCount} ମଧ୍ୟରୁ ${e.changedScenes} ଦୃଶ୍ୟରେ ${e.totalChanges} ବଦଳ`,
     historyNever: 'ପ୍ରଥମ ଥର ଲେଖିବା ପରେ କୌଣସି ଦୃଶ୍ୟ ବଦଳିନି',
     historySceneLine: (s) => (s.changes === 0 ? 'ବଦଳିନି' : `${s.changes} ବଦଳ, ଶେଷ ${new Date(s.lastAt).toLocaleString()}`),
-    historySource: { ai: 'AI ଲେଖିଥିଲା', edited: 'ହାତରେ ବଦଳାଯାଇଛି', imported: 'ଫାଇଲରୁ ଆମଦାନି' },
+    historySource: { ai: 'AI ଦ୍ୱାରା ତିଆରି', edited: 'ହାତରେ ବଦଳାଯାଇଛି', imported: 'ଫାଇଲରୁ ଆମଦାନି' },
+    historyBy: (who) => (who ? ` — ${who}` : ''),
+    reviewPeople: (people) => `ବଦଳ କରିଛନ୍ତି: ${people.map((p) => `${p.label} ${p.changes}`).join(', ')}`,
     historyVersion: (n, at, source) => `ସଂସ୍କରଣ ${n} — ${at} — ${source}`,
     newUserMissingFields: (fields) => `ଟିକେ ରହ, ଏଗୁଡ଼ା ଭରିବା ବାକି: ${fields}।`,
     newUserNeedsProject: 'ଏ ଲଗ୍ ଇନ୍ କେଉଁ ପ୍ରୋଜେକ୍ଟ ଖୋଲିବ ବାଛ (ନହେଲେ "ଖାଲି ପ୍ରଡକ୍ସନ୍" ବାଛ — ସେଥିରେ ପ୍ରୋଜେକ୍ଟ ଲାଗେନି)।',
@@ -2475,10 +2479,11 @@ function EpisodeChangeReview({ sceneList, episodeIndex, t }) {
           <p className="breakdown-item-meta">
             {t.historyEpisodeLine(data)} · {t.workFirstLast(new Date(data.firstAt).toLocaleString(), new Date(data.lastAt).toLocaleString())}
           </p>
+          {data.people?.length > 0 && <p className="breakdown-item-meta">{t.reviewPeople(data.people)}</p>}
           {changed.map((sc) => (
             <p key={sc.sceneIndex} className="breakdown-item-meta">
               <button type="button" className="cancel-button" onClick={() => (open?.scene.sceneIndex === sc.sceneIndex ? setOpen(null) : openScene(sc))}>{sc.sceneNumber}</button>
-              {' '}{sc.location} — {t.historySceneLine(sc)} — {t.historySource[sc.lastSource] ?? sc.lastSource}
+              {' '}{sc.location} — {t.historySceneLine(sc)} — {t.historySource[sc.lastSource] ?? sc.lastSource}{t.historyBy(sc.lastBy)}
             </p>
           ))}
           {open && !open.versions && <p className="breakdown-item-meta">…</p>}
@@ -2488,7 +2493,7 @@ function EpisodeChangeReview({ sceneList, episodeIndex, t }) {
             const diff = lineDiff(v.length > 1 ? v[v.length - 2].lines : [], last.lines)
             return (
               <div className="script-history-version">
-                <p className="breakdown-item-meta"><strong>{open.scene.sceneNumber} — {t.historyVersion(v.length, new Date(last.at).toLocaleString(), t.historySource[last.source] ?? last.source)}</strong></p>
+                <p className="breakdown-item-meta"><strong>{open.scene.sceneNumber} — {t.historyVersion(v.length, new Date(last.at).toLocaleString(), `${t.historySource[last.source] ?? last.source}${t.historyBy(last.by)}`)}</strong></p>
                 {diff.map((d, j) => (
                   <p key={j} style={{ margin: '2px 0', background: d.kind === 'add' ? 'rgba(46,160,67,0.18)' : d.kind === 'del' ? 'rgba(248,81,73,0.18)' : 'transparent', textDecoration: d.kind === 'del' ? 'line-through' : 'none' }}>
                     {d.kind === 'add' ? '+ ' : d.kind === 'del' ? '− ' : '  '}{d.line}

@@ -1984,3 +1984,9 @@ Plain version: every project is now a set of **drafts**. Opening a project shows
 ## Fix: screenplay writer now shows on the project card (built, not deployed yet)
 - [x] The "All your projects" cards only listed Director and AD; a screenplay writer assigned to a project was left out, so the card said "No one on this yet". Now the writer shows as **"Writer: Name"** (Odia: ଲେଖକ). A writer alone does **not** move the project to "Rolling / Pre-production" (that still needs a Director or AD). Checked live.
 - **Next step:** owner says "deploy".
+
+## Review changes panel at each episode end + Send buttons only at the last episode (built, not deployed yet)
+- [x] **New admin-only panel "🕘 Review changes — Episode N" at the end of every episode** (below the script): how many changes, in how many scenes, first/last time, and a line per changed scene (last change, and how it came to be: AI / edited by hand / imported). Click a scene → its last change line by line (green added, red removed). Built from the scene version history, so it also covers earlier work. Writers and other roles do not see it.
+- [x] **"Send to Production (real shoot)" and "Send for AI Production" now appear only at the end of the LAST episode** (the "Full screenplay draft done!" banner moved with them). Checked in a real browser on a 3-episode series: episodes 1 and 2 show only the review panel, episode 3 shows the review panel and the Send buttons.
+- [x] The earlier "Change history" button inside the scene panel is removed (this panel replaces it).
+- **Next step:** owner says "deploy".

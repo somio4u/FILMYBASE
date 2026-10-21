@@ -20377,14 +20377,25 @@ registerChangeHistoryRoutes(app, db, requireRole);
 registerApprovalFormatRoutes(app, db, {
   requireRole,
   sceneListConceptId,
-  askModel: (systemInstruction, contents) => generateJsonContent({
+  characterSheetEntries: async (sceneListId) => {
+    const result = await db.query(
+      `SELECT cs.content FROM scene_lists sl
+       JOIN bit_sheets bs ON bs.id = sl.bit_sheet_id
+       JOIN three_act_structures tas ON tas.id = bs.three_act_structure_id
+       JOIN character_sheets cs ON cs.pitch_deck_id = tas.pitch_deck_id
+       WHERE sl.id = $1 ORDER BY cs.created_at DESC LIMIT 1`, [sceneListId]);
+    return (result.rows[0]?.content?.characters ?? []).map((c) => ({ ...c, name: typeof c?.name === "string" ? c.name : c?.name?.en }));
+  },
+  askModel: (systemInstruction, contents, kind) => generateJsonContent({
     model: AI_MOVIE_DIALOGUE_MODEL_NAME,
     contents,
     config: {
       systemInstruction,
       responseMimeType: "application/json",
       maxOutputTokens: 16384,
-      responseSchema: { type: Type.OBJECT, properties: { paragraphs: { type: Type.ARRAY, items: { type: Type.STRING } } }, required: ["paragraphs"] },
+      responseSchema: kind === "cast"
+        ? { type: Type.OBJECT, properties: { characters: { type: Type.ARRAY, items: { type: Type.OBJECT, properties: { name: { type: Type.STRING }, gender: { type: Type.STRING, enum: ["male", "female"] }, age: { type: Type.STRING }, relation: { type: Type.STRING } }, required: ["name", "gender", "age", "relation"] } } }, required: ["characters"] }
+        : { type: Type.OBJECT, properties: { paragraphs: { type: Type.ARRAY, items: { type: Type.STRING } } }, required: ["paragraphs"] },
     },
   }),
 });

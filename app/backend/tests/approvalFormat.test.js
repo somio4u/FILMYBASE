@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import AdmZip from "adm-zip";
-import { buildApprovalDoc, cleanParagraphs, fileSafe, sceneHash, sceneHeaderLine, sceneToPlainInput, transitionLines, zipOf, APPROVAL_SYSTEM_PROMPT } from "../approvalFormat.js";
+import { buildApprovalDoc, cleanParagraphs, fileSafe, rosterLines, titleCase, CAST_SYSTEM_PROMPT, sceneHash, sceneHeaderLine, sceneToPlainInput, transitionLines, zipOf, APPROVAL_SYSTEM_PROMPT } from "../approvalFormat.js";
 
 test("the scene heading line carries number, in/out, time, place and the characters", () => {
   assert.equal(
@@ -68,4 +68,25 @@ test("a project title becomes a clean file name", () => {
   assert.equal(fileSafe("[DA-UI] Film"), "DA-UI-Film");
   assert.equal(fileSafe("MAHA KALI"), "MAHA-KALI");
   assert.equal(fileSafe("!!!"), "SCREENPLAY");
+});
+
+test("the cast list goes with every scene: names in normal case, gender and age", () => {
+  const cast = new Map([["SOUMYA", { gender: "male", age: "30", relation: "Malati's son" }], ["MALATI", { gender: "female", age: "57", relation: "" }]]);
+  assert.deepEqual(rosterLines(["SOUMYA", "MALATI", "WORKER 1"], cast), ["Soumya: male, 30, Malati's son", "Malati: female, 57", "Worker 1: (not in the cast list)"]);
+  assert.equal(titleCase("BALARAM'S MAN"), "Balaram's Man");
+  const input = sceneToPlainInput({ heading: "INT. HALL - DAY", location: "HALL", characters: ["SOUMYA"], elements: [], roster: rosterLines(["SOUMYA"], cast) });
+  assert.match(input, /THE CAST/);
+  assert.match(input, /Soumya: male, 30/);
+});
+
+test("a change in the cast changes the remembered key of the scene (it is retold)", () => {
+  const a = sceneToPlainInput({ heading: "h", location: "l", characters: ["SOUMYA"], elements: [], roster: ["Soumya: male"] });
+  const b = sceneToPlainInput({ heading: "h", location: "l", characters: ["SOUMYA"], elements: [], roster: ["Soumya: female"] });
+  assert.notEqual(sceneHash(a), sceneHash(b));
+});
+
+test("the instructions fix the faults found in the first real file", () => {
+  const rules = [/MALE character always gets male Hindi forms/, /possessed/, /never "ghaat"/, /ALWAYS "says"/, /No English words in brackets/, /nahin \(never nahi/, /CAPITALS ONLY inside cue lines/, /GENEROUSLY/, /about one cue after every two or three sentences/];
+  for (const rule of rules) assert.match(APPROVAL_SYSTEM_PROMPT, rule);
+  assert.match(CAST_SYSTEM_PROMPT, /same he\/she/);
 });

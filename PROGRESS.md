@@ -2052,3 +2052,13 @@ Plain version: every project is now a set of **drafts**. Opening a project shows
 - [x] The remembered scenes are retold automatically (style version 2, and the cast is part of each scene's key), so pressing the Episode button again gives the corrected file.
 - Checked with an imitated AI on the real database (cast asked once, cast in every scene prompt, no new cast call for the next episode); 4 more unit tests. **Real Gemini not run here** — the owner's next file will show the real effect.
 - **Next step:** after deploy, press Episode 4's approval-format button again and send the file.
+
+## Live sync: two people on one project (built, not deployed yet)
+- [x] **Every 20 seconds (and the moment the tab comes back) each open screenplay quietly asks the server "did anything change?"** (`GET /api/scene-lists/:id/sync`, for the admin and the writer of that project). No page reload:
+  - a scene the OTHER person changed is replaced on this screen by his newest version;
+  - a scene added / removed / moved, a heading changed, or an import swaps the scene list in (if you have an open edit it is saved as a draft first, never lost).
+- [x] **Conflict protection:** if the scene you have OPEN was changed by the other person, nothing is overwritten — a banner says "Kumar changed Episode 4, scene E4S3 while you were on it. Your words are safe" with **[Load their version] [Keep mine]**. The same check now guards "Save my changes" (AI) and the autosave when you leave a scene: before, a save wrote over the other person's newer version without asking (the AI save did not check at all).
+- [x] **"✎ Kumar is editing Episode 4, scene E4S3"** line above the script, and "Kumar is editing this scene right now" in the scene's side panel (who is editing is kept in the server's memory for one minute after the last sign).
+- [x] Checked in two real browsers (the admin and Kumar's writer login) on one seeded project: the admin's change appeared on Kumar's page without a reload; the admin saw Kumar editing; Kumar got the banner with his typed words kept; "Keep mine" saved them on top under Kumar's name. 3 + 1 unit tests.
+- Limits: it is a check every 20 seconds, not instant; the "who is editing" memory is cleared if the server restarts; a change made by the full-script check / change-language job shows on the other screen at the next check like any other.
+- **Next step:** owner says "deploy".

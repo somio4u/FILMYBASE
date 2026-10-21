@@ -40,7 +40,8 @@ import { registerSubmissionRoutes, designerGatekeeper, DESIGNER_ROLE } from "./d
 import { WRITER_ROLE, writerGatekeeper, ensureWriterSchema, registerWriterRoutes } from "./writerAccess.js";
 import { usageContext, installGeminiMetering, ensureUsageSchema, registerUsageRoutes, setSceneListResolver } from "./usageLedger.js";
 import { ensureApprovalFormatSchema, registerApprovalFormatRoutes } from "./approvalFormat.js";
-import { actorOf, trackSceneAuthors } from "./sceneAuthors.js";
+import { actorOf, byLabel, trackSceneAuthors } from "./sceneAuthors.js";
+import { registerLiveSyncRoutes } from "./liveSync.js";
 import { registerChangeHistoryRoutes } from "./changeHistory.js";
 import { ensureScreenplayImportSchema, registerScreenplayImportRoutes } from "./screenplayImportRoutes.js";
 import { readStoryFromPdf } from "./pdfReader.js";
@@ -11488,6 +11489,23 @@ async function insertMovieScreenplayVersion(previousRow, elements, extra = {}) {
   return { id: row.id, episodeIndex: row.episode_index, sceneIndex: row.scene_index, status: row.status, feedback: row.feedback, createdAt: row.created_at, ...content };
 }
 
+// The newest version of one scene, as the screen holds it (with its undo counts) — sent along when a save finds that someone else changed the scene meanwhile.
+async function latestSceneJson(sceneListId, episodeIndex, sceneIndex) {
+  const row = (await db.query(
+    `${SCREENPLAY_SCENE_WITH_HISTORY_SQL}
+     WHERE s.scene_list_id = $1 AND s.episode_index IS NOT DISTINCT FROM $2 AND s.scene_index = $3
+     ORDER BY s.episode_index, s.scene_index, s.created_at DESC, s.id DESC`, [sceneListId, episodeIndex, sceneIndex])).rows[0];
+  return row ? screenplaySceneJson(row) : null;
+}
+
+// Someone else (the admin or the writer) saved this scene after the version the caller started from: tell the caller instead of writing over it.
+async function newerVersionConflict(previousRow, res) {
+  const latest = await latestSceneJson(previousRow.scene_list_id, previousRow.episode_index, previousRow.scene_index);
+  if (!latest || latest.id === previousRow.id) return false;
+  res.status(409).json({ error: "Someone changed this scene while you were working on it.", latest, by: byLabel(latest.madeBy) });
+  return true;
+}
+
 app.post("/api/screenplay/scene/:id/edit", requireRole("admin"), async (req, res) => {
   const elements = cleanMovieEditedElements(req.body.elements);
   if (elements.length === 0) {
@@ -11500,6 +11518,7 @@ app.post("/api/screenplay/scene/:id/edit", requireRole("admin"), async (req, res
     res.status(404).json({ error: "Screenplay scene not found" });
     return;
   }
+  if (await newerVersionConflict(previousRow, res)) return;
   try {
     const dialogueLanguage = ["en", "or", "hi"].includes(previousRow.content?.dialogueLanguage) ? previousRow.content.dialogueLanguage : "en";
     const characterNames = await movieCharacterNamesForSceneList(previousRow.scene_list_id);
@@ -11529,14 +11548,7 @@ app.post("/api/screenplay/scene/:id/draft", requireRole("admin"), async (req, re
     res.status(404).json({ error: "Screenplay scene not found" });
     return;
   }
-  const latest = await db.query(
-    "SELECT id FROM screenplay_scenes WHERE scene_list_id = $1 AND episode_index IS NOT DISTINCT FROM $2 AND scene_index = $3 ORDER BY created_at DESC, id DESC LIMIT 1",
-    [previousRow.scene_list_id, previousRow.episode_index, previousRow.scene_index]
-  );
-  if (latest.rows[0]?.id !== previousRow.id) {
-    res.status(409).json({ error: "A newer version of this scene exists." });
-    return;
-  }
+  if (await newerVersionConflict(previousRow, res)) return;
   if (previousRow.content?.draft === true) {
     const content = { ...previousRow.content, elements, editedByUser: true, draft: true, madeBy: actorOf(req.user) };
     const updated = await db.query(
@@ -20373,6 +20385,7 @@ registerUsageRoutes(app, db, requireRole);
 setSceneListResolver(sceneListConceptId);
 registerAudioCueRoutes(app, db, requireRole, { store: productionMedia.store });
 registerChangeHistoryRoutes(app, db, requireRole);
+registerLiveSyncRoutes(app, db, requireRole);
 // "Approval format" Word file (narrated Hinglish retelling of the episodes; see approvalFormat.js) — the AI only retells each scene
 registerApprovalFormatRoutes(app, db, {
   requireRole,

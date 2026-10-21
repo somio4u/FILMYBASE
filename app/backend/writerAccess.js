@@ -33,6 +33,7 @@ export const WRITER_ROUTES = [
   ["^(GET)$", /^\/api\/scene-lists\/(\d+)\/(breakdown-freshness|script-check|screenplay-pdf)$/, "sceneList"],
   ["^(POST)$", /^\/api\/scene-lists\/(\d+)\/(convert-language|rename-character|script-check)$/, "sceneList"],
   ["^(POST|DELETE|PATCH)$", /^\/api\/scene-lists\/(\d+)\/scenes(\/(move|duplicate|heading|plan))?$/, "sceneList"],
+  ["^(GET)$", /^\/api\/scene-lists\/(\d+)\/sync$/, "sceneList"], // the 20-second "did anything change?" of the open screenplay
   ["^(GET)$", /^\/api\/language-jobs\/[A-Za-z0-9_-]+$/, null],
   ["^(GET)$", /^\/api\/screenplay\/scenes$/, "querySceneList"],
   ["^(POST)$", /^\/api\/screenplay\/scene$/, "bodySceneList"],

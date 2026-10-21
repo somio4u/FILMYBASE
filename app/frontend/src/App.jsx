@@ -463,6 +463,11 @@ const LABELS = {
     approvalButtonAll: '⬇ All episodes — approval format (zip)',
     approvalRunning: (done, total) => (total ? `Preparing… ${done} of ${total} scenes` : 'Preparing…'),
     approvalReady: (name) => `✅ File ready — tap here to save ${name}`,
+    syncConflict: (label, by) => `${by || 'Someone'} changed ${label} while you were on it. Your words are safe — choose:`,
+    syncTakeTheirs: 'Load their version',
+    syncKeepMine: 'Keep mine',
+    syncEditing: (who, where) => `${who} is editing ${where}`,
+    syncEditingThis: (who) => `${who} is editing this scene right now`,
     approvalLost: 'The server was restarted while the file was being prepared. Please press the button once more — what is already done is remembered.',
     approvalNote: 'For approval, not for the shoot. The AI retells each scene in Hinglish with the cue lines; the first time takes a few minutes, later downloads are quick.',
     downloadFormatWord: 'Word',
@@ -1382,6 +1387,11 @@ const LABELS = {
     approvalButtonAll: '⬇ ସବୁ ଏପିସୋଡ୍ — ଅନୁମୋଦନ ଫର୍ମାଟ୍ (zip)',
     approvalRunning: (done, total) => (total ? `ପ୍ରସ୍ତୁତ ହେଉଛି… ${total} ମଧ୍ୟରୁ ${done} ଦୃଶ୍ୟ` : 'ପ୍ରସ୍ତୁତ ହେଉଛି…'),
     approvalReady: (name) => `✅ ଫାଇଲ୍ ପ୍ରସ୍ତୁତ — ${name} ସେଭ୍ କରିବାକୁ ଏଠାରେ ଦବାନ୍ତୁ`,
+    syncConflict: (label, by) => `${label} ତୁମେ କାମ କରୁଥିବା ବେଳେ ${by || 'ଅନ୍ୟ ଜଣେ'} ବଦଳାଇଲେ। ତୁମ ଲେଖା ସୁରକ୍ଷିତ — ବାଛ:`,
+    syncTakeTheirs: 'ତାଙ୍କ ସଂସ୍କରଣ ନିଅ',
+    syncKeepMine: 'ମୋ ଲେଖା ରଖ',
+    syncEditing: (who, where) => `${who} ${where} ଏଡିଟ୍ କରୁଛନ୍ତି`,
+    syncEditingThis: (who) => `${who} ଏବେ ଏହି ସିନ୍ ଏଡିଟ୍ କରୁଛନ୍ତି`,
     approvalLost: 'ଫାଇଲ୍ ପ୍ରସ୍ତୁତ ହେଉଥିବା ବେଳେ ସର୍ଭର୍ ପୁଣି ଚାଲୁ ହେଲା। ଦୟାକରି ବଟନ୍ ଆଉଥରେ ଦବାନ୍ତୁ — ଯାହା ହୋଇସାରିଛି ତାହା ମନେ ଅଛି।',
     approvalNote: 'ଅନୁମୋଦନ ପାଇଁ, ସୁଟିଂ ପାଇଁ ନୁହେଁ। AI ପ୍ରତ୍ୟେକ ଦୃଶ୍ୟକୁ Hinglish ରେ କ୍ୟୁ ଲାଇନ୍ ସହ ଲେଖେ; ପ୍ରଥମ ଥର କିଛି ମିନିଟ୍ ଲାଗେ, ପରେ ଶୀଘ୍ର।',
     downloadFormatWord: 'Word',
@@ -4323,7 +4333,7 @@ function LanguageChanger({ t, sceneListId, episodeIndex, sceneIndex, sceneNumber
 }
 
 function MovieScreenplayWorkspace({
-  sceneList, episodes, t, language, screenplay, scriptTheme, onChangeScriptTheme, onSceneSaved, onReloadScenes, onSceneListChanged, deckId, onDeckChanged, projectCharacterNames, resume, onProgress, onEpisodeChange,
+  sceneList, episodes, t, language, screenplay, scriptTheme, onChangeScriptTheme, onSceneSaved, onReloadScenes, onSceneListChanged: onSceneListChangedFromParent, deckId, onDeckChanged, projectCharacterNames, resume, onProgress, onEpisodeChange,
 }) {
   const groups = sceneList.episodeScenes
     ? sceneList.episodeScenes.map((episodeScene, index) => ({
@@ -4420,6 +4430,12 @@ function MovieScreenplayWorkspace({
   }
   const [bgSaving, setBgSaving] = useState({}) // scene key -> true while the AI check of that scene runs in the background
   const [bgFailed, setBgFailed] = useState({}) // scene key -> true when its AI check failed (the words stay as a draft)
+  // Live sync with the other person on this project (see the effect below): conflicts to resolve, who else is editing what
+  const syncRef = useRef({ hash: null, busy: false, tick: null, mineUntil: {} })
+  const [conflicts, setConflicts] = useState({}) // scene key -> { their, by, mine } : someone else saved the scene while it was open / being saved here
+  const [editors, setEditors] = useState([]) // [{ label, key }] the others who are editing right now
+  // a change made from this screen is already on it; the next check only has to learn the new "list hash"
+  const onSceneListChanged = (content) => { syncRef.current.hash = null; return onSceneListChangedFromParent?.(content) }
   const [saveAll, setSaveAll] = useState(null) // { done, total } while "Save all changes" is working
   const [editError, setEditError] = useState(null)
   const [editFixes, setEditFixes] = useState(null)
@@ -4548,7 +4564,14 @@ function MovieScreenplayWorkspace({
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ elements: elementsForSave(open.elements) }),
       })
       const data = await response.json().catch(() => ({}))
+      if (response.status === 409 && data.latest) {
+        // someone else saved this scene meanwhile: the words are kept in a banner to choose from, and leaving goes on
+        setConflicts((prev) => ({ ...prev, [open.key]: { their: data.latest, by: data.by, mine: open.elements } }))
+        setEditing(null)
+        return true
+      }
       if (!response.ok) { setEditError(response.status === 400 ? null : (data.error || t.draftSaveFailed)); if (response.status !== 400) return false; setEditing(null); return true }
+      syncRef.current.mineUntil[open.key] = Date.now() + 6000
       onSceneSaved?.(open.key, keepUndoCount(open.key, data.scene))
       setEditing(null)
       return true
@@ -4560,13 +4583,19 @@ function MovieScreenplayWorkspace({
 
   // "Save my changes": the editor closes at once; the AI spelling / grammar / language check runs in the background.
   async function saveSceneInBackground(key, draftId, elements) {
+    syncRef.current.mineUntil[key] = Date.now() + 60000
     setBgSaving((prev) => ({ ...prev, [key]: true }))
     try {
       const response = await fetch(`${BACKEND_URL}/api/screenplay/scene/${draftId}/edit`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ elements: elementsForSave(elements) }),
       })
       const data = await response.json().catch(() => ({}))
+      if (response.status === 409 && data.latest) {
+        setConflicts((prev) => ({ ...prev, [key]: { their: data.latest, by: data.by, mine: elements } }))
+        return false
+      }
       if (!response.ok) throw new Error(data.error || 'failed')
+      syncRef.current.mineUntil[key] = Date.now() + 6000
       onSceneSaved?.(key, data.scene)
       setEditFixes({ key, fixes: data.fixes ?? [] })
       refreshBreakdownFreshness()
@@ -4584,6 +4613,100 @@ function MovieScreenplayWorkspace({
     } finally {
       setBgSaving((prev) => { const next = { ...prev }; delete next[key]; return next })
     }
+  }
+
+  // ---- Live sync: every 20 seconds (and when the tab comes back) ask the server "did anything change?" --------------------------------
+  // The other person's new scene versions replace the ones on this screen without a reload; if the scene being edited HERE was changed
+  // there, nothing is overwritten — a banner asks. A new / removed / moved scene or an import swaps the scene list in (the open edit is
+  // saved as a draft first). The same answer says who else is editing which scene.
+  const live = useRef({})
+  live.current = { editing, scenesByKey: screenplay?.scenesByKey, sceneList, flushEdit, bgSaving }
+  const syncOn = Boolean(screenplay)
+  useEffect(() => {
+    if (!syncOn) return undefined
+    const state = syncRef.current
+    state.hash = null
+    let stopped = false
+    async function tick() {
+      if (stopped || document.hidden || state.busy) return
+      state.busy = true
+      try {
+        const now = live.current
+        const query = new URLSearchParams()
+        if (state.hash) query.set('known', state.hash)
+        if (now.editing?.key) query.set('editing', now.editing.key)
+        const response = await fetch(`${BACKEND_URL}/api/scene-lists/${now.sceneList.id}/sync?${query}`)
+        if (!response.ok || stopped) return
+        const data = await response.json()
+        const previousHash = state.hash
+        state.hash = data.hash
+        setEditors(data.editors ?? [])
+        if (previousHash && data.sceneList) {
+          if (live.current.editing?.dirty) await live.current.flushEdit()
+          await onSceneListChangedFromParent?.(data.sceneList)
+          return
+        }
+        const local = live.current.scenesByKey ?? {}
+        const changed = (data.scenes ?? []).filter(([e, s, id]) => {
+          const key = `${e ?? 'film'}-${s}`
+          return local[key] && local[key].id !== id && !(state.mineUntil[key] > Date.now()) && !live.current.bgSaving[key]
+        })
+        if (changed.length === 0) return
+        const all = await (await fetch(`${BACKEND_URL}/api/screenplay/scenes?sceneListId=${now.sceneList.id}`)).json()
+        for (const [e, s, , by] of changed) {
+          const key = `${e ?? 'film'}-${s}`
+          const scene = all.find((x) => x.episodeIndex === e && x.sceneIndex === s)
+          if (!scene || state.mineUntil[key] > Date.now()) continue
+          if (live.current.editing?.key === key) setConflicts((prev) => ({ ...prev, [key]: { their: scene, by, mine: null } }))
+          else onSceneSaved?.(key, scene)
+        }
+      } catch { /* a missed check just waits for the next one */ } finally {
+        state.busy = false
+      }
+    }
+    state.tick = tick
+    tick()
+    const timer = setInterval(tick, 20000)
+    const onVisible = () => { if (!document.hidden) tick() }
+    document.addEventListener('visibilitychange', onVisible)
+    return () => { stopped = true; clearInterval(timer); document.removeEventListener('visibilitychange', onVisible); state.tick = null }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [syncOn, sceneList.id])
+  // starting or stopping an edit tells the other screen at once (who is editing what)
+  useEffect(() => { syncRef.current.tick?.() }, [editing?.key])
+
+  const conflictLabel = (key) => {
+    const [ep, si] = key.split('-')
+    const list = ep === 'film' ? (sceneList.scenes ?? []) : (sceneList.episodeScenes?.[Number(ep)]?.scenes ?? [])
+    const number = list[Number(si)]?.sceneNumber ?? Number(si) + 1
+    return ep === 'film' ? `scene ${number}` : `Episode ${Number(ep) + 1}, scene ${cleanSceneNumber(number)}`
+  }
+  function dropConflict(key) { setConflicts((prev) => { const next = { ...prev }; delete next[key]; return next }) }
+  function takeTheirs(key) {
+    const c = conflicts[key]
+    if (!c) return
+    onSceneSaved?.(key, c.their)
+    if (editing?.key === key) setEditing(null)
+    dropConflict(key)
+  }
+  async function keepMine(key) {
+    const c = conflicts[key]
+    if (!c) return
+    if (editing?.key === key) {
+      // the open editor stays as it is, now standing on their version (so saving puts my words on top, by choice)
+      onSceneSaved?.(key, c.their)
+      setEditing((prev) => prev && { ...prev, draftId: c.their.id, dirty: true })
+      dropConflict(key)
+      return
+    }
+    try {
+      const response = await fetch(`${BACKEND_URL}/api/screenplay/scene/${c.their.id}/draft`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ elements: elementsForSave(c.mine ?? []) }),
+      })
+      const data = await response.json().catch(() => ({}))
+      if (response.status === 409 && data.latest) { setConflicts((prev) => ({ ...prev, [key]: { ...c, their: data.latest, by: data.by } })); return }
+      if (response.ok) { syncRef.current.mineUntil[key] = Date.now() + 6000; onSceneSaved?.(key, data.scene); dropConflict(key) }
+    } catch { /* the banner stays so it can be tried again */ }
   }
 
   function submitEdit() {
@@ -5124,6 +5247,18 @@ function MovieScreenplayWorkspace({
           </div>
         )}
         <RuntimeSummary total={group.total} target={group.target} t={t} />
+        {editors.length > 0 && (
+          <p className="script-tools-editing-note sync-editors">
+            ✎ {editors.map((e) => t.syncEditing(e.label, conflictLabel(e.key))).join(' · ')}
+          </p>
+        )}
+        {Object.entries(conflicts).map(([key, c]) => (
+          <div key={key} className="script-agent-ask sync-conflict" role="alert">
+            <span>{t.syncConflict(conflictLabel(key), c.by)}</span>
+            <button type="button" className="cancel-button" onClick={() => takeTheirs(key)}>{t.syncTakeTheirs}</button>
+            <button type="button" className="choose-button" onClick={() => keepMine(key)}>{t.syncKeepMine}</button>
+          </div>
+        ))}
         {agentDelete !== null && agentDelete === sceneIndex && (
           <div className="script-agent-ask" role="alert">
             <span>{t.voiceDeleteAsk(numberOf(scene, sceneIndex))}</span>
@@ -5350,6 +5485,7 @@ function MovieScreenplayWorkspace({
                         {t.sceneRedoButton}{draft.redoSteps > 0 ? ` (${draft.redoSteps})` : ''}
                       </button>
                     </div>
+                    {editors.find((e) => e.key === selectedKey) && <p className="script-tools-editing-note">✎ {t.syncEditingThis(editors.find((e) => e.key === selectedKey).label)}</p>}
                     {bgSaving[selectedKey] && <p className="script-tools-editing-note">⏳ {t.bgSavingNote}</p>}
                     {!bgSaving[selectedKey] && bgFailed[selectedKey] && <p className="feedback-note">{t.bgSaveFailed}</p>}
                     {!bgSaving[selectedKey] && !bgFailed[selectedKey] && draft?.draft === true && <p className="script-tools-editing-note">✎ {t.draftSavedNote}</p>}

@@ -7,7 +7,7 @@ const ok = (method, path) => Boolean(matchWriterRoute(method, path));
 test("a screenplay writer may use the story and screenplay tools", () => {
   for (const [m, p] of [
     ["GET", "/api/concepts/12/full"], ["POST", "/api/concepts/12/title"],
-    ["POST", "/api/screenplay/scene"], ["POST", "/api/screenplay/scene/voice"], ["POST", "/api/screenplay/scene/undo"], ["POST", "/api/screenplay/scene/55/edit"], ["POST", "/api/screenplay/scene/55/draft"],
+    ["POST", "/api/screenplay/scene"], ["POST", "/api/screenplay/scene/voice"], ["POST", "/api/screenplay/scene/undo"], ["POST", "/api/screenplay/scene/55/edit"], ["POST", "/api/screenplay/scene/55/draft"], ["GET", "/api/scene-lists/7/sync"],
     ["GET", "/api/screenplay/scenes"], ["POST", "/api/voice/understand"], ["POST", "/api/transcribe"],
     ["POST", "/api/scene-lists/7/scenes"], ["DELETE", "/api/scene-lists/7/scenes"], ["POST", "/api/scene-lists/7/scenes/move"], ["PATCH", "/api/scene-lists/7/scenes/heading"],
     ["POST", "/api/scene-lists/7/rename-character"], ["POST", "/api/scene-lists/7/convert-language"], ["GET", "/api/scene-lists/7/screenplay-pdf"],

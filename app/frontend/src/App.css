@@ -7898,3 +7898,6 @@ body.is-script-edit-mode { overflow: hidden; }
   .script-page input.script-parenthetical,
   .script-page textarea.script-line { display: block; margin-left: auto; margin-right: auto; width: 94%; max-width: 94%; text-align: center; }
 }
+
+/* the "file ready" tap target of the approval-format download (a real tap always saves the file, also on a phone) */
+.approval-ready-link { display: block; max-width: 100%; box-sizing: border-box; padding: 10px 16px; border-radius: 999px; background: #1d5fd6; color: #fff; font-weight: 600; text-align: center; text-decoration: none; word-break: break-word; }

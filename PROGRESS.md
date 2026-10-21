@@ -2040,3 +2040,8 @@ Plain version: every project is now a set of **drafts**. Opening a project shows
 - [x] Desktop layout is untouched (all rules are for screens up to 640 px wide). Checked in a phone-size browser (393 px): normal and Edit mode, no sideways scrolling, page edges at 3 px / 390 px.
 - Not changed: the round voice button ("Speak here") still floats over the right edge of the text, as before.
 - **Next step:** owner says "deploy" (this goes together with the approval-format fixes that are already waiting).
+
+## Approval format: "File ready" button for phones (built, not deployed yet)
+- [x] On the owner's phone the approval-format file was prepared but did not download: a phone often blocks a download that starts by itself seconds after the tap. When the file is ready the button now also shows a blue **"✅ File ready — tap here to save <name>.docx"** button; a download started by a real tap is never blocked. (The automatic save is still tried first.) Checked in a phone-size browser: the automatic download and the tap both give the file.
+- Not seen on the owner's phone: if it still fails, the exact message / what is shown after "Preparing…" is needed.
+- **Next step:** owner says "deploy", then taps Episode 4's approval-format button again (the retold scenes are remembered, so it is quick).

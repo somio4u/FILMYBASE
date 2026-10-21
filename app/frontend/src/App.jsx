@@ -462,6 +462,7 @@ const LABELS = {
     approvalButtonFilm: '⬇ Approval format (Word)',
     approvalButtonAll: '⬇ All episodes — approval format (zip)',
     approvalRunning: (done, total) => (total ? `Preparing… ${done} of ${total} scenes` : 'Preparing…'),
+    approvalReady: (name) => `✅ File ready — tap here to save ${name}`,
     approvalLost: 'The server was restarted while the file was being prepared. Please press the button once more — what is already done is remembered.',
     approvalNote: 'For approval, not for the shoot. The AI retells each scene in Hinglish with the cue lines; the first time takes a few minutes, later downloads are quick.',
     downloadFormatWord: 'Word',
@@ -1380,6 +1381,7 @@ const LABELS = {
     approvalButtonFilm: '⬇ ଅନୁମୋଦନ ଫର୍ମାଟ୍ (Word)',
     approvalButtonAll: '⬇ ସବୁ ଏପିସୋଡ୍ — ଅନୁମୋଦନ ଫର୍ମାଟ୍ (zip)',
     approvalRunning: (done, total) => (total ? `ପ୍ରସ୍ତୁତ ହେଉଛି… ${total} ମଧ୍ୟରୁ ${done} ଦୃଶ୍ୟ` : 'ପ୍ରସ୍ତୁତ ହେଉଛି…'),
+    approvalReady: (name) => `✅ ଫାଇଲ୍ ପ୍ରସ୍ତୁତ — ${name} ସେଭ୍ କରିବାକୁ ଏଠାରେ ଦବାନ୍ତୁ`,
     approvalLost: 'ଫାଇଲ୍ ପ୍ରସ୍ତୁତ ହେଉଥିବା ବେଳେ ସର୍ଭର୍ ପୁଣି ଚାଲୁ ହେଲା। ଦୟାକରି ବଟନ୍ ଆଉଥରେ ଦବାନ୍ତୁ — ଯାହା ହୋଇସାରିଛି ତାହା ମନେ ଅଛି।',
     approvalNote: 'ଅନୁମୋଦନ ପାଇଁ, ସୁଟିଂ ପାଇଁ ନୁହେଁ। AI ପ୍ରତ୍ୟେକ ଦୃଶ୍ୟକୁ Hinglish ରେ କ୍ୟୁ ଲାଇନ୍ ସହ ଲେଖେ; ପ୍ରଥମ ଥର କିଛି ମିନିଟ୍ ଲାଗେ, ପରେ ଶୀଘ୍ର।',
     downloadFormatWord: 'Word',
@@ -2457,8 +2459,9 @@ function lineDiff(before, after) {
 // Admin: the episode (or every episode) as a Word file in the narrated Hinglish "approval format". The AI retells each scene on the
 // server, so this runs as a background job: start it, watch the progress, and the file downloads by itself when it is ready.
 function ApprovalFormatButton({ sceneListId, episodeIndex, all, label, t }) {
-  const [state, setState] = useState(null) // { done, total } while it works, { error } after a failure
+  const [state, setState] = useState(null) // { done, total } while it works, { error } after a failure, { ready: { url, filename } } when the file waits for a tap
   const base = `${BACKEND_URL}/api/scene-lists/${sceneListId}/approval-format`
+  useEffect(() => () => { if (state?.ready) URL.revokeObjectURL(state.ready.url) }, [state?.ready])
   // One try: start the job, wait for it, fetch the file. Resolves { blob, filename }, or null when the server lost the job (it was
   // restarted, e.g. by an update) — the scenes already retold are remembered, so simply starting again is quick.
   async function attempt() {
@@ -2491,24 +2494,29 @@ function ApprovalFormatButton({ sceneListId, episodeIndex, all, label, t }) {
       for (let tries = 0; tries < 3 && !result; tries++) result = await attempt()
       if (!result) throw new Error(t.approvalLost)
       const url = URL.createObjectURL(result.blob)
+      // try to save it at once; a phone often blocks a download that starts seconds after the tap, so a button the person taps stays below
       const link = document.createElement('a')
       link.href = url
       link.download = result.filename
       document.body.appendChild(link)
       link.click()
       link.remove()
-      setTimeout(() => URL.revokeObjectURL(url), 60000)
-      setState(null)
+      setState({ ready: { url, filename: result.filename } })
     } catch (error) {
       setState({ error: error.message || t.genericError })
     }
   }
-  const running = state && !state.error
+  const running = state && !state.error && !state.ready
   return (
     <span className="approval-format-download">
       <button type="button" className="cancel-button" onClick={start} disabled={running} title={t.approvalNote}>
         {running ? t.approvalRunning(state.done, state.total) : label}
       </button>
+      {state?.ready && (
+        <a className="approval-ready-link" href={state.ready.url} download={state.ready.filename}>
+          {t.approvalReady(state.ready.filename)}
+        </a>
+      )}
       {state?.error && <span className="feedback-note">{state.error}</span>}
     </span>
   )

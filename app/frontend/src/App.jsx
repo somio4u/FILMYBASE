@@ -462,6 +462,7 @@ const LABELS = {
     approvalButtonFilm: '⬇ Approval format (Word)',
     approvalButtonAll: '⬇ All episodes — approval format (zip)',
     approvalRunning: (done, total) => (total ? `Preparing… ${done} of ${total} scenes` : 'Preparing…'),
+    approvalLost: 'The server was restarted while the file was being prepared. Please press the button once more — what is already done is remembered.',
     approvalNote: 'For approval, not for the shoot. The AI retells each scene in Hinglish with the cue lines; the first time takes a few minutes, later downloads are quick.',
     downloadFormatWord: 'Word',
     scriptRequestChangesWhileEditingNote: 'Want the AI to change it? First save or cancel your edit below the scene.',
@@ -1379,6 +1380,7 @@ const LABELS = {
     approvalButtonFilm: '⬇ ଅନୁମୋଦନ ଫର୍ମାଟ୍ (Word)',
     approvalButtonAll: '⬇ ସବୁ ଏପିସୋଡ୍ — ଅନୁମୋଦନ ଫର୍ମାଟ୍ (zip)',
     approvalRunning: (done, total) => (total ? `ପ୍ରସ୍ତୁତ ହେଉଛି… ${total} ମଧ୍ୟରୁ ${done} ଦୃଶ୍ୟ` : 'ପ୍ରସ୍ତୁତ ହେଉଛି…'),
+    approvalLost: 'ଫାଇଲ୍ ପ୍ରସ୍ତୁତ ହେଉଥିବା ବେଳେ ସର୍ଭର୍ ପୁଣି ଚାଲୁ ହେଲା। ଦୟାକରି ବଟନ୍ ଆଉଥରେ ଦବାନ୍ତୁ — ଯାହା ହୋଇସାରିଛି ତାହା ମନେ ଅଛି।',
     approvalNote: 'ଅନୁମୋଦନ ପାଇଁ, ସୁଟିଂ ପାଇଁ ନୁହେଁ। AI ପ୍ରତ୍ୟେକ ଦୃଶ୍ୟକୁ Hinglish ରେ କ୍ୟୁ ଲାଇନ୍ ସହ ଲେଖେ; ପ୍ରଥମ ଥର କିଛି ମିନିଟ୍ ଲାଗେ, ପରେ ଶୀଘ୍ର।',
     downloadFormatWord: 'Word',
     scriptRequestChangesWhileEditingNote: 'AI କୁ ବଦଳେଇବାକୁ କହିବୁ? ଆଗେ ତଳେ ତୋ ଏଡିଟ୍ ସେଭ୍ କର, ନ ହେଲେ ବାତିଲ୍ କର।',
@@ -2456,31 +2458,42 @@ function lineDiff(before, after) {
 // server, so this runs as a background job: start it, watch the progress, and the file downloads by itself when it is ready.
 function ApprovalFormatButton({ sceneListId, episodeIndex, all, label, t }) {
   const [state, setState] = useState(null) // { done, total } while it works, { error } after a failure
+  const base = `${BACKEND_URL}/api/scene-lists/${sceneListId}/approval-format`
+  // One try: start the job, wait for it, fetch the file. Resolves { blob, filename }, or null when the server lost the job (it was
+  // restarted, e.g. by an update) — the scenes already retold are remembered, so simply starting again is quick.
+  async function attempt() {
+    const response = await fetch(base, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(all ? { all: true } : { episodeIndex }) })
+    const started = await response.json().catch(() => ({}))
+    if (!response.ok) throw new Error(started.error || t.genericError)
+    let filename = 'approval-format.docx'
+    for (;;) {
+      await new Promise((resolve) => setTimeout(resolve, 2000))
+      let poll
+      try { poll = await fetch(`${base}/${started.jobId}`) } catch { await new Promise((resolve) => setTimeout(resolve, 3000)); return null }
+      const status = await poll.json().catch(() => ({}))
+      if (poll.status === 404) return null
+      if (!poll.ok) throw new Error(status.error || t.genericError)
+      if (status.status === 'error') throw new Error(status.error || t.genericError)
+      if (status.status === 'running') { setState({ done: status.done, total: status.total }); continue }
+      filename = status.filename || filename
+      break
+    }
+    // the file is fetched like every other request here (with the login), then saved — a plain link to the server would not carry the login on some phones
+    const file = await fetch(`${base}/${started.jobId}/file`)
+    if (file.status === 404) return null
+    if (!file.ok) throw new Error((await file.json().catch(() => ({}))).error || t.genericError)
+    return { blob: await file.blob(), filename }
+  }
   async function start() {
     setState({ done: 0, total: 0 })
-    const base = `${BACKEND_URL}/api/scene-lists/${sceneListId}/approval-format`
     try {
-      const response = await fetch(base, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(all ? { all: true } : { episodeIndex }) })
-      const started = await response.json().catch(() => ({}))
-      if (!response.ok) throw new Error(started.error || t.genericError)
-      let filename = 'approval-format.docx'
-      for (;;) {
-        await new Promise((resolve) => setTimeout(resolve, 2000))
-        const poll = await fetch(`${base}/${started.jobId}`)
-        const status = await poll.json().catch(() => ({}))
-        if (!poll.ok) throw new Error(status.error || t.genericError)
-        if (status.status === 'error') throw new Error(status.error || t.genericError)
-        if (status.status === 'running') { setState({ done: status.done, total: status.total }); continue }
-        filename = status.filename || filename
-        break
-      }
-      // the file is fetched like every other request here (with the login), then saved — a plain link to the server would not carry the login on some phones
-      const file = await fetch(`${base}/${started.jobId}/file`)
-      if (!file.ok) throw new Error((await file.json().catch(() => ({}))).error || t.genericError)
-      const url = URL.createObjectURL(await file.blob())
+      let result = null
+      for (let tries = 0; tries < 3 && !result; tries++) result = await attempt()
+      if (!result) throw new Error(t.approvalLost)
+      const url = URL.createObjectURL(result.blob)
       const link = document.createElement('a')
       link.href = url
-      link.download = filename
+      link.download = result.filename
       document.body.appendChild(link)
       link.click()
       link.remove()
@@ -2496,7 +2509,7 @@ function ApprovalFormatButton({ sceneListId, episodeIndex, all, label, t }) {
       <button type="button" className="cancel-button" onClick={start} disabled={running} title={t.approvalNote}>
         {running ? t.approvalRunning(state.done, state.total) : label}
       </button>
-      {state?.error && <span className="feedback-note"> {state.error}</span>}
+      {state?.error && <span className="feedback-note">{state.error}</span>}
     </span>
   )
 }

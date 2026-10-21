@@ -2027,3 +2027,8 @@ Plain version: every project is now a set of **drafts**. Opening a project shows
 - [x] The file was ready but the download opened a plain link to the server (onrender.com), which did not carry the login on the owner's phone → `{"error":"Please log in."}`. The button now fetches the file like every other request (with the login) and saves it itself, with a proper file name (e.g. `MAHA-KALI-EP-04-approval.docx`; titles with `[ ]` no longer give a leading dash). Checked in a real browser: the file downloads, the page stays in the app.
 - The AI work is not lost: every retold scene is remembered, so pressing the button again gives the file at once (no new "Preparing 8 scenes").
 - **Next step:** owner says "deploy"; then press the Episode button again.
+
+## Fix: approval-format button after a server restart, and on a phone (built, not deployed yet)
+- [x] **"That download is no longer available":** the server kept the job only in memory; an update (restart) while it ran lost it. The button now starts the job again by itself (up to 3 times); the scenes the AI had already retold are remembered, so the restart is quick. If it still fails, a clear message says to press once more.
+- [x] **Phone layout:** the approval-format buttons now wrap to the screen width (text never cut off), and a message appears in its own box under its button instead of over the next one. Checked in a phone-size browser (390 px wide: no sideways scrolling; the job-lost case downloads the file after an automatic second start).
+- **Next step:** owner says "deploy"; then press the Episode button again and send the file.

@@ -7850,3 +7850,9 @@ body.is-script-edit-mode { overflow: hidden; }
 @media (max-width: 640px) { .mm-day { grid-template-columns: 78px 1fr 56px; } .mm-day small { display: none; } }
 .mm-wide { grid-column: 1 / -1; }
 .mm-note summary { cursor: pointer; margin-top: 8px; }
+
+/* the approval-format download buttons: wrap on a phone, the message under the button (never over the next one) */
+.approval-format-download { display: inline-flex; flex-direction: column; align-items: center; gap: 6px; max-width: 100%; }
+.approval-format-download .cancel-button { white-space: normal; max-width: 100%; text-align: center; line-height: 1.3; }
+.approval-format-download .feedback-note { margin: 0; text-align: center; max-width: 100%; }
+.script-download-bar > * { max-width: 100%; }

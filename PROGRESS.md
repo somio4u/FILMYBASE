@@ -2032,3 +2032,11 @@ Plain version: every project is now a set of **drafts**. Opening a project shows
 - [x] **"That download is no longer available":** the server kept the job only in memory; an update (restart) while it ran lost it. The button now starts the job again by itself (up to 3 times); the scenes the AI had already retold are remembered, so the restart is quick. If it still fails, a clear message says to press once more.
 - [x] **Phone layout:** the approval-format buttons now wrap to the screen width (text never cut off), and a message appears in its own box under its button instead of over the next one. Checked in a phone-size browser (390 px wide: no sideways scrolling; the job-lost case downloads the file after an automatic second start).
 - **Next step:** owner says "deploy"; then press the Episode button again and send the file.
+
+## Screenplay on a phone (built, not deployed yet)
+- [x] **Phone screens (up to 640 px wide) — the screenplay page now uses the whole width:** the empty strips either side are gone (the page runs from edge to edge, also in Edit mode / full screen); less padding around it.
+- [x] **Dialogue is centred:** CHARACTER name, the acting note and the spoken words sit in the middle and use the page width, so names like JAGANNATH no longer break into "JAGANN / ATH". Action lines are left-aligned (stretched lines left big gaps in the narrow Odia column). The scene number now sits in front of the heading instead of in the margin. Same rules for the editable page.
+- [x] **Top bar:** solid (the script no longer shows through it), the project name is cut with "…" instead of running under the buttons; the three round buttons (EN, Full screen, Light mode) are smaller and no longer overlap; in Edit mode the "Edit mode — full screen…" line is no longer hidden under them.
+- [x] Desktop layout is untouched (all rules are for screens up to 640 px wide). Checked in a phone-size browser (393 px): normal and Edit mode, no sideways scrolling, page edges at 3 px / 390 px.
+- Not changed: the round voice button ("Speak here") still floats over the right edge of the text, as before.
+- **Next step:** owner says "deploy" (this goes together with the approval-format fixes that are already waiting).

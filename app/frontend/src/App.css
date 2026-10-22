@@ -6332,6 +6332,11 @@ button:not(:disabled):active {
   animation-delay: 0.36s, 1.26s;
 }
 
+.mode-card-post {
+  --glow: 255, 120, 140;
+  animation-delay: 0.48s, 1.38s;
+}
+
 .mode-card:hover:not(:disabled),
 .mode-card:focus-visible {
   transform: translateY(-6px) scale(1.03);

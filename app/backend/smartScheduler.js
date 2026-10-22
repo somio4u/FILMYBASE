@@ -52,6 +52,7 @@ export function sceneRowsFromList(sceneList, written) {
         artists: [...names].sort(),
         written: Boolean(content?.elements?.length),
         gist: String(textOf(scene.oneLiner)).slice(0, 140),
+        body: (content?.elements ?? []).map((e) => (typeof e.text === "string" ? e.text : "")).join(" ").slice(0, 4000),
       });
     });
   }
@@ -431,4 +432,6 @@ export function registerSmartSchedulerRoutes(app, db, tools) {
     const changed = data ? changedSince(run.fingerprints, data.rows) : [];
     res.json({ run: { id: run.id, createdAt: run.created_at, brief: run.brief, ...run.result }, changedScenes: changed.length, stale: changed.length > 0 });
   });
+
+  return { loadRows };
 }

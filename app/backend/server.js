@@ -42,6 +42,7 @@ import { usageContext, installGeminiMetering, ensureUsageSchema, registerUsageRo
 import { ensureApprovalFormatSchema, registerApprovalFormatRoutes } from "./approvalFormat.js";
 import { actorOf, byLabel, trackSceneAuthors } from "./sceneAuthors.js";
 import { ensureSmartSchedulerSchema, registerSmartSchedulerRoutes } from "./smartScheduler.js";
+import { registerAdRoutes } from "./adRoutes.js";
 import { ensureLocationRenameSchema, registerLocationRenameRoutes } from "./locationRename.js";
 import { ensureSceneTagSchema, registerSceneTagRoutes } from "./sceneTags.js";
 import { registerLiveSyncRoutes } from "./liveSync.js";
@@ -20392,7 +20393,7 @@ registerLiveSyncRoutes(app, db, requireRole);
 registerSceneTagRoutes(app, db, requireRole);
 registerLocationRenameRoutes(app, db, { requireRole });
 // The Smart Scheduler: a separate agent that reads a project's approved screenplay and plans the shoot days (smartScheduler.js). The best model (Gemini Pro) analyses; the arithmetic is in scheduleSolver.js.
-registerSmartSchedulerRoutes(app, db, {
+const smartScheduler = registerSmartSchedulerRoutes(app, db, {
   requireRole,
   askModel: (systemInstruction, contents) => generateJsonContent({
     model: SCENE_LIST_STRONG_MODEL_NAME,
@@ -20415,6 +20416,7 @@ registerSmartSchedulerRoutes(app, db, {
     },
   }),
 });
+registerAdRoutes(app, db, { requireRole, loadRows: smartScheduler.loadRows });
 // "Approval format" Word file (narrated Hinglish retelling of the episodes; see approvalFormat.js) — the AI only retells each scene
 registerApprovalFormatRoutes(app, db, {
   requireRole,

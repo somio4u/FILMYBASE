@@ -48,3 +48,25 @@
 .ss-chip { padding: 2px 10px; border-radius: 999px; font-size: .76rem; color: #fff; }
 .ss-chip.ss-costly { background: #e5484d; } .ss-chip.ss-normal { background: #5b6b8c; } .ss-chip.ss-cheap { background: #2ea043; }
 .ss-scenes { margin: 0; padding-left: 18px; font-size: .86rem; line-height: 1.5; }
+
+/* Names & places */
+.ss-names-head small { display: block; margin: 2px 0 0; }
+.ss-tabs { display: flex; gap: 8px; margin-bottom: 8px; }
+.ss-tabs button { padding: 6px 14px; border-radius: 999px; border: 1px solid var(--border-subtle, rgba(138,180,248,.4)); background: transparent; color: inherit; cursor: pointer; }
+.ss-tabs button.is-on { background: #3b6fe0; color: #fff; border-color: #3b6fe0; }
+.ss-note { padding: 8px 12px; border-radius: 10px; background: rgba(46,160,67,.15); border: 1px solid #2ea043; }
+.ss-sugg { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; padding: 8px 10px; margin: 6px 0; border-radius: 12px; background: rgba(255,255,255,.04); }
+.ss-sugg-names { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; min-width: 0; }
+.ss-nm { padding: 3px 10px; border-radius: 999px; background: rgba(138,180,248,.18); font-size: .84rem; overflow-wrap: anywhere; } .ss-nm small { opacity: .65; margin-left: 4px; }
+.ss-sugg-act { display: flex; gap: 8px; flex-wrap: wrap; }
+.ss-sugg-act button, .ss-merge-form button, .ss-card .ss-ghost { padding: 6px 12px; border-radius: 999px; border: none; background: #3b6fe0; color: #fff; cursor: pointer; font-size: .82rem; }
+.ss-card .ss-ghost { background: transparent; color: inherit; border: 1px solid var(--border-subtle, rgba(138,180,248,.4)); }
+.ss-sugg-act button:disabled, .ss-merge-form button:disabled { opacity: .6; }
+.ss-pick { display: grid; gap: 4px; max-height: 320px; overflow-y: auto; }
+.ss-pick-row { display: flex; gap: 10px; align-items: flex-start; padding: 6px 8px; border-radius: 10px; background: rgba(255,255,255,.03); }
+.ss-pick-row.is-merged { opacity: .55; }
+.ss-pick-row input { margin-top: 4px; width: 20px; height: 20px; flex: none; }
+.ss-merge-form { display: flex; gap: 12px; flex-wrap: wrap; align-items: flex-end; margin: 10px 0; }
+.ss-merge-form label { display: grid; gap: 4px; font-size: .85rem; }
+.ss-merge-form input { padding: 8px 10px; border-radius: 8px; border: 1px solid var(--border-subtle, rgba(138,180,248,.4)); background: var(--bg-input, rgba(0,0,0,.25)); color: inherit; font: inherit; }
+.ss-check { display: block; margin: 12px 0; font-size: .9rem; } .ss-check small { opacity: .65; display: block; margin-left: 26px; }

@@ -6,6 +6,7 @@
 //   3. scheduleSolver.js (plain arithmetic) makes the day plan within the days the owner asks for, using the owner's categories
 //      (artists costly / normal / cheap, locations free / paid)
 import crypto from "crypto";
+import { applyNameMap, dismissKey, mergeIntoMap, normalizeLocation, suggestArtistGroups, suggestLocationGroups, resolveName } from "./nameCleanup.js";
 import { solveSchedule } from "./scheduleSolver.js";
 
 export const ANALYSIS_SYSTEM_PROMPT = `You are the scheduling analyst of a film/series production. You get every scene of a screenplay in short form (id, heading, minutes, who is in it, one line of what happens). Do NOT make a schedule — a program does that. Tell the program what it cannot see:
@@ -43,7 +44,8 @@ export function sceneRowsFromList(sceneList, written) {
         label: scene.sceneNumber ? String(scene.sceneNumber) : g.episodeIndex === null ? `S${si + 1}` : `E${g.episodeIndex + 1}S${si + 1}`,
         episode: g.episodeIndex,
         minutes: Math.max(0.5, Number(scene.estimatedMinutes) || 2),
-        location: upper(textOf(scene.location)) || "UNKNOWN LOCATION",
+        location: normalizeLocation(upper(textOf(scene.location)) || "UNKNOWN LOCATION"),
+        rawLocation: upper(textOf(scene.location)) || "UNKNOWN LOCATION",
         intExt: scene.intExt === "EXT" ? "EXT" : String(scene.intExt || "INT"),
         timeOfDay,
         night: NIGHT.test(timeOfDay),
@@ -163,7 +165,7 @@ export function buildPlan(rows, brief, analysis) {
   if (unwritten > 0) plan.warnings.push(`${unwritten} scene${unwritten === 1 ? " is" : "s are"} not written yet, so who is in ${unwritten === 1 ? "it" : "them"} is unknown — the artists' days are only as complete as the screenplay.`);
   return {
     ...plan,
-    scenes: Object.fromEntries(merged.map((r) => [r.id, { label: r.label, episode: r.episode, location: r.location, intExt: r.intExt, timeOfDay: r.timeOfDay, minutes: r.minutes, artists: r.artists, gist: r.gist, written: r.written }])),
+    scenes: Object.fromEntries(merged.map((r) => [r.id, { label: r.label, episode: r.episode, location: r.location, subPlace: r.rawLocation ?? r.location, intExt: r.intExt, timeOfDay: r.timeOfDay, minutes: r.minutes, artists: r.artists, gist: r.gist, written: r.written }])),
     notes: analysis?.notes ?? [],
     voiceOnly: analysis?.voiceOnly ?? [],
     artistKinds: analysis?.artistKinds ?? {},
@@ -193,6 +195,19 @@ export async function ensureSmartSchedulerSchema(db) {
     created_by INTEGER,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
   )`);
+  await db.query(`CREATE TABLE IF NOT EXISTS scheduler_name_map (
+    scene_list_id INTEGER NOT NULL,
+    kind TEXT NOT NULL,
+    alias TEXT NOT NULL,
+    canonical TEXT NOT NULL,
+    PRIMARY KEY (scene_list_id, kind, alias)
+  )`);
+  await db.query(`CREATE TABLE IF NOT EXISTS scheduler_name_dismissed (
+    scene_list_id INTEGER NOT NULL,
+    kind TEXT NOT NULL,
+    key TEXT NOT NULL,
+    PRIMARY KEY (scene_list_id, kind, key)
+  )`);
   await db.query("CREATE INDEX IF NOT EXISTS scheduler_runs_list ON scheduler_runs (scene_list_id, created_at DESC)");
 }
 
@@ -210,7 +225,18 @@ export function registerSmartSchedulerRoutes(app, db, tools) {
       `SELECT DISTINCT ON (episode_index, scene_index) episode_index, scene_index, content
        FROM screenplay_scenes WHERE scene_list_id = $1 ORDER BY episode_index, scene_index, created_at DESC, id DESC`, [sceneListId])).rows;
     const written = new Map(writtenRows.map((r) => [`${r.episode_index ?? "film"}-${r.scene_index}`, r.content]));
-    return { rows: sceneRowsFromList(list.content, written), content: list.content };
+    const rawRows = sceneRowsFromList(list.content, written);
+    const maps = await loadNameMaps(sceneListId);
+    return { rows: applyNameMap(rawRows, maps), rawRows, maps, content: list.content };
+  }
+  async function loadNameMaps(sceneListId) {
+    const out = { location: {}, artist: {} };
+    for (const r of (await db.query("SELECT kind, alias, canonical FROM scheduler_name_map WHERE scene_list_id = $1", [sceneListId])).rows) if (out[r.kind]) out[r.kind][r.alias] = r.canonical;
+    return out;
+  }
+  async function saveNameMap(client, sceneListId, kind, map) {
+    await client.query("DELETE FROM scheduler_name_map WHERE scene_list_id = $1 AND kind = $2", [sceneListId, kind]);
+    for (const [alias, canonical] of Object.entries(map)) await client.query("INSERT INTO scheduler_name_map (scene_list_id, kind, alias, canonical) VALUES ($1, $2, $3, $4)", [sceneListId, kind, alias, canonical]);
   }
   async function loadBrief(sceneListId) {
     const b = (await db.query("SELECT days, max_minutes_per_day, artists, locations FROM scheduler_briefs WHERE scene_list_id = $1", [sceneListId])).rows[0];
@@ -258,6 +284,97 @@ export function registerSmartSchedulerRoutes(app, db, tools) {
        ON CONFLICT (scene_list_id) DO UPDATE SET days = EXCLUDED.days, max_minutes_per_day = EXCLUDED.max_minutes_per_day, artists = EXCLUDED.artists, locations = EXCLUDED.locations, updated_at = now()`,
       [id, days, max, JSON.stringify(clean(req.body.artists, ["costly", "normal", "cheap"])), JSON.stringify(clean(req.body.locations, ["free", "paid"]))]);
     res.json({ saved: true });
+  });
+
+  // ---- Names & places: the owner's "these are one" decisions ----
+  const KINDS = { location: "location", artist: "artist" };
+  const cleanName = (n) => String(n ?? "").trim().toUpperCase();
+
+  // every raw name with the scenes it is in, plus what is already merged and what looks like the same
+  app.get("/api/smart-scheduler/:id/names", admin, async (req, res) => {
+    const id = Number(req.params.id);
+    const data = await loadRows(id);
+    if (!data) { res.status(404).json({ error: "Project not found" }); return; }
+    const places = new Map();
+    const artists = new Map();
+    const add = (map, name, row) => { const x = map.get(name) ?? { name, scenes: [], minutes: 0 }; x.scenes.push(row.label); x.minutes += row.minutes; map.set(name, x); };
+    for (const r of data.rawRows) { add(places, r.location, r); for (const a of r.artists) add(artists, a, r); }
+    const dismissed = new Set((await db.query("SELECT kind, key FROM scheduler_name_dismissed WHERE scene_list_id = $1", [id])).rows.map((r) => `${r.kind}:${r.key}`));
+    const open = (kind, groups, map) => groups
+      .filter((g) => new Set(g.map((n) => resolveName(map, n))).size > 1)
+      .filter((g) => !dismissed.has(`${kind}:${dismissKey(g)}`));
+    const artistNames = [...artists.keys()];
+    const shape = (map, kind, maps) => [...map.values()].sort((a, b) => b.scenes.length - a.scenes.length || a.name.localeCompare(b.name)).map((x) => ({ ...x, minutes: Math.round(x.minutes * 10) / 10, mergedInto: maps[kind][x.name] ? resolveName(maps[kind], x.name) : null }));
+    res.json({
+      locations: shape(places, "location", data.maps),
+      artists: shape(artists, "artist", data.maps),
+      suggestions: {
+        location: open("location", suggestLocationGroups([...places.keys()], artistNames), data.maps.location),
+        artist: open("artist", suggestArtistGroups(artistNames), data.maps.artist),
+      },
+    });
+  });
+
+  // "these names are one": names -> canonical. The saved category of the final name becomes the most expensive of its members, and the
+  // members' own entries are dropped so the one name is the one the owner edits from now on.
+  app.post("/api/smart-scheduler/:id/names/merge", admin, async (req, res) => {
+    const id = Number(req.params.id);
+    const kind = KINDS[req.body?.kind];
+    const names = (Array.isArray(req.body?.names) ? req.body.names : []).map(cleanName).filter(Boolean);
+    const canonical = cleanName(req.body?.canonical);
+    if (!kind) { res.status(400).json({ error: "Say whether these are places or characters." }); return; }
+    if (!canonical || canonical.length > 80) { res.status(400).json({ error: "Give the one name to keep." }); return; }
+    if (new Set([...names, canonical]).size < 2) { res.status(400).json({ error: "Choose at least two different names." }); return; }
+    if (!(await loadRows(id))) { res.status(404).json({ error: "Project not found" }); return; }
+    const client = await db.connect();
+    try {
+      await client.query("BEGIN");
+      await client.query("SELECT 1 FROM scene_lists WHERE id = $1 FOR UPDATE", [id]);
+      const maps = await loadNameMaps(id);
+      const group = [...new Set([...names, canonical])];
+      const next = mergeIntoMap(maps[kind], group, canonical);
+      await saveNameMap(client, id, kind, next);
+      const brief = (await client.query("SELECT artists, locations FROM scheduler_briefs WHERE scene_list_id = $1", [id])).rows[0];
+      if (brief) {
+        const field = kind === "location" ? "locations" : "artists";
+        const saved = { ...brief[field] };
+        const final = resolveName(next, canonical);
+        const members = Object.keys(next).filter((a) => next[a] === final).concat(final);
+        let best = null;
+        for (const m of members) { const c = saved[m]; if (c && (!best || RANK[c] > RANK[best])) best = c; }
+        for (const m of members) delete saved[m];
+        if (best) saved[final] = best;
+        await client.query(`UPDATE scheduler_briefs SET ${field} = $2 WHERE scene_list_id = $1`, [id, JSON.stringify(saved)]);
+      }
+      await client.query("COMMIT");
+      res.json({ merged: true, map: next });
+    } catch (error) {
+      await client.query("ROLLBACK").catch(() => {});
+      console.error("Merging names failed:", error.message);
+      res.status(500).json({ error: error.message });
+    } finally {
+      client.release();
+    }
+  });
+
+  // take a name out of a merge (or, for the final name, undo the whole merge)
+  app.post("/api/smart-scheduler/:id/names/split", admin, async (req, res) => {
+    const id = Number(req.params.id);
+    const kind = KINDS[req.body?.kind];
+    const name = cleanName(req.body?.name);
+    if (!kind || !name) { res.status(400).json({ error: "Say which name to separate." }); return; }
+    await db.query("DELETE FROM scheduler_name_map WHERE scene_list_id = $1 AND kind = $2 AND (alias = $3 OR canonical = $3)", [id, kind, name]);
+    res.json({ split: true });
+  });
+
+  // "these are different, stop suggesting them"
+  app.post("/api/smart-scheduler/:id/names/dismiss", admin, async (req, res) => {
+    const id = Number(req.params.id);
+    const kind = KINDS[req.body?.kind];
+    const names = (Array.isArray(req.body?.names) ? req.body.names : []).map(cleanName).filter(Boolean);
+    if (!kind || names.length < 2) { res.status(400).json({ error: "Give the names that are different." }); return; }
+    await db.query("INSERT INTO scheduler_name_dismissed (scene_list_id, kind, key) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING", [id, kind, dismissKey(names)]);
+    res.json({ dismissed: true });
   });
 
   async function runJob(job, sceneListId, userId) {

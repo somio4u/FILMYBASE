@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import NamesPlaces from './NamesPlaces.jsx'
 import './SmartScheduler.css'
 
 const ARTIST_CATS = [['costly', 'Costly'], ['normal', 'Normal'], ['cheap', 'Cheap']]
@@ -47,6 +48,15 @@ export default function SmartScheduler({ backendUrl, onBack }) {
       setLatest(await call(backendUrl, `/${p.sceneListId}/latest`))
     } catch (e) { setError(e.message) }
   }, [backendUrl])
+
+  // after names were merged: the artists and places lists change, the days and minutes stay as typed
+  const reloadBrief = useCallback(async () => {
+    try {
+      const data = await call(backendUrl, `/${project.sceneListId}/brief`)
+      setArtists(data.artists); setLocations(data.locations)
+      setLatest(await call(backendUrl, `/${project.sceneListId}/latest`))
+    } catch (e) { setError(e.message) }
+  }, [backendUrl, project])
 
   // what the owner types is saved by itself, a moment after he stops
   const scheduleSave = (nextBrief, nextArtists, nextLocations) => {
@@ -124,6 +134,7 @@ export default function SmartScheduler({ backendUrl, onBack }) {
       {project && brief && (
         <>
           <h2 className="ss-h2">{project.title}</h2>
+          <NamesPlaces backendUrl={backendUrl} sceneListId={project.sceneListId} onChanged={reloadBrief} />
           <section className="ss-card">
             <h3>1 · Your brief {saved && <small className="ss-saved">{saved}</small>}</h3>
             <div className="ss-days">

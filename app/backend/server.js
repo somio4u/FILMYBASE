@@ -42,6 +42,7 @@ import { usageContext, installGeminiMetering, ensureUsageSchema, registerUsageRo
 import { ensureApprovalFormatSchema, registerApprovalFormatRoutes } from "./approvalFormat.js";
 import { actorOf, byLabel, trackSceneAuthors } from "./sceneAuthors.js";
 import { ensureSmartSchedulerSchema, registerSmartSchedulerRoutes } from "./smartScheduler.js";
+import { ensureLocationRenameSchema, registerLocationRenameRoutes } from "./locationRename.js";
 import { ensureSceneTagSchema, registerSceneTagRoutes } from "./sceneTags.js";
 import { registerLiveSyncRoutes } from "./liveSync.js";
 import { registerChangeHistoryRoutes } from "./changeHistory.js";
@@ -20389,6 +20390,7 @@ registerAudioCueRoutes(app, db, requireRole, { store: productionMedia.store });
 registerChangeHistoryRoutes(app, db, requireRole);
 registerLiveSyncRoutes(app, db, requireRole);
 registerSceneTagRoutes(app, db, requireRole);
+registerLocationRenameRoutes(app, db, { requireRole });
 // The Smart Scheduler: a separate agent that reads a project's approved screenplay and plans the shoot days (smartScheduler.js). The best model (Gemini Pro) analyses; the arithmetic is in scheduleSolver.js.
 registerSmartSchedulerRoutes(app, db, {
   requireRole,
@@ -20451,6 +20453,7 @@ ensureAiMovieSchema()
   .then(() => ensureApprovalFormatSchema(db))
   .then(() => ensureSceneTagSchema(db))
   .then(() => ensureSmartSchedulerSchema(db))
+  .then(() => ensureLocationRenameSchema(db))
   .then(() => ensureAllProductionSchemas(db))
   .then(async (failures) => { try { const made = await backfillDrafts(db); await failInterruptedRequests(db); if (made) console.log(`Draft Management: ${made} existing project(s) are now Draft 1 of their project.`); } catch (error) { console.error("Draft backfill failed:", error.message); } return failures; })
   .catch((error) => console.error("Schema setup failed:", error.message))

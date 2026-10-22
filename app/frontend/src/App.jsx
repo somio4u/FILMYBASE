@@ -8355,6 +8355,7 @@ function App() {
   const [isGeneratingBreakdown, setIsGeneratingBreakdown] = useState(false)
   const breakdownPollCancelRef = useRef(false)
   const [isGeneratingAdSheet, setIsGeneratingAdSheet] = useState(false)
+  const [adSheetProgress, setAdSheetProgress] = useState('') // what the AD sheet job is doing right now, in plain words
   const [isApprovingBreakdown, setIsApprovingBreakdown] = useState(false)
   const [showBreakdownFeedbackForm, setShowBreakdownFeedbackForm] = useState(false)
   const [breakdownFeedbackText, setBreakdownFeedbackText] = useState('')
@@ -11549,7 +11550,11 @@ function App() {
           continue
         }
         lost = 0
-        if (job.status === 'running') continue
+        if (job.status === 'running') {
+          setAdSheetProgress(job.parts > 0 ? `Analysing the scenes: part ${job.partsDone} of ${job.parts} done. A long script can take 10–20 minutes — you can leave this page open.` : job.stage ? `${job.stage.charAt(0).toUpperCase()}${job.stage.slice(1)}…` : '')
+          continue
+        }
+        setAdSheetProgress('')
         if (job.status === 'error') { setErrorMessage(job.error || t.genericError); setIsGeneratingAdSheet(false); return }
         const fullResponse = await fetch(`${BACKEND_URL}/api/concepts/${conceptId}/full`)
         if (fullResponse.ok) {
@@ -16327,6 +16332,7 @@ function App() {
                   </button>
                 )}
                 <AnalyzingProgressBar active={isGeneratingAdSheet} label={t.generatingAdSheetLabel} estimatedSeconds={30} />
+                {isGeneratingAdSheet && adSheetProgress && <p className="sidebar-section-note">{adSheetProgress}</p>}
                 {scriptBreakdown.adSheet && (
                   <DownloadChoiceButton
                     t={t}

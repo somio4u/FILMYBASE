@@ -2071,6 +2071,9 @@ function triggerScriptBreakdownAutoBackfill(sceneListRow, breakdownRow) {
       if (needsEpisodeNumbers) {
         updated = await classifyEpisodeNumbers(sourceText, updated);
       }
+      // an AD sheet saved while this was working must not be lost: this row is built from an older snapshot
+      const newestNow = (await db.query("SELECT content FROM script_breakdowns WHERE scene_list_id = $1 ORDER BY created_at DESC LIMIT 1", [sceneListRow.id])).rows[0]?.content;
+      if (newestNow?.adSheet && !updated.adSheet) updated = { ...updated, adSheet: newestNow.adSheet };
       await db.query("INSERT INTO script_breakdowns (scene_list_id, content, status, feedback) VALUES ($1, $2, $3, $4)", [
         sceneListRow.id,
         JSON.stringify(updated),
@@ -13429,7 +13432,7 @@ async function generateAdSheetDetailsForBatch(batchEntries, batchStartIndex, bre
 }
 
 // onBatchError(error) is told about every batch that failed (its scenes come back as blank rows marked failed: true)
-async function generateAdSheetDetails(sceneEntries, breakdownContent, sourceText, onBatchError) {
+async function generateAdSheetDetails(sceneEntries, breakdownContent, sourceText, onBatchError, onProgress) {
   const batches = [];
   for (let i = 0; i < sceneEntries.length; i += AD_SHEET_BATCH_SIZE) {
     batches.push({ start: i, entries: sceneEntries.slice(i, i + AD_SHEET_BATCH_SIZE) });
@@ -13442,6 +13445,8 @@ async function generateAdSheetDetails(sceneEntries, breakdownContent, sourceText
   // fails after retries falls back to blank rows for just that batch
   // instead of losing the whole AD sheet.
   const blankRow = { mainCharacters: [], extras: { en: "", or: "" }, property: { en: "", or: "" }, costumeRemarks: { en: "", or: "" } };
+  let doneBatches = 0;
+  onProgress?.(0, batches.length);
   const batchResults = await mapWithConcurrency(batches, 1, async (batch) => {
     try {
       return await generateAdSheetDetailsForBatch(batch.entries, batch.start, breakdownContent, sourceText);
@@ -13449,6 +13454,9 @@ async function generateAdSheetDetails(sceneEntries, breakdownContent, sourceText
       console.error(`AD sheet batch starting at scene ${batch.start} failed, filling with blank rows:`, error.message);
       onBatchError?.(error);
       return batch.entries.map(() => ({ ...blankRow, failed: true }));
+    } finally {
+      doneBatches += 1;
+      onProgress?.(doneBatches, batches.length);
     }
   });
 
@@ -14136,16 +14144,26 @@ app.post("/api/script-breakdown/:id/generate-ad-sheet", requireRole("admin", "pr
   // timeout. Respond immediately and let the frontend follow the job
   // (GET .../ad-sheet-status) instead of holding this request open: it shows
   // the real reason when the AI fails, and never saves an empty sheet.
-  const job = { status: "running", startedAt: Date.now(), total: 0, failed: 0, firstError: null, error: null, warning: null };
+  const job = { status: "running", stage: "starting", startedAt: Date.now(), total: 0, failed: 0, parts: 0, partsDone: 0, firstError: null, error: null, warning: null };
   adSheetJobs.set(String(req.params.id), job);
   res.json({ status: "processing" });
 
   try {
+    // the cast-tier / episode-number update that may be running in the background saves a NEW breakdown row when it ends: wait for it,
+    // so the two never overwrite each other (this job then builds on the row that update saved)
+    const waitUntil = Date.now() + 15 * 60 * 1000;
+    while (breakdownAutoBackfillInFlight.has(Number(req.params.id)) && Date.now() < waitUntil) {
+      job.stage = "waiting for the cast-tier update to finish";
+      await new Promise((resolve) => setTimeout(resolve, 3000));
+    }
+    job.stage = "reading the script";
+    const basis = (await db.query("SELECT content FROM script_breakdowns WHERE scene_list_id = $1 ORDER BY created_at DESC LIMIT 1", [sceneListId])).rows[0];
     const sceneListResult = await db.query("SELECT content FROM scene_lists WHERE id = $1", [sceneListId]);
     const sceneList = sceneListResult.rows[0].content;
     const sourceText = await buildBreakdownSourceText(sceneList, sceneListId);
     const sceneEntries = flattenScenesForAdSheet(sceneList);
-    const aiDetails = await generateAdSheetDetails(sceneEntries, latest.rows[0].content, sourceText, (e) => { job.firstError ??= e.message; });
+    job.stage = "analysing the scenes";
+    const aiDetails = await generateAdSheetDetails(sceneEntries, basis.content, sourceText, (e) => { job.firstError ??= e.message; }, (done, total) => { job.partsDone = done; job.parts = total; });
     job.total = sceneEntries.length;
     job.failed = aiDetails.filter((d) => d.failed).length;
     if (job.total > 0 && job.failed === job.total) {
@@ -14153,17 +14171,17 @@ app.post("/api/script-breakdown/:id/generate-ad-sheet", requireRole("admin", "pr
     }
 
     const adSheet = sceneEntries.map((entry, i) => { const { failed, ...details } = aiDetails[i]; return { ...entry, ...details }; });
-    const updatedContent = { ...latest.rows[0].content, adSheet };
 
-    // Pure enrichment (adds a derived document, normally run AFTER
-    // approval as an operational step) — carries the previous approval
-    // status forward instead of silently reverting to pending, which
-    // would hide the Shoot Schedule (it only shows once approved).
+    // Pure enrichment (adds a derived document, normally run AFTER approval as an operational step) — carries the previous approval
+    // status forward instead of silently reverting to pending, which would hide the Shoot Schedule (it only shows once approved).
+    // The sheet is added to the NEWEST breakdown as it is right now, never to the older snapshot this job started from.
+    const newest = (await db.query("SELECT content, status FROM script_breakdowns WHERE scene_list_id = $1 ORDER BY created_at DESC LIMIT 1", [sceneListId])).rows[0];
     await db.query(
       "INSERT INTO script_breakdowns (scene_list_id, content, status, feedback) VALUES ($1, $2, $3, $4)",
-      [sceneListId, JSON.stringify(updatedContent), latest.rows[0].status, "Generated AD Scene Breakdown Sheet"]
+      [sceneListId, JSON.stringify({ ...newest.content, adSheet }), newest.status, "Generated AD Scene Breakdown Sheet"]
     );
     if (job.failed > 0) job.warning = `The AD sheet is ready, but ${job.failed} of ${job.total} scenes could not be analysed (their extras / props / costume boxes are empty). Press "Make the AD scene breakdown sheet" again to retry.`;
+    job.stage = "done";
     job.status = "done";
   } catch (error) {
     console.error("AD sheet generation failed:", error.message);
@@ -14175,7 +14193,7 @@ app.post("/api/script-breakdown/:id/generate-ad-sheet", requireRole("admin", "pr
 const adSheetJobs = new Map();
 app.get("/api/script-breakdown/:id/ad-sheet-status", requireLogin, (req, res) => {
   const job = adSheetJobs.get(String(req.params.id));
-  res.json(job ? { status: job.status, error: job.error, warning: job.warning, total: job.total, failed: job.failed } : { status: "none" });
+  res.json(job ? { status: job.status, stage: job.stage, parts: job.parts, partsDone: job.partsDone, error: job.error, warning: job.warning, total: job.total, failed: job.failed } : { status: "none" });
 });
 
 app.post("/api/script-breakdown/:id/approve", requireRole("admin", "director"), async (req, res) => {

@@ -14129,14 +14129,8 @@ app.post("/api/script-breakdown/:id/generate-ad-sheet", requireRole("admin", "pr
     return;
   }
 
-  const latest = await db.query(
-    "SELECT id, content, status FROM script_breakdowns WHERE scene_list_id = $1 ORDER BY created_at DESC LIMIT 1",
-    [sceneListId]
-  );
-  if (String(latest.rows[0].id) !== String(req.params.id)) {
-    res.status(409).json({ error: "Someone else updated this breakdown since you loaded it. Reload the page and try again." });
-    return;
-  }
+  // No "someone else updated this" refusal here: the job always builds on the NEWEST breakdown (waiting for any background update first)
+  // and adds the sheet to the newest version when it saves, so a page that still holds an older version cannot lose or overwrite anything.
 
   // Same reasoning as /api/script-breakdown: one batch per ~15 scenes, each
   // re-sending the whole script, run sequentially now for rate-limit
@@ -14152,7 +14146,9 @@ app.post("/api/script-breakdown/:id/generate-ad-sheet", requireRole("admin", "pr
     // the cast-tier / episode-number update that may be running in the background saves a NEW breakdown row when it ends: wait for it,
     // so the two never overwrite each other (this job then builds on the row that update saved)
     const waitUntil = Date.now() + 15 * 60 * 1000;
-    while (breakdownAutoBackfillInFlight.has(Number(req.params.id)) && Date.now() < waitUntil) {
+    const backfillRunning = async () => breakdownAutoBackfillInFlight.size > 0
+      && (await db.query("SELECT 1 FROM script_breakdowns WHERE id = ANY($1::int[]) AND scene_list_id = $2 LIMIT 1", [[...breakdownAutoBackfillInFlight].map(Number), sceneListId])).rows.length > 0;
+    while ((await backfillRunning()) && Date.now() < waitUntil) {
       job.stage = "waiting for the cast-tier update to finish";
       await new Promise((resolve) => setTimeout(resolve, 3000));
     }

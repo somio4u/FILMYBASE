@@ -2133,3 +2133,10 @@ Plain version: every project is now a set of **drafts**. Opening a project shows
 - [x] Checked on the real AI and database: a normal run (6 scenes, progress fields, all earlier breakdown data kept) and a simulated race (an update saved while the AD sheet was being made — both the update and the AD sheet are in the final version).
 - **Not checked:** a truly long script (hundreds of scenes) end to end — it was not available here.
 - **Next step:** owner says "deploy", then presses "Make the AD scene breakdown sheet" on Maha Kali and waits (the screen now shows the parts).
+
+## AD sheet — the "Someone else updated this breakdown since you loaded it" error (owner's screenshot)
+- [x] **Cause:** "Make the AD scene breakdown sheet" refused to start whenever the page held an older breakdown than the newest one — and background jobs (cast tiers / episode numbers, or a finished AD sheet) save a newer breakdown while the page is open, so the page's copy goes stale and the button said "Reload the page and try again".
+- [x] **Fix:** that refusal is removed for the AD sheet. The job now always builds on the NEWEST breakdown (waiting for any background update on that project first) and adds the sheet to the newest version, so an older page can neither lose nor overwrite anything.
+- [x] Checked on the real AI and database: pressing it with an OLD breakdown id (1) while the newest was 8 now works (before: refused with this error).
+- **Same message can still appear on the other breakdown buttons** (Check it again, Tag episode numbers, costume suggestions, Edit …) — they keep the refusal because a hand edit on an old copy could really overwrite newer work; reloading the page fixes it. Say if you want those relaxed too.
+- **Next step:** owner says "deploy".

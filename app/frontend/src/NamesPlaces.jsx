@@ -16,7 +16,6 @@ export default function NamesPlaces({ backendUrl, sceneListId, onChanged, onScen
   const [data, setData] = useState(null)
   const [picked, setPicked] = useState([])
   const [keep, setKeep] = useState('')
-  const [inScript, setInScript] = useState(false)
   const [busy, setBusy] = useState(false)
   const [message, setMessage] = useState('')
   const [undo, setUndo] = useState(null) // the last place rename that can be taken back
@@ -24,11 +23,17 @@ export default function NamesPlaces({ backendUrl, sceneListId, onChanged, onScen
   const base = `/api/smart-scheduler/${sceneListId}/names`
   const load = useCallback(async () => {
     try {
-      setData(await call(backendUrl, base))
+      const d = await call(backendUrl, base)
+      setData(d)
       setUndo((await call(backendUrl, `/api/scene-lists/${sceneListId}/rename-location/latest`)).latest)
-    } catch (e) { setMessage(e.message) }
+      return d
+    } catch (e) { setMessage(e.message); return null }
   }, [backendUrl, base, sceneListId])
-  useEffect(() => { if (open && !data) load() }, [open, data, load])
+  useEffect(() => {
+    if (!open || data) return
+    load().then((d) => (d ? applySavedMerges(d) : null)).catch((e) => setMessage(e.message))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, data, load])
   useEffect(() => { setPicked([]); setKeep(''); setMessage('') }, [kind])
 
   const list = (kind === 'location' ? data?.locations : data?.artists) ?? []
@@ -38,40 +43,53 @@ export default function NamesPlaces({ backendUrl, sceneListId, onChanged, onScen
   const noun = kind === 'location' ? 'place' : 'character'
   const togglePick = (name) => { const next = picked.includes(name) ? picked.filter((n) => n !== name) : [...picked, name]; setPicked(next); if (!next.includes(keep)) setKeep(next.length ? mostUsed(next) : '') }
 
-  // the screenplay itself: first count what would change, ask, then change
-  async function changeScreenplay(names, to) {
-    if (kind === 'location') {
-      const body = { names, to }
-      const pv = await call(backendUrl, `/api/scene-lists/${sceneListId}/rename-location`, post({ ...body, preview: true }))
-      if (pv.scenes === 0) return 'The screenplay already uses this name everywhere.'
-      if (!window.confirm(`${pv.scenes} scene heading(s) will change to "${to}" (INT/EXT of each scene stays). You can undo this. Go ahead?`)) return 'The screenplay was left as it is.'
-      const done = await call(backendUrl, `/api/scene-lists/${sceneListId}/rename-location`, post(body))
-      if (done.sceneList) onSceneList?.(done.sceneList)
-      return `${done.scenes} scene heading(s) now say "${to}".`
+  // the screenplay itself: every merge is applied to it too (places: the scene headings; characters: names and dialogue). Returns how many scenes changed.
+  async function changeScreenplay(which, names, to) {
+    if (which === 'location') {
+      const done = await call(backendUrl, `/api/scene-lists/${sceneListId}/rename-location`, post({ names: [...names, to], to }))
+      if (done.sceneList && done.scenes > 0) onSceneList?.(done.sceneList)
+      return done.scenes
     }
-    const others = names.filter((n) => n !== to)
-    const counts = []
-    for (const from of others) counts.push([from, await call(backendUrl, `/api/scene-lists/${sceneListId}/rename-character`, post({ from, to, preview: true }))])
-    const total = counts.reduce((n, [, c]) => n + c.scenes, 0)
-    if (total === 0) return 'The screenplay already uses this name everywhere.'
-    if (!window.confirm(`In the screenplay ${counts.map(([f, c]) => `${f} → ${to}: ${c.scenes} scene(s)`).join(', ')} will change. Each changed scene is saved as a new version (Undo works in the screenplay). Go ahead?`)) return 'The screenplay was left as it is.'
+    let total = 0
     let latestList = null
-    for (const [from] of counts) latestList = (await call(backendUrl, `/api/scene-lists/${sceneListId}/rename-character`, post({ from, to }))).sceneList ?? latestList
+    for (const from of names.filter((n) => n !== to)) {
+      const pv = await call(backendUrl, `/api/scene-lists/${sceneListId}/rename-character`, post({ from, to, preview: true }))
+      if (pv.scenes === 0 && pv.outlineLines === 0) continue
+      const done = await call(backendUrl, `/api/scene-lists/${sceneListId}/rename-character`, post({ from, to }))
+      total += done.scenes
+      latestList = done.sceneList ?? latestList
+    }
     if (latestList) onSceneList?.(latestList)
-    return `The screenplay now says ${to} in ${total} scene(s).`
+    return total
   }
 
-  async function merge(names, canonical, alsoScript) {
+  async function merge(names, canonical) {
     if (busy) return
     setBusy(true); setMessage('')
     try {
+      const to = canonical.toUpperCase()
       await call(backendUrl, `${base}/merge`, post({ kind, names, canonical }))
-      let note = `Merged into ${canonical.toUpperCase()}.`
-      if (alsoScript) note += ` ${await changeScreenplay(names, canonical.toUpperCase())}`
-      setMessage(note); setPicked([]); setKeep('')
+      const changed = await changeScreenplay(kind, names, to)
+      setMessage(`Merged into ${to}. ${changed > 0 ? `The screenplay now says ${to} in ${changed} scene${changed === 1 ? '' : 's'}.` : 'The screenplay already used this name.'}`)
+      setPicked([]); setKeep('')
       await load(); onChanged?.()
     } catch (e) { setMessage(e.message) }
     setBusy(false)
+  }
+
+  // merges saved earlier but never applied to the screenplay are applied now (safe to repeat: it only changes what still differs)
+  async function applySavedMerges(d) {
+    let places = 0
+    let people = 0
+    for (const [which, items] of [['location', d.locations], ['artist', d.artists]]) {
+      const groups = new Map()
+      for (const x of items) if (x.mergedInto) groups.set(x.mergedInto, [...(groups.get(x.mergedInto) ?? []), x.name])
+      for (const [to, names] of groups) { const n = await changeScreenplay(which, names, to); if (which === 'location') places += n; else people += n }
+    }
+    if (places + people > 0) {
+      setMessage(`Your earlier merges are now in the screenplay too: ${places} scene heading${places === 1 ? '' : 's'} and ${people} scene${people === 1 ? '' : 's'} with a character name changed.`)
+      await load(); onChanged?.()
+    }
   }
   async function act(path, body, note) {
     setBusy(true); setMessage('')
@@ -115,7 +133,7 @@ export default function NamesPlaces({ backendUrl, sceneListId, onChanged, onScen
                   <div className="ss-sugg" key={group.join('|')}>
                     <div className="ss-sugg-names">{names.map((n) => <span className="ss-nm" key={n}>{n} <small>{info(n)?.scenes.length ?? 0} scenes</small></span>)}</div>
                     <div className="ss-sugg-act">
-                      <button type="button" disabled={busy} onClick={() => merge(names, names[0], inScript)}>Merge into {names[0]}</button>
+                      <button type="button" disabled={busy} onClick={() => merge(names, names[0])}>Merge into {names[0]}</button>
                       <button type="button" className="ss-ghost" disabled={busy} onClick={() => act('dismiss', { names }, 'Okay, these stay separate.')}>Not the same</button>
                     </div>
                   </div>
@@ -137,11 +155,9 @@ export default function NamesPlaces({ backendUrl, sceneListId, onChanged, onScen
                     <input list="ss-keep-names" value={keep} onChange={(e) => setKeep(e.target.value)} />
                     <datalist id="ss-keep-names">{picked.map((n) => <option key={n} value={n} />)}</datalist>
                   </label>
-                  <button type="button" disabled={busy || !keep.trim()} onClick={() => merge(picked, keep.trim(), inScript)}>Merge {picked.length} names</button>
+                  <button type="button" disabled={busy || !keep.trim()} onClick={() => merge(picked, keep.trim())}>Merge {picked.length} names</button>
                 </div>
               )}
-              <label className="ss-check"><input type="checkbox" checked={inScript} onChange={(e) => setInScript(e.target.checked)} /> Screenplay में भी बदलो <small>(you will see how many scenes change and can confirm; places can be undone here, characters with the screenplay's Undo)</small></label>
-
               {finals.length > 0 && (
                 <>
                   <h4>Already merged</h4>

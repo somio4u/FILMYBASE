@@ -9,6 +9,8 @@
 // Everything is saved as NEW versions (nothing is deleted), the approval status of the breakdown and the schedule is carried over, and the
 // cast already assigned to characters is kept. The AI work itself is done by the same functions the individual buttons use.
 
+import crypto from "node:crypto";
+
 const jobs = new Map();
 const lower = (s) => String(s ?? "").trim().toLowerCase();
 
@@ -114,6 +116,7 @@ export function registerProductionSyncRoutes(app, db, tools) {
   }
 
   app.post("/api/scene-lists/:id/sync-production", allowed, async (req, res) => {
+    try {
     const id = Number(req.params.id);
     if (!(await userOwnsSceneList(req.user, id))) { res.status(403).json({ error: "You don't have access to this project." }); return; }
     const list = (await db.query("SELECT status FROM scene_lists WHERE id = $1", [id])).rows[0];
@@ -126,6 +129,11 @@ export function registerProductionSyncRoutes(app, db, tools) {
     jobs.set(jobId, job);
     run(job, id);
     res.json({ jobId, serverNow: Date.now() });
+    } catch (error) {
+      // never let a mistake here take the whole server down (an uncaught error in an async route ends the process)
+      console.error("Starting the synchronization failed:", error.message);
+      res.status(500).json({ error: `The synchronization could not be started: ${error.message}` });
+    }
   });
 
   // the newest synchronization of this project (running, or finished within the last hour): lets the screen pick it up again after the

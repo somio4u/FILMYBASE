@@ -11,6 +11,7 @@ export default function SyncProduction({ backendUrl, sceneListId, onDone }) {
   const [job, setJob] = useState(null) // { jobId, status, steps, cast, error, startedAt, finishedAt }
   const [asking, setAsking] = useState(false) // the "are you sure" step, inside the card (a pop-up can be blocked by the browser)
   const [error, setError] = useState('')
+  const [reconnecting, setReconnecting] = useState('') // shown while the server cannot be reached (restarting after an update, or waking up)
   const [tick, setTick] = useState(0)
   const offset = useRef(0) // server clock minus this device's clock
   const following = useRef(null) // the job id being followed
@@ -21,12 +22,29 @@ export default function SyncProduction({ backendUrl, sceneListId, onDone }) {
   const follow = useCallback(async (jobId, announceDone) => {
     if (following.current === jobId) return
     following.current = jobId
+    let failures = 0
     try {
       for (;;) {
-        const response = await fetch(`${backendUrl}/api/scene-lists/${sceneListId}/sync-production/${jobId}`)
-        const status = await response.json()
+        let status = null
+        let httpStatus = 0
+        try {
+          const response = await fetch(`${backendUrl}/api/scene-lists/${sceneListId}/sync-production/${jobId}`)
+          httpStatus = response.status
+          status = await response.json().catch(() => ({}))
+          failures = 0
+          setReconnecting('')
+        } catch {
+          // the server could not be reached (it may be restarting after an update, or waking up): keep trying, say so, never drop the progress
+          failures += 1
+          if (!alive.current) return
+          if (failures > 60) throw new Error('The server could not be reached for several minutes. Check your internet, wait a little, and press Synchronize again.')
+          setReconnecting(`Lost the connection to the server — trying again (${failures})… The work on the server is not stopped by this.`)
+          await new Promise((resolve) => setTimeout(resolve, 3000))
+          continue
+        }
         if (!alive.current) return
-        if (!response.ok) throw new Error(status.error || 'The synchronization was interrupted. Press Synchronize again.')
+        if (httpStatus === 404) throw new Error('The server restarted while this was running, so it was interrupted. Nothing was changed — press Synchronize again.')
+        if (httpStatus >= 400) throw new Error(status.error || 'Something went wrong on the server. Please try again.')
         if (status.now) offset.current = status.now - Date.now()
         setJob({ jobId, ...status })
         if (status.status !== 'running') {
@@ -36,7 +54,7 @@ export default function SyncProduction({ backendUrl, sceneListId, onDone }) {
         await new Promise((resolve) => setTimeout(resolve, 2500))
         if (!alive.current) return
       }
-    } catch (e) { if (alive.current) { setError(e.message); setJob(null) } }
+    } catch (e) { if (alive.current) { setError(e.message); setJob((j) => (j ? { ...j, status: 'error', error: e.message } : null)) } }
     if (following.current === jobId) following.current = null
   }, [backendUrl, sceneListId])
 
@@ -64,15 +82,25 @@ export default function SyncProduction({ backendUrl, sceneListId, onDone }) {
   }, [job?.status])
 
   async function start() {
-    setAsking(false); setError('')
-    try {
-      const started = await fetch(`${backendUrl}/api/scene-lists/${sceneListId}/sync-production`, { method: 'POST' })
-      const first = await started.json()
-      if (!started.ok) throw new Error(first.error || 'Something went wrong. Please try again.')
-      if (first.serverNow) offset.current = first.serverNow - Date.now()
-      setJob({ jobId: first.jobId, status: 'running', steps: [], cast: null, error: null, startedAt: Date.now() + offset.current })
-      follow(first.jobId, true)
-    } catch (e) { setError(e.message) }
+    setAsking(false); setError(''); setReconnecting('')
+    // the server may be restarting (after an update) or waking up: try a few times before giving up. Safe to repeat — a second start just returns the job already running.
+    let first = null
+    for (let attempt = 1; attempt <= 6 && !first; attempt++) {
+      try {
+        const started = await fetch(`${backendUrl}/api/scene-lists/${sceneListId}/sync-production`, { method: 'POST' })
+        const body = await started.json().catch(() => ({}))
+        if (!started.ok) { setError(body.error || 'Something went wrong. Please try again.'); setReconnecting(''); return }
+        first = body
+      } catch {
+        if (attempt === 6) { setReconnecting(''); setError('Could not reach the server. It may be restarting after an update or waking up — wait a minute and press Synchronize again.'); return }
+        setReconnecting(`The server is not answering yet (it may be restarting or waking up) — trying again (${attempt}/5)…`)
+        await new Promise((resolve) => setTimeout(resolve, 5000))
+      }
+    }
+    setReconnecting('')
+    if (first.serverNow) offset.current = first.serverNow - Date.now()
+    setJob({ jobId: first.jobId, status: 'running', steps: [], cast: null, error: null, startedAt: Date.now() + offset.current })
+    follow(first.jobId, true)
   }
 
   const running = job?.status === 'running'
@@ -99,6 +127,7 @@ export default function SyncProduction({ backendUrl, sceneListId, onDone }) {
       )}
 
       {running && <p className="sync-live">⏳ Working on the server… running for <b>{clock(elapsed)}</b>. Nothing is stuck while the clock runs and a step shows ⏳ — you can leave this page open.</p>}
+      {reconnecting && <p className="sync-live" role="status">🔌 {reconnecting}</p>}
       {error && <p className="ss-error" role="alert">{error}</p>}
       {job && job.steps?.length > 0 && (
         <ul className="sync-steps">
@@ -111,7 +140,7 @@ export default function SyncProduction({ backendUrl, sceneListId, onDone }) {
           ))}
         </ul>
       )}
-      {job?.status === 'error' && <p className="ss-error" role="alert">Synchronization stopped: {job.error}. Nothing was lost — the previous versions are still there. Press Synchronize to try again.</p>}
+      {job?.status === 'error' && !error && <p className="ss-error" role="alert">Synchronization stopped: {job.error}. Nothing was lost — the previous versions are still there. Press Synchronize to try again.</p>}
       {job?.status === 'done' && (
         <div className="ss-note" role="status">
           <b>Everything now follows the new screenplay</b>{job.finishedAt && job.startedAt ? ` (took ${clock(job.finishedAt - job.startedAt)})` : ''}.

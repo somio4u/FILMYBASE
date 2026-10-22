@@ -4,9 +4,34 @@ import { fileBase, renderPdf, renderXlsx } from "./adRender.js";
 import { changedSince } from "./smartScheduler.js";
 
 export function registerAdRoutes(app, db, { requireRole, loadRows }) {
-  const admin = requireRole("admin");
+  const admin = requireRole("admin", "production_manager");
 
-  async function context(sceneListId) {
+  // the Production Management shoot schedule, shaped like the Smart Scheduler's plan (days of scene ids) so every paper can use either
+  function planFromShootSchedule(content, rows) {
+    const byId = new Map(rows.map((r) => [r.id, r]));
+    const refs = new Map();
+    const days = [];
+    for (const day of content?.scheduleDays ?? []) {
+      const list = [];
+      for (const ref of day.sceneRefs ?? []) {
+        const id = `${ref.episodeIndex ?? "film"}-${ref.sceneIndex}`;
+        const row = byId.get(id);
+        if (!row) continue;
+        list.push(row);
+        refs.set(id, { costume: ref.costume || "", properties: ref.properties || "", adRemark: ref.adRemark || "" });
+      }
+      const nights = list.filter((r) => r.night).length;
+      days.push({
+        day: Number(day.dayNumber) || days.length + 1, date: day.date || "", sceneIds: list.map((r) => r.id),
+        minutes: Math.round(list.reduce((n, r) => n + r.minutes, 0) * 10) / 10,
+        locations: [...new Set(list.map((r) => r.location))], artists: [...new Set(list.flatMap((r) => r.artists))].sort(),
+        night: nights > 0 && nights === list.length, mixed: nights > 0 && nights < list.length,
+      });
+    }
+    return { plan: days.length ? { days } : null, refs };
+  }
+
+  async function context(sceneListId, wanted) {
     const data = await loadRows(sceneListId);
     if (!data) return null;
     const head = (await db.query(
@@ -21,13 +46,22 @@ export function registerAdRoutes(app, db, { requireRole, loadRows }) {
     const tagRows = (await db.query("SELECT episode_index, scene_index, tag, note, set_by_name, done_by FROM scene_tags WHERE scene_list_id = $1 ORDER BY episode_index, scene_index", [sceneListId])).rows;
     const contacts = new Map((await db.query("SELECT character_name, name, contact_number FROM crew_members WHERE scene_list_id = $1 AND category = 'artist'", [sceneListId])).rows
       .filter((r) => r.character_name).map((r) => [String(r.character_name).trim().toUpperCase(), r]));
+    const shoot = (await db.query("SELECT content FROM shoot_schedules WHERE scene_list_id = $1 ORDER BY created_at DESC LIMIT 1", [sceneListId])).rows[0]?.content;
+    const fromShoot = planFromShootSchedule(shoot, data.rows);
     const changedIds = run ? changedSince(run.fingerprints, data.rows) : [];
+    // the days come from Production Management's shoot schedule when it has one, else from the Smart Scheduler's plan (or the one asked for)
+    const planSource = wanted === "smart" ? (run ? "smart" : null) : wanted === "production" ? (fromShoot.plan ? "production" : null) : fromShoot.plan ? "production" : run ? "smart" : null;
     return {
       title: head?.title || `Project ${sceneListId}`,
       rows: data.rows,
-      plan: run?.result ?? null,
-      stale: changedIds.length > 0,
-      changedIds,
+      planSource,
+      hasProductionSchedule: Boolean(fromShoot.plan),
+      hasSmartPlan: Boolean(run),
+      plan: planSource === "production" ? fromShoot.plan : planSource === "smart" ? run.result : null,
+      refs: planSource === "production" ? fromShoot.refs : new Map(),
+      categories: run ? { artists: run.result.artists, locations: run.result.locations } : null,
+      stale: planSource === "smart" && changedIds.length > 0,
+      changedIds: planSource === "smart" ? changedIds : [],
       adSheet: breakdown?.adSheet ?? null,
       breakdown,
       tags: tagRows.map((t) => [t.episode_index, t.scene_index, t.tag, t.note, t.set_by_name, t.done_by]),
@@ -36,12 +70,13 @@ export function registerAdRoutes(app, db, { requireRole, loadRows }) {
   }
 
   app.get("/api/ad/:id/documents", admin, async (req, res) => {
-    const ctx = await context(Number(req.params.id));
+    const ctx = await context(Number(req.params.id), req.query.source);
     if (!ctx) { res.status(404).json({ error: "Project not found" }); return; }
     res.json({
+      planSource: ctx.planSource, hasProductionSchedule: ctx.hasProductionSchedule, hasSmartPlan: ctx.hasSmartPlan,
       title: ctx.title,
       hasPlan: Boolean(ctx.plan),
-      stale: ctx.stale && Boolean(ctx.plan),
+      stale: ctx.stale,
       hasBreakdown: Boolean(ctx.breakdown),
       sceneBreakdownMatches: Array.isArray(ctx.adSheet) && ctx.adSheet.length === ctx.rows.length,
       documents: DOCUMENTS,
@@ -52,7 +87,7 @@ export function registerAdRoutes(app, db, { requireRole, loadRows }) {
     const { kind, format } = req.params;
     if (!["pdf", "xlsx"].includes(format)) { res.status(404).json({ error: "Choose pdf or xlsx." }); return; }
     try {
-      const ctx = await context(Number(req.params.id));
+      const ctx = await context(Number(req.params.id), req.query.source);
       if (!ctx) { res.status(404).json({ error: "Project not found" }); return; }
       const spec = buildDocument(kind, ctx);
       const buffer = format === "pdf" ? await renderPdf(spec) : await renderXlsx(spec);

@@ -10,8 +10,8 @@ async function call(backendUrl, path, options) {
 }
 const post = (body) => ({ method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
 
-export default function NamesPlaces({ backendUrl, sceneListId, onChanged }) {
-  const [open, setOpen] = useState(false)
+export default function NamesPlaces({ backendUrl, sceneListId, onChanged, onSceneList, embedded = false }) {
+  const [open, setOpen] = useState(embedded)
   const [kind, setKind] = useState('location') // 'location' | 'artist'
   const [data, setData] = useState(null)
   const [picked, setPicked] = useState([])
@@ -46,6 +46,7 @@ export default function NamesPlaces({ backendUrl, sceneListId, onChanged }) {
       if (pv.scenes === 0) return 'The screenplay already uses this name everywhere.'
       if (!window.confirm(`${pv.scenes} scene heading(s) will change to "${to}" (INT/EXT of each scene stays). You can undo this. Go ahead?`)) return 'The screenplay was left as it is.'
       const done = await call(backendUrl, `/api/scene-lists/${sceneListId}/rename-location`, post(body))
+      if (done.sceneList) onSceneList?.(done.sceneList)
       return `${done.scenes} scene heading(s) now say "${to}".`
     }
     const others = names.filter((n) => n !== to)
@@ -54,7 +55,9 @@ export default function NamesPlaces({ backendUrl, sceneListId, onChanged }) {
     const total = counts.reduce((n, [, c]) => n + c.scenes, 0)
     if (total === 0) return 'The screenplay already uses this name everywhere.'
     if (!window.confirm(`In the screenplay ${counts.map(([f, c]) => `${f} → ${to}: ${c.scenes} scene(s)`).join(', ')} will change. Each changed scene is saved as a new version (Undo works in the screenplay). Go ahead?`)) return 'The screenplay was left as it is.'
-    for (const [from] of counts) await call(backendUrl, `/api/scene-lists/${sceneListId}/rename-character`, post({ from, to }))
+    let latestList = null
+    for (const [from] of counts) latestList = (await call(backendUrl, `/api/scene-lists/${sceneListId}/rename-character`, post({ from, to }))).sceneList ?? latestList
+    if (latestList) onSceneList?.(latestList)
     return `The screenplay now says ${to} in ${total} scene(s).`
   }
 
@@ -79,6 +82,7 @@ export default function NamesPlaces({ backendUrl, sceneListId, onChanged }) {
     setBusy(true); setMessage('')
     try {
       const r = await call(backendUrl, `/api/scene-lists/${sceneListId}/rename-location/${undo.id}/undo`, { method: 'POST' })
+      if (r.sceneList) onSceneList?.(r.sceneList)
       setMessage(`${r.restored} scene heading(s) are back as they were.`)
       await load(); onChanged?.()
     } catch (e) { setMessage(e.message) }
@@ -90,7 +94,9 @@ export default function NamesPlaces({ backendUrl, sceneListId, onChanged }) {
 
   return (
     <section className="ss-card">
-      <h3 className="ss-names-head" onClick={() => setOpen(!open)} style={{ cursor: 'pointer' }}>{open ? '▾' : '▸'} Names &amp; places <small>same place or same person written two ways? Make it one.</small></h3>
+      {embedded
+        ? <h3 className="ss-names-head">Names &amp; places <small>same place or same person written two ways? Make it one.</small></h3>
+        : <h3 className="ss-names-head" onClick={() => setOpen(!open)} style={{ cursor: 'pointer' }}>{open ? '▾' : '▸'} Names &amp; places <small>same place or same person written two ways? Make it one.</small></h3>}
       {open && (
         <>
           <div className="ss-tabs">

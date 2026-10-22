@@ -1,6 +1,7 @@
 import MoneyMeter from './MoneyMeter.jsx'
 import SmartScheduler from './SmartScheduler.jsx'
-import PostProduction from './PostProduction.jsx'
+import AdPapers from './AdPapers.jsx'
+import NamesPlaces from './NamesPlaces.jsx'
 import { useState, useEffect, useRef, useMemo, useCallback, useContext, createContext, Fragment, lazy, Suspense } from 'react'
 import { createPortal } from 'react-dom'
 import ScriptEditor, { ScriptToolbar } from './ScriptEditor.jsx'
@@ -194,6 +195,10 @@ const LABELS = {
     stageCrewLabel: 'Crew',
     stageScheduleLabel: 'Shoot Schedule',
     stageClapboardLabel: 'Clapboard',
+    stageAdLabel: 'For Assistant Directors',
+    adHeading: 'For Assistant Directors',
+    sceneNamesButton: 'Names & places',
+    sceneNamesBack: 'Close',
     clapboardSceneLabel: 'Scene',
     clapboardPickFromSchedule: 'Pick from schedule…',
     clapboardSceneManualPlaceholder: 'Or type the scene number',
@@ -324,8 +329,6 @@ const LABELS = {
     appModeAiMovieHint: 'Make the whole film with AI — story to screen',
     appModeMoneyOption: 'Money Meter',
     appModeMoneyHint: 'What every project and every user has spent on AI (admin only)',
-    appModePostOption: 'Post-production',
-    appModePostHint: 'For Assistant Directors: D sheet, location-wise schedule and artists, call sheets and more — PDF and Excel (admin only)',
     appModeSchedulerOption: 'Smart Scheduler',
     appModeSchedulerHint: 'An agent that plans the whole shoot in the days you give (admin only)',
     aiMovieProductionLabel: 'Production',
@@ -1132,6 +1135,10 @@ const LABELS = {
     stageCrewLabel: 'କ୍ରୁ',
     stageScheduleLabel: 'ସୁଟିଂ ସିଡ୍ୟୁଲ୍',
     stageClapboardLabel: 'କ୍ଲାପବୋର୍ଡ',
+    stageAdLabel: 'ସହକାରୀ ନିର୍ଦ୍ଦେଶକଙ୍କ ପାଇଁ',
+    adHeading: 'ସହକାରୀ ନିର୍ଦ୍ଦେଶକଙ୍କ ପାଇଁ',
+    sceneNamesButton: 'ନାମ ଓ ସ୍ଥାନ',
+    sceneNamesBack: 'ବନ୍ଦ କରନ୍ତୁ',
     clapboardSceneLabel: 'ସିନ୍',
     clapboardPickFromSchedule: 'ସିଡ୍ୟୁଲ୍‌ରୁ ବାଛ…',
     clapboardSceneManualPlaceholder: 'ନହେଲେ ସିନ୍ ନମ୍ବର ଟାଇପ୍ କର',
@@ -1262,8 +1269,6 @@ const LABELS = {
     appModeAiMovieHint: 'AI ସାଙ୍ଗରେ ପୁରା ଫିଲ୍ମ ବନା — ଗପରୁ ସ୍କ୍ରିନ୍ ଯାଏ',
     appModeMoneyOption: 'ମନି ମିଟର',
     appModeMoneyHint: 'କେଉଁ ପ୍ରୋଜେକ୍ଟ ଓ କେଉଁ ୟୁଜର AI ରେ କେତେ ଖର୍ଚ୍ଚ କଲେ (କେବଳ ଆଡମିନ୍)',
-    appModePostOption: 'ପୋଷ୍ଟ-ପ୍ରୋଡକ୍ସନ୍',
-    appModePostHint: 'ସହକାରୀ ନିର୍ଦ୍ଦେଶକଙ୍କ ପାଇଁ: ଡି ସିଟ୍, ଲୋକେସନ୍ ଅନୁସାରେ ସିଡ୍ୟୁଲ୍ ଓ କଳାକାର, କଲ୍ ସିଟ୍ — PDF ଓ Excel (କେବଳ ଆଡମିନ୍)',
     appModeSchedulerOption: 'ସ୍ମାର୍ଟ ସିଡ୍ୟୁଲର୍',
     appModeSchedulerHint: 'ଆପଣ ଦେଇଥିବା ଦିନରେ ପୁରା ସୁଟିଂ ଯୋଜନା କରୁଥିବା ଏଜେଣ୍ଟ (କେବଳ ଆଡମିନ୍)',
     aiMovieProductionLabel: 'ପ୍ରଡକ୍ସନ୍',
@@ -4429,6 +4434,7 @@ function MovieScreenplayWorkspace({
   const [drag, setDrag] = useState(null) // while a scene is dragged in the list: { from, over, after }
   const [headingForm, setHeadingForm] = useState(null) // { index, intExt, location, timeOfDay }
   const [multiForm, setMultiForm] = useState(null) // "Add multiple scenes": { text, where }
+  const [namesOpen, setNamesOpen] = useState(false) // "Names & places": make same places / same people one
   const [renameForm, setRenameForm] = useState(null) // "Rename a character everywhere": { from, to, found, done }
   const [importForm, setImportForm] = useState(null) // "Import episodes from a Word file": { file, preview, picked, busy, done, lastImport }
   const [multiProgress, setMultiProgress] = useState(null) // { step: 'planning' | 'writing', index, total }
@@ -5627,7 +5633,14 @@ function MovieScreenplayWorkspace({
               {screenplay && (
                 <div className="script-scene-manage">
                   <p className="script-panel-title">{t.sceneManageTitle}</p>
-                  {renameForm ? (
+                  {namesOpen ? (
+                    <div className="script-scene-form script-names-form">
+                      <NamesPlaces embedded backendUrl={BACKEND_URL} sceneListId={sceneList.id} onChanged={() => onReloadScenes?.()} onSceneList={(list) => onSceneListChanged?.(list)} />
+                      <div className="script-scene-form-actions">
+                        <button type="button" className="cancel-button" onClick={() => setNamesOpen(false)}>{t.sceneNamesBack}</button>
+                      </div>
+                    </div>
+                  ) : renameForm ? (
                     <div className="script-scene-form script-rename-form">
                       <p className="script-tools-heading">{t.sceneRenameTitle}</p>
                       <p className="script-tools-editing-note">{t.sceneRenameHint}</p>
@@ -5748,6 +5761,11 @@ function MovieScreenplayWorkspace({
                         {t.sceneRenameButton}
                       </button>
                       {/* admin only: the screenplay writer's login (the only one with onProgress) has no access to this */}
+                      {!onProgress && (
+                        <button type="button" className="cancel-button" onClick={() => setNamesOpen(true)} disabled={Boolean(editing) || isAiWriting || isChecking || isChangingScenes}>
+                          {t.sceneNamesButton}
+                        </button>
+                      )}
                       {!onProgress && Array.isArray(sceneList.episodeScenes) && (
                         <button type="button" className="cancel-button" onClick={openImportForm} disabled={Boolean(editing) || isAiWriting || isChecking || isChangingScenes}>
                           {t.sceneImportButton}
@@ -13371,7 +13389,7 @@ function App() {
     const chooseMode = (mode) => {
       if (modeChoice) return
       const reduceMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
-      const open = () => (mode === 'ai' ? handleChooseAiMovieMode() : mode === 'money' ? setAppMode('money') : mode === 'scheduler' ? setAppMode('scheduler') : mode === 'post' ? setAppMode('post') : setAppMode('movie'))
+      const open = () => (mode === 'ai' ? handleChooseAiMovieMode() : mode === 'money' ? setAppMode('money') : mode === 'scheduler' ? setAppMode('scheduler') : setAppMode('movie'))
       if (reduceMotion) {
         open()
         return
@@ -13386,7 +13404,7 @@ function App() {
     const modes = [
       { key: 'movie', icon: '🎬', label: t.appModeMovieOption, hint: t.appModeMovieHint },
       { key: 'ai', icon: '✨', label: t.appModeAiMovieOption, hint: t.appModeAiMovieHint },
-      ...(currentUser.role === 'admin' ? [{ key: 'money', icon: '💰', label: t.appModeMoneyOption, hint: t.appModeMoneyHint }, { key: 'scheduler', icon: '🗓️', label: t.appModeSchedulerOption, hint: t.appModeSchedulerHint }, { key: 'post', icon: '🎞️', label: t.appModePostOption, hint: t.appModePostHint }] : []),
+      ...(currentUser.role === 'admin' ? [{ key: 'money', icon: '💰', label: t.appModeMoneyOption, hint: t.appModeMoneyHint }, { key: 'scheduler', icon: '🗓️', label: t.appModeSchedulerOption, hint: t.appModeSchedulerHint }] : []),
     ]
     return (
       <div className={`mode-stage${modeChoice ? ` is-choosing is-choosing-${modeChoice}` : ''}`}>
@@ -13413,10 +13431,6 @@ function App() {
 
   if (appMode === 'money' && currentUser.role === 'admin') {
     return <MoneyMeter backendUrl={BACKEND_URL} onBack={() => setAppMode(null)} />
-  }
-
-  if (appMode === 'post' && currentUser.role === 'admin') {
-    return <PostProduction backendUrl={BACKEND_URL} onBack={() => setAppMode(null)} />
   }
 
   if (appMode === 'scheduler' && currentUser.role === 'admin') {
@@ -14943,6 +14957,10 @@ function App() {
                 <button className={`production-main-nav-item stage-${stageSchedule}`} onClick={() => handleStageClick('stage-schedule')}>
                   <span className="production-main-nav-icon">{ICONS.calendar}</span>
                   {t.stageScheduleLabel}
+                </button>
+                <button className="production-main-nav-item stage-upcoming" onClick={() => handleStageClick('stage-ad')}>
+                  <span className="production-main-nav-icon">{ICONS.users}</span>
+                  {t.stageAdLabel}
                 </button>
                 <button className="production-main-nav-item stage-upcoming" onClick={() => setIsClapboardOpen(true)}>
                   <span className="production-main-nav-icon">{ICONS.calendar}</span>
@@ -16960,6 +16978,13 @@ function App() {
               />
             </>
           )}
+        </div>
+      )}
+
+      {activeAgent === 'production' && sceneList && sceneList.status === 'approved' && !isScreenplayWriter && (
+        <div className="three-act-structure" id="stage-ad">
+          <h2>{t.adHeading}</h2>
+          <AdPapers backendUrl={BACKEND_URL} sceneListId={sceneList.id} refreshKey={shootSchedule?.id ?? 0} />
         </div>
       )}
 

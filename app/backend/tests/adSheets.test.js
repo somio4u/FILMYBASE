@@ -57,7 +57,7 @@ test("D sheet has one block per day with totals; location schedule lists days; c
 });
 
 test("plan-based sheets say so plainly when there is no plan; others still work", () => {
-  assert.throws(() => buildDocument("d-sheet", ctx({ plan: null })), /Smart Scheduler first/);
+  assert.throws(() => buildDocument("d-sheet", ctx({ plan: null })), /shoot schedule first/);
   assert.ok(buildDocument("one-liner", ctx({ plan: null })).sections[0].rows.length === 4);
   assert.ok(buildDocument("location-artists", ctx({ plan: null })).sections.length > 1);
 });
@@ -102,6 +102,7 @@ test("routes: document list and downloads on the real database", { skip: !up }, 
   await db.query("ALTER TABLE auto_pipeline_runs ADD COLUMN IF NOT EXISTS scene_list_id INTEGER");
   await ensureSmartSchedulerSchema(db);
   await db.query("CREATE TABLE IF NOT EXISTS scene_tags (id SERIAL PRIMARY KEY, scene_list_id INTEGER NOT NULL, episode_index INTEGER, scene_index INTEGER NOT NULL, tag TEXT NOT NULL, note TEXT NOT NULL DEFAULT '', set_by_name TEXT, set_by_role TEXT, set_at TIMESTAMPTZ NOT NULL DEFAULT now(), done_by TEXT, done_at TIMESTAMPTZ)");
+  await db.query("CREATE TABLE IF NOT EXISTS shoot_schedules (id SERIAL PRIMARY KEY, scene_list_id INTEGER, content JSONB, status TEXT, feedback TEXT, created_at TIMESTAMPTZ DEFAULT now())");
   await db.query("CREATE TABLE IF NOT EXISTS crew_members (id SERIAL PRIMARY KEY, scene_list_id INTEGER, category TEXT, character_name TEXT, name TEXT, contact_number TEXT)");
   await db.query("CREATE TABLE IF NOT EXISTS script_breakdowns (id SERIAL PRIMARY KEY, scene_list_id INTEGER, content JSONB, status TEXT, feedback TEXT, created_at TIMESTAMPTZ DEFAULT now())");
   const content = { scenes: [
@@ -120,9 +121,30 @@ test("routes: document list and downloads on the real database", { skip: !up }, 
     const list = await (await fetch(`${base}/api/ad/${id}/documents`)).json();
     assert.equal(list.hasPlan, false);
     assert.equal(list.documents.length, 12);
-    assert.equal((await fetch(`${base}/api/ad/${id}/d-sheet/pdf`)).status, 409); // no plan yet
+    assert.equal((await fetch(`${base}/api/ad/${id}/d-sheet/pdf`)).status, 409); // no schedule yet
+    // Production Management's own shoot schedule is used first, with its dates and per-scene costume / props
+    await db.query("INSERT INTO shoot_schedules (scene_list_id, content, status) VALUES ($1, $2, 'approved')", [id, JSON.stringify({ scheduleDays: [{ dayNumber: 1, date: "2026-11-02", location: { en: "Temple" }, sceneRefs: [{ episodeIndex: null, sceneIndex: 1, costume: "red saree", properties: "brass lamp", adRemark: "" }, { episodeIndex: null, sceneIndex: 0, costume: "", properties: "", adRemark: "" }] }] })]);
+    const withShoot = await (await fetch(`${base}/api/ad/${id}/documents`)).json();
+    assert.equal(withShoot.planSource, "production");
+    assert.equal(withShoot.hasPlan, true);
+    const dsheet = await fetch(`${base}/api/ad/${id}/d-sheet/xlsx`);
+    assert.equal(dsheet.status, 200);
+    const wbx = new ExcelJS.Workbook();
+    await wbx.xlsx.load(await dsheet.arrayBuffer());
+    const cells = [];
+    wbx.worksheets[0].eachRow((row) => cells.push(row.values.join(" ")));
+    assert.ok(cells.some((c) => c.includes("2026-11-02")));
+    const props = await fetch(`${base}/api/ad/${id}/props-costume/xlsx`);
+    const wbp = new ExcelJS.Workbook();
+    await wbp.xlsx.load(await props.arrayBuffer());
+    const pc = [];
+    wbp.worksheets[0].eachRow((row) => pc.push(row.values.join(" ")));
+    assert.ok(pc.some((c) => c.includes("brass lamp") && c.includes("red saree")));
+    await db.query("DELETE FROM shoot_schedules WHERE scene_list_id = $1", [id]);
+    assert.equal((await (await fetch(`${base}/api/ad/${id}/documents`)).json()).planSource, null);
     const loaded = await loadRows(id);
     await db.query("INSERT INTO scheduler_runs (scene_list_id, brief, result, fingerprints) VALUES ($1, $2, $3, $4)", [id, JSON.stringify(brief), JSON.stringify(buildPlan(loaded.rows, { ...brief, days: 1 }, null)), JSON.stringify(sceneFingerprints(loaded.rows))]);
+    assert.equal((await (await fetch(`${base}/api/ad/${id}/documents`)).json()).planSource, "smart"); // no shoot schedule: the Smart Scheduler plan is used
     for (const [kind, fmt, type] of [["d-sheet", "pdf", "application/pdf"], ["location-artists", "xlsx", "spreadsheetml"], ["location-schedule", "pdf", "application/pdf"]]) {
       const r = await fetch(`${base}/api/ad/${id}/${kind}/${fmt}`);
       assert.equal(r.status, 200, kind);
@@ -135,6 +157,7 @@ test("routes: document list and downloads on the real database", { skip: !up }, 
     assert.equal((await fetch(`${base}/api/ad/999999/documents`)).status, 404);
   } finally {
     server.close();
+    await db.query("DELETE FROM shoot_schedules WHERE scene_list_id = $1", [id]);
     for (const t of ["scheduler_runs", "scheduler_briefs", "scheduler_name_map", "scheduler_name_dismissed"]) await db.query(`DELETE FROM ${t} WHERE scene_list_id = $1`, [id]);
     await db.query("DELETE FROM scene_lists WHERE id = $1", [id]);
     await db.end();

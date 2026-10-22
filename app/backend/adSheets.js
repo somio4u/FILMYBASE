@@ -36,21 +36,25 @@ function prepare(ctx) {
     day: dayOf.get(r.id) ?? null,
     tag: tagOf.get(r.id) ?? null,
     ad: useAd ? ctx.adSheet[i] : null,
+    ref: ctx.refs?.get(r.id) ?? null,
     place: r.rawLocation && r.rawLocation !== r.location ? `${r.location} (${r.rawLocation})` : r.location,
     cast: r.artists.join(", "),
     epLabel: r.episode === null ? "" : `Ep ${r.episode + 1}`,
   }));
   const costume = new Map((ctx.breakdown?.costumes ?? []).map((c) => [String(c.character).toUpperCase(), textOf(c.description)]));
-  const category = Object.fromEntries((ctx.plan?.artists ?? []).map((a) => [a.name, a.category]));
-  const locCategory = Object.fromEntries((ctx.plan?.locations ?? []).map((l) => [l.name, l.category]));
+  const category = Object.fromEntries((ctx.categories?.artists ?? ctx.plan?.artists ?? []).map((a) => [a.name, a.category]));
+  const locCategory = Object.fromEntries((ctx.categories?.locations ?? ctx.plan?.locations ?? []).map((l) => [l.name, l.category]));
   return { rows, costume, category, locCategory, useAd };
 }
 
+const joinUnique = (...parts) => [...new Set(parts.map((x) => clip(x, 400)).filter(Boolean))].join("; ");
+const propsOf = (r) => joinUnique(textOf(r.ad?.property), r.ref?.properties);
+const costumeNotesOf = (r) => joinUnique(textOf(r.ad?.costumeRemarks), r.ref?.costume);
 const dayText = (r) => (r.day ? `Day ${r.day}` : "Not in plan");
 const sceneCols = [{ h: "Sc", w: 5 }, { h: "INT/EXT", w: 7 }, { h: "Place", w: 20 }, { h: "D/N", w: 7 }, { h: "Min", w: 5 }, { h: "Cast", w: 22 }, { h: "What happens", w: 34 }];
 const sceneRow = (r) => [r.label, r.intExt, r.place, r.timeOfDay, num(r.minutes), r.cast, clip(r.gist, 220)];
 const inShootOrder = (list) => [...list].sort((a, b) => (a.episode ?? -1) - (b.episode ?? -1) || byLabel(a, b));
-const needPlan = (ctx) => { if (!ctx.plan) throw Object.assign(new Error("Make a plan in the Smart Scheduler first — this sheet follows its shoot days."), { status: 409 }); };
+const needPlan = (ctx) => { if (!ctx.plan) throw Object.assign(new Error("Make the shoot schedule first (Production Management → Shoot Schedule) — this paper follows its shoot days."), { status: 409 }); };
 const warnings = (ctx, rows) => {
   const out = [];
   if (ctx.stale) out.push("The screenplay changed after this plan was made — run the Smart Scheduler again for an up-to-date sheet.");
@@ -68,12 +72,12 @@ function dSheet(ctx, P) {
     heading: "Shoot overview",
     note: warnings(ctx, P.rows).join(" "),
     columns: [{ h: "Day", w: 6 }, { h: "Scenes", w: 8 }, { h: "Minutes", w: 8 }, { h: "Places", w: 32 }, { h: "Cast", w: 40 }, { h: "Day/Night", w: 10 }],
-    rows: days.map((d) => [`Day ${d.day}`, d.sceneIds.length, num(d.minutes), d.locations.join(", "), d.artists.join(", "), d.night ? "NIGHT" : d.mixed ? "DAY + NIGHT" : "DAY"]),
+    rows: days.map((d) => [`Day ${d.day}${d.date ? ` (${d.date})` : ""}`, d.sceneIds.length, num(d.minutes), d.locations.join(", "), d.artists.join(", "), d.night ? "NIGHT" : d.mixed ? "DAY + NIGHT" : "DAY"]),
   }];
   for (const d of days) {
     const list = d.sceneIds.map((id) => byId.get(id)).filter(Boolean);
     sections.push({
-      heading: `Day ${d.day}   ·   Date: ____________   ·   Call time: ________   ·   Wrap: ________`,
+      heading: `Day ${d.day}   ·   Date: ${d.date || "____________"}   ·   Call time: ________   ·   Wrap: ________`,
       note: `${list.length} scene(s) · ${num(d.minutes)} min · ${d.locations.join("  >  ")}`,
       columns: [...sceneCols, { h: "Notes", w: 16 }],
       rows: [...list.map((r) => [...sceneRow(r), ""]), ["", "", "", "TOTAL", num(list.reduce((n, r) => n + r.minutes, 0)), "", "", ""]],
@@ -136,7 +140,7 @@ function callSheet(ctx, P) {
   for (const d of ctx.plan.days.filter((x) => x.sceneIds.length > 0)) {
     const list = d.sceneIds.map((id) => byId.get(id)).filter(Boolean);
     sections.push({
-      heading: `CALL SHEET — Day ${d.day}   ·   Date: ____________   ·   General call: ________   ·   Sunrise/Sunset: ________`,
+      heading: `CALL SHEET — Day ${d.day}   ·   Date: ${d.date || "____________"}   ·   General call: ________   ·   Sunrise/Sunset: ________`,
       note: `${ctx.title} · ${list.length} scene(s) · ${num(d.minutes)} min · ${d.locations.join("  >  ")}${d.night ? " · NIGHT shoot" : d.mixed ? " · day and night" : ""}`,
       columns: [...sceneCols, { h: "Time", w: 9 }],
       rows: list.map((r) => [...sceneRow(r), ""]),
@@ -180,7 +184,7 @@ function propsCostume(ctx, P) {
     heading: "Props and costume by scene",
     note: notes.join(" "),
     columns: [{ h: "Sc", w: 5 }, { h: "Day", w: 7 }, { h: "Place", w: 18 }, { h: "Cast", w: 18 }, { h: "Props", w: 30 }, { h: "Costume remarks", w: 30 }, { h: "Done", w: 6 }],
-    rows: inShootOrder(P.rows).map((r) => [r.label, r.day ? `Day ${r.day}` : "", r.place, r.cast, clip(textOf(r.ad?.property), 160), clip(textOf(r.ad?.costumeRemarks), 160), ""]),
+    rows: inShootOrder(P.rows).map((r) => [r.label, r.day ? `Day ${r.day}` : "", r.place, r.cast, clip(propsOf(r), 160), clip(costumeNotesOf(r), 160), ""]),
   }];
   const props = ctx.breakdown?.props ?? [];
   sections.push({
@@ -202,7 +206,7 @@ function propsCostume(ctx, P) {
 function continuity(ctx, P) {
   const rows = [];
   for (const r of inShootOrder(P.rows)) {
-    for (const a of r.artists) rows.push([r.label, r.day ? `Day ${r.day}` : "", r.place, r.timeOfDay, a, clip(P.costume.get(a) ?? "", 120), clip(textOf(r.ad?.costumeRemarks), 120), "", clip(textOf(r.ad?.property), 120), ""]);
+    for (const a of r.artists) rows.push([r.label, r.day ? `Day ${r.day}` : "", r.place, r.timeOfDay, a, clip(P.costume.get(a) ?? "", 120), clip(costumeNotesOf(r), 120), "", clip(propsOf(r), 120), ""]);
   }
   return {
     title: "Continuity Sheet", subtitle: sub(ctx),
@@ -222,7 +226,7 @@ function sceneBreakdown(ctx, P) {
       heading: "All scenes",
       note: warnings(ctx, P.rows).join(" "),
       columns: [{ h: "Sc", w: 5 }, { h: "Day", w: 7 }, { h: "INT/EXT", w: 6 }, { h: "Place", w: 16 }, { h: "D/N", w: 6 }, { h: "Min", w: 5 }, { h: "Cast", w: 16 }, { h: "Extras", w: 14 }, { h: "Props", w: 16 }, { h: "Costume", w: 16 }, { h: "Written", w: 7 }, { h: "Tag", w: 8 }],
-      rows: P.rows.map((r) => [r.label, r.day ? `Day ${r.day}` : "", r.intExt, r.place, r.timeOfDay, num(r.minutes), r.cast, clip(textOf(r.ad?.extras), 80), clip(textOf(r.ad?.property), 80), clip(textOf(r.ad?.costumeRemarks), 80), r.written ? "yes" : "NO", r.tag?.tag ?? ""]),
+      rows: P.rows.map((r) => [r.label, r.day ? `Day ${r.day}` : "", r.intExt, r.place, r.timeOfDay, num(r.minutes), r.cast, clip(textOf(r.ad?.extras), 80), clip(propsOf(r), 80), clip(costumeNotesOf(r), 80), r.written ? "yes" : "NO", r.tag?.tag ?? ""]),
     }],
   };
 }

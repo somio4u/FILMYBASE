@@ -127,6 +127,7 @@ export default function SyncProduction({ backendUrl, sceneListId, onDone }) {
       )}
 
       {running && <p className="sync-live">⏳ Working on the server… running for <b>{clock(elapsed)}</b>. Nothing is stuck while the clock runs and a step shows ⏳ — you can leave this page open.</p>}
+      {job?.notice && <p className="ss-note" role="status">🔁 {job.notice}</p>}
       {reconnecting && <p className="sync-live" role="status">🔌 {reconnecting}</p>}
       {error && <p className="ss-error" role="alert">{error}</p>}
       {job && job.steps?.length > 0 && (

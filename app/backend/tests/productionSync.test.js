@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import express from "express";
 import pg from "pg";
 import { castCheck, mergeAvailability, registerProductionSyncRoutes } from "../productionSync.js";
+import { createJobStore, ensureJobSchema, shouldResume, MAX_RESUMES } from "../jobStore.js";
 
 test("availability typed for the old script is kept for names that still exist, new names are unknown", () => {
   const prev = { startDate: "2026-11-01", characters: [{ name: "Soumya", availableDates: "1-5 Nov" }, { name: "Gone", unknown: true }], locations: [{ location: "Temple", availableDates: "all" }] };
@@ -24,6 +25,8 @@ let up = true;
 try { await db.query("SELECT 1"); } catch { up = false; }
 
 test("sync job: rebuilds breakdown + AD sheet + schedule from the CURRENT screenplay, keeps approval, completed days and the cast", { skip: !up }, async () => {
+  await ensureJobSchema(db);
+  await db.query("DELETE FROM background_jobs"); // resume() looks at every project: start from a clean list
   await db.query("CREATE TABLE IF NOT EXISTS script_breakdowns (id SERIAL PRIMARY KEY, scene_list_id INTEGER, content JSONB, status TEXT NOT NULL DEFAULT 'pending', feedback TEXT, created_at TIMESTAMPTZ DEFAULT now())");
   await db.query("CREATE TABLE IF NOT EXISTS shoot_schedules (id SERIAL PRIMARY KEY, scene_list_id INTEGER, content JSONB, status TEXT NOT NULL DEFAULT 'pending', feedback TEXT, created_at TIMESTAMPTZ DEFAULT now())");
   await db.query("CREATE TABLE IF NOT EXISTS crew_members (id SERIAL PRIMARY KEY, scene_list_id INTEGER, category TEXT, character_name TEXT, name TEXT, contact_number TEXT)");
@@ -36,6 +39,7 @@ test("sync job: rebuilds breakdown + AD sheet + schedule from the CURRENT screen
 
   const seen = {};
   const tools = {
+    jobStore: createJobStore(db),
     requireRole: () => (req, res, next) => { req.user = { id: 1 }; next(); },
     userOwnsSceneList: async () => true,
     buildBreakdownSourceText: async () => "THE NEW SCREENPLAY TEXT",
@@ -46,7 +50,7 @@ test("sync job: rebuilds breakdown + AD sheet + schedule from the CURRENT screen
     generateShootScheduleContent: async (sl, names, availability, targetDays, rev, opts) => { seen.schedule = { names, availability, targetDays, opts }; return { scheduleDays: [...opts.completedDays, { dayNumber: 2, sceneRefs: [{ sceneIndex: 1 }] }], availability, targetDays, specialInstructions: opts.specialInstructions }; },
   };
   const app = express(); app.use(express.json());
-  registerProductionSyncRoutes(app, db, tools);
+  const sync = registerProductionSyncRoutes(app, db, tools);
   const server = app.listen(0);
   const base = `http://127.0.0.1:${server.address().port}`;
   try {
@@ -85,20 +89,51 @@ test("sync job: rebuilds breakdown + AD sheet + schedule from the CURRENT screen
     assert.equal(st.steps[2].state, "skipped");
     assert.equal(st.status, "done");
 
+    // a SERVER RESTART in the middle: the job was running when the old server stopped; the new server starts it again by itself
+    await db.query("DELETE FROM script_breakdowns WHERE scene_list_id = $1", [id]);
+    const orphan = { id: "orphan-job-1", sceneListId: id, status: "running", startedAt: Date.now() - 5 * 60 * 1000, steps: [{ key: "breakdown", label: "x", state: "working", note: "half way" }], cast: null, error: null, notice: "", resumes: 0 };
+    await tools.jobStore.insert(orphan.id, "sync", id, "", orphan);
+    const beforeRestart = await (await fetch(`${base}/api/scene-lists/${id}/sync-production/${orphan.id}`)).json();
+    assert.equal(beforeRestart.status, "running"); // the screen can still see it (from the database) before the new server resumes it
+    await sync.resume();
+    for (let i = 0; i < 50; i++) { st = await (await fetch(`${base}/api/scene-lists/${id}/sync-production/${orphan.id}`)).json(); if (st.status !== "running") break; await new Promise((r) => setTimeout(r, 50)); }
+    assert.equal(st.status, "done", JSON.stringify(st));
+    assert.match(st.notice, /restarted .* started again from the beginning — restart 1/);
+    assert.equal(st.steps[0].state, "done");
+    assert.ok((await db.query("SELECT count(*)::int AS n FROM script_breakdowns WHERE scene_list_id = $1", [id])).rows[0].n >= 1); // the work was really done again
+    // and after yet another restart the finished job is simply there, not run a second time
+    const cur = await (await fetch(`${base}/api/scene-lists/${id}/sync-production/current`)).json();
+    assert.equal(cur.status, "done");
+
+    // a job interrupted too many times is given up with a plain message, not started again forever
+    const tired = { ...orphan, id: "orphan-job-2" };
+    await tools.jobStore.insert(tired.id, "sync", id, "", tired);
+    await db.query("UPDATE background_jobs SET resumes = $2 WHERE id = $1", [tired.id, MAX_RESUMES]);
+    await sync.resume();
+    const gaveUp = await (await fetch(`${base}/api/scene-lists/${id}/sync-production/${tired.id}`)).json();
+    assert.equal(gaveUp.status, "error");
+    assert.match(gaveUp.error, /given up/);
+
     // a failing breakdown leaves everything as it was and says so
     seen.fail = true;
     const before = (await db.query("SELECT count(*)::int AS n FROM script_breakdowns WHERE scene_list_id = $1", [id])).rows[0].n;
     const bad = await (await fetch(`${base}/api/scene-lists/${id}/sync-production`, { method: "POST" })).json();
     for (let i = 0; i < 50; i++) { st = await (await fetch(`${base}/api/scene-lists/${id}/sync-production/${bad.jobId}`)).json(); if (st.status !== "running") break; await new Promise((r) => setTimeout(r, 50)); }
-    assert.equal(st.status, "error");
+    assert.equal(st.status, "error", JSON.stringify({ bad, st }).slice(0, 600));
     assert.match(st.error, /AI unavailable/);
     assert.equal(st.steps[0].state, "error");
     assert.equal((await db.query("SELECT count(*)::int AS n FROM script_breakdowns WHERE scene_list_id = $1", [id])).rows[0].n, before);
     assert.equal((await fetch(`${base}/api/scene-lists/${id}/sync-production/nope`)).status, 404);
   } finally {
     server.close();
-    for (const t of ["script_breakdowns", "shoot_schedules", "crew_members"]) await db.query(`DELETE FROM ${t} WHERE scene_list_id = $1`, [id]);
+    for (const t of ["script_breakdowns", "shoot_schedules", "crew_members", "background_jobs"]) await db.query(`DELETE FROM ${t} WHERE scene_list_id = $1`, [id]);
     await db.query("DELETE FROM scene_lists WHERE id = $1", [id]);
     await db.end();
   }
+});
+
+test("which interrupted jobs are started again: not too many times, not when very old", () => {
+  assert.deepEqual(shouldResume({ resumes: 0, startedAt: Date.now() - 60000 }), { resume: true });
+  assert.equal(shouldResume({ resumes: MAX_RESUMES, startedAt: Date.now() }).resume, false);
+  assert.equal(shouldResume({ resumes: 0, startedAt: Date.now() - 4 * 60 * 60 * 1000 }).resume, false);
 });

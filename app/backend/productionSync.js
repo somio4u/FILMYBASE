@@ -10,6 +10,7 @@
 // cast already assigned to characters is kept. The AI work itself is done by the same functions the individual buttons use.
 
 import crypto from "node:crypto";
+import { shouldResume } from "./jobStore.js";
 
 const jobs = new Map();
 const lower = (s) => String(s ?? "").trim().toLowerCase();
@@ -43,15 +44,18 @@ export function castCheck(artistLabels, crewRows) {
 }
 
 export function registerProductionSyncRoutes(app, db, tools) {
-  const { requireRole, userOwnsSceneList, buildBreakdownSourceText, generateDeepScriptBreakdownContent,
+  const { jobStore, requireRole, userOwnsSceneList, buildBreakdownSourceText, generateDeepScriptBreakdownContent,
     flattenScenesForAdSheet, generateAdSheetDetails, fetchCharacterNamesForSceneList, generateShootScheduleContent } = tools;
   const allowed = requireRole("admin", "production_manager");
 
+  // every change of a job is also written to the database, so a restart of the server cannot make it vanish
+  const persist = (job) => jobStore.save(job.id, job, job.status).catch((e) => console.error("Saving the synchronization state failed:", e.message));
+
   async function run(job, sceneListId) {
     const step = (key) => job.steps.find((s) => s.key === key);
-    const begin = (key, note) => { const s = step(key); s.state = "working"; s.note = note ?? ""; s.startedAt = Date.now(); };
-    const say = (key, note) => { step(key).note = note; };
-    const end = (key, state, note) => { const s = step(key); s.state = state; s.note = note ?? ""; };
+    const begin = (key, note) => { const s = step(key); s.state = "working"; s.note = note ?? ""; s.startedAt = Date.now(); persist(job); };
+    const say = (key, note) => { step(key).note = note; persist(job); };
+    const end = (key, state, note) => { const s = step(key); s.state = state; s.note = note ?? ""; persist(job); };
     try {
       const sceneList = (await db.query("SELECT content FROM scene_lists WHERE id = $1", [sceneListId])).rows[0].content;
       const sourceText = await buildBreakdownSourceText(sceneList, sceneListId);
@@ -105,6 +109,7 @@ export function registerProductionSyncRoutes(app, db, tools) {
       end("cast", "done", `${job.cast.withoutActor.length} character(s) without an actor yet`);
       job.status = "done";
       job.finishedAt = Date.now();
+      await persist(job);
     } catch (error) {
       console.error("Production sync failed:", error.message);
       const working = job.steps.find((s) => s.state === "working");
@@ -112,6 +117,7 @@ export function registerProductionSyncRoutes(app, db, tools) {
       job.status = "error";
       job.error = error.message;
       job.finishedAt = Date.now();
+      await persist(job);
     }
   }
 
@@ -124,9 +130,13 @@ export function registerProductionSyncRoutes(app, db, tools) {
     if (list.status !== "approved") { res.status(400).json({ error: "The screenplay must be approved first." }); return; }
     for (const [k, j] of jobs) if (j.status !== "running" && Date.now() - j.startedAt > 60 * 60 * 1000) jobs.delete(k);
     for (const [k, j] of jobs) if (j.sceneListId === id && j.status === "running") { res.json({ jobId: k, alreadyRunning: true }); return; }
+    // a running one may be known only to the database (the server restarted since): the screen follows that one
+    const known = await jobStore.latest("sync", id);
+    if (known && known.status === "running" && !jobs.has(known.id)) { res.json({ jobId: known.id, alreadyRunning: true, serverNow: Date.now() }); return; }
     const jobId = crypto.randomUUID();
-    const job = { sceneListId: id, status: "running", startedAt: Date.now(), steps: STEPS.map((s) => ({ ...s, state: "waiting", note: "" })), cast: null, error: null };
+    const job = { id: jobId, sceneListId: id, status: "running", startedAt: Date.now(), steps: STEPS.map((s) => ({ ...s, state: "waiting", note: "" })), cast: null, error: null, notice: "", resumes: 0 };
     jobs.set(jobId, job);
+    await jobStore.insert(jobId, "sync", id, "", job);
     run(job, id);
     res.json({ jobId, serverNow: Date.now() });
     } catch (error) {
@@ -136,20 +146,47 @@ export function registerProductionSyncRoutes(app, db, tools) {
     }
   });
 
+  const view = (id, job) => ({ jobId: id, status: job.status, steps: job.steps, cast: job.cast, error: job.error, notice: job.notice ?? "", startedAt: job.startedAt, finishedAt: job.finishedAt ?? null, now: Date.now() });
+
   // the newest synchronization of this project (running, or finished within the last hour): lets the screen pick it up again after the
-  // page reloaded or refreshed itself, instead of looking as if nothing is happening
-  app.get("/api/scene-lists/:id/sync-production/current", allowed, (req, res) => {
+  // page reloaded or refreshed itself, or after the server restarted, instead of looking as if nothing is happening
+  app.get("/api/scene-lists/:id/sync-production/current", allowed, async (req, res) => {
     const id = Number(req.params.id);
-    let found = null;
-    for (const [k, j] of jobs) if (j.sceneListId === id && (!found || j.startedAt > found.job.startedAt)) found = { jobId: k, job: j };
-    if (!found || (found.job.status !== "running" && Date.now() - (found.job.finishedAt ?? found.job.startedAt) > 60 * 60 * 1000)) { res.json({ jobId: null }); return; }
-    const { jobId, job } = found;
-    res.json({ jobId, status: job.status, steps: job.steps, cast: job.cast, error: job.error, startedAt: job.startedAt, finishedAt: job.finishedAt ?? null, now: Date.now() });
+    const stored = await jobStore.latest("sync", id);
+    if (!stored) { res.json({ jobId: null }); return; }
+    const job = jobs.get(stored.id) ?? stored.state;
+    if (job.status !== "running" && Date.now() - (job.finishedAt ?? job.startedAt) > 60 * 60 * 1000) { res.json({ jobId: null }); return; }
+    res.json(view(stored.id, job));
   });
 
-  app.get("/api/scene-lists/:id/sync-production/:jobId", allowed, (req, res) => {
-    const job = jobs.get(req.params.jobId);
+  app.get("/api/scene-lists/:id/sync-production/:jobId", allowed, async (req, res) => {
+    const stored = jobs.has(req.params.jobId) ? null : await jobStore.get(req.params.jobId);
+    const job = jobs.get(req.params.jobId) ?? stored?.state;
     if (!job || job.sceneListId !== Number(req.params.id)) { res.status(404).json({ error: "That synchronization is no longer available." }); return; }
-    res.json({ status: job.status, steps: job.steps, cast: job.cast, error: job.error, startedAt: job.startedAt, finishedAt: job.finishedAt ?? null, now: Date.now() });
+    res.json(view(req.params.jobId, job));
   });
+
+  // at start-up: a synchronization that was running when the server stopped (a deploy, a restart) is started again from the beginning
+  async function resume() {
+    for (const stored of await jobStore.running("sync")) {
+      const verdict = shouldResume(stored);
+      const job = { ...stored.state, id: stored.id, sceneListId: stored.sceneListId };
+      if (!verdict.resume) {
+        job.status = "error"; job.error = `This synchronization was given up: ${verdict.why}. Nothing was changed — press Synchronize again.`; job.finishedAt = Date.now();
+        await persist(job);
+        continue;
+      }
+      await jobStore.countResume(stored.id);
+      job.resumes = stored.resumes + 1;
+      job.status = "running";
+      job.steps = STEPS.map((s) => ({ ...s, state: "waiting", note: "" }));
+      job.notice = `The server was restarted (an update), so this started again from the beginning — restart ${job.resumes}. Nothing was lost.`;
+      jobs.set(stored.id, job);
+      await persist(job);
+      console.log(`Resuming the synchronization of scene list ${stored.sceneListId} (restart ${job.resumes}).`);
+      run(job, stored.sceneListId);
+    }
+  }
+
+  return { resume };
 }

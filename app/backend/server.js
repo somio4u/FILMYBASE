@@ -44,6 +44,7 @@ import { actorOf, byLabel, trackSceneAuthors } from "./sceneAuthors.js";
 import { ensureSmartSchedulerSchema, registerSmartSchedulerRoutes } from "./smartScheduler.js";
 import { registerAdRoutes } from "./adRoutes.js";
 import { registerProductionSyncRoutes } from "./productionSync.js";
+import { createJobStore, ensureJobSchema, shouldResume } from "./jobStore.js";
 import { repairStoredTransitions, withoutTransitions } from "./transitionNames.js";
 import { ensureLocationRenameSchema, registerLocationRenameRoutes } from "./locationRename.js";
 import { ensureSceneTagSchema, registerSceneTagRoutes } from "./sceneTags.js";
@@ -155,6 +156,9 @@ const db = new Pool(
     ? { connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } }
     : { database: "filmmaking_app" }
 );
+
+// Long background jobs (Synchronize, the AD scene sheet) keep their state in the database, so a restart of the server cannot make them vanish (jobStore.js)
+const jobStore = createJobStore(db);
 
 // Money Meter: measures every Gemini text call (tokens x price) and remembers who and which project it was for.
 installGeminiMetering(ai, db);
@@ -14143,10 +14147,21 @@ app.post("/api/script-breakdown/:id/generate-ad-sheet", requireRole("admin", "pr
   // timeout. Respond immediately and let the frontend follow the job
   // (GET .../ad-sheet-status) instead of holding this request open: it shows
   // the real reason when the AI fails, and never saves an empty sheet.
-  const job = { status: "running", stage: "starting", startedAt: Date.now(), total: 0, failed: 0, parts: 0, partsDone: 0, firstError: null, error: null, warning: null };
-  adSheetJobs.set(String(req.params.id), job);
+  const key = String(req.params.id);
+  // a running one may be known only to the database (the server restarted since)
+  const knownJob = await jobStore.latest("adsheet", sceneListId, key);
+  if (knownJob && knownJob.status === "running" && !adSheetJobs.has(key)) { res.json({ status: "processing", alreadyRunning: true }); return; }
+  const job = { id: crypto.randomUUID(), status: "running", stage: "starting", startedAt: Date.now(), total: 0, failed: 0, parts: 0, partsDone: 0, firstError: null, error: null, warning: null, notice: "", resumes: 0 };
+  adSheetJobs.set(key, job);
+  await jobStore.insert(job.id, "adsheet", sceneListId, key, job);
   res.json({ status: "processing" });
+  runAdSheetJob(job, key, sceneListId);
+});
 
+// the AD sheet job itself (also started again after a server restart). It is saved to the database as it goes.
+async function runAdSheetJob(job, key, sceneListId) {
+  const save = () => jobStore.save(job.id, job, job.status).catch((e) => console.error("Saving the AD sheet job failed:", e.message));
+  save();
   try {
     // the cast-tier / episode-number update that may be running in the background saves a NEW breakdown row when it ends: wait for it,
     // so the two never overwrite each other (this job then builds on the row that update saved)
@@ -14155,16 +14170,19 @@ app.post("/api/script-breakdown/:id/generate-ad-sheet", requireRole("admin", "pr
       && (await db.query("SELECT 1 FROM script_breakdowns WHERE id = ANY($1::int[]) AND scene_list_id = $2 LIMIT 1", [[...breakdownAutoBackfillInFlight].map(Number), sceneListId])).rows.length > 0;
     while ((await backfillRunning()) && Date.now() < waitUntil) {
       job.stage = "waiting for the cast-tier update to finish";
+      save();
       await new Promise((resolve) => setTimeout(resolve, 3000));
     }
     job.stage = "reading the script";
+    save();
     const basis = (await db.query("SELECT content FROM script_breakdowns WHERE scene_list_id = $1 ORDER BY created_at DESC LIMIT 1", [sceneListId])).rows[0];
     const sceneListResult = await db.query("SELECT content FROM scene_lists WHERE id = $1", [sceneListId]);
     const sceneList = sceneListResult.rows[0].content;
     const sourceText = await buildBreakdownSourceText(sceneList, sceneListId);
     const sceneEntries = flattenScenesForAdSheet(sceneList);
     job.stage = "analysing the scenes";
-    const aiDetails = await generateAdSheetDetails(sceneEntries, basis.content, sourceText, (e) => { job.firstError ??= e.message; }, (done, total) => { job.partsDone = done; job.parts = total; });
+    save();
+    const aiDetails = await generateAdSheetDetails(sceneEntries, basis.content, sourceText, (e) => { job.firstError ??= e.message; }, (done, total) => { job.partsDone = done; job.parts = total; save(); });
     job.total = sceneEntries.length;
     job.failed = aiDetails.filter((d) => d.failed).length;
     if (job.total > 0 && job.failed === job.total) {
@@ -14189,13 +14207,39 @@ app.post("/api/script-breakdown/:id/generate-ad-sheet", requireRole("admin", "pr
     job.status = "error";
     job.error = error.message;
   }
-});
+  job.finishedAt = Date.now();
+  await save();
+}
 
 const adSheetJobs = new Map();
-app.get("/api/script-breakdown/:id/ad-sheet-status", requireLogin, (req, res) => {
-  const job = adSheetJobs.get(String(req.params.id));
-  res.json(job ? { status: job.status, stage: job.stage, parts: job.parts, partsDone: job.partsDone, error: job.error, warning: job.warning, total: job.total, failed: job.failed } : { status: "none" });
+app.get("/api/script-breakdown/:id/ad-sheet-status", requireLogin, async (req, res) => {
+  const key = String(req.params.id);
+  let job = adSheetJobs.get(key);
+  if (!job) {
+    const stored = await jobStore.latest("adsheet", Number((await db.query("SELECT scene_list_id FROM script_breakdowns WHERE id = $1", [key])).rows[0]?.scene_list_id ?? 0), key);
+    job = stored?.state;
+  }
+  res.json(job ? { status: job.status, stage: job.stage, parts: job.parts, partsDone: job.partsDone, error: job.error, warning: job.warning, notice: job.notice ?? "", total: job.total, failed: job.failed, startedAt: job.startedAt ?? null, now: Date.now() } : { status: "none" });
 });
+
+// at start-up: an AD sheet job that was running when the server stopped is started again from the beginning
+async function resumeAdSheetJobs() {
+  for (const stored of await jobStore.running("adsheet")) {
+    const verdict = shouldResume(stored);
+    const job = { ...stored.state, id: stored.id };
+    if (!verdict.resume) {
+      job.status = "error"; job.error = `The AD sheet was given up: ${verdict.why}. Nothing was changed — press "Make the AD scene breakdown sheet" again.`; job.finishedAt = Date.now();
+      await jobStore.save(job.id, job, job.status);
+      continue;
+    }
+    await jobStore.countResume(stored.id);
+    job.resumes = stored.resumes + 1; job.status = "running"; job.stage = "starting"; job.parts = 0; job.partsDone = 0; job.error = null;
+    job.notice = `The server was restarted (an update), so this started again from the beginning — restart ${job.resumes}. Nothing was lost.`;
+    adSheetJobs.set(stored.key, job);
+    console.log(`Resuming the AD sheet of breakdown ${stored.key} (restart ${job.resumes}).`);
+    runAdSheetJob(job, stored.key, stored.sceneListId);
+  }
+}
 
 app.post("/api/script-breakdown/:id/approve", requireRole("admin", "director"), async (req, res) => {
   const target = await db.query("SELECT scene_list_id FROM script_breakdowns WHERE id = $1", [req.params.id]);
@@ -20468,8 +20512,8 @@ const smartScheduler = registerSmartSchedulerRoutes(app, db, {
 });
 registerAdRoutes(app, db, { requireRole, loadRows: smartScheduler.loadRows });
 // "Synchronize with the latest screenplay": rebuilds the Script Breakdown, the AD scene sheet and the Shoot Schedule from the CURRENT screenplay (productionSync.js)
-registerProductionSyncRoutes(app, db, {
-  requireRole, userOwnsSceneList, buildBreakdownSourceText, generateDeepScriptBreakdownContent,
+const productionSync = registerProductionSyncRoutes(app, db, {
+  jobStore, requireRole, userOwnsSceneList, buildBreakdownSourceText, generateDeepScriptBreakdownContent,
   flattenScenesForAdSheet, generateAdSheetDetails, fetchCharacterNamesForSceneList, generateShootScheduleContent,
 });
 // "Approval format" Word file (narrated Hinglish retelling of the episodes; see approvalFormat.js) — the AI only retells each scene
@@ -20511,7 +20555,9 @@ ensureAiMovieSchema()
   .then(() => ensureSceneTagSchema(db))
   .then(() => ensureSmartSchedulerSchema(db))
   .then(() => ensureLocationRenameSchema(db))
+  .then(() => ensureJobSchema(db))
   .then(async () => { try { const fixed = await repairStoredTransitions(db); if (fixed) console.log(`Screenplay: ${fixed} scene(s) had a transition (FREEZE. BREAK- …) written as a character — corrected.`); } catch (error) { console.error("Transition repair failed:", error.message); } })
+  .then(async () => { try { await productionSync.resume(); await resumeAdSheetJobs(); } catch (error) { console.error("Resuming interrupted background jobs failed:", error.message); } })
   .then(() => ensureAllProductionSchemas(db))
   .then(async (failures) => { try { const made = await backfillDrafts(db); await failInterruptedRequests(db); if (made) console.log(`Draft Management: ${made} existing project(s) are now Draft 1 of their project.`); } catch (error) { console.error("Draft backfill failed:", error.message); } return failures; })
   .catch((error) => console.error("Schema setup failed:", error.message))

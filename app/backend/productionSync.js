@@ -1,0 +1,130 @@
+// "Synchronize with the latest screenplay": Production Management is built from the screenplay (the Script Breakdown, the AD scene sheet,
+// the Shoot Schedule). When the screenplay changes afterwards they still describe the OLD one. This runs the whole chain again from the
+// CURRENT screenplay, in one go, as a background job the screen follows step by step:
+//   1. the Script Breakdown (artists, locations, props, costumes, cast tiers, episode numbers)
+//   2. the AD scene sheet (extras / props / costume remarks per scene)
+//   3. the Shoot Schedule (only if there is one) — availability, target days and instructions typed earlier are reused, days already marked
+//      completed are kept untouched, and only the remaining scenes are planned again
+//   4. a check of the cast: characters without an actor yet / actors whose character is gone
+// Everything is saved as NEW versions (nothing is deleted), the approval status of the breakdown and the schedule is carried over, and the
+// cast already assigned to characters is kept. The AI work itself is done by the same functions the individual buttons use.
+
+const jobs = new Map();
+const lower = (s) => String(s ?? "").trim().toLowerCase();
+
+export const STEPS = [
+  { key: "breakdown", label: "Script Breakdown from the new screenplay" },
+  { key: "adSheet", label: "AD scene sheet (extras, props, costume per scene)" },
+  { key: "schedule", label: "Shoot Schedule" },
+  { key: "cast", label: "Cast check" },
+];
+
+// the availability typed for the old script, matched to the NEW characters and places: kept where the name still exists, "unknown" for new ones
+export function mergeAvailability(previous, characterNames, locationNames) {
+  const oldChars = new Map((previous?.characters ?? []).map((c) => [lower(c.name), c]));
+  const oldLocs = new Map((previous?.locations ?? []).map((l) => [lower(l.location), l]));
+  return {
+    ...(previous ?? {}),
+    characters: characterNames.map((name) => oldChars.get(lower(name)) ?? { name, unknown: true }),
+    locations: locationNames.map((location) => oldLocs.get(lower(location)) ?? { location, unknown: true }),
+  };
+}
+
+// who is in the new breakdown but has no actor yet, and which actors' characters no longer exist
+export function castCheck(artistLabels, crewRows) {
+  const labels = new Set(artistLabels.map(lower));
+  const cast = new Set(crewRows.map((r) => lower(r.character_name)).filter(Boolean));
+  return {
+    withoutActor: artistLabels.filter((l) => !cast.has(lower(l))),
+    orphanedActors: crewRows.filter((r) => r.character_name && !labels.has(lower(r.character_name))).map((r) => ({ character: r.character_name, actor: r.name })),
+  };
+}
+
+export function registerProductionSyncRoutes(app, db, tools) {
+  const { requireRole, userOwnsSceneList, buildBreakdownSourceText, generateDeepScriptBreakdownContent, classifyCastCategories, classifyEpisodeNumbers,
+    flattenScenesForAdSheet, generateAdSheetDetails, fetchCharacterNamesForSceneList, generateShootScheduleContent } = tools;
+  const allowed = requireRole("admin", "production_manager");
+
+  async function run(job, sceneListId) {
+    const step = (key) => job.steps.find((s) => s.key === key);
+    const begin = (key) => { step(key).state = "working"; };
+    const end = (key, state, note) => { const s = step(key); s.state = state; s.note = note ?? ""; };
+    try {
+      const sceneList = (await db.query("SELECT content FROM scene_lists WHERE id = $1", [sceneListId])).rows[0].content;
+      const sourceText = await buildBreakdownSourceText(sceneList, sceneListId);
+      const previousBreakdown = (await db.query("SELECT status FROM script_breakdowns WHERE scene_list_id = $1 ORDER BY created_at DESC LIMIT 1", [sceneListId])).rows[0];
+
+      // 1 + 2 — one new breakdown row, with the AD scene sheet in it
+      begin("breakdown");
+      let content = await generateDeepScriptBreakdownContent(sourceText);
+      const notes = [];
+      try { content = { ...content, artistList: await classifyCastCategories(sourceText, content.artistList ?? []) }; } catch (e) { notes.push("cast tiers will be filled in automatically"); console.error("Sync: cast tiers failed:", e.message); }
+      try { content = await classifyEpisodeNumbers(sourceText, content); } catch (e) { notes.push("episode numbers will be filled in automatically"); console.error("Sync: episode numbers failed:", e.message); }
+      end("breakdown", "done", `${(content.artistList ?? []).length} characters, ${(content.locationList ?? []).length} places${notes.length ? ` (${notes.join("; ")})` : ""}`);
+
+      begin("adSheet");
+      const entries = flattenScenesForAdSheet(sceneList);
+      const details = await generateAdSheetDetails(entries, content, sourceText);
+      content = { ...content, adSheet: entries.map((e, i) => ({ ...e, ...details[i] })) };
+      const status = previousBreakdown?.status === "approved" ? "approved" : "pending";
+      await db.query("INSERT INTO script_breakdowns (scene_list_id, content, status, feedback) VALUES ($1, $2, $3, $4)", [sceneListId, JSON.stringify(content), status, "Synchronized with the latest screenplay"]);
+      end("adSheet", "done", `${entries.length} scenes`);
+
+      // 3 — the schedule, only when one exists
+      begin("schedule");
+      const previousSchedule = (await db.query("SELECT content, status FROM shoot_schedules WHERE scene_list_id = $1 ORDER BY created_at DESC LIMIT 1", [sceneListId])).rows[0];
+      if (!previousSchedule) {
+        end("schedule", "skipped", "no Shoot Schedule yet — nothing to rebuild");
+      } else {
+        try {
+          const characterNames = await fetchCharacterNamesForSceneList(sceneListId, sceneList);
+          const locationNames = (content.locationList ?? []).map((l) => l.location?.en).filter(Boolean);
+          const prev = previousSchedule.content ?? {};
+          const completedDays = (prev.scheduleDays ?? []).filter((d) => d.completed);
+          const schedule = await generateShootScheduleContent(sceneList, characterNames, mergeAvailability(prev.availability, characterNames, locationNames), prev.targetDays, null, {
+            specialInstructions: prev.specialInstructions, completedDays, sourceText, breakdownContent: content,
+          });
+          await db.query("INSERT INTO shoot_schedules (scene_list_id, content, status, feedback) VALUES ($1, $2, $3, $4)", [sceneListId, JSON.stringify(schedule), previousSchedule.status === "approved" ? "approved" : "pending", "Synchronized with the latest screenplay"]);
+          end("schedule", "done", `${(schedule.scheduleDays ?? []).length} days${completedDays.length ? `, ${completedDays.length} completed day(s) kept` : ""}`);
+        } catch (error) {
+          console.error("Sync: the schedule failed:", error.message);
+          end("schedule", "error", "the old Shoot Schedule was kept — press Synchronize again or rebuild it from the Shoot Schedule section");
+        }
+      }
+
+      // 4 — the cast
+      begin("cast");
+      const crew = (await db.query("SELECT character_name, name FROM crew_members WHERE scene_list_id = $1 AND category = 'artist'", [sceneListId])).rows;
+      job.cast = castCheck((content.artistList ?? []).map((a) => a.label), crew);
+      end("cast", "done", `${job.cast.withoutActor.length} character(s) without an actor yet`);
+      job.status = "done";
+    } catch (error) {
+      console.error("Production sync failed:", error.message);
+      const working = job.steps.find((s) => s.state === "working");
+      if (working) { working.state = "error"; working.note = error.message; }
+      job.status = "error";
+      job.error = error.message;
+    }
+  }
+
+  app.post("/api/scene-lists/:id/sync-production", allowed, async (req, res) => {
+    const id = Number(req.params.id);
+    if (!(await userOwnsSceneList(req.user, id))) { res.status(403).json({ error: "You don't have access to this project." }); return; }
+    const list = (await db.query("SELECT status FROM scene_lists WHERE id = $1", [id])).rows[0];
+    if (!list) { res.status(404).json({ error: "Scene list not found" }); return; }
+    if (list.status !== "approved") { res.status(400).json({ error: "The screenplay must be approved first." }); return; }
+    for (const [k, j] of jobs) if (j.status !== "running" && Date.now() - j.startedAt > 60 * 60 * 1000) jobs.delete(k);
+    for (const [k, j] of jobs) if (j.sceneListId === id && j.status === "running") { res.json({ jobId: k, alreadyRunning: true }); return; }
+    const jobId = crypto.randomUUID();
+    const job = { sceneListId: id, status: "running", startedAt: Date.now(), steps: STEPS.map((s) => ({ ...s, state: "waiting", note: "" })), cast: null, error: null };
+    jobs.set(jobId, job);
+    run(job, id);
+    res.json({ jobId });
+  });
+
+  app.get("/api/scene-lists/:id/sync-production/:jobId", allowed, (req, res) => {
+    const job = jobs.get(req.params.jobId);
+    if (!job || job.sceneListId !== Number(req.params.id)) { res.status(404).json({ error: "That synchronization is no longer available." }); return; }
+    res.json({ status: job.status, steps: job.steps, cast: job.cast, error: job.error });
+  });
+}

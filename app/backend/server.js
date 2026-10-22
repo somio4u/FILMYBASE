@@ -43,6 +43,7 @@ import { ensureApprovalFormatSchema, registerApprovalFormatRoutes } from "./appr
 import { actorOf, byLabel, trackSceneAuthors } from "./sceneAuthors.js";
 import { ensureSmartSchedulerSchema, registerSmartSchedulerRoutes } from "./smartScheduler.js";
 import { registerAdRoutes } from "./adRoutes.js";
+import { registerProductionSyncRoutes } from "./productionSync.js";
 import { ensureLocationRenameSchema, registerLocationRenameRoutes } from "./locationRename.js";
 import { ensureSceneTagSchema, registerSceneTagRoutes } from "./sceneTags.js";
 import { registerLiveSyncRoutes } from "./liveSync.js";
@@ -1507,6 +1508,8 @@ const PRODUCTION_ONLY_ROUTES = [
   ["DELETE", /^\/api\/concepts\/(\d+)$/, "concept"],
   ["POST", /^\/api\/import-screenplay-for-production(\/file)?$/, null], // creates a project he owns
   ["POST", /^\/api\/scene-lists\/(\d+)\/reimport-screenplay(\/file)?$/, "sceneList"],
+  ["POST", /^\/api\/scene-lists\/(\d+)\/sync-production$/, "sceneList"],
+  ["GET", /^\/api\/scene-lists\/(\d+)\/sync-production\/[\w-]+$/, "sceneList"],
   ["GET", /^\/api\/scene-lists\/(\d+)\/(breakdown-freshness|director-overview|character-script(\/export|\/export-excel|\/share-link)?)$/, "sceneList"],
   ["GET", /^\/api\/screenplay\/scenes$/, "querySceneList"],
   ["POST", /^\/api\/script-breakdown$/, "bodySceneList"],
@@ -20417,6 +20420,11 @@ const smartScheduler = registerSmartSchedulerRoutes(app, db, {
   }),
 });
 registerAdRoutes(app, db, { requireRole, loadRows: smartScheduler.loadRows });
+// "Synchronize with the latest screenplay": rebuilds the Script Breakdown, the AD scene sheet and the Shoot Schedule from the CURRENT screenplay (productionSync.js)
+registerProductionSyncRoutes(app, db, {
+  requireRole, userOwnsSceneList, buildBreakdownSourceText, generateDeepScriptBreakdownContent, classifyCastCategories, classifyEpisodeNumbers,
+  flattenScenesForAdSheet, generateAdSheetDetails, fetchCharacterNamesForSceneList, generateShootScheduleContent,
+});
 // "Approval format" Word file (narrated Hinglish retelling of the episodes; see approvalFormat.js) — the AI only retells each scene
 registerApprovalFormatRoutes(app, db, {
   requireRole,

@@ -1,6 +1,7 @@
 import MoneyMeter from './MoneyMeter.jsx'
 import SmartScheduler from './SmartScheduler.jsx'
 import AdPapers from './AdPapers.jsx'
+import SyncProduction from './SyncProduction.jsx'
 import NamesPlaces from './NamesPlaces.jsx'
 import { useState, useEffect, useRef, useMemo, useCallback, useContext, createContext, Fragment, lazy, Suspense } from 'react'
 import { createPortal } from 'react-dom'
@@ -16220,6 +16221,20 @@ function App() {
       {activeAgent === 'production' && sceneList && sceneList.status === 'approved' && (
         <div className="three-act-structure" id="stage-breakdown">
           <MovieBreakdownFreshnessNote sceneListId={sceneList.id} t={t} />
+          {!isScreenplayWriter && (
+            <SyncProduction
+              backendUrl={BACKEND_URL}
+              sceneListId={sceneList.id}
+              onDone={async () => {
+                const response = await fetch(`${BACKEND_URL}/api/concepts/${conceptId}/full`)
+                if (!response.ok) return
+                const data = await response.json()
+                setScriptBreakdown(data.scriptBreakdown)
+                setShootSchedule(data.shootSchedule)
+                loadCrewMembers(sceneList.id)
+              }}
+            />
+          )}
           <h2>{t.scriptBreakdownHeading}</h2>
 
           {scriptBreakdown?.autoBackfillStatus === 'in_progress' && (

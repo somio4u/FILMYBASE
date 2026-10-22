@@ -71,3 +71,10 @@
 .ss-merge-form input { padding: 8px 10px; border-radius: 8px; border: 1px solid var(--border-subtle, rgba(138,180,248,.4)); background: var(--bg-input, rgba(0,0,0,.25)); color: inherit; font: inherit; }
 .ss-check { display: block; margin: 12px 0; font-size: .9rem; } .ss-check small { opacity: .65; display: block; margin-left: 26px; }
 .ss-note a { color: #9cc2ff; font-weight: 600; }
+
+/* Synchronize with the latest screenplay */
+.sync-steps { list-style: none; margin: 12px 0 0; padding: 0; display: grid; gap: 6px; }
+.sync-step { padding: 6px 10px; border-radius: 10px; background: rgba(255,255,255,.04); font-size: .9rem; opacity: .7; }
+.sync-step small { opacity: .75; }
+.sync-step.is-working, .sync-step.is-done, .sync-step.is-error { opacity: 1; }
+.sync-step.is-error { background: rgba(229,72,77,.15); }

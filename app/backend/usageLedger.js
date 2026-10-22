@@ -76,6 +76,9 @@ export async function projectOfRequest(db, req, sceneListConceptId) {
   if (m) return { type: "ai_movie", id: Number(m[1]) };
   m = path.match(/^\/api\/concepts\/(\d+)/) ?? path.match(/^\/api\/concept\/(\d+)/);
   if (m) return { type: "story", id: Number(m[1]) };
+  // the Smart Scheduler names the project's scene list in its path (the AI cost is the project's)
+  m = path.match(/^\/api\/smart-scheduler\/(\d+)\//);
+  if (m && sceneListConceptId) { const concept = await sceneListConceptId(m[1]).catch(() => null); if (concept) return { type: "story", id: concept }; }
   const body = req.body && typeof req.body === "object" ? req.body : {};
   const direct = num(body.conceptId ?? body.concept_id ?? req.query?.conceptId);
   if (direct) return { type: "story", id: direct };

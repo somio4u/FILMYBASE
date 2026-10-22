@@ -41,6 +41,7 @@ import { WRITER_ROLE, writerGatekeeper, ensureWriterSchema, registerWriterRoutes
 import { usageContext, installGeminiMetering, ensureUsageSchema, registerUsageRoutes, setSceneListResolver } from "./usageLedger.js";
 import { ensureApprovalFormatSchema, registerApprovalFormatRoutes } from "./approvalFormat.js";
 import { actorOf, byLabel, trackSceneAuthors } from "./sceneAuthors.js";
+import { ensureSmartSchedulerSchema, registerSmartSchedulerRoutes } from "./smartScheduler.js";
 import { ensureSceneTagSchema, registerSceneTagRoutes } from "./sceneTags.js";
 import { registerLiveSyncRoutes } from "./liveSync.js";
 import { registerChangeHistoryRoutes } from "./changeHistory.js";
@@ -20388,6 +20389,30 @@ registerAudioCueRoutes(app, db, requireRole, { store: productionMedia.store });
 registerChangeHistoryRoutes(app, db, requireRole);
 registerLiveSyncRoutes(app, db, requireRole);
 registerSceneTagRoutes(app, db, requireRole);
+// The Smart Scheduler: a separate agent that reads a project's approved screenplay and plans the shoot days (smartScheduler.js). The best model (Gemini Pro) analyses; the arithmetic is in scheduleSolver.js.
+registerSmartSchedulerRoutes(app, db, {
+  requireRole,
+  askModel: (systemInstruction, contents) => generateJsonContent({
+    model: SCENE_LIST_STRONG_MODEL_NAME,
+    contents,
+    config: {
+      systemInstruction,
+      responseSchema: {
+        type: Type.OBJECT,
+        properties: {
+          locationAliases: { type: Type.ARRAY, items: { type: Type.OBJECT, properties: { canonical: { type: Type.STRING }, aliases: { type: Type.ARRAY, items: { type: Type.STRING } } }, required: ["canonical", "aliases"] } },
+          characterAliases: { type: Type.ARRAY, items: { type: Type.OBJECT, properties: { canonical: { type: Type.STRING }, aliases: { type: Type.ARRAY, items: { type: Type.STRING } } }, required: ["canonical", "aliases"] } },
+          voiceOnly: { type: Type.ARRAY, items: { type: Type.STRING } },
+          artistKinds: { type: Type.ARRAY, items: { type: Type.OBJECT, properties: { name: { type: Type.STRING }, kind: { type: Type.STRING, enum: ["lead", "supporting", "extra", "child"] } }, required: ["name", "kind"] } },
+          sameDay: { type: Type.ARRAY, items: { type: Type.OBJECT, properties: { sceneIds: { type: Type.ARRAY, items: { type: Type.STRING } }, reason: { type: Type.STRING } }, required: ["sceneIds", "reason"] } },
+          order: { type: Type.ARRAY, items: { type: Type.OBJECT, properties: { before: { type: Type.STRING }, after: { type: Type.STRING }, reason: { type: Type.STRING } }, required: ["before", "after", "reason"] } },
+          notes: { type: Type.ARRAY, items: { type: Type.STRING } },
+        },
+        required: ["locationAliases", "characterAliases", "voiceOnly", "artistKinds", "sameDay", "order", "notes"],
+      },
+    },
+  }),
+});
 // "Approval format" Word file (narrated Hinglish retelling of the episodes; see approvalFormat.js) — the AI only retells each scene
 registerApprovalFormatRoutes(app, db, {
   requireRole,
@@ -20425,6 +20450,7 @@ ensureAiMovieSchema()
   .then(() => ensureScreenplayImportSchema(db))
   .then(() => ensureApprovalFormatSchema(db))
   .then(() => ensureSceneTagSchema(db))
+  .then(() => ensureSmartSchedulerSchema(db))
   .then(() => ensureAllProductionSchemas(db))
   .then(async (failures) => { try { const made = await backfillDrafts(db); await failInterruptedRequests(db); if (made) console.log(`Draft Management: ${made} existing project(s) are now Draft 1 of their project.`); } catch (error) { console.error("Draft backfill failed:", error.message); } return failures; })
   .catch((error) => console.error("Schema setup failed:", error.message))

@@ -1,4 +1,5 @@
 import MoneyMeter from './MoneyMeter.jsx'
+import SmartScheduler from './SmartScheduler.jsx'
 import { useState, useEffect, useRef, useMemo, useCallback, useContext, createContext, Fragment, lazy, Suspense } from 'react'
 import { createPortal } from 'react-dom'
 import ScriptEditor, { ScriptToolbar } from './ScriptEditor.jsx'
@@ -322,6 +323,8 @@ const LABELS = {
     appModeAiMovieHint: 'Make the whole film with AI — story to screen',
     appModeMoneyOption: 'Money Meter',
     appModeMoneyHint: 'What every project and every user has spent on AI (admin only)',
+    appModeSchedulerOption: 'Smart Scheduler',
+    appModeSchedulerHint: 'An agent that plans the whole shoot in the days you give (admin only)',
     aiMovieProductionLabel: 'Production',
     aiMovieAnalyzeIntro: "Paste anything — a concept, story, synopsis, bit sheet, or screenplay — and I'll tell you what stage it's at.",
     aiMovieAnalyzePlaceholder: 'Paste anything here…',
@@ -1256,6 +1259,8 @@ const LABELS = {
     appModeAiMovieHint: 'AI ସାଙ୍ଗରେ ପୁରା ଫିଲ୍ମ ବନା — ଗପରୁ ସ୍କ୍ରିନ୍ ଯାଏ',
     appModeMoneyOption: 'ମନି ମିଟର',
     appModeMoneyHint: 'କେଉଁ ପ୍ରୋଜେକ୍ଟ ଓ କେଉଁ ୟୁଜର AI ରେ କେତେ ଖର୍ଚ୍ଚ କଲେ (କେବଳ ଆଡମିନ୍)',
+    appModeSchedulerOption: 'ସ୍ମାର୍ଟ ସିଡ୍ୟୁଲର୍',
+    appModeSchedulerHint: 'ଆପଣ ଦେଇଥିବା ଦିନରେ ପୁରା ସୁଟିଂ ଯୋଜନା କରୁଥିବା ଏଜେଣ୍ଟ (କେବଳ ଆଡମିନ୍)',
     aiMovieProductionLabel: 'ପ୍ରଡକ୍ସନ୍',
     aiMovieAnalyzeIntro: 'ଯାହା ବି ପେଷ୍ଟ କର — କନସେପ୍ଟ, ଗପ, ସିନୋପସିସ୍, ବିଟ୍ ସିଟ୍ ବା ସ୍କ୍ରିନପ୍ଲେ — ମୁଁ କହିଦେବି ସେଇଟା କେଉଁ ଷ୍ଟେଜ୍‌ରେ ଅଛି।',
     aiMovieAnalyzePlaceholder: 'ଯାହା ବି ଏଠି ପେଷ୍ଟ କର…',
@@ -13361,7 +13366,7 @@ function App() {
     const chooseMode = (mode) => {
       if (modeChoice) return
       const reduceMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
-      const open = () => (mode === 'ai' ? handleChooseAiMovieMode() : mode === 'money' ? setAppMode('money') : setAppMode('movie'))
+      const open = () => (mode === 'ai' ? handleChooseAiMovieMode() : mode === 'money' ? setAppMode('money') : mode === 'scheduler' ? setAppMode('scheduler') : setAppMode('movie'))
       if (reduceMotion) {
         open()
         return
@@ -13376,7 +13381,7 @@ function App() {
     const modes = [
       { key: 'movie', icon: '🎬', label: t.appModeMovieOption, hint: t.appModeMovieHint },
       { key: 'ai', icon: '✨', label: t.appModeAiMovieOption, hint: t.appModeAiMovieHint },
-      ...(currentUser.role === 'admin' ? [{ key: 'money', icon: '💰', label: t.appModeMoneyOption, hint: t.appModeMoneyHint }] : []),
+      ...(currentUser.role === 'admin' ? [{ key: 'money', icon: '💰', label: t.appModeMoneyOption, hint: t.appModeMoneyHint }, { key: 'scheduler', icon: '🗓️', label: t.appModeSchedulerOption, hint: t.appModeSchedulerHint }] : []),
     ]
     return (
       <div className={`mode-stage${modeChoice ? ` is-choosing is-choosing-${modeChoice}` : ''}`}>
@@ -13403,6 +13408,10 @@ function App() {
 
   if (appMode === 'money' && currentUser.role === 'admin') {
     return <MoneyMeter backendUrl={BACKEND_URL} onBack={() => setAppMode(null)} />
+  }
+
+  if (appMode === 'scheduler' && currentUser.role === 'admin') {
+    return <SmartScheduler backendUrl={BACKEND_URL} onBack={() => setAppMode(null)} />
   }
 
   if (appMode === 'ai') {

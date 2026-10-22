@@ -7901,3 +7901,21 @@ body.is-script-edit-mode { overflow: hidden; }
 
 /* the "file ready" tap target of the approval-format download (a real tap always saves the file, also on a phone) */
 .approval-ready-link { display: block; max-width: 100%; box-sizing: border-box; padding: 10px 16px; border-radius: 999px; background: #1d5fd6; color: #fff; font-weight: 600; text-align: center; text-decoration: none; word-break: break-word; }
+
+/* ---- colour tags on scenes (admin marks, writer sees) ---- */
+.script-nav-item { position: relative; }
+.scene-tag-dot { position: absolute; top: 8px; right: 8px; width: 11px; height: 11px; border-radius: 50%; box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.35); }
+.script-nav-row.is-filtered-out { display: none; }
+.scene-tag-box { margin: 6px 0 10px; padding: 8px 12px; border: 1px solid; border-left-width: 5px; border-radius: 8px; font-family: var(--font-body, system-ui, sans-serif); font-size: 0.85rem; line-height: 1.4; color: var(--script-ink, #141414); text-transform: none; }
+.scene-tag-by { opacity: 0.65; font-size: 0.78rem; }
+.scene-tag-done-button { display: block; margin-top: 8px; padding: 6px 14px; font-size: 0.82rem; }
+.scene-tag-summary { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: center; margin: 8px 0; }
+.scene-tag-chip { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; border-radius: 999px; border: 1px solid var(--border-subtle); font-size: 0.8rem; }
+.scene-tag-chip i { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+.scene-tag-summary .cancel-button.is-active { outline: 2px solid currentColor; }
+.scene-tag-panel { margin: 0 0 14px; padding: 10px; border: 1px solid var(--border-subtle); border-radius: 10px; }
+.scene-tag-choices { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+.scene-tag-choice { padding: 5px 12px; border-radius: 999px; border: 2px solid var(--tag-color); background: transparent; color: inherit; font-size: 0.8rem; cursor: pointer; }
+.scene-tag-choice.is-active { background: var(--tag-color); color: #fff; font-weight: 700; }
+.scene-tag-note { width: 100%; box-sizing: border-box; margin-bottom: 8px; padding: 7px 10px; border-radius: 8px; border: 1px solid var(--border-subtle); background: var(--bg-input); color: inherit; font: inherit; font-size: 0.85rem; }
+.script-nav-item:has(.scene-tag-dot) .script-nav-heading { padding-right: 18px; }

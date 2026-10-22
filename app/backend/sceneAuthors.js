@@ -13,7 +13,7 @@ export function actorOf(user) {
   return user ? { id: user.id, name: user.name, role: user.role } : null;
 }
 
-const TRACKED = /^\/api\/(screenplay\/|scene-lists\/\d+\/)/;
+const TRACKED = /^\/api\/(screenplay\/|scene-lists\/\d+\/(?!scene-tag|approval-format))/;
 
 // Express middleware. A request that changes the screenplay writes its new versions before it answers; just before the answer goes out,
 // the versions created since the request began are marked with the person who asked.

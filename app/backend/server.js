@@ -41,6 +41,7 @@ import { WRITER_ROLE, writerGatekeeper, ensureWriterSchema, registerWriterRoutes
 import { usageContext, installGeminiMetering, ensureUsageSchema, registerUsageRoutes, setSceneListResolver } from "./usageLedger.js";
 import { ensureApprovalFormatSchema, registerApprovalFormatRoutes } from "./approvalFormat.js";
 import { actorOf, byLabel, trackSceneAuthors } from "./sceneAuthors.js";
+import { ensureSceneTagSchema, registerSceneTagRoutes } from "./sceneTags.js";
 import { registerLiveSyncRoutes } from "./liveSync.js";
 import { registerChangeHistoryRoutes } from "./changeHistory.js";
 import { ensureScreenplayImportSchema, registerScreenplayImportRoutes } from "./screenplayImportRoutes.js";
@@ -11812,7 +11813,7 @@ function withSceneArray(content, episodeIndex, scenes) {
 // Moves every stored scene at position >= fromIndex (in this film or
 // episode) by `delta`: all screenplay versions and the shoot schedule.
 async function shiftScenePositions(client, sceneListId, episodeIndex, fromIndex, delta) {
-  for (const table of ["screenplay_scenes", "screenplay_scene_redo"]) {
+  for (const table of ["screenplay_scenes", "screenplay_scene_redo", "scene_tags"]) {
     await client.query(
       `UPDATE ${table} SET scene_index = scene_index + $4
        WHERE scene_list_id = $1 AND episode_index IS NOT DISTINCT FROM $2 AND scene_index >= $3`,
@@ -11943,7 +11944,7 @@ app.delete("/api/scene-lists/:id/scenes", requireRole("admin"), async (req, res)
       return;
     }
 
-    for (const table of ["screenplay_scenes", "screenplay_scene_redo"]) {
+    for (const table of ["screenplay_scenes", "screenplay_scene_redo", "scene_tags"]) {
       await client.query(
         `DELETE FROM ${table} WHERE scene_list_id = $1 AND episode_index IS NOT DISTINCT FROM $2 AND scene_index = $3`,
         [sceneListId, episodeIndex, sceneIndex]
@@ -12063,7 +12064,7 @@ app.post("/api/scene-lists/:id/scenes/move", requireRole("admin"), async (req, r
     const { content, scenes } = locked;
     if (!validMove(scenes.length, from, to)) { await client.query("ROLLBACK"); res.status(400).json({ error: "That move is not possible." }); return; }
     const { lo, hi, sql } = moveCaseSql(from, to);
-    for (const table of ["screenplay_scenes", "screenplay_scene_redo"]) {
+    for (const table of ["screenplay_scenes", "screenplay_scene_redo", "scene_tags"]) {
       await client.query(
         `UPDATE ${table} SET scene_index = ${sql} WHERE scene_list_id = $1 AND episode_index IS NOT DISTINCT FROM $2 AND scene_index BETWEEN $3 AND $4`,
         [sceneListId, episodeIndex, lo, hi]
@@ -20386,6 +20387,7 @@ setSceneListResolver(sceneListConceptId);
 registerAudioCueRoutes(app, db, requireRole, { store: productionMedia.store });
 registerChangeHistoryRoutes(app, db, requireRole);
 registerLiveSyncRoutes(app, db, requireRole);
+registerSceneTagRoutes(app, db, requireRole);
 // "Approval format" Word file (narrated Hinglish retelling of the episodes; see approvalFormat.js) — the AI only retells each scene
 registerApprovalFormatRoutes(app, db, {
   requireRole,
@@ -20422,6 +20424,7 @@ ensureAiMovieSchema()
   .then(() => ensureUsageSchema(db))
   .then(() => ensureScreenplayImportSchema(db))
   .then(() => ensureApprovalFormatSchema(db))
+  .then(() => ensureSceneTagSchema(db))
   .then(() => ensureAllProductionSchemas(db))
   .then(async (failures) => { try { const made = await backfillDrafts(db); await failInterruptedRequests(db); if (made) console.log(`Draft Management: ${made} existing project(s) are now Draft 1 of their project.`); } catch (error) { console.error("Draft backfill failed:", error.message); } return failures; })
   .catch((error) => console.error("Schema setup failed:", error.message))

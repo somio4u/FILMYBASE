@@ -7,7 +7,7 @@ const ok = (method, path) => Boolean(matchWriterRoute(method, path));
 test("a screenplay writer may use the story and screenplay tools", () => {
   for (const [m, p] of [
     ["GET", "/api/concepts/12/full"], ["POST", "/api/concepts/12/title"],
-    ["POST", "/api/screenplay/scene"], ["POST", "/api/screenplay/scene/voice"], ["POST", "/api/screenplay/scene/undo"], ["POST", "/api/screenplay/scene/55/edit"], ["POST", "/api/screenplay/scene/55/draft"], ["GET", "/api/scene-lists/7/sync"],
+    ["POST", "/api/screenplay/scene"], ["POST", "/api/screenplay/scene/voice"], ["POST", "/api/screenplay/scene/undo"], ["POST", "/api/screenplay/scene/55/edit"], ["POST", "/api/screenplay/scene/55/draft"], ["GET", "/api/scene-lists/7/sync"], ["PUT", "/api/scene-lists/7/scene-tag"],
     ["GET", "/api/screenplay/scenes"], ["POST", "/api/voice/understand"], ["POST", "/api/transcribe"],
     ["POST", "/api/scene-lists/7/scenes"], ["DELETE", "/api/scene-lists/7/scenes"], ["POST", "/api/scene-lists/7/scenes/move"], ["PATCH", "/api/scene-lists/7/scenes/heading"],
     ["POST", "/api/scene-lists/7/rename-character"], ["POST", "/api/scene-lists/7/convert-language"], ["GET", "/api/scene-lists/7/screenplay-pdf"],
@@ -43,6 +43,8 @@ test("what a writer did is named in plain terms, with the episode", () => {
   assert.equal(workOf("POST", "/api/screenplay/scene/55/edit", {}).sceneRowId, 55);
   assert.equal(workOf("POST", "/api/screenplay/scene/55/draft", {}).action, "edit");
   assert.deepEqual(workOf("POST", "/api/scene-lists/7/rename-character", {}), { action: "rename", episodeIndex: null, sceneIndex: null });
+  assert.equal(workOf("PUT", "/api/scene-lists/7/scene-tag", { episodeIndex: 1, sceneIndex: 2, tag: "done" }).action, "tagdone");
+  assert.equal(workOf("PUT", "/api/scene-lists/7/scene-tag", { tag: "change" }).action, "tag");
   assert.equal(workOf("POST", "/api/scene-lists/7/scenes/plan", {}), null);
   assert.equal(workOf("POST", "/api/pitch-deck", {}), null);
   assert.equal(workOf("POST", "/api/scene-lists/7/rename-character", { preview: true }), null);

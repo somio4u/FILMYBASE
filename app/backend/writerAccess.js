@@ -33,6 +33,7 @@ export const WRITER_ROUTES = [
   ["^(GET)$", /^\/api\/scene-lists\/(\d+)\/(breakdown-freshness|script-check|screenplay-pdf)$/, "sceneList"],
   ["^(POST)$", /^\/api\/scene-lists\/(\d+)\/(convert-language|rename-character|script-check)$/, "sceneList"],
   ["^(POST|DELETE|PATCH)$", /^\/api\/scene-lists\/(\d+)\/scenes(\/(move|duplicate|heading|plan))?$/, "sceneList"],
+  ["^(PUT)$", /^\/api\/scene-lists\/(\d+)\/scene-tag$/, "sceneList"], // the writer may only mark a tagged scene "done" (sceneTags.js decides)
   ["^(GET)$", /^\/api\/scene-lists\/(\d+)\/sync$/, "sceneList"], // the 20-second "did anything change?" of the open screenplay
   ["^(GET)$", /^\/api\/language-jobs\/[A-Za-z0-9_-]+$/, null],
   ["^(GET)$", /^\/api\/screenplay\/scenes$/, "querySceneList"],
@@ -127,6 +128,7 @@ export function workOf(method, path, body) {
     const action = m[1] ?? (method === "DELETE" ? "delete" : method === "POST" ? "add" : null);
     return action ? place(action) : null;
   }
+  if (method === "PUT" && /^\/api\/scene-lists\/\d+\/scene-tag$/.test(path)) return place(b.tag === "done" ? "tagdone" : "tag");
   if (method === "POST" && /^\/api\/scene-lists\/\d+\/rename-character$/.test(path)) return b.preview === true ? null : { action: "rename", episodeIndex: null, sceneIndex: null };
   if (method === "POST" && /^\/api\/scene-lists\/\d+\/convert-language$/.test(path)) return { action: "convert", episodeIndex: null, sceneIndex: null };
   return null;

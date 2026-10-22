@@ -4,6 +4,7 @@
 // version of every scene (id + who made it), and who else is editing which scene right now ("Kumar is editing E4S3").
 // "Editing right now" is remembered here, in memory, for one minute after the last time that person's screen said so.
 import { byLabel } from "./sceneAuthors.js";
+import { listTags } from "./sceneTags.js";
 
 const PRESENCE_MS = 60 * 1000;
 
@@ -51,6 +52,7 @@ export function registerLiveSyncRoutes(app, db, requireRole) {
       ...(known && known !== list.hash ? { sceneList: list.content } : {}),
       scenes: scenes.map((r) => [r.episode_index, r.scene_index, r.id, byLabel(r.made_by)]),
       editors: othersEditing(presence, id, req.user.id),
+      tags: await listTags(db, id),
     });
   });
 }

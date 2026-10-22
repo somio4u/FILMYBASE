@@ -128,7 +128,7 @@ const LABELS = {
     workEpisode: (i) => (i === null || i === undefined ? 'Whole script / film' : `Episode ${i + 1}`),
     workEpisodeLine: (e) => `${e.changes} change${e.changes === 1 ? '' : 's'} in ${e.scenes} scene${e.scenes === 1 ? '' : 's'}, opened ${e.opens}×`,
     workFirstLast: (a, b) => `first ${a} · last ${b}`,
-    workActions: { write: 'wrote a scene (AI)', edit: 'edited a scene', changes: 'asked the AI for changes', undo: 'undo', redo: 'redo', voice: 'spoke a scene', add: 'added a scene', delete: 'deleted a scene', move: 'moved a scene', heading: 'changed a scene heading', duplicate: 'copied a scene', rename: 'renamed a character', convert: 'changed the language', open: 'opened' },
+    workActions: { write: 'wrote a scene (AI)', edit: 'edited a scene', changes: 'asked the AI for changes', undo: 'undo', redo: 'redo', voice: 'spoke a scene', add: 'added a scene', delete: 'deleted a scene', move: 'moved a scene', heading: 'changed a scene heading', duplicate: 'copied a scene', rename: 'renamed a character', convert: 'changed the language', open: 'opened', tag: 'tagged a scene', tagdone: 'marked a scene done' },
     workRecent: 'Latest actions',
     reviewTitle: (i) => (i === null || i === undefined ? '🕘 Review changes — whole script' : `🕘 Review changes — Episode ${i + 1}`),
     historyEpisodeLine: (e) => `${e.totalChanges} change${e.totalChanges === 1 ? '' : 's'} in ${e.changedScenes} of ${e.sceneCount} scenes`,
@@ -468,6 +468,16 @@ const LABELS = {
     syncKeepMine: 'Keep mine',
     syncEditing: (who, where) => `${who} is editing ${where}`,
     syncEditingThis: (who) => `${who} is editing this scene right now`,
+    sceneTagLabels: { change: 'Change', check: 'Check', new: 'New', done: 'Done' },
+    sceneTagPanelTitle: 'Tag this scene (for the writer)',
+    sceneTagNotePlaceholder: 'Note for the writer (optional)',
+    sceneTagClear: 'Remove tag',
+    sceneTagMarkDone: 'Mark done',
+    sceneTagDoneBy: (who) => `done by ${who}`,
+    tagOnlyTasks: (n) => `Only scenes to work on (${n})`,
+    tagShowAll: 'Show all scenes',
+    tagNext: '▶ Next scene to work on',
+    tagNoneLeft: 'Nothing left to work on in this episode.',
     approvalLost: 'The server was restarted while the file was being prepared. Please press the button once more — what is already done is remembered.',
     approvalNote: 'For approval, not for the shoot. The AI retells each scene in Hinglish with the cue lines; the first time takes a few minutes, later downloads are quick.',
     downloadFormatWord: 'Word',
@@ -1052,7 +1062,7 @@ const LABELS = {
     workEpisode: (i) => (i === null || i === undefined ? 'ସମ୍ପୂର୍ଣ୍ଣ ସ୍କ୍ରିପ୍ଟ / ଫିଲ୍ମ' : `ଏପିସୋଡ୍ ${i + 1}`),
     workEpisodeLine: (e) => `${e.scenes} ଦୃଶ୍ୟରେ ${e.changes} ବଦଳ, ${e.opens} ଥର ଖୋଲିଛି`,
     workFirstLast: (a, b) => `ପ୍ରଥମ ${a} · ଶେଷ ${b}`,
-    workActions: { write: 'ଦୃଶ୍ୟ ଲେଖିଲା (AI)', edit: 'ଦୃଶ୍ୟ ବଦଳାଇଲା', changes: 'AI ଠାରୁ ବଦଳ ମାଗିଲା', undo: 'undo', redo: 'redo', voice: 'କହି ଦୃଶ୍ୟ ଲେଖିଲା', add: 'ଦୃଶ୍ୟ ଯୋଡ଼ିଲା', delete: 'ଦୃଶ୍ୟ ହଟାଇଲା', move: 'ଦୃଶ୍ୟ ଘୁଞ୍ଚାଇଲା', heading: 'ଦୃଶ୍ୟ ହେଡିଂ ବଦଳାଇଲା', duplicate: 'ଦୃଶ୍ୟ କପି କଲା', rename: 'ଚରିତ୍ର ନାମ ବଦଳାଇଲା', convert: 'ଭାଷା ବଦଳାଇଲା', open: 'ଖୋଲିଲା' },
+    workActions: { write: 'ଦୃଶ୍ୟ ଲେଖିଲା (AI)', edit: 'ଦୃଶ୍ୟ ବଦଳାଇଲା', changes: 'AI ଠାରୁ ବଦଳ ମାଗିଲା', undo: 'undo', redo: 'redo', voice: 'କହି ଦୃଶ୍ୟ ଲେଖିଲା', add: 'ଦୃଶ୍ୟ ଯୋଡ଼ିଲା', delete: 'ଦୃଶ୍ୟ ହଟାଇଲା', move: 'ଦୃଶ୍ୟ ଘୁଞ୍ଚାଇଲା', heading: 'ଦୃଶ୍ୟ ହେଡିଂ ବଦଳାଇଲା', duplicate: 'ଦୃଶ୍ୟ କପି କଲା', rename: 'ଚରିତ୍ର ନାମ ବଦଳାଇଲା', convert: 'ଭାଷା ବଦଳାଇଲା', open: 'ଖୋଲିଲା', tag: 'ଦୃଶ୍ୟରେ ନିଶାଣ ଲଗାଇଲା', tagdone: 'ଦୃଶ୍ୟ ହୋଇଗଲା ବୋଲି ଚିହ୍ନାଇଲା' },
     workRecent: 'ଶେଷ କାମଗୁଡ଼ିକ',
     reviewTitle: (i) => (i === null || i === undefined ? '🕘 ବଦଳ ସମୀକ୍ଷା — ସମ୍ପୂର୍ଣ୍ଣ ସ୍କ୍ରିପ୍ଟ' : `🕘 ବଦଳ ସମୀକ୍ଷା — ଏପିସୋଡ୍ ${i + 1}`),
     historyEpisodeLine: (e) => `${e.sceneCount} ମଧ୍ୟରୁ ${e.changedScenes} ଦୃଶ୍ୟରେ ${e.totalChanges} ବଦଳ`,
@@ -1392,6 +1402,16 @@ const LABELS = {
     syncKeepMine: 'ମୋ ଲେଖା ରଖ',
     syncEditing: (who, where) => `${who} ${where} ଏଡିଟ୍ କରୁଛନ୍ତି`,
     syncEditingThis: (who) => `${who} ଏବେ ଏହି ସିନ୍ ଏଡିଟ୍ କରୁଛନ୍ତି`,
+    sceneTagLabels: { change: 'ବଦଳାଅ', check: 'ଦେଖ', new: 'ନୂଆ ଲେଖ', done: 'ହୋଇଗଲା' },
+    sceneTagPanelTitle: 'ଏହି ସିନ୍‌ରେ ନିଶାଣ ଲଗାଅ (ଲେଖକଙ୍କ ପାଇଁ)',
+    sceneTagNotePlaceholder: 'ଲେଖକଙ୍କ ପାଇଁ ନୋଟ୍ (ଇଚ୍ଛାଧୀନ)',
+    sceneTagClear: 'ନିଶାଣ ହଟାଅ',
+    sceneTagMarkDone: 'ହୋଇଗଲା',
+    sceneTagDoneBy: (who) => `${who} କରିଛନ୍ତି`,
+    tagOnlyTasks: (n) => `କେବଳ କାମ ଥିବା ସିନ୍ (${n})`,
+    tagShowAll: 'ସବୁ ସିନ୍ ଦେଖାଅ',
+    tagNext: '▶ ପରବର୍ତ୍ତୀ କାମ ଥିବା ସିନ୍',
+    tagNoneLeft: 'ଏହି ଏପିସୋଡ୍‌ରେ ଆଉ କାମ ନାହିଁ।',
     approvalLost: 'ଫାଇଲ୍ ପ୍ରସ୍ତୁତ ହେଉଥିବା ବେଳେ ସର୍ଭର୍ ପୁଣି ଚାଲୁ ହେଲା। ଦୟାକରି ବଟନ୍ ଆଉଥରେ ଦବାନ୍ତୁ — ଯାହା ହୋଇସାରିଛି ତାହା ମନେ ଅଛି।',
     approvalNote: 'ଅନୁମୋଦନ ପାଇଁ, ସୁଟିଂ ପାଇଁ ନୁହେଁ। AI ପ୍ରତ୍ୟେକ ଦୃଶ୍ୟକୁ Hinglish ରେ କ୍ୟୁ ଲାଇନ୍ ସହ ଲେଖେ; ପ୍ରଥମ ଥର କିଛି ମିନିଟ୍ ଲାଗେ, ପରେ ଶୀଘ୍ର।',
     downloadFormatWord: 'Word',
@@ -4332,6 +4352,11 @@ function LanguageChanger({ t, sceneListId, episodeIndex, sceneIndex, sceneNumber
   )
 }
 
+// colour tags on scenes (the admin marks, the writer sees; see sceneTags.js)
+const SCENE_TAG_COLORS = { change: '#e5484d', check: '#f5b800', new: '#3b82f6', done: '#2ea043' }
+const SCENE_TAG_TASKS = ['change', 'check', 'new'] // still to work on (green = done)
+const tagsToMap = (list) => Object.fromEntries((list ?? []).map(([e, s, tag, note, by, doneBy]) => [`${e ?? 'film'}-${s}`, { tag, note, by, doneBy }]))
+
 function MovieScreenplayWorkspace({
   sceneList, episodes, t, language, screenplay, scriptTheme, onChangeScriptTheme, onSceneSaved, onReloadScenes, onSceneListChanged: onSceneListChangedFromParent, deckId, onDeckChanged, projectCharacterNames, resume, onProgress, onEpisodeChange,
 }) {
@@ -4434,8 +4459,11 @@ function MovieScreenplayWorkspace({
   const syncRef = useRef({ hash: null, busy: false, tick: null, mineUntil: {} })
   const [conflicts, setConflicts] = useState({}) // scene key -> { their, by, mine } : someone else saved the scene while it was open / being saved here
   const [editors, setEditors] = useState([]) // [{ label, key }] the others who are editing right now
+  const [tags, setTags] = useState({}) // scene key -> { tag, note, by, doneBy }: the admin's colour tags
+  const [onlyTasks, setOnlyTasks] = useState(false) // show only the scenes that still need work
+  const [tagNote, setTagNote] = useState('') // the admin's note box in the scene panel
   // a change made from this screen is already on it; the next check only has to learn the new "list hash"
-  const onSceneListChanged = (content) => { syncRef.current.hash = null; return onSceneListChangedFromParent?.(content) }
+  const onSceneListChanged = (content) => { syncRef.current.hash = null; setTimeout(() => syncRef.current.tick?.(), 400); return onSceneListChangedFromParent?.(content) }
   const [saveAll, setSaveAll] = useState(null) // { done, total } while "Save all changes" is working
   const [editError, setEditError] = useState(null)
   const [editFixes, setEditFixes] = useState(null)
@@ -4641,6 +4669,7 @@ function MovieScreenplayWorkspace({
         const previousHash = state.hash
         state.hash = data.hash
         setEditors(data.editors ?? [])
+        setTags(tagsToMap(data.tags))
         if (previousHash && data.sceneList) {
           if (live.current.editing?.dirty) await live.current.flushEdit()
           await onSceneListChangedFromParent?.(data.sceneList)
@@ -4707,6 +4736,44 @@ function MovieScreenplayWorkspace({
       if (response.status === 409 && data.latest) { setConflicts((prev) => ({ ...prev, [key]: { ...c, their: data.latest, by: data.by } })); return }
       if (response.ok) { syncRef.current.mineUntil[key] = Date.now() + 6000; onSceneSaved?.(key, data.scene); dropConflict(key) }
     } catch { /* the banner stays so it can be tried again */ }
+  }
+
+  // ---- colour tags ----------------------------------------------------------------------------------------------------------------
+  const tagOf = (index) => tags[keyOf(index)]
+  const isTask = (index) => SCENE_TAG_TASKS.includes(tagOf(index)?.tag)
+  async function setSceneTag(index, tag, note) {
+    try {
+      const response = await fetch(`${BACKEND_URL}/api/scene-lists/${sceneList.id}/scene-tag`, {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ episodeIndex: group.episodeIndex, sceneIndex: index, tag, note: note ?? '' }),
+      })
+      const data = await response.json().catch(() => ({}))
+      if (response.ok) setTags(tagsToMap(data.tags))
+      else setSceneChangeError(data.error || t.genericError)
+    } catch { setSceneChangeError(t.genericError) }
+  }
+  const taskIndexes = scenes.map((_, i) => i).filter(isTask)
+  const tagCounts = Object.fromEntries(Object.keys(SCENE_TAG_COLORS).map((tg) => [tg, scenes.filter((_, i) => tagOf(i)?.tag === tg).length]))
+  function goToNextTask() {
+    if (taskIndexes.length === 0) { setSceneChangeError(t.tagNoneLeft); return }
+    selectScene(taskIndexes.find((i) => i > sceneIndex) ?? taskIndexes[0], true)
+  }
+  useEffect(() => { setTagNote(tags[selectedKey]?.note ?? '') }, [selectedKey, tags[selectedKey]?.note])
+  // the tag's box under a scene heading: what is asked, the note, who asked — and for the writer a button to say "done"
+  function renderTagBox(index) {
+    const tg = tagOf(index)
+    if (!tg) return null
+    const color = SCENE_TAG_COLORS[tg.tag]
+    return (
+      <div className="scene-tag-box" style={{ borderColor: color, background: `${color}26` }} onClick={(event) => event.stopPropagation()}>
+        <strong style={{ color }}>● {t.sceneTagLabels[tg.tag]}</strong>
+        {tg.note ? <span> — {tg.note}</span> : null}
+        <span className="scene-tag-by"> · {tg.by}{tg.doneBy ? ` · ${t.sceneTagDoneBy(tg.doneBy)}` : ''}</span>
+        {onProgress && SCENE_TAG_TASKS.includes(tg.tag) && (
+          <button type="button" className="choose-button scene-tag-done-button" onClick={() => setSceneTag(index, 'done')}>✔ {t.sceneTagMarkDone}</button>
+        )}
+      </div>
+    )
   }
 
   function submitEdit() {
@@ -5169,13 +5236,14 @@ function MovieScreenplayWorkspace({
 
   function renderEditableScene(index, s) {
     return (
-      <div key={index} id={`movie-script-scene-${index}`} className="script-scene is-selected is-editing script-scene-doc">
+      <div key={index} id={`movie-script-scene-${index}`} className="script-scene is-selected is-editing script-scene-doc" style={tagOf(index) ? { boxShadow: `-6px 0 0 -2px ${SCENE_TAG_COLORS[tagOf(index).tag]}` } : undefined}>
         <p className="script-slug" onClick={slugClick(index)} title={editMode ? t.headingClickHint : undefined} style={editMode ? { cursor: 'pointer' } : undefined}>
           <span className="script-scene-number script-scene-number-left">{numberOf(s, index)}</span>
           {movieSlugline(s)}
           <span className="script-scene-number script-scene-number-right">{numberOf(s, index)}</span>
         </p>
         {renderHeadingForm(index)}
+        {renderTagBox(index)}
         <ScriptEditor
           ref={editorRef}
           elements={editing.elements}
@@ -5247,6 +5315,19 @@ function MovieScreenplayWorkspace({
           </div>
         )}
         <RuntimeSummary total={group.total} target={group.target} t={t} />
+        {Object.values(tagCounts).some((n) => n > 0) && (
+          <div className="scene-tag-summary">
+            {Object.keys(SCENE_TAG_COLORS).filter((tg) => tagCounts[tg] > 0).map((tg) => (
+              <span key={tg} className="scene-tag-chip"><i style={{ background: SCENE_TAG_COLORS[tg] }} />{t.sceneTagLabels[tg]} {tagCounts[tg]}</span>
+            ))}
+            {taskIndexes.length > 0 && (
+              <>
+                <button type="button" className={`cancel-button${onlyTasks ? ' is-active' : ''}`} onClick={() => setOnlyTasks((v) => !v)}>{onlyTasks ? t.tagShowAll : t.tagOnlyTasks(taskIndexes.length)}</button>
+                <button type="button" className="cancel-button" onClick={goToNextTask}>{t.tagNext}</button>
+              </>
+            )}
+          </div>
+        )}
         {editors.length > 0 && (
           <p className="script-tools-editing-note sync-editors">
             ✎ {editors.map((e) => t.syncEditing(e.label, conflictLabel(e.key))).join(' · ')}
@@ -5275,7 +5356,7 @@ function MovieScreenplayWorkspace({
                 {scenes.map((s, index) => (
                   <div
                     key={index}
-                    className={`script-nav-row${drag?.from === index ? ' is-dragging' : ''}${drag && drag.over === index ? (drag.after ? ' is-drop-after' : ' is-drop-before') : ''}`}
+                    className={`script-nav-row${onlyTasks && !isTask(index) ? ' is-filtered-out' : ''}${drag?.from === index ? ' is-dragging' : ''}${drag && drag.over === index ? (drag.after ? ' is-drop-after' : ' is-drop-before') : ''}`}
                     draggable
                     title={t.sceneDragHint}
                     onDragStart={(event) => { event.dataTransfer.effectAllowed = 'move'; event.dataTransfer.setData('text/plain', String(index)); setDrag({ from: index, over: null, after: false }) }}
@@ -5292,6 +5373,7 @@ function MovieScreenplayWorkspace({
                   >
                     <button type="button" className={`script-nav-item${index === sceneIndex ? ' is-active' : ''}${draftOf(index) ? ' is-written' : ''}`} onClick={() => selectScene(index, true)}>
                       <span className="script-nav-number">{numberOf(s, index)}</span>
+                      {tagOf(index) && <span className="scene-tag-dot" style={{ background: SCENE_TAG_COLORS[tagOf(index).tag] }} title={`${t.sceneTagLabels[tagOf(index).tag]}${tagOf(index).note ? ` — ${tagOf(index).note}` : ''}`} />}
                       <span className="script-nav-heading">{movieSlugline(s)}</span>
                       <span className="script-nav-duration">
                         {typeof s.estimatedMinutes === 'number' ? t.aiMovieShortDuration(s.estimatedMinutes) : ''}
@@ -5331,7 +5413,7 @@ function MovieScreenplayWorkspace({
                         key={index}
                         id={`movie-script-scene-${index}`}
                         className={`script-scene${index === sceneIndex ? ' is-selected' : ''}${d ? '' : ' is-unwritten'}`}
-                        style={{ '--scene-order': index }}
+                        style={{ '--scene-order': index, ...(tagOf(index) ? { boxShadow: `-6px 0 0 -2px ${SCENE_TAG_COLORS[tagOf(index).tag]}` } : {}), ...(onlyTasks && !isTask(index) ? { display: 'none' } : {}) }}
                         onClick={(event) => {
                           selectScene(index, false)
                           // in edit mode a click on any written scene opens it for typing right where you clicked
@@ -5350,6 +5432,7 @@ function MovieScreenplayWorkspace({
                           <span className="script-scene-number script-scene-number-right">{numberOf(s, index)}</span>
                         </p>
                         {renderHeadingForm(index)}
+                        {renderTagBox(index)}
                         {d && Array.isArray(d.elements) ? (
                           renderElements(d.elements)
                         ) : (
@@ -5446,6 +5529,24 @@ function MovieScreenplayWorkspace({
             <aside className="script-tools" aria-label={t.scriptSelectedSceneTitle(numberOf(scene, sceneIndex))}>
               <p className="script-panel-title">{t.scriptSelectedSceneTitle(numberOf(scene, sceneIndex))}</p>
               <p className="script-tools-heading">{scene ? movieSlugline(scene) : ''}</p>
+              {!onProgress && (
+                <div className="scene-tag-panel">
+                  <p className="script-panel-title">{t.sceneTagPanelTitle}</p>
+                  <div className="scene-tag-choices">
+                    {Object.keys(SCENE_TAG_COLORS).map((tg) => (
+                      <button key={tg} type="button" className={`scene-tag-choice${tagOf(sceneIndex)?.tag === tg ? ' is-active' : ''}`} style={{ '--tag-color': SCENE_TAG_COLORS[tg] }}
+                        onClick={() => setSceneTag(sceneIndex, tg, tagNote)}>
+                        {t.sceneTagLabels[tg]}
+                      </button>
+                    ))}
+                  </div>
+                  <input className="scene-tag-note" type="text" maxLength={500} value={tagNote} placeholder={t.sceneTagNotePlaceholder}
+                    onChange={(event) => setTagNote(event.target.value)}
+                    onBlur={() => { const cur = tagOf(sceneIndex); if (cur && tagNote !== cur.note) setSceneTag(sceneIndex, cur.tag, tagNote) }}
+                    onKeyDown={(event) => { if (event.key === 'Enter') event.currentTarget.blur() }} />
+                  {tagOf(sceneIndex) && <button type="button" className="cancel-button" onClick={() => setSceneTag(sceneIndex, null)}>{t.sceneTagClear}</button>}
+                </div>
+              )}
               <div className="script-tools-meta" key={`meta-${groupIndex}-${sceneIndex}`}>
                 {typeof scene?.estimatedMinutes === 'number' && <span>{t.aiMovieSceneDurationLabel(scene.estimatedMinutes)}</span>}
                 {scene?.purpose && <span>{t.scenePurposeLabels[scene.purpose]}</span>}

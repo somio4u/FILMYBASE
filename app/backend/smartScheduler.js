@@ -6,6 +6,7 @@
 //   3. scheduleSolver.js (plain arithmetic) makes the day plan within the days the owner asks for, using the owner's categories
 //      (artists costly / normal, locations free / paid)
 import crypto from "crypto";
+import { isTransitionName } from "./transitionNames.js";
 import { applyNameMap, dismissKey, mergeIntoMap, normalizeLocation, suggestArtistGroups, suggestLocationGroups, resolveName } from "./nameCleanup.js";
 import { solveSchedule } from "./scheduleSolver.js";
 
@@ -34,9 +35,9 @@ export function sceneRowsFromList(sceneList, written) {
       const key = `${g.episodeIndex ?? "film"}-${si}`;
       const content = written?.get?.(key);
       const names = new Set();
-      for (const n of content?.charactersPresent ?? []) if (upper(n)) names.add(upper(n));
+      for (const n of content?.charactersPresent ?? []) if (upper(n) && !isTransitionName(n)) names.add(upper(n));
       for (const e of content?.elements ?? []) {
-        if (e.type === "dialogue" && e.character && e.characterModifier !== "V.O.") names.add(upper(e.character));
+        if (e.type === "dialogue" && e.character && e.characterModifier !== "V.O." && !isTransitionName(e.character)) names.add(upper(e.character));
       }
       const timeOfDay = upper(scene.timeOfDay) || "DAY";
       rows.push({

@@ -13,6 +13,7 @@
 //   FADE OUT.                      <- a transition
 //
 // A scene's action lines and dialogue are kept word for word; nothing is rewritten.
+import { TRANSITION_LINE } from "./transitionNames.js";
 
 const ODIA_DIGITS = "୦୧୨୩୪୫୬୭୮୯";
 export function toAsciiDigits(text) {
@@ -36,7 +37,7 @@ const EPISODE_LINE = /^(?:EPISODE|ଏପିସୋଡ୍|ଏପିସୋଡ)\s*([
 const SCENE_LINE = /^SCENE\s+([0-9୦-୯]+[A-Z]?)\s*(?:[(\[（]\s*(.*?)\s*[)\]）])?\s*[:.]?\s*$/i;
 const SLUGLINE = /^(?:INT\.?\s*\/\s*EXT|EXT\.?\s*\/\s*INT|INT|EXT)[. ]\s*\S/i;
 const CHARACTERS_LINE = /^Characters?\s*:\s*(.*)$/i;
-const TRANSITION = /^(?:FADE (?:IN|OUT)|CUT TO(?: BLACK)?|SMASH CUT TO|DISSOLVE TO|MATCH CUT TO|FREEZE(?: FRAME)?|THE END|END OF EPISODE)\b[^a-z଀-୿]*$/i;
+const TRANSITION = TRANSITION_LINE; // see transitionNames.js (also FREEZE. BREAK-, BREAK, INTERVAL …)
 const CUE = /^([A-Z][A-Z0-9 .'’\-]{0,34}?)(?:\s*\((V\.O\.|O\.S\.|CONT'D|ECHOING)\))?$/;
 const TIME_WORD = /\b(MORNING|AFTERNOON|EVENING|NIGHT|DAY|DAWN|DUSK|MIDNIGHT|NOON|SUNSET|SUNRISE)\b/i;
 const BREAK_ONLY = /^[-_*=\s]{3,}$/;

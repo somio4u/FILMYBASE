@@ -15,6 +15,7 @@ The person you're working with is NOT a professional coder. They are
 - After finishing any step, update PROGRESS.md: mark the step done, add a one-line plain-English note of what was built, and state the next step clearly.
 - If something is ambiguous, ask a simple question rather than guessing silently.
 - Prefer simple, readable solutions over clever ones. This person will need to understand what exists later.
+- Every long-running action (anything that waits on AI or runs in the background) MUST show visible progress: what it is doing right now, how long it has been running, and it must still show after a page reload. The owner needs to know the backend is working. Never ship a silent spinner.
 
 ## Architecture: Multi-Agent System
 This app is built as a set of specialized AI agents, coordinated by one

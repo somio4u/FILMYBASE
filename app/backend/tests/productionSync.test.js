@@ -39,9 +39,7 @@ test("sync job: rebuilds breakdown + AD sheet + schedule from the CURRENT screen
     requireRole: () => (req, res, next) => { req.user = { id: 1 }; next(); },
     userOwnsSceneList: async () => true,
     buildBreakdownSourceText: async () => "THE NEW SCREENPLAY TEXT",
-    generateDeepScriptBreakdownContent: async (text) => { if (seen.fail) throw new Error("AI unavailable"); seen.text = text; return { artistList: [{ label: "ANU" }, { label: "NEW HERO" }], locationList: [{ location: { en: "Temple" } }, { location: { en: "River" } }] }; },
-    classifyCastCategories: async (text, list) => list.map((a) => ({ ...a, tier: "lead" })),
-    classifyEpisodeNumbers: async (text, c) => ({ ...c, episodeNumbersDone: true }),
+    generateDeepScriptBreakdownContent: async (text) => { if (seen.fail) throw new Error("AI unavailable"); seen.text = text; return { artistList: [{ label: "ANU", tier: "lead" }, { label: "NEW HERO" }], locationList: [{ location: { en: "Temple" } }, { location: { en: "River" } }] }; },
     flattenScenesForAdSheet: (sl) => sl.scenes.map((s, i) => ({ sceneNumber: String(i + 1) })),
     generateAdSheetDetails: async (entries) => entries.map(() => ({ mainCharacters: ["ANU"], extras: { en: "crowd" }, property: { en: "" }, costumeRemarks: { en: "" } })),
     fetchCharacterNamesForSceneList: async () => ["ANU", "NEW HERO"],
@@ -53,6 +51,11 @@ test("sync job: rebuilds breakdown + AD sheet + schedule from the CURRENT screen
   const base = `http://127.0.0.1:${server.address().port}`;
   try {
     const { jobId } = await (await fetch(`${base}/api/scene-lists/${id}/sync-production`, { method: "POST" })).json();
+    // a page opened (or reloaded) while the job runs can pick it up again, with the live note of the step in progress
+    const live = await (await fetch(`${base}/api/scene-lists/${id}/sync-production/current`)).json();
+    assert.equal(live.jobId, jobId);
+    assert.ok(["running", "done"].includes(live.status));
+    assert.ok(live.startedAt && live.now);
     let st;
     for (let i = 0; i < 50; i++) { st = await (await fetch(`${base}/api/scene-lists/${id}/sync-production/${jobId}`)).json(); if (st.status !== "running") break; await new Promise((r) => setTimeout(r, 50)); }
     assert.equal(st.status, "done", JSON.stringify(st));

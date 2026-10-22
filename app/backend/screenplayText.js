@@ -1,6 +1,7 @@
 // A finished Film screenplay (scenes stored as structured elements) turned into one plain screenplay
 // text — scene headings, action, character names, dialogue — the shape the AI Movies importer reads.
 // Pure functions: no database here.
+import { isTransitionName } from "./transitionNames.js";
 const text = (v) => (typeof v === "string" ? v : v && typeof v === "object" ? v.en ?? v.or ?? v.hi ?? "" : "");
 
 export function countScenes(sceneList) {
@@ -13,7 +14,11 @@ function sceneToText(scene, number, elements) {
   const lines = [`SCENE ${number} — ${scene.intExt ?? "INT"}. ${text(scene.location).toUpperCase() || "LOCATION"} — ${scene.timeOfDay ?? "DAY"}`];
   for (const element of elements ?? []) {
     const body = text(element.text).trim();
-    if (element.type === "dialogue") {
+    if (element.type === "dialogue" && isTransitionName(element.character)) {
+      // an old import read "FREEZE. BREAK-" as a speaker: it is a transition
+      lines.push(String(element.character).toUpperCase());
+      if (body) lines.push(body);
+    } else if (element.type === "dialogue") {
       const modifier = element.characterModifier && element.characterModifier !== "none" ? ` (${element.characterModifier})` : "";
       lines.push(`${String(element.character ?? "CHARACTER").toUpperCase()}${modifier}`);
       if (element.parenthetical) lines.push(`(${element.parenthetical})`);

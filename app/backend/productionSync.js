@@ -41,13 +41,14 @@ export function castCheck(artistLabels, crewRows) {
 }
 
 export function registerProductionSyncRoutes(app, db, tools) {
-  const { requireRole, userOwnsSceneList, buildBreakdownSourceText, generateDeepScriptBreakdownContent, classifyCastCategories, classifyEpisodeNumbers,
+  const { requireRole, userOwnsSceneList, buildBreakdownSourceText, generateDeepScriptBreakdownContent,
     flattenScenesForAdSheet, generateAdSheetDetails, fetchCharacterNamesForSceneList, generateShootScheduleContent } = tools;
   const allowed = requireRole("admin", "production_manager");
 
   async function run(job, sceneListId) {
     const step = (key) => job.steps.find((s) => s.key === key);
-    const begin = (key) => { step(key).state = "working"; };
+    const begin = (key, note) => { const s = step(key); s.state = "working"; s.note = note ?? ""; s.startedAt = Date.now(); };
+    const say = (key, note) => { step(key).note = note; };
     const end = (key, state, note) => { const s = step(key); s.state = state; s.note = note ?? ""; };
     try {
       const sceneList = (await db.query("SELECT content FROM scene_lists WHERE id = $1", [sceneListId])).rows[0].content;
@@ -55,17 +56,15 @@ export function registerProductionSyncRoutes(app, db, tools) {
       const previousBreakdown = (await db.query("SELECT status FROM script_breakdowns WHERE scene_list_id = $1 ORDER BY created_at DESC LIMIT 1", [sceneListId])).rows[0];
 
       // 1 + 2 — one new breakdown row, with the AD scene sheet in it
-      begin("breakdown");
+      begin("breakdown", "reading the whole screenplay: characters, places, props, costumes, cast tiers, episode numbers — the longest part, several minutes");
       let content = await generateDeepScriptBreakdownContent(sourceText);
-      const notes = [];
-      try { content = { ...content, artistList: await classifyCastCategories(sourceText, content.artistList ?? []) }; } catch (e) { notes.push("cast tiers will be filled in automatically"); console.error("Sync: cast tiers failed:", e.message); }
-      try { content = await classifyEpisodeNumbers(sourceText, content); } catch (e) { notes.push("episode numbers will be filled in automatically"); console.error("Sync: episode numbers failed:", e.message); }
-      end("breakdown", "done", `${(content.artistList ?? []).length} characters, ${(content.locationList ?? []).length} places${notes.length ? ` (${notes.join("; ")})` : ""}`);
+      // (the generator itself already sorts the cast into tiers and tags the episode numbers)
+      end("breakdown", "done", `${(content.artistList ?? []).length} characters, ${(content.locationList ?? []).length} places`);
 
-      begin("adSheet");
+      begin("adSheet", "starting");
       const entries = flattenScenesForAdSheet(sceneList);
       let firstError = null;
-      const details = await generateAdSheetDetails(entries, content, sourceText, (e) => { firstError ??= e.message; });
+      const details = await generateAdSheetDetails(entries, content, sourceText, (e) => { firstError ??= e.message; }, (done, total) => say("adSheet", `scenes analysed in ${total} parts — part ${Math.min(done + 1, total)} of ${total} is being worked on (${done} done)`));
       const failed = details.filter((d) => d.failed).length;
       // an AD sheet the AI could not read at all is never saved (the old breakdown stays); a partly blank one is saved and said so
       if (entries.length > 0 && failed === entries.length) throw new Error(`The AI could not read the script for the AD sheet${firstError ? ` (${firstError})` : ""}. Nothing was changed — please try again in a minute.`);
@@ -75,12 +74,13 @@ export function registerProductionSyncRoutes(app, db, tools) {
       end("adSheet", failed ? "warning" : "done", failed ? `${entries.length - failed} of ${entries.length} scenes analysed — ${failed} could not be (press Synchronize again to retry)` : `${entries.length} scenes`);
 
       // 3 — the schedule, only when one exists
-      begin("schedule");
+      begin("schedule", "checking for an existing Shoot Schedule");
       const previousSchedule = (await db.query("SELECT content, status FROM shoot_schedules WHERE scene_list_id = $1 ORDER BY created_at DESC LIMIT 1", [sceneListId])).rows[0];
       if (!previousSchedule) {
         end("schedule", "skipped", "no Shoot Schedule yet — nothing to rebuild");
       } else {
         try {
+          say("schedule", "planning the remaining days — several minutes");
           const characterNames = await fetchCharacterNamesForSceneList(sceneListId, sceneList);
           const locationNames = (content.locationList ?? []).map((l) => l.location?.en).filter(Boolean);
           const prev = previousSchedule.content ?? {};
@@ -97,17 +97,19 @@ export function registerProductionSyncRoutes(app, db, tools) {
       }
 
       // 4 — the cast
-      begin("cast");
+      begin("cast", "comparing the characters with the actors you assigned");
       const crew = (await db.query("SELECT character_name, name FROM crew_members WHERE scene_list_id = $1 AND category = 'artist'", [sceneListId])).rows;
       job.cast = castCheck((content.artistList ?? []).map((a) => a.label), crew);
       end("cast", "done", `${job.cast.withoutActor.length} character(s) without an actor yet`);
       job.status = "done";
+      job.finishedAt = Date.now();
     } catch (error) {
       console.error("Production sync failed:", error.message);
       const working = job.steps.find((s) => s.state === "working");
       if (working) { working.state = "error"; working.note = error.message; }
       job.status = "error";
       job.error = error.message;
+      job.finishedAt = Date.now();
     }
   }
 
@@ -123,12 +125,23 @@ export function registerProductionSyncRoutes(app, db, tools) {
     const job = { sceneListId: id, status: "running", startedAt: Date.now(), steps: STEPS.map((s) => ({ ...s, state: "waiting", note: "" })), cast: null, error: null };
     jobs.set(jobId, job);
     run(job, id);
-    res.json({ jobId });
+    res.json({ jobId, serverNow: Date.now() });
+  });
+
+  // the newest synchronization of this project (running, or finished within the last hour): lets the screen pick it up again after the
+  // page reloaded or refreshed itself, instead of looking as if nothing is happening
+  app.get("/api/scene-lists/:id/sync-production/current", allowed, (req, res) => {
+    const id = Number(req.params.id);
+    let found = null;
+    for (const [k, j] of jobs) if (j.sceneListId === id && (!found || j.startedAt > found.job.startedAt)) found = { jobId: k, job: j };
+    if (!found || (found.job.status !== "running" && Date.now() - (found.job.finishedAt ?? found.job.startedAt) > 60 * 60 * 1000)) { res.json({ jobId: null }); return; }
+    const { jobId, job } = found;
+    res.json({ jobId, status: job.status, steps: job.steps, cast: job.cast, error: job.error, startedAt: job.startedAt, finishedAt: job.finishedAt ?? null, now: Date.now() });
   });
 
   app.get("/api/scene-lists/:id/sync-production/:jobId", allowed, (req, res) => {
     const job = jobs.get(req.params.jobId);
     if (!job || job.sceneListId !== Number(req.params.id)) { res.status(404).json({ error: "That synchronization is no longer available." }); return; }
-    res.json({ status: job.status, steps: job.steps, cast: job.cast, error: job.error });
+    res.json({ status: job.status, steps: job.steps, cast: job.cast, error: job.error, startedAt: job.startedAt, finishedAt: job.finishedAt ?? null, now: Date.now() });
   });
 }

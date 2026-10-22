@@ -41,6 +41,7 @@ function prepare(ctx) {
     tag: tagOf.get(r.id) ?? null,
     ad: useAd ? ctx.adSheet[i] : null,
     ref: ctx.refs?.get(r.id) ?? null,
+    gist: (useAd && adText(ctx.adSheet[i]?.sceneSummary)) || r.gist, // the AI's clear sentence, not the script's raw first line
     place: r.rawLocation && r.rawLocation !== r.location ? `${r.location} (${r.rawLocation})` : r.location,
     cast: r.artists.join(", "),
     epLabel: r.episode === null ? "" : `Ep ${r.episode + 1}`,

@@ -9,6 +9,7 @@
 // Each scene: { number, heading, intExt, location, time, qualifier, beatIndex?, elements[] }
 // Each element: { kind: action | dialogue | shot_hint | transition | note,
 //                 text, speaker?, extension?, parenthetical?, label? }
+import { isTransitionName } from "./transitionNames.js";
 
 const TIME_WORDS = /\b(MORNING|DAY|NIGHT|EVENING|AFTERNOON|DAWN|DUSK|SUNSET|SUNRISE|NOON|MIDNIGHT|CONTINUOUS|LATER|SAME TIME|SURREAL|MOMENTS LATER|DAYTIME|NIGHTTIME)\b/i;
 const INT_EXT = /^(INT\.?\s*\/\s*EXT|EXT\.?\s*\/\s*INT|I\s*\/\s*E|INT|EXT)\b\.?\s*(.*)$/i;
@@ -74,6 +75,7 @@ function detectSceneStart(trimmed) {
 
 // A speaker line: **NAME** *(how)*  or  NAME (V.O.)  followed by their words.
 function detectCue(trimmed, nextLine) {
+  if (isTransitionName(trimmed)) return null;
   if (/^\*\*SHOT\b/i.test(trimmed)) return null;
   const bold = /^\*\*([^*]+?)\*\*\s*(?:\*\(([^)]*)\)\*|\(([^)]*)\))?\s*$/.exec(trimmed);
   if (bold) {
@@ -137,7 +139,7 @@ export function parseScreenplayText(text) {
 
     const bare = plain(trimmed);
     if (/^(THE END|END)\.?$/i.test(bare)) continue;
-    if (TRANSITIONS.test(bare)) { push({ kind: "transition", text: bare.toUpperCase() }); continue; }
+    if (TRANSITIONS.test(bare) || isTransitionName(bare)) { push({ kind: "transition", text: bare.toUpperCase() }); continue; }
 
     const cue = detectCue(trimmed, lines[i + 1]);
     if (cue) {

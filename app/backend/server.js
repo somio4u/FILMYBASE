@@ -44,6 +44,7 @@ import { actorOf, byLabel, trackSceneAuthors } from "./sceneAuthors.js";
 import { ensureSmartSchedulerSchema, registerSmartSchedulerRoutes } from "./smartScheduler.js";
 import { registerAdRoutes } from "./adRoutes.js";
 import { registerProductionSyncRoutes } from "./productionSync.js";
+import { repairStoredTransitions, withoutTransitions } from "./transitionNames.js";
 import { ensureLocationRenameSchema, registerLocationRenameRoutes } from "./locationRename.js";
 import { ensureSceneTagSchema, registerSceneTagRoutes } from "./sceneTags.js";
 import { registerLiveSyncRoutes } from "./liveSync.js";
@@ -905,8 +906,10 @@ const AD_SHEET_ROW_SCHEMA = {
     extras: BILINGUAL_TEXT_SCHEMA,
     property: BILINGUAL_TEXT_SCHEMA,
     costumeRemarks: BILINGUAL_TEXT_SCHEMA,
+    // what happens in the scene, in one clear sentence — written by the AI from the script itself (never the script's first raw line)
+    sceneSummary: BILINGUAL_TEXT_SCHEMA,
   },
-  required: ["mainCharacters", "extras", "property", "costumeRemarks"],
+  required: ["mainCharacters", "extras", "property", "costumeRemarks", "sceneSummary"],
 };
 
 // A character's full master script packet — EVERY scene they appear in
@@ -1106,7 +1109,7 @@ function buildScreenplaySystemPrompt(dialogueLanguage) {
   return `${SCREENPLAY_BASE_PROMPT}\n\n${actionLanguage}\n\n${MOVIE_SCREEN_ONLY_RULE}\n\n${craft}`;
 }
 
-const SCRIPT_BREAKDOWN_SYSTEM_PROMPT = `You are an experienced Assistant Director / Script Supervisor performing a professional SCRIPT BREAKDOWN — the standard pre-scheduling analysis every production does once a script is locked, reading it closely for everything the production team needs to plan for. You are precise and thorough, not creative — extract what's actually in the script, don't invent story content.
+const SCRIPT_BREAKDOWN_SYSTEM_PROMPT = `You are an experienced Assistant Director / Script Supervisor performing a professional SCRIPT BREAKDOWN — the standard pre-scheduling analysis every production does once a script is locked, reading it closely for everything the production team needs to plan for. You are precise and thorough, not creative — extract what's actually in the script, don't invent story content. Transitions and markers such as FADE IN/OUT, CUT TO, FREEZE, "FREEZE. BREAK-", BREAK, INTERVAL, THE END and END OF EPISODE are NOT characters and must never appear in the artist/cast list or as someone present in a scene.
 
 Read the full scene-by-scene material given and produce five separate lists:
 - "artistList": every character who appears, each with a short bilingual note on their overall involvement (how central they are, roughly how many scenes, anything schedule-relevant like "appears only in exterior scenes"), their approximate age (an age or age range as stated or reasonably inferable from the script and dialogue — e.g. "60s", "Late 20s", "Child, around 8" — use "Unspecified" only when genuinely not inferable), and their gender (Male, Female, or Unspecified) — casting decisions are made against age and gender, so infer both confidently from context (name, pronouns, family role, honorifics) rather than defaulting to Unspecified.
@@ -12772,7 +12775,9 @@ async function generateDeepScriptBreakdownContent(sourceText, revision) {
   // Tags every item in every category with which episode(s) it appears in
   // (episode-level only, not exact scenes — see classifyEpisodeNumbers for
   // why). Runs after refinement/cast-tiering so it sees the final lists.
-  return await classifyEpisodeNumbers(sourceText, withCastTiers);
+  const finished = await classifyEpisodeNumbers(sourceText, withCastTiers);
+  // transitions (FADE OUT, FREEZE. BREAK- …) are never characters, whatever the AI listed
+  return { ...finished, artistList: withoutTransitions(finished.artistList) };
 }
 
 // The first-ever breakdown on a long script is a first pass PLUS 5
@@ -13406,7 +13411,7 @@ async function generateAdSheetDetailsForBatch(batchEntries, batchStartIndex, bre
   const knownProps = (breakdownContent.props ?? []).map((p) => p.label).join(", ");
   const knownCostumes = (breakdownContent.costumes ?? []).map((c) => `${c.character}: ${c.description.en}`).join("; ");
 
-  const contents = `The full script material (the authoritative source — use this to check exactly who and what is in each of the scenes below, not just their one-liners, which are compressed summaries that can omit incidental details):\n${sourceText}\n\nThese ${batchEntries.length} scenes are the ones to report back on this time, numbered by their true position in the full scene list:\n${numberedScenes}\n\nEstablished full cast list: ${knownCharacters}\n\nEstablished property list: ${knownProps || "(none yet)"}\n\nEstablished costume notes: ${knownCostumes || "(none yet)"}\n\nFor EACH of these ${batchEntries.length} scenes, in the same order given, re-read the corresponding part of the full script material carefully and determine:\n- mainCharacters: EVERY named individual who is physically part of that scene's action — whether or not they speak, and however brief their presence (someone dropping something off, a silent bystander who is nonetheless a named character, a baby being handed over, etc.). Do not default to just the scene's two lead characters — actively check for every name the script mentions in that scene. Prefer exact names from the established full cast list above when they match, but if the script clearly names someone not on that list, include them anyway using the name the script gives them — never silently drop a named person.\n- extras: unnamed/generic background people only (a crowd, "a few guests", "kids playing football") — never someone the script gives an actual name to; leave empty if none.\n- property: objects handled or referenced in that scene, preferring the established property list when relevant; leave empty if none.\n- costumeRemarks: a costume-specific note for that scene if the costume notes above say anything relevant; leave empty if nothing applies.\nReturn exactly ${batchEntries.length} rows in the same order as these scenes — do not skip, merge, or add extra rows.`;
+  const contents = `The full script material (the authoritative source — use this to check exactly who and what is in each of the scenes below, not just their one-liners, which are compressed summaries that can omit incidental details):\n${sourceText}\n\nThese ${batchEntries.length} scenes are the ones to report back on this time, numbered by their true position in the full scene list:\n${numberedScenes}\n\nEstablished full cast list: ${knownCharacters}\n\nEstablished property list: ${knownProps || "(none yet)"}\n\nEstablished costume notes: ${knownCostumes || "(none yet)"}\n\nFor EACH of these ${batchEntries.length} scenes, in the same order given, re-read the corresponding part of the full script material carefully and determine:\n- mainCharacters: EVERY named individual who is physically part of that scene's action — whether or not they speak, and however brief their presence (someone dropping something off, a silent bystander who is nonetheless a named character, a baby being handed over, etc.). Do not default to just the scene's two lead characters — actively check for every name the script mentions in that scene. Prefer exact names from the established full cast list above when they match, but if the script clearly names someone not on that list, include them anyway using the name the script gives them — never silently drop a named person.\n- extras: unnamed/generic background people only (a crowd, "a few guests", "kids playing football") — never someone the script gives an actual name to; leave empty if none.\n- property: objects handled or referenced in that scene, preferring the established property list when relevant; leave empty if none.\n- costumeRemarks: a costume-specific note for that scene if the costume notes above say anything relevant; leave empty if nothing applies.\n- sceneSummary: ONE clear sentence (two at most) saying what happens in the scene — who does what, and where — written in plain simple English (and the Odia and Hindi equivalents in their own fields). Read the scene in the full script; never copy its first raw line, never a single letter or a heading. Name the characters who take part. Transitions such as FREEZE. BREAK- or FADE OUT are never characters.\nReturn exactly ${batchEntries.length} rows in the same order as these scenes — do not skip, merge, or add extra rows.`;
 
   const parsed = await generateJsonContent({
     model: GEMINI_MODEL_NAME,
@@ -13422,8 +13427,8 @@ async function generateAdSheetDetailsForBatch(batchEntries, batchStartIndex, bre
     },
   });
 
-  const rows = sanitizeBilingualContent(parsed).rows ?? [];
-  const blankRow = { mainCharacters: [], extras: { en: "", or: "" }, property: { en: "", or: "" }, costumeRemarks: { en: "", or: "" } };
+  const rows = (sanitizeBilingualContent(parsed).rows ?? []).map((r) => ({ ...r, mainCharacters: withoutTransitions(r.mainCharacters ?? []) }));
+  const blankRow = { mainCharacters: [], extras: { en: "", or: "" }, property: { en: "", or: "" }, costumeRemarks: { en: "", or: "" }, sceneSummary: { en: "", or: "" } };
   // Defensive padding/truncation — the row COUNT must match the real scene
   // count no matter what the model returns, since every downstream row is
   // positionally joined back to its deterministic scene entry.
@@ -13444,7 +13449,7 @@ async function generateAdSheetDetails(sceneEntries, breakdownContent, sourceText
   // it) — sequential is slower but actually finishes. A batch that still
   // fails after retries falls back to blank rows for just that batch
   // instead of losing the whole AD sheet.
-  const blankRow = { mainCharacters: [], extras: { en: "", or: "" }, property: { en: "", or: "" }, costumeRemarks: { en: "", or: "" } };
+  const blankRow = { mainCharacters: [], extras: { en: "", or: "" }, property: { en: "", or: "" }, costumeRemarks: { en: "", or: "" }, sceneSummary: { en: "", or: "" } };
   let doneBatches = 0;
   onProgress?.(0, batches.length);
   const batchResults = await mapWithConcurrency(batches, 1, async (batch) => {
@@ -14562,6 +14567,12 @@ app.get("/api/script-breakdown/:id/export-excel", requireLogin, async (req, res)
 // real table rather than the flowing-text style used by the other
 // category exports (this one has too many short columns for that to read
 // well on paper).
+// the AI writes "None" when a box has nothing: print an empty box, not the word
+function noneToBlank(text) {
+  const t = String(text ?? "").trim();
+  return /^(none|nil|n\/a|no|nothing|-+|कोई नहीं|କେହି ନୁହଁନ୍ତି)\.?$/i.test(t) ? "" : t;
+}
+
 app.get("/api/script-breakdown/:id/export-ad-sheet", requireLogin, async (req, res) => {
   const lang = ["or", "hi"].includes(req.query.lang) ? req.query.lang : "en";
 
@@ -14616,6 +14627,8 @@ app.get("/api/script-breakdown/:id/export-ad-sheet", requireLogin, async (req, r
     ];
     const cellPaddingX = 4;
     const cellPaddingY = 4;
+    // each cell gets the font its OWN text needs: a scene written in Odia or Hindi inside an English sheet used to print as garbage
+    const cellFont = (text, bold = false) => (/[\u0B00-\u0B7F]/.test(text) ? (bold ? "odiaBold" : "odiaRegular") : /[\u0900-\u097F]/.test(text) ? (bold ? "hindiBold" : "hindiRegular") : bold ? headerFont : bodyFont);
 
     function drawHeaderRow(y) {
       doc.font(headerFont).fontSize(9);
@@ -14636,14 +14649,14 @@ app.get("/api/script-breakdown/:id/export-ad-sheet", requireLogin, async (req, r
     function rowValues(row) {
       return {
         scn: row.episodeLabel ? `${row.episodeLabel}\n${row.sceneNumber}` : row.sceneNumber,
-        description: row.oneLiner?.[lang] ?? "",
+        description: row.sceneSummary?.[lang] || row.sceneSummary?.en || row.oneLiner?.[lang] || "",
         type: row.intExt,
         dn: row.timeOfDay,
         location: row.location?.[lang] ?? "",
         characters: (row.mainCharacters ?? []).join(", "),
-        extras: row.extras?.[lang] ?? "",
-        property: row.property?.[lang] ?? "",
-        costume: row.costumeRemarks?.[lang] ?? "",
+        extras: noneToBlank(row.extras?.[lang]),
+        property: noneToBlank(row.property?.[lang]),
+        costume: noneToBlank(row.costumeRemarks?.[lang]),
       };
     }
 
@@ -14654,10 +14667,9 @@ app.get("/api/script-breakdown/:id/export-ad-sheet", requireLogin, async (req, r
 
     adSheet.forEach((row) => {
       const values = rowValues(row);
-      doc.font(bodyFont).fontSize(9);
       const rowHeight = Math.max(
         18,
-        ...columns.map((col) => doc.heightOfString(String(values[col.key] ?? ""), { width: col.width - cellPaddingX * 2 }) + cellPaddingY * 2)
+        ...columns.map((col) => doc.font(cellFont(String(values[col.key] ?? ""))).fontSize(9).heightOfString(String(values[col.key] ?? ""), { width: col.width - cellPaddingX * 2 }) + cellPaddingY * 2)
       );
 
       if (y + rowHeight > pageBottom) {
@@ -14669,7 +14681,7 @@ app.get("/api/script-breakdown/:id/export-ad-sheet", requireLogin, async (req, r
       let x = pageLeft;
       columns.forEach((col) => {
         doc.rect(x, y, col.width, rowHeight).stroke("#cccccc");
-        doc.font(bodyFont).fontSize(9).text(String(values[col.key] ?? ""), x + cellPaddingX, y + cellPaddingY, { width: col.width - cellPaddingX * 2 });
+        doc.font(cellFont(String(values[col.key] ?? ""))).fontSize(9).text(String(values[col.key] ?? ""), x + cellPaddingX, y + cellPaddingY, { width: col.width - cellPaddingX * 2 });
         x += col.width;
       });
       y += rowHeight;
@@ -14714,14 +14726,14 @@ app.get("/api/script-breakdown/:id/export-ad-sheet-excel", requireLogin, async (
     function rowValues(row) {
       return {
         scn: row.episodeLabel ? `${row.episodeLabel} ${row.sceneNumber}` : row.sceneNumber,
-        description: row.oneLiner?.[lang] ?? "",
+        description: row.sceneSummary?.[lang] || row.sceneSummary?.en || row.oneLiner?.[lang] || "",
         type: row.intExt,
         dn: row.timeOfDay,
         location: row.location?.[lang] ?? "",
         characters: (row.mainCharacters ?? []).join(", "),
-        extras: row.extras?.[lang] ?? "",
-        property: row.property?.[lang] ?? "",
-        costume: row.costumeRemarks?.[lang] ?? "",
+        extras: noneToBlank(row.extras?.[lang]),
+        property: noneToBlank(row.property?.[lang]),
+        costume: noneToBlank(row.costumeRemarks?.[lang]),
       };
     }
 
@@ -16238,7 +16250,7 @@ app.get("/api/shoot-schedule/:id/export", requireLogin, async (req, res) => {
             const values = {
               sno: String(serialNumber),
               scn,
-              description: adSheetRow?.oneLiner?.[lang] || notAvailableLabel,
+              description: adSheetRow?.sceneSummary?.[lang] || adSheetRow?.sceneSummary?.en || adSheetRow?.oneLiner?.[lang] || notAvailableLabel,
               dn: scene.timeOfDay || notAvailableLabel,
               location: `${scene.intExt}. ${scene.location?.[lang] ?? ""}`,
               artist,
@@ -16498,7 +16510,7 @@ app.get("/api/shoot-schedule/:id/export-excel", requireLogin, async (req, res) =
             const dataRow = sheet.addRow({
               sno: serialNumber,
               scn,
-              description: adSheetRow?.oneLiner?.[lang] || notAvailableLabel,
+              description: adSheetRow?.sceneSummary?.[lang] || adSheetRow?.sceneSummary?.en || adSheetRow?.oneLiner?.[lang] || notAvailableLabel,
               dn: scene.timeOfDay || notAvailableLabel,
               location: `${scene.intExt}. ${scene.location?.[lang] ?? ""}`,
               artist,
@@ -20457,7 +20469,7 @@ const smartScheduler = registerSmartSchedulerRoutes(app, db, {
 registerAdRoutes(app, db, { requireRole, loadRows: smartScheduler.loadRows });
 // "Synchronize with the latest screenplay": rebuilds the Script Breakdown, the AD scene sheet and the Shoot Schedule from the CURRENT screenplay (productionSync.js)
 registerProductionSyncRoutes(app, db, {
-  requireRole, userOwnsSceneList, buildBreakdownSourceText, generateDeepScriptBreakdownContent, classifyCastCategories, classifyEpisodeNumbers,
+  requireRole, userOwnsSceneList, buildBreakdownSourceText, generateDeepScriptBreakdownContent,
   flattenScenesForAdSheet, generateAdSheetDetails, fetchCharacterNamesForSceneList, generateShootScheduleContent,
 });
 // "Approval format" Word file (narrated Hinglish retelling of the episodes; see approvalFormat.js) — the AI only retells each scene
@@ -20499,6 +20511,7 @@ ensureAiMovieSchema()
   .then(() => ensureSceneTagSchema(db))
   .then(() => ensureSmartSchedulerSchema(db))
   .then(() => ensureLocationRenameSchema(db))
+  .then(async () => { try { const fixed = await repairStoredTransitions(db); if (fixed) console.log(`Screenplay: ${fixed} scene(s) had a transition (FREEZE. BREAK- …) written as a character — corrected.`); } catch (error) { console.error("Transition repair failed:", error.message); } })
   .then(() => ensureAllProductionSchemas(db))
   .then(async (failures) => { try { const made = await backfillDrafts(db); await failInterruptedRequests(db); if (made) console.log(`Draft Management: ${made} existing project(s) are now Draft 1 of their project.`); } catch (error) { console.error("Draft backfill failed:", error.message); } return failures; })
   .catch((error) => console.error("Schema setup failed:", error.message))

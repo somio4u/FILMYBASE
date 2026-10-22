@@ -26,7 +26,7 @@
 .ss-seg-btn { padding: 5px 11px; border: none; background: transparent; color: inherit; font-size: .78rem; cursor: pointer; }
 .ss-seg-btn.is-on.ss-costly, .ss-seg-btn.is-on.ss-paid { background: #e5484d; color: #fff; }
 .ss-seg-btn.is-on.ss-normal { background: #5b6b8c; color: #fff; }
-.ss-seg-btn.is-on.ss-cheap, .ss-seg-btn.is-on.ss-free { background: #2ea043; color: #fff; }
+.ss-seg-btn.is-on.ss-free { background: #2ea043; color: #fff; }
 .ss-go { margin-top: 14px; padding: 11px 22px; border-radius: 999px; border: none; background: linear-gradient(135deg, #3b6fe0, #6a4cd8); color: #fff; font-weight: 700; cursor: pointer; }
 .ss-go:disabled { opacity: .7; cursor: progress; }
 .ss-stale { padding: 8px 12px; border-radius: 10px; background: rgba(245,184,0,.15); border: 1px solid #f5b800; }
@@ -40,13 +40,13 @@
 .ss-grid-head { font-weight: 700; opacity: .7; font-size: .76rem; text-transform: uppercase; }
 .ss-grid-row { display: contents; } .ss-grid-row > span { padding: 4px 0; border-top: 1px solid rgba(255,255,255,.06); }
 .ss-dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 7px; }
-.ss-dot.ss-costly, .ss-dot.ss-paid { background: #e5484d; } .ss-dot.ss-normal { background: #5b6b8c; } .ss-dot.ss-cheap, .ss-dot.ss-free { background: #2ea043; }
+.ss-dot.ss-costly, .ss-dot.ss-paid { background: #e5484d; } .ss-dot.ss-normal { background: #5b6b8c; } .ss-dot.ss-free { background: #2ea043; }
 .ss-days-list { display: grid; gap: 10px; }
 .ss-day { padding: 12px; border-radius: 12px; border: 1px solid var(--border-subtle, rgba(138,180,248,.25)); }
 .ss-day-head { display: flex; gap: 12px; flex-wrap: wrap; align-items: baseline; }
 .ss-chips { display: flex; gap: 6px; flex-wrap: wrap; margin: 8px 0; }
 .ss-chip { padding: 2px 10px; border-radius: 999px; font-size: .76rem; color: #fff; }
-.ss-chip.ss-costly { background: #e5484d; } .ss-chip.ss-normal { background: #5b6b8c; } .ss-chip.ss-cheap { background: #2ea043; }
+.ss-chip.ss-costly { background: #e5484d; } .ss-chip.ss-normal { background: #5b6b8c; }
 .ss-scenes { margin: 0; padding-left: 18px; font-size: .86rem; line-height: 1.5; }
 
 /* Names & places */
@@ -78,3 +78,7 @@
 .sync-step small { opacity: .75; }
 .sync-step.is-working, .sync-step.is-done, .sync-step.is-error { opacity: 1; }
 .sync-step.is-error { background: rgba(229,72,77,.15); }
+.sync-step.is-warning { opacity: 1; background: rgba(245,184,0,.15); }
+
+.ss-embedded { padding: 0; max-width: none; }
+.ss-embedded .ss-h2 { display: none; }

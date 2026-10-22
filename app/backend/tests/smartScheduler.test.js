@@ -79,7 +79,7 @@ test("merged names become one place / one artist, voice-only names need no call"
 });
 
 test("a merged name takes the category of its most expensive member", () => {
-  const c = categoriesFor({ artists: { NAYANA: "cheap", SOUMYA: "costly" }, locations: { "TEMPLE COURTYARD": "paid", "KALI TEMPLE": "free" } }, { characterAliases: { NAYANA: "SOUMYA" }, locationAliases: { "TEMPLE COURTYARD": "KALI TEMPLE" } });
+  const c = categoriesFor({ artists: { NAYANA: "normal", SOUMYA: "costly" }, locations: { "TEMPLE COURTYARD": "paid", "KALI TEMPLE": "free" } }, { characterAliases: { NAYANA: "SOUMYA" }, locationAliases: { "TEMPLE COURTYARD": "KALI TEMPLE" } });
   assert.equal(c.artistCategory.SOUMYA, "costly");
   assert.equal(c.locationCategory["KALI TEMPLE"], "paid");
 });
@@ -93,4 +93,10 @@ test("the plan is built from the screenplay and the owner's days; the AI analysi
   assert.ok(plan.warnings.some((w) => /1 scene is not written yet/.test(w)));
   assert.equal(plan.artists.find((a) => a.name === "SOUMYA").category, "costly");
   assert.match(analysisInput(rows), /0-0 \| E1S1 \| EXT\. KALI TEMPLE - NIGHT \| 2 min \| NAYANA, SOUMYA/);
+});
+
+test("only two artist categories exist: costly and normal (an old 'cheap' shows as normal)", () => {
+  const rows = [{ id: "film-0", label: "1", minutes: 2, location: "TEMPLE", rawLocation: "TEMPLE", artists: ["SOUMYA", "RAVI"] }];
+  const lists = briefLists(rows, { artists: { SOUMYA: "costly", RAVI: "cheap" }, locations: {} });
+  assert.deepEqual(lists.artists.map((a) => [a.name, a.category]).sort(), [["RAVI", "normal"], ["SOUMYA", "costly"]]);
 });

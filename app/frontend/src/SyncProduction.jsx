@@ -2,7 +2,7 @@ import { useState } from 'react'
 import './SmartScheduler.css'
 
 // Production Management → "Synchronize with the latest screenplay": rebuilds the Script Breakdown, the AD scene sheet and the Shoot Schedule from the CURRENT screenplay, step by step.
-const ICON = { waiting: '○', working: '⏳', done: '✓', skipped: '–', error: '⚠' }
+const ICON = { waiting: '○', working: '⏳', done: '✓', skipped: '–', warning: '⚠', error: '⚠' }
 
 export default function SyncProduction({ backendUrl, sceneListId, onDone }) {
   const [job, setJob] = useState(null) // { status, steps, cast, error }

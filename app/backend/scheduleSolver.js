@@ -1,15 +1,15 @@
 // The Smart Scheduler's arithmetic: given the scenes (where, who, how long), the number of shoot days and the owner's categories
-// (artists: costly / normal / cheap; locations: free / paid) it finds the day plan with the lowest cost that fits the days.
+// (artists: costly / normal; locations: free / paid) it finds the day plan with the lowest cost that fits the days.
 // No AI and no luck: the same input always gives the same plan (a seeded search). The AI only helps BEFORE this (merging names,
 // finding scenes that must stay together or in order); the numbers come from here.
 //
 // Cost, in "units" (relative until real rupee rates are given):
-//   an artist called for a day      costly 5 · normal 2 · cheap 1
+//   an artist called for a day      costly 5 · normal 2
 //   a paid location used for a day  3 (a free one 0, plus 0.2 so shooting at one place on fewer days still wins)
 //   each extra location on one day  1 (a company move; real distances will replace this later)
 //   a day mixing day and night      1.5
 
-export const ARTIST_WEIGHT = { costly: 5, normal: 2, cheap: 1 };
+export const ARTIST_WEIGHT = { costly: 5, normal: 2 };
 export const LOCATION_WEIGHT = { paid: 3, free: 0 };
 const MOVE_WEIGHT = 1;
 const MIX_WEIGHT = 1.5;

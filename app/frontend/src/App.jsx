@@ -197,6 +197,7 @@ const LABELS = {
     stageScheduleLabel: 'Shoot Schedule',
     stageClapboardLabel: 'Clapboard',
     stageAdLabel: 'For Assistant Directors',
+    stageSmartLabel: 'Smart Scheduler',
     adHeading: 'For Assistant Directors',
     sceneNamesButton: 'Names & places',
     sceneNamesBack: 'Close',
@@ -1137,6 +1138,7 @@ const LABELS = {
     stageScheduleLabel: 'ସୁଟିଂ ସିଡ୍ୟୁଲ୍',
     stageClapboardLabel: 'କ୍ଲାପବୋର୍ଡ',
     stageAdLabel: 'ସହକାରୀ ନିର୍ଦ୍ଦେଶକଙ୍କ ପାଇଁ',
+    stageSmartLabel: 'ସ୍ମାର୍ଟ ସିଡ୍ୟୁଲର୍',
     adHeading: 'ସହକାରୀ ନିର୍ଦ୍ଦେଶକଙ୍କ ପାଇଁ',
     sceneNamesButton: 'ନାମ ଓ ସ୍ଥାନ',
     sceneNamesBack: 'ବନ୍ଦ କରନ୍ତୁ',
@@ -11527,7 +11529,39 @@ function App() {
       // Same batched-and-sequential background job as Analyze Script — see
       // that handler's comment — so this also polls for the new row
       // instead of waiting on one long-lived request.
-      await pollForScriptBreakdown(conceptId, scriptBreakdown.id, setIsGeneratingAdSheet)
+      // Follows the job itself (not just "did a new row appear"): a failure shows its real reason right away instead of the button
+      // spinning for 20 minutes, and an interrupted job (server restarted) is noticed.
+      const breakdownId = scriptBreakdown.id
+      let lost = 0
+      for (let attempt = 0; attempt < 400; attempt++) {
+        await new Promise((resolve) => setTimeout(resolve, 4000))
+        if (breakdownPollCancelRef.current) return
+        let job = { status: 'running' }
+        try {
+          const statusResponse = await fetch(`${BACKEND_URL}/api/script-breakdown/${breakdownId}/ad-sheet-status`)
+          if (statusResponse.ok) job = await statusResponse.json()
+        } catch {
+          // one missed check is not fatal
+        }
+        if (job.status === 'none') {
+          lost += 1
+          if (lost >= 15) { setErrorMessage('The AD sheet job was interrupted (the server may have restarted). Please press "Make the AD scene breakdown sheet" again.'); setIsGeneratingAdSheet(false); return }
+          continue
+        }
+        lost = 0
+        if (job.status === 'running') continue
+        if (job.status === 'error') { setErrorMessage(job.error || t.genericError); setIsGeneratingAdSheet(false); return }
+        const fullResponse = await fetch(`${BACKEND_URL}/api/concepts/${conceptId}/full`)
+        if (fullResponse.ok) {
+          const fullData = await fullResponse.json()
+          if (fullData.scriptBreakdown) setScriptBreakdown(fullData.scriptBreakdown)
+        }
+        if (job.warning) setErrorMessage(job.warning)
+        setIsGeneratingAdSheet(false)
+        return
+      }
+      setErrorMessage(t.breakdownTimedOutError)
+      setIsGeneratingAdSheet(false)
     } catch {
       setErrorMessage(t.genericError)
       setIsGeneratingAdSheet(false)
@@ -13390,7 +13424,7 @@ function App() {
     const chooseMode = (mode) => {
       if (modeChoice) return
       const reduceMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
-      const open = () => (mode === 'ai' ? handleChooseAiMovieMode() : mode === 'money' ? setAppMode('money') : mode === 'scheduler' ? setAppMode('scheduler') : setAppMode('movie'))
+      const open = () => (mode === 'ai' ? handleChooseAiMovieMode() : mode === 'money' ? setAppMode('money') : setAppMode('movie'))
       if (reduceMotion) {
         open()
         return
@@ -13405,7 +13439,7 @@ function App() {
     const modes = [
       { key: 'movie', icon: '🎬', label: t.appModeMovieOption, hint: t.appModeMovieHint },
       { key: 'ai', icon: '✨', label: t.appModeAiMovieOption, hint: t.appModeAiMovieHint },
-      ...(currentUser.role === 'admin' ? [{ key: 'money', icon: '💰', label: t.appModeMoneyOption, hint: t.appModeMoneyHint }, { key: 'scheduler', icon: '🗓️', label: t.appModeSchedulerOption, hint: t.appModeSchedulerHint }] : []),
+      ...(currentUser.role === 'admin' ? [{ key: 'money', icon: '💰', label: t.appModeMoneyOption, hint: t.appModeMoneyHint }] : []),
     ]
     return (
       <div className={`mode-stage${modeChoice ? ` is-choosing is-choosing-${modeChoice}` : ''}`}>
@@ -13432,10 +13466,6 @@ function App() {
 
   if (appMode === 'money' && currentUser.role === 'admin') {
     return <MoneyMeter backendUrl={BACKEND_URL} onBack={() => setAppMode(null)} />
-  }
-
-  if (appMode === 'scheduler' && currentUser.role === 'admin') {
-    return <SmartScheduler backendUrl={BACKEND_URL} onBack={() => setAppMode(null)} />
   }
 
   if (appMode === 'ai') {
@@ -14963,6 +14993,12 @@ function App() {
                   <span className="production-main-nav-icon">{ICONS.users}</span>
                   {t.stageAdLabel}
                 </button>
+                {currentUser.role === 'admin' && (
+                  <button className="production-main-nav-item stage-upcoming" onClick={() => handleStageClick('stage-smart')}>
+                    <span className="production-main-nav-icon">{ICONS.calendar}</span>
+                    {t.stageSmartLabel}
+                  </button>
+                )}
                 <button className="production-main-nav-item stage-upcoming" onClick={() => setIsClapboardOpen(true)}>
                   <span className="production-main-nav-icon">{ICONS.calendar}</span>
                   {t.stageClapboardLabel}
@@ -17000,6 +17036,13 @@ function App() {
         <div className="three-act-structure" id="stage-ad">
           <h2>{t.adHeading}</h2>
           <AdPapers backendUrl={BACKEND_URL} sceneListId={sceneList.id} refreshKey={shootSchedule?.id ?? 0} />
+        </div>
+      )}
+
+      {activeAgent === 'production' && sceneList && sceneList.status === 'approved' && currentUser.role === 'admin' && (
+        <div className="three-act-structure" id="stage-smart">
+          <h2>{t.stageSmartLabel}</h2>
+          <SmartScheduler embedded backendUrl={BACKEND_URL} sceneListId={sceneList.id} projectTitle={projectTitle} />
         </div>
       )}
 

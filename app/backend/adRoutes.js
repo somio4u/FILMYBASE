@@ -59,7 +59,6 @@ export function registerAdRoutes(app, db, { requireRole, loadRows }) {
       hasSmartPlan: Boolean(run),
       plan: planSource === "production" ? fromShoot.plan : planSource === "smart" ? run.result : null,
       refs: planSource === "production" ? fromShoot.refs : new Map(),
-      categories: run ? { artists: run.result.artists, locations: run.result.locations } : null,
       stale: planSource === "smart" && changedIds.length > 0,
       changedIds: planSource === "smart" ? changedIds : [],
       adSheet: breakdown?.adSheet ?? null,

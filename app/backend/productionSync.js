@@ -64,11 +64,15 @@ export function registerProductionSyncRoutes(app, db, tools) {
 
       begin("adSheet");
       const entries = flattenScenesForAdSheet(sceneList);
-      const details = await generateAdSheetDetails(entries, content, sourceText);
-      content = { ...content, adSheet: entries.map((e, i) => ({ ...e, ...details[i] })) };
+      let firstError = null;
+      const details = await generateAdSheetDetails(entries, content, sourceText, (e) => { firstError ??= e.message; });
+      const failed = details.filter((d) => d.failed).length;
+      // an AD sheet the AI could not read at all is never saved (the old breakdown stays); a partly blank one is saved and said so
+      if (entries.length > 0 && failed === entries.length) throw new Error(`The AI could not read the script for the AD sheet${firstError ? ` (${firstError})` : ""}. Nothing was changed — please try again in a minute.`);
+      content = { ...content, adSheet: entries.map((e, i) => { const { failed: _failed, ...rest } = details[i]; return { ...e, ...rest }; }) };
       const status = previousBreakdown?.status === "approved" ? "approved" : "pending";
       await db.query("INSERT INTO script_breakdowns (scene_list_id, content, status, feedback) VALUES ($1, $2, $3, $4)", [sceneListId, JSON.stringify(content), status, "Synchronized with the latest screenplay"]);
-      end("adSheet", "done", `${entries.length} scenes`);
+      end("adSheet", failed ? "warning" : "done", failed ? `${entries.length - failed} of ${entries.length} scenes analysed — ${failed} could not be (press Synchronize again to retry)` : `${entries.length} scenes`);
 
       // 3 — the schedule, only when one exists
       begin("schedule");

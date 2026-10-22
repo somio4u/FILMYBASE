@@ -1,6 +1,7 @@
 // "For Assistant Directors": the paper an AD works from, built from what the app already knows — the approved scene list, the written
 // screenplay, the Smart Scheduler's plan, the colour tags, and the Script Breakdown (when one exists). Every document is a plain
 // "spec" ({ title, subtitle, sections: [{ heading, note, columns: [{ h, w }], rows }] }); adRender.js turns a spec into a PDF or an Excel file.
+// The Smart Scheduler's cost categories (costly / normal, free / paid) are the owner's private reference: they never appear on these papers.
 // Nothing here is invented: where the app does not know something (call times, dates, contact numbers, make-up looks) the cell is left blank
 // for the AD to fill in by hand.
 
@@ -21,6 +22,9 @@ export const DOCUMENTS = [
   { kind: "extras", group: "more", needsPlan: false, title: "Extras & Crowd List", about: "Scenes that need extras: from the Script Breakdown and from crowd words found in the scene text; the number needed is left blank." },
 ];
 
+const NONE = /^(none|nil|n\/a|na|no|nothing|not applicable|no extras?|no props?|-+|—)\.?$/i;
+// the AI writes "None" when there is nothing: that is an empty box, not an entry
+const adText = (v) => { const t = String(v && typeof v === "object" ? v.en || v.or || v.hi || "" : v ?? "").trim(); return NONE.test(t) ? "" : t; };
 const clip = (s, n = 400) => { const t = String(s ?? "").replace(/\s+/g, " ").trim(); return t.length > n ? `${t.slice(0, n - 1)}…` : t; };
 const num = (n) => Math.round(Number(n) * 10) / 10;
 const textOf = (v) => (v && typeof v === "object" ? v.en || v.or || v.hi || "" : String(v ?? ""));
@@ -42,14 +46,12 @@ function prepare(ctx) {
     epLabel: r.episode === null ? "" : `Ep ${r.episode + 1}`,
   }));
   const costume = new Map((ctx.breakdown?.costumes ?? []).map((c) => [String(c.character).toUpperCase(), textOf(c.description)]));
-  const category = Object.fromEntries((ctx.categories?.artists ?? ctx.plan?.artists ?? []).map((a) => [a.name, a.category]));
-  const locCategory = Object.fromEntries((ctx.categories?.locations ?? ctx.plan?.locations ?? []).map((l) => [l.name, l.category]));
-  return { rows, costume, category, locCategory, useAd };
+  return { rows, costume, useAd };
 }
 
 const joinUnique = (...parts) => [...new Set(parts.map((x) => clip(x, 400)).filter(Boolean))].join("; ");
-const propsOf = (r) => joinUnique(textOf(r.ad?.property), r.ref?.properties);
-const costumeNotesOf = (r) => joinUnique(textOf(r.ad?.costumeRemarks), r.ref?.costume);
+const propsOf = (r) => joinUnique(adText(r.ad?.property), r.ref?.properties);
+const costumeNotesOf = (r) => joinUnique(adText(r.ad?.costumeRemarks), r.ref?.costume);
 const dayText = (r) => (r.day ? `Day ${r.day}` : "Not in plan");
 const sceneCols = [{ h: "Sc", w: 5 }, { h: "INT/EXT", w: 7 }, { h: "Place", w: 20 }, { h: "D/N", w: 7 }, { h: "Min", w: 5 }, { h: "Cast", w: 22 }, { h: "What happens", w: 34 }];
 const sceneRow = (r) => [r.label, r.intExt, r.place, r.timeOfDay, num(r.minutes), r.cast, clip(r.gist, 220)];
@@ -94,8 +96,8 @@ function locationSchedule(ctx, P) {
   const sections = [{
     heading: "All locations",
     note: warnings(ctx, P.rows).join(" "),
-    columns: [{ h: "Location", w: 24 }, { h: "Free/Paid", w: 9 }, { h: "Scenes", w: 8 }, { h: "Minutes", w: 8 }, { h: "Artists", w: 8 }, { h: "Shoot days", w: 22 }],
-    rows: stats.map((s) => [s.name, (P.locCategory[s.name] ?? "free").toUpperCase(), s.list.length, num(s.minutes), s.artists.size, s.days.length ? s.days.map((d) => `Day ${d}`).join(", ") : "—"]),
+    columns: [{ h: "Location", w: 28 }, { h: "Scenes", w: 8 }, { h: "Minutes", w: 8 }, { h: "Artists", w: 8 }, { h: "Shoot days", w: 22 }],
+    rows: stats.map((s) => [s.name, s.list.length, num(s.minutes), s.artists.size, s.days.length ? s.days.map((d) => `Day ${d}`).join(", ") : "—"]),
   }];
   for (const s of stats) {
     sections.push({
@@ -126,8 +128,8 @@ function locationArtists(ctx, P) {
     sections.push({
       heading: `${s.name}  —  ${s.list.length} scene(s), ${s.artists.length} artist(s)`,
       note: `Scenes here: ${s.list.map((r) => r.label).join(", ")}`,
-      columns: [{ h: "Artist", w: 20 }, { h: "Category", w: 9 }, { h: "Scenes here", w: 7 }, { h: "Scene numbers", w: 30 }, { h: "Days at this place", w: 18 }],
-      rows: s.artists.length ? s.artists.map((a) => [a.name, (P.category[a.name] ?? "—").toUpperCase(), a.scenes.length, a.scenes.join(", "), a.days.size ? [...a.days].sort((x, y) => x - y).map((d) => `Day ${d}`).join(", ") : "—"]) : [["(no artist known yet)", "", "", "", ""]],
+      columns: [{ h: "Artist", w: 24 }, { h: "Scenes here", w: 9 }, { h: "Scene numbers", w: 30 }, { h: "Days at this place", w: 18 }],
+      rows: s.artists.length ? s.artists.map((a) => [a.name, a.scenes.length, a.scenes.join(", "), a.days.size ? [...a.days].sort((x, y) => x - y).map((d) => `Day ${d}`).join(", ") : "—"]) : [["(no artist known yet)", "", "", ""]],
     });
   }
   return { title: "Location-wise Artist List", subtitle: sub(ctx), sections };
@@ -147,8 +149,8 @@ function callSheet(ctx, P) {
     });
     sections.push({
       heading: `Cast to call — Day ${d.day}`,
-      columns: [{ h: "Artist", w: 20 }, { h: "Category", w: 9 }, { h: "Scenes today", w: 16 }, { h: "Contact", w: 16 }, { h: "Pick-up", w: 11 }, { h: "Make-up", w: 11 }, { h: "On set", w: 11 }, { h: "Costume", w: 28 }],
-      rows: d.artists.map((a) => [a, (P.category[a] ?? "normal").toUpperCase(), list.filter((r) => r.artists.includes(a)).map((r) => r.label).join(", "), ctx.contacts?.get(a)?.contact_number ?? "", "", "", "", clip(P.costume.get(a) ?? "", 90)]),
+      columns: [{ h: "Artist", w: 24 }, { h: "Scenes today", w: 16 }, { h: "Contact", w: 16 }, { h: "Pick-up", w: 11 }, { h: "Make-up", w: 11 }, { h: "On set", w: 11 }, { h: "Costume", w: 28 }],
+      rows: d.artists.map((a) => [a, list.filter((r) => r.artists.includes(a)).map((r) => r.label).join(", "), ctx.contacts?.get(a)?.contact_number ?? "", "", "", "", clip(P.costume.get(a) ?? "", 90)]),
     });
   }
   return { title: "Call Sheets", subtitle: sub(ctx), sections };
@@ -158,12 +160,12 @@ function artistSchedule(ctx, P) {
   needPlan(ctx);
   const names = [...new Set(P.rows.flatMap((r) => r.artists))];
   const stat = (name) => { const list = P.rows.filter((r) => r.artists.includes(name)); return { name, list, minutes: list.reduce((n, r) => n + r.minutes, 0), days: [...new Set(list.map((r) => r.day).filter(Boolean))].sort((a, b) => a - b) }; };
-  const stats = names.map(stat).sort((a, b) => ({ costly: 0, normal: 1, cheap: 2 }[P.category[a.name] ?? "normal"] - { costly: 0, normal: 1, cheap: 2 }[P.category[b.name] ?? "normal"]) || b.days.length - a.days.length || a.name.localeCompare(b.name));
+  const stats = names.map(stat).sort((a, b) => b.days.length - a.days.length || b.list.length - a.list.length || a.name.localeCompare(b.name));
   const sections = [{
     heading: "All artists",
     note: warnings(ctx, P.rows).join(" "),
-    columns: [{ h: "Artist", w: 20 }, { h: "Category", w: 9 }, { h: "Days called", w: 9 }, { h: "Scenes", w: 8 }, { h: "Minutes", w: 8 }, { h: "Which days", w: 36 }],
-    rows: stats.map((s) => [s.name, (P.category[s.name] ?? "normal").toUpperCase(), s.days.length, s.list.length, num(s.minutes), s.days.map((d) => `Day ${d}`).join(", ") || "—"]),
+    columns: [{ h: "Artist", w: 26 }, { h: "Days called", w: 9 }, { h: "Scenes", w: 8 }, { h: "Minutes", w: 8 }, { h: "Which days", w: 36 }],
+    rows: stats.map((s) => [s.name, s.days.length, s.list.length, num(s.minutes), s.days.map((d) => `Day ${d}`).join(", ") || "—"]),
   }];
   for (const s of stats) {
     sections.push({
@@ -226,7 +228,7 @@ function sceneBreakdown(ctx, P) {
       heading: "All scenes",
       note: warnings(ctx, P.rows).join(" "),
       columns: [{ h: "Sc", w: 5 }, { h: "Day", w: 7 }, { h: "INT/EXT", w: 6 }, { h: "Place", w: 16 }, { h: "D/N", w: 6 }, { h: "Min", w: 5 }, { h: "Cast", w: 16 }, { h: "Extras", w: 14 }, { h: "Props", w: 16 }, { h: "Costume", w: 16 }, { h: "Written", w: 7 }, { h: "Tag", w: 8 }],
-      rows: P.rows.map((r) => [r.label, r.day ? `Day ${r.day}` : "", r.intExt, r.place, r.timeOfDay, num(r.minutes), r.cast, clip(textOf(r.ad?.extras), 80), clip(propsOf(r), 80), clip(costumeNotesOf(r), 80), r.written ? "yes" : "NO", r.tag?.tag ?? ""]),
+      rows: P.rows.map((r) => [r.label, r.day ? `Day ${r.day}` : "", r.intExt, r.place, r.timeOfDay, num(r.minutes), r.cast, clip(adText(r.ad?.extras), 80), clip(propsOf(r), 80), clip(costumeNotesOf(r), 80), r.written ? "yes" : "NO", r.tag?.tag ?? ""]),
     }],
   };
 }
@@ -278,7 +280,7 @@ function changedScenes(ctx, P) {
 function extras(ctx, P) {
   const rows = [];
   for (const r of inShootOrder(P.rows)) {
-    const fromBreakdown = clip(textOf(r.ad?.extras), 160);
+    const fromBreakdown = clip(adText(r.ad?.extras), 160);
     const found = [...new Set([...`${r.gist} ${r.body ?? ""}`.matchAll(CROWD)].map((m) => m[0].toLowerCase()))].join(", ");
     if (fromBreakdown || found) rows.push([r.label, r.day ? `Day ${r.day}` : "", r.place, r.timeOfDay, fromBreakdown, found, "", ""]);
   }

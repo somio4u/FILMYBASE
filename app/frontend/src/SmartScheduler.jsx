@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import './SmartScheduler.css'
 
-const ARTIST_CATS = [['costly', 'Costly'], ['normal', 'Normal'], ['cheap', 'Cheap']]
+const ARTIST_CATS = [['costly', 'Costly'], ['normal', 'Normal']]
 const LOCATION_CATS = [['free', 'Free'], ['paid', 'Paid']]
 const STAGE = { reading: 'Reading the screenplay…', analysing: 'The AI is analysing the screenplay (places, people, what must stay together)…', scheduling: 'Planning the days…' }
 
@@ -23,7 +23,8 @@ function Segmented({ value, options, onChange }) {
 }
 
 // A separate agent (like Adu): it reads a project's approved screenplay and plans the shoot days. It never changes the Production schedule.
-export default function SmartScheduler({ backendUrl, onBack }) {
+// embedded: lives inside Production Management for ONE project (sceneListId) — no start screen, no project picker. Admin only.
+export default function SmartScheduler({ backendUrl, onBack, embedded = false, sceneListId = null, projectTitle = '' }) {
   const [projects, setProjects] = useState(null)
   const [error, setError] = useState('')
   const [project, setProject] = useState(null) // { sceneListId, title, ... }
@@ -36,8 +37,9 @@ export default function SmartScheduler({ backendUrl, onBack }) {
   const saveTimer = useRef(null)
 
   useEffect(() => {
+    if (embedded) return
     call(backendUrl, '/projects').then(setProjects).catch((e) => setError(e.message))
-  }, [backendUrl])
+  }, [backendUrl, embedded])
 
   const open = useCallback(async (p) => {
     setProject(p); setError(''); setBrief(null); setLatest(null); setSaved('')
@@ -47,6 +49,10 @@ export default function SmartScheduler({ backendUrl, onBack }) {
       setLatest(await call(backendUrl, `/${p.sceneListId}/latest`))
     } catch (e) { setError(e.message) }
   }, [backendUrl])
+
+  useEffect(() => {
+    if (embedded && sceneListId) open({ sceneListId, title: projectTitle })
+  }, [embedded, sceneListId, projectTitle, open])
 
   // what the owner types is saved by itself, a moment after he stops
   const scheduleSave = (nextBrief, nextArtists, nextLocations) => {
@@ -97,15 +103,17 @@ export default function SmartScheduler({ backendUrl, onBack }) {
   const catOfArtist = (name) => run1?.artists.find((a) => a.name === name)?.category ?? 'normal'
 
   return (
-    <div className="ss-page">
-      <div className="ss-top">
-        <button type="button" className="ss-back" onClick={project ? () => { setProject(null); setError('') } : onBack}>← {project ? 'Projects' : 'Back'}</button>
-        <h1>🗓️ Smart Scheduler</h1>
-      </div>
+    <div className={`ss-page${embedded ? ' ss-embedded' : ''}`}>
+      {!embedded && (
+        <div className="ss-top">
+          <button type="button" className="ss-back" onClick={project ? () => { setProject(null); setError('') } : onBack}>← {project ? 'Projects' : 'Back'}</button>
+          <h1>🗓️ Smart Scheduler</h1>
+        </div>
+      )}
       <p className="ss-sub">A separate agent: it reads a project's approved screenplay and plans the shoot days — fewest days for the costly artists, as few paid-location days and moves as possible. It does not change the Production schedule.</p>
       {error && <p className="ss-error" role="alert">{error}</p>}
 
-      {!project && (
+      {!embedded && !project && (
         <div className="ss-projects">
           {!projects && !error && <p className="ss-muted">Loading projects…</p>}
           {projects?.length === 0 && <p className="ss-muted">No project has an approved screenplay yet.</p>}

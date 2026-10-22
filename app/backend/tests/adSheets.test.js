@@ -163,3 +163,20 @@ test("routes: document list and downloads on the real database", { skip: !up }, 
     await db.end();
   }
 });
+
+test("the owner's cost categories (costly / normal, free / paid) never appear on any AD paper", () => {
+  const planWithCats = { ...plan, artists: [{ name: "SOUMYA", category: "costly" }], locations: [{ name: "TEMPLE", category: "paid" }] };
+  for (const d of DOCUMENTS) {
+    const spec = buildDocument(d.kind, ctx({ plan: planWithCats }));
+    const all = JSON.stringify(spec).toLowerCase();
+    assert.ok(!all.includes("costly"), `${d.kind} shows costly`);
+    assert.ok(!all.includes('"category"') && !all.includes("free/paid") && !all.includes('"paid"'), `${d.kind} shows a category column`);
+  }
+});
+
+test('"None" written by the AI is an empty box, not an extra or a prop', () => {
+  const noneSheet = rows.map(() => ({ mainCharacters: [], extras: { en: "None" }, property: { en: "N/A" }, costumeRemarks: { en: "none." } }));
+  const extras = buildDocument("extras", ctx({ adSheet: noneSheet }));
+  assert.ok(!flat(extras).toLowerCase().includes("none"));
+  assert.equal(extras.sections[0].rows.length, 1); // only scene 2, from the crowd words in its text
+});

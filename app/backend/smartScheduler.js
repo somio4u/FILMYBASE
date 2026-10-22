@@ -4,7 +4,7 @@
 //   2. the AI (the best model) reads it too: merges names that are the same place / person, finds scenes that must stay together or
 //      in order, and notes what looks risky
 //   3. scheduleSolver.js (plain arithmetic) makes the day plan within the days the owner asks for, using the owner's categories
-//      (artists costly / normal / cheap, locations free / paid)
+//      (artists costly / normal, locations free / paid)
 import crypto from "crypto";
 import { applyNameMap, dismissKey, mergeIntoMap, normalizeLocation, suggestArtistGroups, suggestLocationGroups, resolveName } from "./nameCleanup.js";
 import { solveSchedule } from "./scheduleSolver.js";
@@ -79,7 +79,7 @@ export function briefLists(rows, brief) {
   }
   const round = (n) => Math.round(n * 10) / 10;
   return {
-    artists: [...artists.values()].sort((a, b) => b.minutes - a.minutes).map((a) => ({ ...a, minutes: round(a.minutes), category: ["costly", "normal", "cheap"].includes(brief?.artists?.[a.name]) ? brief.artists[a.name] : "normal" })),
+    artists: [...artists.values()].sort((a, b) => b.minutes - a.minutes).map((a) => ({ ...a, minutes: round(a.minutes), category: ["costly", "normal"].includes(brief?.artists?.[a.name]) ? brief.artists[a.name] : "normal" })),
     locations: [...locations.values()].sort((a, b) => b.minutes - a.minutes).map((l) => ({ ...l, minutes: round(l.minutes), category: ["free", "paid"].includes(brief?.locations?.[l.name]) ? brief.locations[l.name] : "free" })),
   };
 }
@@ -283,7 +283,7 @@ export function registerSmartSchedulerRoutes(app, db, tools) {
     await db.query(
       `INSERT INTO scheduler_briefs (scene_list_id, days, max_minutes_per_day, artists, locations, updated_at) VALUES ($1, $2, $3, $4, $5, now())
        ON CONFLICT (scene_list_id) DO UPDATE SET days = EXCLUDED.days, max_minutes_per_day = EXCLUDED.max_minutes_per_day, artists = EXCLUDED.artists, locations = EXCLUDED.locations, updated_at = now()`,
-      [id, days, max, JSON.stringify(clean(req.body.artists, ["costly", "normal", "cheap"])), JSON.stringify(clean(req.body.locations, ["free", "paid"]))]);
+      [id, days, max, JSON.stringify(clean(req.body.artists, ["costly", "normal"])), JSON.stringify(clean(req.body.locations, ["free", "paid"]))]);
     res.json({ saved: true });
   });
 

@@ -1514,7 +1514,7 @@ const PRODUCTION_ONLY_ROUTES = [
   ["GET", /^\/api\/screenplay\/scenes$/, "querySceneList"],
   ["POST", /^\/api\/script-breakdown$/, "bodySceneList"],
   ["POST", /^\/api\/script-breakdown\/(\d+)\/[a-z-]+$/, "breakdown"],
-  ["GET", /^\/api\/script-breakdown\/(\d+)\/(export|export-excel|export-ad-sheet|export-ad-sheet-excel)$/, "breakdown"],
+  ["GET", /^\/api\/script-breakdown\/(\d+)\/(export|export-excel|export-ad-sheet|export-ad-sheet-excel|ad-sheet-status)$/, "breakdown"],
   ["POST", /^\/api\/shoot-schedule$/, "bodySceneList"],
   ["POST", /^\/api\/shoot-schedule\/(\d+)\/(parse-day-completion|interpret-handwritten-note|apply-handwritten-changes|record-day)$/, "sceneList"],
   ["POST", /^\/api\/shoot-schedule\/(\d+)\/(edit-scene|approve|request-changes)$/, "schedule"],
@@ -13424,10 +13424,12 @@ async function generateAdSheetDetailsForBatch(batchEntries, batchStartIndex, bre
   // Defensive padding/truncation — the row COUNT must match the real scene
   // count no matter what the model returns, since every downstream row is
   // positionally joined back to its deterministic scene entry.
-  return batchEntries.map((_, i) => rows[i] ?? blankRow);
+  // a scene the AI returned nothing for is flagged, so the caller can tell a real answer from a blank one
+  return batchEntries.map((_, i) => rows[i] ?? { ...blankRow, failed: true });
 }
 
-async function generateAdSheetDetails(sceneEntries, breakdownContent, sourceText) {
+// onBatchError(error) is told about every batch that failed (its scenes come back as blank rows marked failed: true)
+async function generateAdSheetDetails(sceneEntries, breakdownContent, sourceText, onBatchError) {
   const batches = [];
   for (let i = 0; i < sceneEntries.length; i += AD_SHEET_BATCH_SIZE) {
     batches.push({ start: i, entries: sceneEntries.slice(i, i + AD_SHEET_BATCH_SIZE) });
@@ -13445,7 +13447,8 @@ async function generateAdSheetDetails(sceneEntries, breakdownContent, sourceText
       return await generateAdSheetDetailsForBatch(batch.entries, batch.start, breakdownContent, sourceText);
     } catch (error) {
       console.error(`AD sheet batch starting at scene ${batch.start} failed, filling with blank rows:`, error.message);
-      return batch.entries.map(() => blankRow);
+      onBatchError?.(error);
+      return batch.entries.map(() => ({ ...blankRow, failed: true }));
     }
   });
 
@@ -14130,8 +14133,11 @@ app.post("/api/script-breakdown/:id/generate-ad-sheet", requireRole("admin", "pr
   // Same reasoning as /api/script-breakdown: one batch per ~15 scenes, each
   // re-sending the whole script, run sequentially now for rate-limit
   // safety — a real script easily pushes this past Render's own request
-  // timeout. Respond immediately and let the frontend poll for the new
-  // row instead of holding this request open.
+  // timeout. Respond immediately and let the frontend follow the job
+  // (GET .../ad-sheet-status) instead of holding this request open: it shows
+  // the real reason when the AI fails, and never saves an empty sheet.
+  const job = { status: "running", startedAt: Date.now(), total: 0, failed: 0, firstError: null, error: null, warning: null };
+  adSheetJobs.set(String(req.params.id), job);
   res.json({ status: "processing" });
 
   try {
@@ -14139,9 +14145,14 @@ app.post("/api/script-breakdown/:id/generate-ad-sheet", requireRole("admin", "pr
     const sceneList = sceneListResult.rows[0].content;
     const sourceText = await buildBreakdownSourceText(sceneList, sceneListId);
     const sceneEntries = flattenScenesForAdSheet(sceneList);
-    const aiDetails = await generateAdSheetDetails(sceneEntries, latest.rows[0].content, sourceText);
+    const aiDetails = await generateAdSheetDetails(sceneEntries, latest.rows[0].content, sourceText, (e) => { job.firstError ??= e.message; });
+    job.total = sceneEntries.length;
+    job.failed = aiDetails.filter((d) => d.failed).length;
+    if (job.total > 0 && job.failed === job.total) {
+      throw new Error(`The AI could not read the script for the AD sheet${job.firstError ? ` (${job.firstError})` : ""}. Nothing was changed — please try again in a minute.`);
+    }
 
-    const adSheet = sceneEntries.map((entry, i) => ({ ...entry, ...aiDetails[i] }));
+    const adSheet = sceneEntries.map((entry, i) => { const { failed, ...details } = aiDetails[i]; return { ...entry, ...details }; });
     const updatedContent = { ...latest.rows[0].content, adSheet };
 
     // Pure enrichment (adds a derived document, normally run AFTER
@@ -14152,9 +14163,19 @@ app.post("/api/script-breakdown/:id/generate-ad-sheet", requireRole("admin", "pr
       "INSERT INTO script_breakdowns (scene_list_id, content, status, feedback) VALUES ($1, $2, $3, $4)",
       [sceneListId, JSON.stringify(updatedContent), latest.rows[0].status, "Generated AD Scene Breakdown Sheet"]
     );
+    if (job.failed > 0) job.warning = `The AD sheet is ready, but ${job.failed} of ${job.total} scenes could not be analysed (their extras / props / costume boxes are empty). Press "Make the AD scene breakdown sheet" again to retry.`;
+    job.status = "done";
   } catch (error) {
     console.error("AD sheet generation failed:", error.message);
+    job.status = "error";
+    job.error = error.message;
   }
+});
+
+const adSheetJobs = new Map();
+app.get("/api/script-breakdown/:id/ad-sheet-status", requireLogin, (req, res) => {
+  const job = adSheetJobs.get(String(req.params.id));
+  res.json(job ? { status: job.status, error: job.error, warning: job.warning, total: job.total, failed: job.failed } : { status: "none" });
 });
 
 app.post("/api/script-breakdown/:id/approve", requireRole("admin", "director"), async (req, res) => {

@@ -13,7 +13,7 @@ for (let i = 0; i < 4; i++) {
   add("CLINIC", ["BABU", "ASHA"], 2);
 }
 
-const run = (extra = {}) => solveSchedule({ scenes, days: 3, artistCategory: { STAR: "costly", BABU: "cheap" }, locationCategory: { CLINIC: "paid" }, ...extra });
+const run = (extra = {}) => solveSchedule({ scenes, days: 3, artistCategory: { STAR: "costly", BABU: "normal" }, locationCategory: { CLINIC: "paid" }, ...extra });
 
 test("the same input always gives the same plan", () => {
   const a = run(); const b = run();
@@ -41,7 +41,7 @@ test("the costly artist is called on fewer days than there are places he appears
   assert.ok(star.callDays <= 3);
   assert.equal(star.category, "costly");
   const babu = r.artists.find((a) => a.name === "BABU");
-  assert.equal(babu.category, "cheap");
+  assert.equal(babu.category, "normal");
 });
 
 test("a paid location is used on as few days as possible", () => {

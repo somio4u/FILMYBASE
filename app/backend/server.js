@@ -46,13 +46,15 @@ import { registerAdRoutes } from "./adRoutes.js";
 import { registerProductionSyncRoutes } from "./productionSync.js";
 import { createJobStore, ensureJobSchema, shouldResume } from "./jobStore.js";
 import { repairStoredTransitions, withoutTransitions } from "./transitionNames.js";
+import { createAiCredentials, ensureAiCredentialsSchema } from "./aiCredentials.js";
+import { registerAiSettingsRoutes } from "./aiSettingsRoutes.js";
 import { ensureLocationRenameSchema, registerLocationRenameRoutes } from "./locationRename.js";
 import { ensureSceneTagSchema, registerSceneTagRoutes } from "./sceneTags.js";
 import { registerLiveSyncRoutes } from "./liveSync.js";
 import { registerChangeHistoryRoutes } from "./changeHistory.js";
 import { ensureScreenplayImportSchema, registerScreenplayImportRoutes } from "./screenplayImportRoutes.js";
 import { readStoryFromPdf } from "./pdfReader.js";
-import { BIBLE_PASS_SCORE, brainAsker, newUsage, designStoryBible, generateBrainJson, reviseBibleWithNote, storyBibleToMarkdown } from "./storyBrain.js";
+import { useServiceAccountSource, BIBLE_PASS_SCORE, brainAsker, newUsage, designStoryBible, generateBrainJson, reviseBibleWithNote, storyBibleToMarkdown } from "./storyBrain.js";
 import { ensureAiMovieStorySchema, getProjectModes, judgedStage, registerAiMovieStoryRoutes } from "./aiMovieStory.js";
 import { assertWithinBudget, recordSpend } from "./pipelineSettings.js";
 import { ensureCinematicSchema, registerSpectacleRoutes, createShotCutterHook } from "./spectacleDirector.js";
@@ -102,24 +104,79 @@ const BACKEND_URL = process.env.BACKEND_URL || `http://localhost:${PORT}`;
 // prepaid-credit system, which is why this exists — switch to it if AI
 // Studio credits run out. The service account's own project_id is used
 // directly, so no separate project env var is needed.
-const googleServiceAccountJson = process.env.GOOGLE_SERVICE_ACCOUNT_JSON;
-const googleServiceAccount = googleServiceAccountJson ? JSON.parse(googleServiceAccountJson) : null;
-const ai = googleServiceAccount
-  ? new GoogleGenAI({
-      vertexai: true,
-      project: googleServiceAccount.project_id,
-      location: process.env.GOOGLE_CLOUD_LOCATION || "us-central1",
-      googleAuthOptions: { credentials: googleServiceAccount },
-    })
-  : new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+// Which key is in use is decided at the moment of each AI call (aiCredentials.js): the key the admin saved in Settings if there is one, else the
+// server's own GOOGLE_SERVICE_ACCOUNT_JSON, else GEMINI_API_KEY. `ai` below looks like the usual Gemini client, but hands every call to the
+// client built for the CURRENT key, so changing the key in Settings takes effect at once, without a restart.
+const aiCredentials = createAiCredentials({ env: process.env });
+useServiceAccountSource(() => aiCredentials.current().serviceAccount); // the Pro "Story Brain" model follows the same key
+let aiClient = null;
+let aiClientFor = "";
+let aiMeteringDb = null;
+function buildAiClient(credentials = aiCredentials.current()) {
+  const sa = credentials.serviceAccount;
+  return sa
+    ? new GoogleGenAI({ vertexai: true, project: sa.project_id, location: credentials.location, googleAuthOptions: { credentials: sa } })
+    : new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+}
+function currentAiClient() {
+  const c = aiCredentials.current();
+  const id = `${c.source}|${c.location}|${c.serviceAccount?.client_email}|${c.serviceAccount?.private_key_id}|${c.serviceAccount?.project_id}`;
+  if (!aiClient || id !== aiClientFor) {
+    aiClient = buildAiClient(c);
+    aiClientFor = id;
+    if (aiMeteringDb) installGeminiMetering(aiClient, aiMeteringDb); // the Money Meter keeps counting with the new key
+  }
+  return aiClient;
+}
+const ai = new Proxy({}, {
+  get(_target, prop) {
+    const client = currentAiClient();
+    const value = client[prop];
+    return typeof value === "function" ? value.bind(client) : value;
+  },
+});
+const usingVertex = () => Boolean(aiCredentials.current().serviceAccount);
+
+// Pictures, voices and video go through their own helper (providers.js); it is rebuilt whenever the AI key changes.
+let providersInstance = null;
+let providersFor = "";
+function currentProviders() {
+  const c = aiCredentials.current();
+  const sa = c.serviceAccount;
+  const id = `${c.source}|${c.location}|${sa?.client_email}|${sa?.private_key_id}|${sa?.project_id}`;
+  if (!providersInstance || id !== providersFor) {
+    providersFor = id;
+    providersInstance = createProviders({
+      env: process.env,
+      vertex: sa ? { project: sa.project_id, location: c.location } : null,
+      getVertexToken: sa
+        ? async () => {
+            const { GoogleAuth } = await import("google-auth-library");
+            const client = await new GoogleAuth({ credentials: sa, scopes: ["https://www.googleapis.com/auth/cloud-platform"] }).getClient();
+            return (await client.getAccessToken()).token;
+          }
+        : null,
+      // Plain-text AI helper used to cut scenes into shots and write storyboard text.
+      textJson: async (prompt) => {
+        const response = await generateContentWithRetry({
+          model: AI_MOVIE_DIALOGUE_MODEL_NAME,
+          contents: prompt,
+          config: { responseMimeType: "application/json", maxOutputTokens: 16384, temperature: 0.4 },
+        });
+        return JSON.parse(response.text);
+      },
+    });
+  }
+  return providersInstance;
+}
 
 // Silent otherwise: a misspelled/missing env var would fall back to the free
 // AI Studio key with zero indication anything was wrong, which is exactly
 // the kind of "did my Vertex AI switch actually take effect?" question this
 // line exists to answer from Render's logs.
 console.log(
-  googleServiceAccount
-    ? `Using Vertex AI (project: ${googleServiceAccount.project_id}, location: ${process.env.GOOGLE_CLOUD_LOCATION || "us-central1"})`
+  usingVertex()
+    ? `Using Vertex AI (project: ${aiCredentials.current().serviceAccount.project_id}, location: ${aiCredentials.current().location}) — a key saved in Settings (if any) replaces this once the database is read`
     : "Using AI Studio free-tier Gemini API key (GOOGLE_SERVICE_ACCOUNT_JSON not set)"
 );
 
@@ -161,7 +218,9 @@ const db = new Pool(
 const jobStore = createJobStore(db);
 
 // Money Meter: measures every Gemini text call (tokens x price) and remembers who and which project it was for.
-installGeminiMetering(ai, db);
+aiMeteringDb = db;
+installGeminiMetering(currentAiClient(), db);
+aiCredentials.attach(db);
 // Supabase's pooled connection role has an empty default search_path, so
 // unqualified table names (`users`, `concepts`, ...) fail to resolve unless
 // each new connection sets it explicitly.
@@ -1713,7 +1772,7 @@ app.get("/api/test-gemini", requireRole("admin"), async (req, res) => {
     });
     res.json({
       ok: true,
-      backend: googleServiceAccount ? "vertex-ai" : "ai-studio-free-tier",
+      backend: usingVertex() ? "vertex-ai" : "ai-studio-free-tier",
       model: GEMINI_MODEL_NAME,
       elapsedMs: Date.now() - startedAt,
       story: response.text,
@@ -1721,7 +1780,7 @@ app.get("/api/test-gemini", requireRole("admin"), async (req, res) => {
   } catch (error) {
     res.status(502).json({
       ok: false,
-      backend: googleServiceAccount ? "vertex-ai" : "ai-studio-free-tier",
+      backend: usingVertex() ? "vertex-ai" : "ai-studio-free-tier",
       model: GEMINI_MODEL_NAME,
       elapsedMs: Date.now() - startedAt,
       error: error.message,
@@ -20456,26 +20515,7 @@ registerPipelineRoutes(app, db, requireRole, {
     if (job?.status === "waiting_for_you" && job.next === "approve_shots") await startAutoProduction(projectId, req.headers.cookie, { phase: "finish" });
   },
   store: productionMedia.store,
-  providers: createProviders({
-    env: process.env,
-    vertex: googleServiceAccount ? { project: googleServiceAccount.project_id, location: process.env.GOOGLE_CLOUD_LOCATION || "us-central1" } : null,
-    getVertexToken: googleServiceAccount
-      ? async () => {
-          const { GoogleAuth } = await import("google-auth-library");
-          const client = await new GoogleAuth({ credentials: googleServiceAccount, scopes: ["https://www.googleapis.com/auth/cloud-platform"] }).getClient();
-          return (await client.getAccessToken()).token;
-        }
-      : null,
-    // Plain-text AI helper used to cut scenes into shots and write storyboard text.
-    textJson: async (prompt) => {
-      const response = await generateContentWithRetry({
-        model: AI_MOVIE_DIALOGUE_MODEL_NAME,
-        contents: prompt,
-        config: { responseMimeType: "application/json", maxOutputTokens: 16384, temperature: 0.4 },
-      });
-      return JSON.parse(response.text);
-    },
-  }),
+  providers: new Proxy({}, { get: (_target, prop) => currentProviders()[prop] }), // built for whichever AI key is in use right now
 });
 registerSubmissionRoutes(app, db, requireRole, { store: productionMedia.store, serveMedia: productionMedia.serveMedia });
 registerWriterRoutes(app, db, requireRole);
@@ -20511,6 +20551,19 @@ const smartScheduler = registerSmartSchedulerRoutes(app, db, {
   }),
 });
 registerAdRoutes(app, db, { requireRole, loadRows: smartScheduler.loadRows });
+// Settings → AI connection (admin): paste a Google Vertex key, test it, and the whole app uses it at once (aiCredentials.js, aiSettingsRoutes.js)
+registerAiSettingsRoutes(app, db, {
+  requireRole,
+  aiCredentials,
+  // a real, tiny AI call with a key that is NOT saved yet
+  testCandidate: async (serviceAccount, location) => {
+    const client = buildAiClient({ serviceAccount, location, source: "candidate" });
+    await Promise.race([
+      client.models.generateContent({ model: GEMINI_MODEL_NAME, contents: "Reply with the single word OK.", config: { maxOutputTokens: 16 } }),
+      new Promise((_, reject) => setTimeout(() => reject(new Error("timed out after 45 seconds")), 45000)),
+    ]);
+  },
+});
 // "Synchronize with the latest screenplay": rebuilds the Script Breakdown, the AD scene sheet and the Shoot Schedule from the CURRENT screenplay (productionSync.js)
 const productionSync = registerProductionSyncRoutes(app, db, {
   jobStore, requireRole, userOwnsSceneList, buildBreakdownSourceText, generateDeepScriptBreakdownContent,
@@ -20556,6 +20609,8 @@ ensureAiMovieSchema()
   .then(() => ensureSmartSchedulerSchema(db))
   .then(() => ensureLocationRenameSchema(db))
   .then(() => ensureJobSchema(db))
+  .then(() => ensureAiCredentialsSchema(db))
+  .then(async () => { try { await aiCredentials.load(); aiCredentials.startRefresh(); const c = aiCredentials.current(); console.log(`AI connection: ${c.source}${c.serviceAccount ? ` — project ${c.serviceAccount.project_id}, ${c.location}` : ""}${c.problem ? ` — PROBLEM: ${c.problem}` : ""}`); } catch (error) { console.error("Reading the saved AI key failed:", error.message); } })
   .then(async () => { try { const fixed = await repairStoredTransitions(db); if (fixed) console.log(`Screenplay: ${fixed} scene(s) had a transition (FREEZE. BREAK- …) written as a character — corrected.`); } catch (error) { console.error("Transition repair failed:", error.message); } })
   .then(async () => { try { await productionSync.resume(); await resumeAdSheetJobs(); } catch (error) { console.error("Resuming interrupted background jobs failed:", error.message); } })
   .then(() => ensureAllProductionSchemas(db))

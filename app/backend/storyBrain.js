@@ -23,16 +23,21 @@ const BRAIN_CALL_TIMEOUT_MS = 10 * 60 * 1000;
 const BRAIN_MAX_OUTPUT_TOKENS = 65536;
 const RETRIES_PER_MODEL = 3;
 
-const serviceAccount = process.env.GOOGLE_SERVICE_ACCOUNT_JSON
-  ? JSON.parse(process.env.GOOGLE_SERVICE_ACCOUNT_JSON)
-  : null;
+// Which Google key to use is asked at the moment of each call (see aiCredentials.js), so a key changed in Settings applies at once.
+// Until the server says otherwise, the server's own GOOGLE_SERVICE_ACCOUNT_JSON is used.
+let currentServiceAccount = () => (process.env.GOOGLE_SERVICE_ACCOUNT_JSON ? JSON.parse(process.env.GOOGLE_SERVICE_ACCOUNT_JSON) : null);
+export function useServiceAccountSource(fn) { currentServiceAccount = fn; }
 let googleAuth = null;
+let googleAuthFor = "";
+let tokenSource = null; // tests only: a stand-in for the real Google sign-in
+export function useAccessTokenSource(fn) { tokenSource = fn; }
 
-async function accessToken() {
-  googleAuth ??= new GoogleAuth({
-    credentials: serviceAccount,
-    scopes: ["https://www.googleapis.com/auth/cloud-platform"],
-  });
+async function accessToken(serviceAccount) {
+  const id = `${serviceAccount.client_email}|${serviceAccount.private_key_id}`;
+  if (!googleAuth || googleAuthFor !== id) {
+    googleAuth = new GoogleAuth({ credentials: serviceAccount, scopes: ["https://www.googleapis.com/auth/cloud-platform"] });
+    googleAuthFor = id;
+  }
   const client = await googleAuth.getClient();
   return (await client.getAccessToken()).token;
 }
@@ -40,6 +45,7 @@ async function accessToken() {
 // Vertex AI (the service account) when it's set up, like the rest of the
 // app; otherwise the AI Studio key.
 async function endpointFor(model, location) {
+  const serviceAccount = currentServiceAccount();
   if (!serviceAccount) {
     return {
       url: `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
@@ -49,7 +55,7 @@ async function endpointFor(model, location) {
   const host = location === "global" ? "aiplatform.googleapis.com" : `${location}-aiplatform.googleapis.com`;
   return {
     url: `https://${host}/v1/projects/${serviceAccount.project_id}/locations/${location}/publishers/google/models/${model}:generateContent`,
-    headers: { Authorization: `Bearer ${await accessToken()}` },
+    headers: { Authorization: `Bearer ${await (tokenSource ? tokenSource(serviceAccount) : accessToken(serviceAccount))}` },
   };
 }
 

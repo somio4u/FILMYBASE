@@ -1,6 +1,7 @@
 import MoneyMeter from './MoneyMeter.jsx'
 import SmartScheduler from './SmartScheduler.jsx'
 import AdPapers from './AdPapers.jsx'
+import AiSettings from './AiSettings.jsx'
 import SyncProduction from './SyncProduction.jsx'
 import NamesPlaces from './NamesPlaces.jsx'
 import { useState, useEffect, useRef, useMemo, useCallback, useContext, createContext, Fragment, lazy, Suspense } from 'react'
@@ -197,6 +198,8 @@ const LABELS = {
     stageScheduleLabel: 'Shoot Schedule',
     stageClapboardLabel: 'Clapboard',
     stageAdLabel: 'For Assistant Directors',
+    appModeSettingsOption: 'Settings',
+    appModeSettingsHint: 'The Google AI key the whole app uses — paste it here, no deploy needed (admin only)',
     stageSmartLabel: 'Smart Scheduler',
     adHeading: 'For Assistant Directors',
     sceneNamesButton: 'Names & places',
@@ -1138,6 +1141,8 @@ const LABELS = {
     stageScheduleLabel: 'ସୁଟିଂ ସିଡ୍ୟୁଲ୍',
     stageClapboardLabel: 'କ୍ଲାପବୋର୍ଡ',
     stageAdLabel: 'ସହକାରୀ ନିର୍ଦ୍ଦେଶକଙ୍କ ପାଇଁ',
+    appModeSettingsOption: 'ସେଟିଂସ୍',
+    appModeSettingsHint: 'ସମସ୍ତ ଆପ୍ ବ୍ୟବହାର କରୁଥିବା Google AI କୀ — ଏଠାରେ ଦିଅ (କେବଳ ଆଡମିନ୍)',
     stageSmartLabel: 'ସ୍ମାର୍ଟ ସିଡ୍ୟୁଲର୍',
     adHeading: 'ସହକାରୀ ନିର୍ଦ୍ଦେଶକଙ୍କ ପାଇଁ',
     sceneNamesButton: 'ନାମ ଓ ସ୍ଥାନ',
@@ -13429,7 +13434,7 @@ function App() {
     const chooseMode = (mode) => {
       if (modeChoice) return
       const reduceMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
-      const open = () => (mode === 'ai' ? handleChooseAiMovieMode() : mode === 'money' ? setAppMode('money') : setAppMode('movie'))
+      const open = () => (mode === 'ai' ? handleChooseAiMovieMode() : mode === 'money' ? setAppMode('money') : mode === 'settings' ? setAppMode('settings') : setAppMode('movie'))
       if (reduceMotion) {
         open()
         return
@@ -13444,7 +13449,7 @@ function App() {
     const modes = [
       { key: 'movie', icon: '🎬', label: t.appModeMovieOption, hint: t.appModeMovieHint },
       { key: 'ai', icon: '✨', label: t.appModeAiMovieOption, hint: t.appModeAiMovieHint },
-      ...(currentUser.role === 'admin' ? [{ key: 'money', icon: '💰', label: t.appModeMoneyOption, hint: t.appModeMoneyHint }] : []),
+      ...(currentUser.role === 'admin' ? [{ key: 'money', icon: '💰', label: t.appModeMoneyOption, hint: t.appModeMoneyHint }, { key: 'settings', icon: '⚙️', label: t.appModeSettingsOption, hint: t.appModeSettingsHint }] : []),
     ]
     return (
       <div className={`mode-stage${modeChoice ? ` is-choosing is-choosing-${modeChoice}` : ''}`}>
@@ -13467,6 +13472,10 @@ function App() {
         <AduWorkBar currentUser={currentUser} t={t} appMode="picker" onOpenAdu={(w) => { if (w.module === 'film') setAppMode('movie'); else handleChooseAiMovieMode(); setTimeout(() => setAduOpenNonce((v) => v + 1), 800) }} />
       </div>
     )
+  }
+
+  if (appMode === 'settings' && currentUser.role === 'admin') {
+    return <AiSettings backendUrl={BACKEND_URL} onBack={() => setAppMode(null)} />
   }
 
   if (appMode === 'money' && currentUser.role === 'admin') {

@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import express from "express";
 import pg from "pg";
 import crypto from "node:crypto";
-import { cleanLocation, createAiCredentials, detectKind, parseApiKey, safeDetails, decryptJson, describeAiError, encryptJson, ensureAiCredentialsSchema, lockSecret, parseServiceAccount } from "../aiCredentials.js";
+import { cleanLocation, createAiCredentials, providerEnv, detectKind, parseApiKey, safeDetails, decryptJson, describeAiError, encryptJson, ensureAiCredentialsSchema, lockSecret, parseServiceAccount } from "../aiCredentials.js";
 import { registerAiSettingsRoutes } from "../aiSettingsRoutes.js";
 
 const { privateKey } = crypto.generateKeyPairSync("rsa", { modulusLength: 2048, privateKeyEncoding: { type: "pkcs8", format: "pem" }, publicKeyEncoding: { type: "spki", format: "pem" } });
@@ -331,4 +331,26 @@ test("a refused AQ. key whose Vertex-express probe succeeded is explained as 'th
       assert.ok(!JSON.stringify(good).includes(AQ_KEY) && !JSON.stringify(bad).includes(AQ_KEY), "the key must not come back in any reply");
     } finally { server.close(); }
   } finally { await pg2.end(); }
+});
+
+test("NOTHING saved in Settings = the app runs exactly as it did before: the server's own key, the server's own settings, untouched", () => {
+  // the server has BOTH a Vertex file and a plain key (as some servers do): before Settings existed, the main AI used Vertex and the
+  // pictures/voices/video helper read the environment as it was (where a plain key wins). That must stay exactly so.
+  const env = { GOOGLE_SERVICE_ACCOUNT_JSON: JSON.stringify(key("server-project")), GEMINI_API_KEY: "AIza-server-plain-key-xxxxxxxxxxxxxxxx", GOOGLE_CLOUD_LOCATION: "europe-west4" };
+  const both = createAiCredentials({ env });
+  assert.equal(both.current().source, "server");
+  assert.equal(both.current().kind, "vertex");
+  assert.equal(both.current().serviceAccount.project_id, "server-project");
+  assert.equal(both.current().location, "europe-west4");
+  assert.equal(providerEnv(env, both.current()), env, "the helper must get the very same environment, not a changed copy");
+  // only a plain key on the server
+  const plain = createAiCredentials({ env: { GEMINI_API_KEY: "AIza-server-plain-key-xxxxxxxxxxxxxxxx" } });
+  assert.equal(plain.current().kind, "apikey"); assert.equal(plain.current().apiKey, "AIza-server-plain-key-xxxxxxxxxxxxxxxx");
+  assert.equal(providerEnv({ GEMINI_API_KEY: "k" }, plain.current()).GEMINI_API_KEY, "k");
+  // nothing at all
+  assert.equal(createAiCredentials({ env: {} }).current().kind, null);
+  // once something IS saved, the choice is explicit; an unreadable saved key never lets another key in
+  assert.equal(providerEnv(env, { source: "saved", kind: "vertex" }).GEMINI_API_KEY, "");
+  assert.equal(providerEnv(env, { source: "saved", kind: "apikey", apiKey: "AQ.mine" }).GEMINI_API_KEY, "AQ.mine");
+  assert.equal(providerEnv(env, { source: "saved-unreadable" }).GEMINI_API_KEY, "");
 });

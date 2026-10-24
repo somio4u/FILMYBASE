@@ -130,6 +130,15 @@ export function detectKind(text) {
   return null;
 }
 
+// The settings the pictures / voices / video helper reads. Nothing saved in Settings: EXACTLY the server's own settings, untouched, as it always was.
+// Only when the admin saved a key here is the choice made explicit (a plain key, or none so that Vertex is used) — and a saved key that cannot be read
+// never falls back to another key quietly.
+export function providerEnv(env, credentials) {
+  if (credentials.source === "saved") return { ...env, GEMINI_API_KEY: credentials.kind === "apikey" ? credentials.apiKey ?? "" : "" };
+  if (credentials.source === "saved-unreadable") return { ...env, GEMINI_API_KEY: "" };
+  return env;
+}
+
 export const cleanLocation = (value) => (/^[a-z]+(?:-[a-z]+\d+)?$/.test(String(value ?? "").trim()) ? String(value).trim() : "us-central1");
 
 // Google's raw error -> a plain sentence that says what to do

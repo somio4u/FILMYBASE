@@ -46,7 +46,7 @@ import { registerAdRoutes } from "./adRoutes.js";
 import { registerProductionSyncRoutes } from "./productionSync.js";
 import { createJobStore, ensureJobSchema, shouldResume } from "./jobStore.js";
 import { repairStoredTransitions, withoutTransitions } from "./transitionNames.js";
-import { createAiCredentials, describeAiError, ensureAiCredentialsSchema } from "./aiCredentials.js";
+import { createAiCredentials, describeAiError, ensureAiCredentialsSchema, providerEnv } from "./aiCredentials.js";
 import { registerAiSettingsRoutes } from "./aiSettingsRoutes.js";
 import { ensureLocationRenameSchema, registerLocationRenameRoutes } from "./locationRename.js";
 import { ensureSceneTagSchema, registerSceneTagRoutes } from "./sceneTags.js";
@@ -108,6 +108,7 @@ const BACKEND_URL = process.env.BACKEND_URL || `http://localhost:${PORT}`;
 // server's own GOOGLE_SERVICE_ACCOUNT_JSON, else GEMINI_API_KEY. `ai` below looks like the usual Gemini client, but hands every call to the
 // client built for the CURRENT key, so changing the key in Settings takes effect at once, without a restart.
 const aiCredentials = createAiCredentials({ env: process.env });
+if (process.env.GOOGLE_SERVICE_ACCOUNT_JSON && !aiCredentials.current().serviceAccount) console.error("GOOGLE_SERVICE_ACCOUNT_JSON is set on the server but is not valid JSON — it is ignored. Fix it, or save a key in Settings.");
 useServiceAccountSource(() => aiCredentials.current().serviceAccount); // the Pro "Story Brain" model follows the same key
 useApiKeySource(() => aiCredentials.current().apiKey);
 let aiClient = null;
@@ -123,6 +124,7 @@ function buildAiClient(credentials = aiCredentials.current()) {
 const credentialsId = (c) => `${c.source}|${c.kind}|${c.location}|${c.serviceAccount?.client_email}|${c.serviceAccount?.private_key_id}|${c.serviceAccount?.project_id}|${c.apiKey ? c.apiKey.slice(-6) : ""}`;
 function currentAiClient() {
   const c = aiCredentials.current();
+  if (c.source === "saved-unreadable") throw new Error(c.problem); // never another key quietly
   const id = credentialsId(c);
   if (!aiClient || id !== aiClientFor) {
     aiClient = buildAiClient(c);
@@ -145,13 +147,13 @@ let providersInstance = null;
 let providersFor = "";
 function currentProviders() {
   const c = aiCredentials.current();
+  if (c.source === "saved-unreadable") throw new Error(c.problem);
   const sa = c.serviceAccount;
   const id = credentialsId(c);
   if (!providersInstance || id !== providersFor) {
     providersFor = id;
     providersInstance = createProviders({
-      // the plain key in use (or none, so that Vertex is used even when the server's settings also hold a plain key)
-      env: { ...process.env, GEMINI_API_KEY: c.kind === "apikey" ? c.apiKey ?? "" : "" },
+      env: providerEnv(process.env, c), // nothing saved in Settings: the server's settings exactly as they are
       vertex: sa ? { project: sa.project_id, location: c.location } : null,
       getVertexToken: sa
         ? async () => {

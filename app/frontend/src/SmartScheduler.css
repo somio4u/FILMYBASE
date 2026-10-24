@@ -99,3 +99,6 @@
 .ai-details summary { cursor: pointer; font-size: .85rem; opacity: .85; }
 .ai-details pre { white-space: pre-wrap; overflow-wrap: anywhere; font-size: .75rem; padding: 8px 10px; border-radius: 8px; background: rgba(0,0,0,.3); }
 .ai-step.is-warn { color: #f5b800; }
+.ai-kind { display: inline-flex; border: 1px solid var(--border-subtle, rgba(138,180,248,.4)); border-radius: 999px; overflow: hidden; margin: 4px 0; }
+.ai-kind button { padding: 8px 16px; border: none; background: transparent; color: inherit; cursor: pointer; font-size: .9rem; }
+.ai-kind button.is-on { background: #3b6fe0; color: #fff; }

@@ -106,12 +106,35 @@ export function parseServiceAccount(input) {
   return { ok: true, serviceAccount, projectId: serviceAccount.project_id.trim(), clientEmail: serviceAccount.client_email.trim() };
 }
 
+// ---- a plain Google (AI Studio) API key: AIza… ----------------------------------------------------------------------------------------------
+
+export function parseApiKey(input) {
+  const text = String(input ?? "").replace(/^\uFEFF/, "").trim();
+  if (!text) return { ok: false, error: "Nothing was pasted. Paste the API key (it starts with AIza…)." };
+  if (text.includes("{") && /service_account|private_key/.test(text)) return { ok: false, error: "That is a service-account file (Vertex), not an API key. Choose “Vertex (JSON file)” above, or paste the key that starts with AIza…." };
+  const found = /AIza[0-9A-Za-z_\-]{30,}/.exec(text.replace(/\s+/g, ""));
+  if (!found) return { ok: false, error: "That does not look like a Google API key. It starts with AIza… and is about 39 characters, with no spaces. Create one in Google AI Studio → Get API key (aistudio.google.com/apikey)." };
+  return { ok: true, apiKey: found[0], hint: `…${found[0].slice(-4)}` };
+}
+
+// which kind did the admin paste? ("vertex" = a JSON file, "apikey" = AIza…), or null when it cannot be told
+export function detectKind(text) {
+  const t = String(text ?? "").replace(/^\uFEFF/, "").trim();
+  if (!t) return null;
+  if (t.includes("{")) return "vertex";
+  if (/AIza[0-9A-Za-z_\-]{20,}/.test(t.replace(/\s+/g, ""))) return "apikey";
+  return null;
+}
+
 export const cleanLocation = (value) => (/^[a-z]+(?:-[a-z]+\d+)?$/.test(String(value ?? "").trim()) ? String(value).trim() : "us-central1");
 
 // Google's raw error -> a plain sentence that says what to do
 export function describeAiError(error, step = null) {
   const raw = String(error?.message ?? error ?? "");
   const project = /projects\/([\w-]+)/.exec(raw)?.[1];
+  if (/API key not valid|API_KEY_INVALID|API key expired|invalid API key/i.test(raw)) return "Google says this API key is not valid. Check it was copied completely (it starts with AIza… and has no spaces) and that it is a key from Google AI Studio (aistudio.google.com/apikey) that has not been deleted.";
+  if (/API_KEY_HTTP_REFERRER_BLOCKED|API_KEY_IP_ADDRESS_BLOCKED|API_KEY_SERVICE_BLOCKED|referer .* blocked|are blocked/i.test(raw)) return "This API key has restrictions (only certain websites, IP addresses or services). A server cannot use it. In Google Cloud → APIs & Services → Credentials, open the key and set “Application restrictions: None” (and allow the Generative Language API), or create a new unrestricted key.";
+  if (/prepayment|credits? (are|is) depleted|spending cap|exceeded your (current )?quota.*billing/i.test(raw)) return "This Google AI Studio account has run out of prepaid credit (or hit its spending cap). Open aistudio.google.com → Billing and add credit, then test again.";
   if (/billing|dunning/i.test(raw)) return `Google says the billing account of this project${project ? ` (${project})` : ""} has a problem — usually an unpaid balance (Google calls it “dunning”), a closed or suspended account, or no billing account linked. Open Google Cloud → Billing, fix or link the billing account, then test again.`;
   if (/API has not been used|SERVICE_DISABLED|is not enabled|has not been enabled/i.test(raw)) return "The Vertex AI API is switched off in this Google project. Open Google Cloud → APIs & Services → enable “Vertex AI API”, wait a minute, then test again.";
   if (/PERMISSION_DENIED|permission .* denied|403/i.test(raw)) return "This key is not allowed to use Vertex AI. In Google Cloud → IAM, give this service account the role “Vertex AI User”, then test again.";
@@ -140,33 +163,48 @@ export async function ensureAiCredentialsSchema(db) {
     saved_by TEXT,
     saved_at TIMESTAMPTZ NOT NULL DEFAULT now()
   )`);
+  // "vertex" (a service-account file) or "apikey" (a plain Google AI Studio key); older rows are Vertex
+  await db.query("ALTER TABLE ai_credentials ADD COLUMN IF NOT EXISTS mode TEXT NOT NULL DEFAULT 'vertex'");
 }
 
 export function createAiCredentials({ env = process.env } = {}) {
+  // state.kind: "vertex" (a service-account file → serviceAccount) or "apikey" (a plain Google AI Studio key → apiKey) or null (nothing)
   const fromServer = () => {
     let serviceAccount = null;
     try { serviceAccount = env.GOOGLE_SERVICE_ACCOUNT_JSON ? JSON.parse(env.GOOGLE_SERVICE_ACCOUNT_JSON) : null; } catch { /* a broken server key is reported at start-up */ }
-    return { source: serviceAccount ? "server" : env.GEMINI_API_KEY ? "apikey" : "none", serviceAccount, location: env.GOOGLE_CLOUD_LOCATION || "us-central1", savedBy: null, savedAt: null, problem: null };
+    const apiKey = !serviceAccount && env.GEMINI_API_KEY ? env.GEMINI_API_KEY : null;
+    return {
+      source: serviceAccount ? "server" : apiKey ? "apikey" : "none",
+      kind: serviceAccount ? "vertex" : apiKey ? "apikey" : null,
+      serviceAccount, apiKey, location: env.GOOGLE_CLOUD_LOCATION || "us-central1", savedBy: null, savedAt: null, problem: null,
+    };
   };
   let state = fromServer();
   let db = null;
   let timer = null;
   const listeners = new Set();
-  const same = (a, b) => a.source === b.source && a.location === b.location && a.serviceAccount?.private_key_id === b.serviceAccount?.private_key_id && a.serviceAccount?.client_email === b.serviceAccount?.client_email && a.problem === b.problem;
+  const same = (a, b) => a.source === b.source && a.kind === b.kind && a.location === b.location && a.apiKey === b.apiKey
+    && a.serviceAccount?.private_key_id === b.serviceAccount?.private_key_id && a.serviceAccount?.client_email === b.serviceAccount?.client_email
+    && a.serviceAccount?.private_key === b.serviceAccount?.private_key && a.problem === b.problem;
   const set = (next) => { const changed = !same(state, next); state = next; if (changed) for (const fn of listeners) { try { fn(state); } catch { /* a listener must not break the others */ } } };
+  const hint = (key) => (key ? `…${String(key).slice(-4)}` : null);
 
   async function load() {
     if (!db) return state;
-    const row = (await db.query("SELECT locked, location, saved_by, saved_at FROM ai_credentials WHERE id = 1")).rows[0];
+    const row = (await db.query("SELECT locked, location, mode, saved_by, saved_at FROM ai_credentials WHERE id = 1")).rows[0];
     if (!row) { set(fromServer()); return state; }
     const opened = decryptJson(row.locked, lockSecret(env).secret);
-    const parsed = opened ? parseServiceAccount(opened) : null;
-    if (!parsed?.ok) {
-      // do not fall back to another key quietly: say so
-      set({ ...fromServer(), source: "saved-unreadable", serviceAccount: null, problem: "The key saved in Settings can no longer be read (the server's lock changed or the data is damaged). Paste the key again, or remove the saved key to use the server's own.", savedBy: row.saved_by, savedAt: row.saved_at });
+    const unreadable = (why) => set({ ...fromServer(), source: "saved-unreadable", kind: null, serviceAccount: null, apiKey: null, problem: why, savedBy: row.saved_by, savedAt: row.saved_at });
+    const problem = "The key saved in Settings can no longer be read (the server's lock changed or the data is damaged). Paste the key again, or remove the saved key to use the server's own.";
+    if (row.mode === "apikey") {
+      const parsed = opened ? parseApiKey(opened.apiKey) : null;
+      if (!parsed?.ok) { unreadable(problem); return state; }
+      set({ source: "saved", kind: "apikey", serviceAccount: null, apiKey: parsed.apiKey, location: row.location, savedBy: row.saved_by, savedAt: row.saved_at, problem: null });
       return state;
     }
-    set({ source: "saved", serviceAccount: parsed.serviceAccount, location: row.location, savedBy: row.saved_by, savedAt: row.saved_at, problem: null });
+    const parsed = opened ? parseServiceAccount(opened) : null;
+    if (!parsed?.ok) { unreadable(problem); return state; }
+    set({ source: "saved", kind: "vertex", serviceAccount: parsed.serviceAccount, apiKey: null, location: row.location, savedBy: row.saved_by, savedAt: row.saved_at, problem: null });
     return state;
   }
 
@@ -177,27 +215,33 @@ export function createAiCredentials({ env = process.env } = {}) {
     load,
     // another copy of the server may have changed it: look again every half minute
     startRefresh(everyMs = 30000) { if (!timer) { timer = setInterval(() => load().catch(() => {}), everyMs); timer.unref?.(); } },
-    async save({ serviceAccount, location, userName }) {
+    // kind "vertex": { serviceAccount, location }   kind "apikey": { apiKey }
+    async save({ kind = "vertex", serviceAccount, apiKey, location, userName }) {
       const lock = lockSecret(env);
+      const isKey = kind === "apikey";
       await db.query(
-        `INSERT INTO ai_credentials (id, locked, location, project_id, client_email, saved_by, saved_at) VALUES (1, $1, $2, $3, $4, $5, now())
-         ON CONFLICT (id) DO UPDATE SET locked = EXCLUDED.locked, location = EXCLUDED.location, project_id = EXCLUDED.project_id, client_email = EXCLUDED.client_email, saved_by = EXCLUDED.saved_by, saved_at = now()`,
-        [encryptJson(serviceAccount, lock.secret), cleanLocation(location), serviceAccount.project_id, serviceAccount.client_email, userName ?? null]);
+        `INSERT INTO ai_credentials (id, locked, location, project_id, client_email, mode, saved_by, saved_at) VALUES (1, $1, $2, $3, $4, $5, $6, now())
+         ON CONFLICT (id) DO UPDATE SET locked = EXCLUDED.locked, location = EXCLUDED.location, project_id = EXCLUDED.project_id, client_email = EXCLUDED.client_email, mode = EXCLUDED.mode, saved_by = EXCLUDED.saved_by, saved_at = now()`,
+        [encryptJson(isKey ? { apiKey } : serviceAccount, lock.secret), cleanLocation(location), isKey ? "" : serviceAccount.project_id, isKey ? hint(apiKey) ?? "" : serviceAccount.client_email, isKey ? "apikey" : "vertex", userName ?? null]);
       return load();
     },
     async clear() { await db.query("DELETE FROM ai_credentials WHERE id = 1"); return load(); },
     // what the browser may see (never the key itself)
     async publicStatus() {
-      const row = db ? (await db.query("SELECT project_id, client_email, saved_by, saved_at FROM ai_credentials WHERE id = 1")).rows[0] : null;
+      const row = db ? (await db.query("SELECT project_id, client_email, mode, saved_by, saved_at FROM ai_credentials WHERE id = 1")).rows[0] : null;
       const sa = state.serviceAccount;
+      const server = fromServer();
       return {
         source: state.source,
+        kind: state.kind,
         activeProject: sa?.project_id ?? null,
         activeEmail: sa?.client_email ?? null,
+        activeKeyHint: state.kind === "apikey" ? hint(state.apiKey) : null,
         location: state.location,
         problem: state.problem,
-        saved: row ? { projectId: row.project_id, clientEmail: row.client_email, savedBy: row.saved_by, savedAt: row.saved_at } : null,
-        serverKeyProject: (() => { try { return env.GOOGLE_SERVICE_ACCOUNT_JSON ? JSON.parse(env.GOOGLE_SERVICE_ACCOUNT_JSON).project_id : null; } catch { return null; } })(),
+        saved: row ? { kind: row.mode, projectId: row.mode === "apikey" ? null : row.project_id, clientEmail: row.mode === "apikey" ? null : row.client_email, keyHint: row.mode === "apikey" ? row.client_email : null, savedBy: row.saved_by, savedAt: row.saved_at } : null,
+        serverKey: server.kind ? { kind: server.kind, project: server.serviceAccount?.project_id ?? null, keyHint: hint(server.apiKey) } : null,
+        serverKeyProject: server.serviceAccount?.project_id ?? null,
         lock: lockSecret(env).strength,
       };
     },

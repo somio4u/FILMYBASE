@@ -27,6 +27,8 @@ const RETRIES_PER_MODEL = 3;
 // Until the server says otherwise, the server's own GOOGLE_SERVICE_ACCOUNT_JSON is used.
 let currentServiceAccount = () => (process.env.GOOGLE_SERVICE_ACCOUNT_JSON ? JSON.parse(process.env.GOOGLE_SERVICE_ACCOUNT_JSON) : null);
 export function useServiceAccountSource(fn) { currentServiceAccount = fn; }
+let currentApiKey = () => process.env.GEMINI_API_KEY;
+export function useApiKeySource(fn) { currentApiKey = fn; }
 let googleAuth = null;
 let googleAuthFor = "";
 let tokenSource = null; // tests only: a stand-in for the real Google sign-in
@@ -49,7 +51,7 @@ async function endpointFor(model, location) {
   if (!serviceAccount) {
     return {
       url: `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
-      headers: { "x-goog-api-key": process.env.GEMINI_API_KEY },
+      headers: { "x-goog-api-key": currentApiKey() },
     };
   }
   const host = location === "global" ? "aiplatform.googleapis.com" : `${location}-aiplatform.googleapis.com`;

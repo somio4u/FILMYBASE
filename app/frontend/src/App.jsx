@@ -199,7 +199,7 @@ const LABELS = {
     stageClapboardLabel: 'Clapboard',
     stageAdLabel: 'For Assistant Directors',
     appModeSettingsOption: 'Settings',
-    appModeSettingsHint: 'The Google AI key the whole app uses — paste it here, no deploy needed (admin only)',
+    appModeSettingsHint: 'The Google AI key the whole app uses (Vertex file or API key) — paste it here, no deploy needed (admin only)',
     stageSmartLabel: 'Smart Scheduler',
     adHeading: 'For Assistant Directors',
     sceneNamesButton: 'Names & places',

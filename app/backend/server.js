@@ -54,7 +54,7 @@ import { registerLiveSyncRoutes } from "./liveSync.js";
 import { registerChangeHistoryRoutes } from "./changeHistory.js";
 import { ensureScreenplayImportSchema, registerScreenplayImportRoutes } from "./screenplayImportRoutes.js";
 import { readStoryFromPdf } from "./pdfReader.js";
-import { useServiceAccountSource, STORY_BRAIN_MODELS, BIBLE_PASS_SCORE, brainAsker, newUsage, designStoryBible, generateBrainJson, reviseBibleWithNote, storyBibleToMarkdown } from "./storyBrain.js";
+import { useServiceAccountSource, useApiKeySource, STORY_BRAIN_MODELS, BIBLE_PASS_SCORE, brainAsker, newUsage, designStoryBible, generateBrainJson, reviseBibleWithNote, storyBibleToMarkdown } from "./storyBrain.js";
 import { ensureAiMovieStorySchema, getProjectModes, judgedStage, registerAiMovieStoryRoutes } from "./aiMovieStory.js";
 import { assertWithinBudget, recordSpend } from "./pipelineSettings.js";
 import { ensureCinematicSchema, registerSpectacleRoutes, createShotCutterHook } from "./spectacleDirector.js";
@@ -109,6 +109,7 @@ const BACKEND_URL = process.env.BACKEND_URL || `http://localhost:${PORT}`;
 // client built for the CURRENT key, so changing the key in Settings takes effect at once, without a restart.
 const aiCredentials = createAiCredentials({ env: process.env });
 useServiceAccountSource(() => aiCredentials.current().serviceAccount); // the Pro "Story Brain" model follows the same key
+useApiKeySource(() => aiCredentials.current().apiKey);
 let aiClient = null;
 let aiClientFor = "";
 let aiMeteringDb = null;
@@ -116,11 +117,13 @@ function buildAiClient(credentials = aiCredentials.current()) {
   const sa = credentials.serviceAccount;
   return sa
     ? new GoogleGenAI({ vertexai: true, project: sa.project_id, location: credentials.location, googleAuthOptions: { credentials: sa } })
-    : new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+    : new GoogleGenAI({ apiKey: credentials.apiKey ?? process.env.GEMINI_API_KEY });
 }
+// one short name for "which key is this": a changed key means a new client
+const credentialsId = (c) => `${c.source}|${c.kind}|${c.location}|${c.serviceAccount?.client_email}|${c.serviceAccount?.private_key_id}|${c.serviceAccount?.project_id}|${c.apiKey ? c.apiKey.slice(-6) : ""}`;
 function currentAiClient() {
   const c = aiCredentials.current();
-  const id = `${c.source}|${c.location}|${c.serviceAccount?.client_email}|${c.serviceAccount?.private_key_id}|${c.serviceAccount?.project_id}`;
+  const id = credentialsId(c);
   if (!aiClient || id !== aiClientFor) {
     aiClient = buildAiClient(c);
     aiClientFor = id;
@@ -143,11 +146,12 @@ let providersFor = "";
 function currentProviders() {
   const c = aiCredentials.current();
   const sa = c.serviceAccount;
-  const id = `${c.source}|${c.location}|${sa?.client_email}|${sa?.private_key_id}|${sa?.project_id}`;
+  const id = credentialsId(c);
   if (!providersInstance || id !== providersFor) {
     providersFor = id;
     providersInstance = createProviders({
-      env: process.env,
+      // the plain key in use (or none, so that Vertex is used even when the server's settings also hold a plain key)
+      env: { ...process.env, GEMINI_API_KEY: c.kind === "apikey" ? c.apiKey ?? "" : "" },
       vertex: sa ? { project: sa.project_id, location: c.location } : null,
       getVertexToken: sa
         ? async () => {
@@ -20556,7 +20560,32 @@ registerAiSettingsRoutes(app, db, {
   requireRole,
   aiCredentials,
   // a real, tiny AI call with a key that is NOT saved yet
-  testCandidate: async (serviceAccount, location, report) => {
+  testCandidate: async (candidate, location, report) => {
+    const withTimeout = (promise) => Promise.race([promise, new Promise((_, reject) => setTimeout(() => reject(new Error("timed out after 45 seconds")), 45000))]);
+    const ask = (client) => withTimeout(client.models.generateContent({ model: GEMINI_MODEL_NAME, contents: "Reply with the single word OK.", config: { maxOutputTokens: 16 } }));
+    const proBody = JSON.stringify({ contents: [{ role: "user", parts: [{ text: "Reply with the single word OK." }] }], generationConfig: { maxOutputTokens: 256 } });
+    let lastProblem = "";
+    const proWarning = () => { if (lastProblem) report?.("pro", describeAiError(new Error(lastProblem)), { warn: true }); };
+
+    if (candidate.kind === "apikey") {
+      // a plain Google AI Studio key: does Google answer with it?
+      try {
+        await ask(buildAiClient({ apiKey: candidate.apiKey, source: "candidate", kind: "apikey" }));
+        report?.("answer", `Google answered with this key (model ${GEMINI_MODEL_NAME})`);
+      } catch (error) { error.step = "answer"; throw error; }
+      // the best-quality (Pro) model: a warning only
+      for (const target of STORY_BRAIN_MODELS) {
+        try {
+          const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${target.model}:generateContent`, { method: "POST", headers: { "x-goog-api-key": candidate.apiKey, "Content-Type": "application/json" }, body: proBody, signal: AbortSignal.timeout(40000) });
+          if (response.ok) { report?.("pro", `${target.model} answered`); lastProblem = ""; break; }
+          lastProblem = `${target.model}: HTTP ${response.status} ${(await response.text()).slice(0, 200)}`;
+        } catch (error) { lastProblem = `${target.model}: ${error.message}`; }
+      }
+      proWarning();
+      return { model: GEMINI_MODEL_NAME };
+    }
+
+    const serviceAccount = candidate.serviceAccount;
     // step 2 — does Google accept the key at all (sign-in)?
     let token = null;
     try {
@@ -20568,29 +20597,19 @@ registerAiSettingsRoutes(app, db, {
     } catch (error) { error.step = "signin"; throw error; }
     // step 3 — does Vertex AI answer a question with it?
     try {
-      const client = buildAiClient({ serviceAccount, location, source: "candidate" });
-      await Promise.race([
-        client.models.generateContent({ model: GEMINI_MODEL_NAME, contents: "Reply with the single word OK.", config: { maxOutputTokens: 16 } }),
-        new Promise((_, reject) => setTimeout(() => reject(new Error("timed out after 45 seconds")), 45000)),
-      ]);
+      await ask(buildAiClient({ serviceAccount, location, source: "candidate", kind: "vertex" }));
       report?.("vertex", `Vertex AI answered (model ${GEMINI_MODEL_NAME}, location ${location})`);
     } catch (error) { error.step = "vertex"; throw error; }
     // step 4 — the best-quality (Pro) model, used by the Smart analysis and the Story Brain. A warning only: the key still works for everything else.
-    let lastProblem = "";
     for (const target of STORY_BRAIN_MODELS) {
       try {
         const host = target.location === "global" ? "aiplatform.googleapis.com" : `${target.location}-aiplatform.googleapis.com`;
-        const response = await fetch(`https://${host}/v1/projects/${serviceAccount.project_id}/locations/${target.location}/publishers/google/models/${target.model}:generateContent`, {
-          method: "POST",
-          headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-          body: JSON.stringify({ contents: [{ role: "user", parts: [{ text: "Reply with the single word OK." }] }], generationConfig: { maxOutputTokens: 256 } }),
-          signal: AbortSignal.timeout(40000),
-        });
+        const response = await fetch(`https://${host}/v1/projects/${serviceAccount.project_id}/locations/${target.location}/publishers/google/models/${target.model}:generateContent`, { method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }, body: proBody, signal: AbortSignal.timeout(40000) });
         if (response.ok) { report?.("pro", `${target.model} answered`); lastProblem = ""; break; }
         lastProblem = `${target.model}: HTTP ${response.status} ${(await response.text()).slice(0, 200)}`;
       } catch (error) { lastProblem = `${target.model}: ${error.message}`; }
     }
-    if (lastProblem) report?.("pro", describeAiError(new Error(lastProblem)), { warn: true });
+    proWarning();
     return { model: GEMINI_MODEL_NAME };
   },
 });

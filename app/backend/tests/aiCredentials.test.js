@@ -1,9 +1,9 @@
-import test from "node:test";
+import test, { after } from "node:test";
 import assert from "node:assert/strict";
 import express from "express";
 import pg from "pg";
 import crypto from "node:crypto";
-import { cleanLocation, createAiCredentials, safeDetails, decryptJson, describeAiError, encryptJson, ensureAiCredentialsSchema, lockSecret, parseServiceAccount } from "../aiCredentials.js";
+import { cleanLocation, createAiCredentials, detectKind, parseApiKey, safeDetails, decryptJson, describeAiError, encryptJson, ensureAiCredentialsSchema, lockSecret, parseServiceAccount } from "../aiCredentials.js";
 import { registerAiSettingsRoutes } from "../aiSettingsRoutes.js";
 
 const { privateKey } = crypto.generateKeyPairSync("rsa", { modulusLength: 2048, privateKeyEncoding: { type: "pkcs8", format: "pem" }, publicKeyEncoding: { type: "spki", format: "pem" } });
@@ -139,7 +139,7 @@ test("Settings routes: test first, a failing key is not saved (unless insisted o
   registerAiSettingsRoutes(app, db, {
     requireRole: () => (req, res, next) => { req.user = { id: 1, name: "Admin Asha" }; next(); },
     aiCredentials: creds,
-    testCandidate: async (sa, location, report) => { tested.push([sa.project_id, location]); report?.("signin", "ok"); if (failWith) { const e = new Error(failWith); e.step = "vertex"; throw e; } report?.("vertex", "answered"); if (proWarning) report?.("pro", proWarning, { warn: true }); else report?.("pro", "answered"); return { model: "m" }; },
+    testCandidate: async (candidate, location, report) => { tested.push([candidate.kind === "apikey" ? `apikey:${candidate.apiKey.slice(-4)}` : candidate.serviceAccount.project_id, location]); report?.("signin", "ok"); if (failWith) { const e = new Error(failWith); e.step = "vertex"; throw e; } report?.("vertex", "answered"); if (proWarning) report?.("pro", proWarning, { warn: true }); else report?.("pro", "answered"); return { model: "m" }; },
   });
   const server = app.listen(0);
   const base = `http://127.0.0.1:${server.address().port}`;
@@ -182,5 +182,102 @@ test("Settings routes: test first, a failing key is not saved (unless insisted o
     const removed = JSON.parse((await call("DELETE", "/api/settings/ai")).text);
     assert.equal(removed.source, "server");
     assert.equal(removed.saved, null);
-  } finally { server.close(); await db.query("DELETE FROM ai_credentials"); await db.end(); }
+  } finally { server.close(); await db.query("DELETE FROM ai_credentials"); }
 });
+
+const REAL_LOOKING_KEY = "AIzaSyD" + "x".repeat(32);
+
+test("a plain Google API key: found inside whatever was pasted, and the other kinds are told apart", () => {
+  assert.equal(parseApiKey(REAL_LOOKING_KEY).ok, true);
+  assert.equal(parseApiKey(`  GEMINI_API_KEY="${REAL_LOOKING_KEY}"\n`).apiKey, REAL_LOOKING_KEY);
+  assert.equal(parseApiKey(`key = ${REAL_LOOKING_KEY.slice(0, 20)} \n ${REAL_LOOKING_KEY.slice(20)}`).ok, true); // a line break in the middle of a pasted key
+  assert.equal(parseApiKey(REAL_LOOKING_KEY).hint, "…xxxx");
+  assert.match(parseApiKey("").error, /Nothing was pasted/);
+  assert.match(parseApiKey("hello").error, /does not look like a Google API key/);
+  assert.match(parseApiKey(JSON.stringify(key("p1"))).error, /service-account file/);
+  assert.equal(detectKind(REAL_LOOKING_KEY), "apikey");
+  assert.equal(detectKind(JSON.stringify(key("p1"))), "vertex");
+  assert.equal(detectKind("hello"), null);
+  assert.equal(detectKind(""), null);
+});
+
+test("API-key problems get plain sentences (invalid key, restricted key, no prepaid credit)", () => {
+  assert.match(describeAiError(new Error('400 API key not valid. Please pass a valid API key. {"status":"INVALID_ARGUMENT","reason":"API_KEY_INVALID"}')), /not valid.*AIza/);
+  assert.match(describeAiError(new Error('403 Requests from referer <empty> are blocked. {"reason":"API_KEY_HTTP_REFERRER_BLOCKED"}')), /restrictions/);
+  assert.match(describeAiError(new Error("429 Your prepayment credits are depleted. Please go to AI Studio at https://ai.studio/projects to manage your project and billing.")), /out of prepaid credit/);
+});
+
+test("a saved Google API key: kept locked, used by the app, never sent back, and removing it goes back to the server's", { skip: !up }, async () => {
+  await ensureAiCredentialsSchema(db);
+  await db.query("DELETE FROM ai_credentials");
+  const env = { GOOGLE_SERVICE_ACCOUNT_JSON: JSON.stringify(key("server-project")), SETTINGS_ENCRYPTION_KEY: "x".repeat(24) };
+  try {
+    const a = createAiCredentials({ env }); a.attach(db); await a.load();
+    assert.equal(a.current().kind, "vertex");
+    await a.save({ kind: "apikey", apiKey: REAL_LOOKING_KEY, userName: "Admin Asha" });
+    assert.equal(a.current().kind, "apikey");
+    assert.equal(a.current().apiKey, REAL_LOOKING_KEY);
+    assert.equal(a.current().serviceAccount, null); // the server's Vertex key is not used while a plain key is saved
+    const raw = (await db.query("SELECT locked, mode FROM ai_credentials")).rows[0];
+    assert.equal(raw.mode, "apikey");
+    assert.ok(!raw.locked.includes("AIza"));
+    const status = await a.publicStatus();
+    assert.equal(status.kind, "apikey"); assert.equal(status.activeKeyHint, "…xxxx"); assert.equal(status.saved.kind, "apikey"); assert.equal(status.saved.keyHint, "…xxxx");
+    assert.ok(!JSON.stringify(status).includes(REAL_LOOKING_KEY), "the key must never be sent back");
+    assert.deepEqual(status.serverKey, { kind: "vertex", project: "server-project", keyHint: null });
+    // after a "restart" it is still there; with another lock secret it is reported, not replaced quietly
+    const b = createAiCredentials({ env }); b.attach(db); await b.load();
+    assert.equal(b.current().apiKey, REAL_LOOKING_KEY);
+    const c = createAiCredentials({ env: { ...env, SETTINGS_ENCRYPTION_KEY: "y".repeat(24) } }); c.attach(db); await c.load();
+    assert.equal(c.current().source, "saved-unreadable");
+    assert.equal(c.current().apiKey, null);
+    await a.clear();
+    assert.equal(a.current().kind, "vertex");
+    // an API key can also be the server's own (GEMINI_API_KEY) when there is no Vertex key
+    const d = createAiCredentials({ env: { GEMINI_API_KEY: REAL_LOOKING_KEY } });
+    assert.equal(d.current().kind, "apikey"); assert.equal(d.current().source, "apikey");
+  } finally { await db.query("DELETE FROM ai_credentials"); }
+});
+
+test("Settings routes with a Google API key: tested and saved like the other kind; mixing the kinds up is explained, not guessed", { skip: !up }, async () => {
+  await ensureAiCredentialsSchema(db);
+  await db.query("DELETE FROM ai_credentials");
+  const env = { GOOGLE_SERVICE_ACCOUNT_JSON: JSON.stringify(key("server-project")), SETTINGS_ENCRYPTION_KEY: "x".repeat(24) };
+  const creds = createAiCredentials({ env }); creds.attach(db); await creds.load();
+  const seen = []; let fail = null;
+  const app = express(); app.use(express.json());
+  registerAiSettingsRoutes(app, db, {
+    requireRole: () => (req, res, next) => { req.user = { id: 1, name: "Admin Asha" }; next(); },
+    aiCredentials: creds,
+    testCandidate: async (candidate, location, report) => { seen.push(candidate.kind); report?.("answer", "ok"); if (fail) { const e = new Error(fail); e.step = "answer"; throw e; } report?.("pro", "answered"); return { model: "m" }; },
+  });
+  const server = app.listen(0);
+  const base = `http://127.0.0.1:${server.address().port}`;
+  const call = async (method, path, body) => { const r = await fetch(base + path, { method, headers: { "content-type": "application/json" }, body: body ? JSON.stringify(body) : undefined }); return { status: r.status, text: await r.text() }; };
+  try {
+    const ok = JSON.parse((await call("POST", "/api/settings/ai/test", { kind: "apikey", key: REAL_LOOKING_KEY })).text);
+    assert.equal(ok.ok, true); assert.equal(ok.kind, "apikey"); assert.equal(ok.keyHint, "…xxxx");
+    assert.deepEqual(ok.steps.map((s) => s.key), ["format", "answer", "pro"]);
+    // the wrong kind selected: refused with a pointer
+    const wrong1 = await call("POST", "/api/settings/ai/test", { kind: "vertex", key: REAL_LOOKING_KEY });
+    assert.equal(wrong1.status, 400); assert.match(JSON.parse(wrong1.text).error, /looks like an API key/);
+    const wrong2 = await call("POST", "/api/settings/ai/test", { kind: "apikey", key: JSON.stringify(key("p1")) });
+    assert.equal(wrong2.status, 400); assert.match(JSON.parse(wrong2.text).error, /looks like a JSON key file/);
+    // a bad key is not saved
+    fail = "400 API key not valid. Please pass a valid API key. API_KEY_INVALID";
+    const bad = await call("PUT", "/api/settings/ai", { kind: "apikey", key: REAL_LOOKING_KEY });
+    assert.equal(bad.status, 422); assert.match(JSON.parse(bad.text).error, /not valid/);
+    assert.equal(JSON.parse((await call("GET", "/api/settings/ai")).text).kind, "vertex");
+    fail = null;
+    const saved = await call("PUT", "/api/settings/ai", { kind: "apikey", key: REAL_LOOKING_KEY });
+    const s = JSON.parse(saved.text);
+    assert.equal(s.source, "saved"); assert.equal(s.kind, "apikey"); assert.equal(s.activeKeyHint, "…xxxx"); assert.equal(s.saved.savedBy, "Admin Asha");
+    assert.ok(!saved.text.includes(REAL_LOOKING_KEY));
+    // kind left out: it is worked out from what was pasted
+    const auto = JSON.parse((await call("POST", "/api/settings/ai/test", { key: JSON.stringify(key("auto-project")) })).text);
+    assert.equal(auto.kind, "vertex"); assert.equal(auto.projectId, "auto-project");
+    assert.equal(JSON.parse((await call("DELETE", "/api/settings/ai")).text).kind, "vertex");
+  } finally { server.close(); await db.query("DELETE FROM ai_credentials"); }
+});
+
+after(async () => { await db.end(); });

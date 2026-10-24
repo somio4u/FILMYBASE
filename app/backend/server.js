@@ -46,7 +46,7 @@ import { registerAdRoutes } from "./adRoutes.js";
 import { registerProductionSyncRoutes } from "./productionSync.js";
 import { createJobStore, ensureJobSchema, shouldResume } from "./jobStore.js";
 import { repairStoredTransitions, withoutTransitions } from "./transitionNames.js";
-import { createAiCredentials, ensureAiCredentialsSchema } from "./aiCredentials.js";
+import { createAiCredentials, describeAiError, ensureAiCredentialsSchema } from "./aiCredentials.js";
 import { registerAiSettingsRoutes } from "./aiSettingsRoutes.js";
 import { ensureLocationRenameSchema, registerLocationRenameRoutes } from "./locationRename.js";
 import { ensureSceneTagSchema, registerSceneTagRoutes } from "./sceneTags.js";
@@ -54,7 +54,7 @@ import { registerLiveSyncRoutes } from "./liveSync.js";
 import { registerChangeHistoryRoutes } from "./changeHistory.js";
 import { ensureScreenplayImportSchema, registerScreenplayImportRoutes } from "./screenplayImportRoutes.js";
 import { readStoryFromPdf } from "./pdfReader.js";
-import { useServiceAccountSource, BIBLE_PASS_SCORE, brainAsker, newUsage, designStoryBible, generateBrainJson, reviseBibleWithNote, storyBibleToMarkdown } from "./storyBrain.js";
+import { useServiceAccountSource, STORY_BRAIN_MODELS, BIBLE_PASS_SCORE, brainAsker, newUsage, designStoryBible, generateBrainJson, reviseBibleWithNote, storyBibleToMarkdown } from "./storyBrain.js";
 import { ensureAiMovieStorySchema, getProjectModes, judgedStage, registerAiMovieStoryRoutes } from "./aiMovieStory.js";
 import { assertWithinBudget, recordSpend } from "./pipelineSettings.js";
 import { ensureCinematicSchema, registerSpectacleRoutes, createShotCutterHook } from "./spectacleDirector.js";
@@ -20556,12 +20556,42 @@ registerAiSettingsRoutes(app, db, {
   requireRole,
   aiCredentials,
   // a real, tiny AI call with a key that is NOT saved yet
-  testCandidate: async (serviceAccount, location) => {
-    const client = buildAiClient({ serviceAccount, location, source: "candidate" });
-    await Promise.race([
-      client.models.generateContent({ model: GEMINI_MODEL_NAME, contents: "Reply with the single word OK.", config: { maxOutputTokens: 16 } }),
-      new Promise((_, reject) => setTimeout(() => reject(new Error("timed out after 45 seconds")), 45000)),
-    ]);
+  testCandidate: async (serviceAccount, location, report) => {
+    // step 2 — does Google accept the key at all (sign-in)?
+    let token = null;
+    try {
+      const { GoogleAuth } = await import("google-auth-library");
+      const client = await new GoogleAuth({ credentials: serviceAccount, scopes: ["https://www.googleapis.com/auth/cloud-platform"] }).getClient();
+      token = (await client.getAccessToken()).token;
+      if (!token) throw new Error("Google gave no access token");
+      report?.("signin", "Google accepted the key");
+    } catch (error) { error.step = "signin"; throw error; }
+    // step 3 — does Vertex AI answer a question with it?
+    try {
+      const client = buildAiClient({ serviceAccount, location, source: "candidate" });
+      await Promise.race([
+        client.models.generateContent({ model: GEMINI_MODEL_NAME, contents: "Reply with the single word OK.", config: { maxOutputTokens: 16 } }),
+        new Promise((_, reject) => setTimeout(() => reject(new Error("timed out after 45 seconds")), 45000)),
+      ]);
+      report?.("vertex", `Vertex AI answered (model ${GEMINI_MODEL_NAME}, location ${location})`);
+    } catch (error) { error.step = "vertex"; throw error; }
+    // step 4 — the best-quality (Pro) model, used by the Smart analysis and the Story Brain. A warning only: the key still works for everything else.
+    let lastProblem = "";
+    for (const target of STORY_BRAIN_MODELS) {
+      try {
+        const host = target.location === "global" ? "aiplatform.googleapis.com" : `${target.location}-aiplatform.googleapis.com`;
+        const response = await fetch(`https://${host}/v1/projects/${serviceAccount.project_id}/locations/${target.location}/publishers/google/models/${target.model}:generateContent`, {
+          method: "POST",
+          headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+          body: JSON.stringify({ contents: [{ role: "user", parts: [{ text: "Reply with the single word OK." }] }], generationConfig: { maxOutputTokens: 256 } }),
+          signal: AbortSignal.timeout(40000),
+        });
+        if (response.ok) { report?.("pro", `${target.model} answered`); lastProblem = ""; break; }
+        lastProblem = `${target.model}: HTTP ${response.status} ${(await response.text()).slice(0, 200)}`;
+      } catch (error) { lastProblem = `${target.model}: ${error.message}`; }
+    }
+    if (lastProblem) report?.("pro", describeAiError(new Error(lastProblem)), { warn: true });
+    return { model: GEMINI_MODEL_NAME };
   },
 });
 // "Synchronize with the latest screenplay": rebuilds the Script Breakdown, the AD scene sheet and the Shoot Schedule from the CURRENT screenplay (productionSync.js)

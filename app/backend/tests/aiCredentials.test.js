@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import express from "express";
 import pg from "pg";
 import crypto from "node:crypto";
-import { cleanLocation, createAiCredentials, decryptJson, describeAiError, encryptJson, ensureAiCredentialsSchema, lockSecret, parseServiceAccount } from "../aiCredentials.js";
+import { cleanLocation, createAiCredentials, safeDetails, decryptJson, describeAiError, encryptJson, ensureAiCredentialsSchema, lockSecret, parseServiceAccount } from "../aiCredentials.js";
 import { registerAiSettingsRoutes } from "../aiSettingsRoutes.js";
 
 const { privateKey } = crypto.generateKeyPairSync("rsa", { modulusLength: 2048, privateKeyEncoding: { type: "pkcs8", format: "pem" }, publicKeyEncoding: { type: "spki", format: "pem" } });
@@ -27,12 +27,51 @@ test("lock strength: a real server secret is 'strong', otherwise 'basic'", () =>
 
 test("what is pasted is checked with plain messages", () => {
   assert.equal(parseServiceAccount(JSON.stringify(key("p1"))).ok, true);
-  assert.match(parseServiceAccount("not json").error, /not a JSON file/);
-  assert.match(parseServiceAccount(JSON.stringify({ type: "authorized_user" })).error, /not a service-account key/);
+  assert.match(parseServiceAccount("not json").error, /does not look like the key file/);
+  assert.match(parseServiceAccount(JSON.stringify({ type: "authorized_user" })).error, /authorized_user/);
   assert.match(parseServiceAccount(JSON.stringify(key("p1", { client_email: "" }))).error, /client_email/);
   assert.match(parseServiceAccount(JSON.stringify(key("p1", { private_key: "oops" }))).error, /private_key/);
   assert.equal(cleanLocation("europe-west4"), "europe-west4");
   assert.equal(cleanLocation("drop table"), "us-central1");
+});
+
+test("a good key is not refused for how it was copied (phone, chat, editors): every common mangling is put right", () => {
+  const good = key("p1");
+  const pretty = JSON.stringify(good, null, 2);
+  const mangled = {
+    "plain file": pretty,
+    "byte-order mark": "\uFEFF" + pretty,
+    "curly quotes": pretty.replace(/"/g, (m, i) => (i % 2 ? "”" : "“")),
+    "real line breaks inside the private key": pretty.replace(/\\n/g, "\n"),
+    "line breaks written twice": pretty.replace(/\\n/g, "\\\\n"),
+    "wrapped in quotes": JSON.stringify(pretty),
+    "text around it": `Here is the key:\n${pretty}\nthanks!`,
+    "no type field": JSON.stringify({ ...good, type: undefined }),
+    "spaces and no-break spaces at the ends": `\u00A0 ${pretty} \u00A0`,
+  };
+  for (const [name, text] of Object.entries(mangled)) {
+    const r = parseServiceAccount(text);
+    assert.equal(r.ok, true, `${name}: ${r.error}`);
+    assert.equal(r.serviceAccount.private_key, good.private_key, `${name}: the private key must come out exactly as it was`);
+    assert.doesNotThrow(() => crypto.createPrivateKey(r.serviceAccount.private_key), `${name}: the private key must be usable for signing`);
+  }
+});
+
+test("when a key really cannot be used, the message says exactly why", () => {
+  assert.match(parseServiceAccount("   ").error, /Nothing was pasted/);
+  assert.match(parseServiceAccount("AIzaSyA1234567890abcdefghijklmnopqrstuvw").error, /API key/);
+  assert.match(parseServiceAccount("just some words").error, /does not look like the key file/);
+  assert.match(parseServiceAccount(JSON.stringify(key("p1"), null, 2).slice(0, 400)).error, /cut off/);
+  assert.match(parseServiceAccount(JSON.stringify({ type: "authorized_user", project_id: "x" })).error, /authorized_user/);
+  assert.match(parseServiceAccount(JSON.stringify(key("p1", { private_key: "-----BEGIN PRIVATE KEY-----\nabc" }))).error, /incomplete or changed/);
+});
+
+test("the technical details never carry the key; a failed step is named in the message", () => {
+  const leaky = new Error(`bad ${"A".repeat(200)} and -----BEGIN PRIVATE KEY-----\nMIIE\n-----END PRIVATE KEY-----`);
+  const shown = safeDetails(leaky);
+  assert.ok(!shown.includes("AAAAAAAAAA") && !shown.includes("MIIE"));
+  assert.match(describeAiError(new Error("something odd"), "signin"), /did not accept this key at sign-in/);
+  assert.match(describeAiError(new Error("something odd"), "vertex"), /Google refused the test call/);
 });
 
 test("Google's raw errors become a sentence that says what to do", () => {
@@ -95,12 +134,12 @@ test("Settings routes: test first, a failing key is not saved (unless insisted o
   await db.query("DELETE FROM ai_credentials");
   const env = { GOOGLE_SERVICE_ACCOUNT_JSON: JSON.stringify(key("server-project")), SETTINGS_ENCRYPTION_KEY: "x".repeat(24) };
   const creds = createAiCredentials({ env }); creds.attach(db); await creds.load();
-  let failWith = null; const tested = [];
+  let failWith = null; let proWarning = null; const tested = [];
   const app = express(); app.use(express.json());
   registerAiSettingsRoutes(app, db, {
     requireRole: () => (req, res, next) => { req.user = { id: 1, name: "Admin Asha" }; next(); },
     aiCredentials: creds,
-    testCandidate: async (sa, location) => { tested.push([sa.project_id, location]); if (failWith) throw new Error(failWith); },
+    testCandidate: async (sa, location, report) => { tested.push([sa.project_id, location]); report?.("signin", "ok"); if (failWith) { const e = new Error(failWith); e.step = "vertex"; throw e; } report?.("vertex", "answered"); if (proWarning) report?.("pro", proWarning, { warn: true }); else report?.("pro", "answered"); return { model: "m" }; },
   });
   const server = app.listen(0);
   const base = `http://127.0.0.1:${server.address().port}`;
@@ -113,11 +152,19 @@ test("Settings routes: test first, a failing key is not saved (unless insisted o
     assert.equal((await call("POST", "/api/settings/ai/test", { key: "nonsense" })).status, 400);
     const ok = JSON.parse((await call("POST", "/api/settings/ai/test", { key: JSON.stringify(key("new-project")), location: "us-central1" })).text);
     assert.equal(ok.ok, true); assert.equal(ok.projectId, "new-project");
+    assert.deepEqual(ok.steps.map((s) => [s.key, s.ok]), [["format", true], ["signin", true], ["vertex", true], ["pro", true]]);
+    proWarning = "The Pro model is not available in this project.";
+    const warned = JSON.parse((await call("POST", "/api/settings/ai/test", { key: JSON.stringify(key("new-project")) })).text);
+    assert.equal(warned.ok, true); // a warning never blocks
+    assert.deepEqual(warned.warnings, ["The Pro model is not available in this project."]);
+    proWarning = null;
     assert.equal((await call("GET", "/api/settings/ai")).text.includes("new-project"), false); // testing saves nothing
 
     failWith = "403 There are issues with your billing account, please pay your outstanding balance for project: projects/42";
     const bad = await call("PUT", "/api/settings/ai", { key: JSON.stringify(key("broke-project")) });
     assert.equal(bad.status, 422);
+    const badTest = JSON.parse(bad.text).test;
+    assert.equal(badTest.step, "vertex"); assert.deepEqual(badTest.steps.map((s) => [s.key, s.ok]), [["format", true], ["signin", true], ["vertex", false]]); assert.match(badTest.details, /billing account/);
     assert.match(JSON.parse(bad.text).error, /billing account of this project/);
     assert.equal(JSON.parse((await call("GET", "/api/settings/ai")).text).source, "server"); // nothing replaced
 

@@ -1,18 +1,23 @@
 // Settings → AI connection (admin only): see which Google key the app is using, test a new one, save it, or go back to the server's own.
-import { cleanLocation, describeAiError, parseServiceAccount } from "./aiCredentials.js";
+import { cleanLocation, describeAiError, parseServiceAccount, safeDetails } from "./aiCredentials.js";
 
 export function registerAiSettingsRoutes(app, db, { requireRole, aiCredentials, testCandidate }) {
   const admin = requireRole("admin");
 
-  // a real, tiny AI call with the candidate key (nothing is saved): tells plainly whether it will work
+  // a real, tiny AI call with the candidate key (nothing is saved): tells plainly whether it will work, and at which step it stops
+  // steps: 1 the file was read · 2 Google accepts the key (sign-in) · 3 Vertex AI answers a test question
   async function runTest(parsed, location) {
     const started = Date.now();
+    const base = { projectId: parsed.projectId, clientEmail: parsed.clientEmail, location };
+    const steps = [{ key: "format", ok: true, note: `project ${parsed.projectId}, service account ${parsed.clientEmail}` }];
     try {
-      await testCandidate(parsed.serviceAccount, location);
-      return { ok: true, projectId: parsed.projectId, clientEmail: parsed.clientEmail, seconds: Math.round((Date.now() - started) / 100) / 10 };
+      const info = await testCandidate(parsed.serviceAccount, location, (step, note, opts) => steps.push({ key: step, ok: !opts?.warn, warn: Boolean(opts?.warn), note }));
+      return { ok: true, ...base, model: info?.model ?? null, steps, warnings: steps.filter((s) => s.warn).map((s) => s.note), seconds: Math.round((Date.now() - started) / 100) / 10 };
     } catch (error) {
-      console.error(`AI key test failed for project ${parsed.projectId}:`, String(error?.message ?? error).slice(0, 300));
-      return { ok: false, projectId: parsed.projectId, clientEmail: parsed.clientEmail, message: describeAiError(error), seconds: Math.round((Date.now() - started) / 100) / 10 };
+      const step = error?.step ?? "vertex";
+      steps.push({ key: step, ok: false });
+      console.error(`AI key test failed at "${step}" for project ${parsed.projectId}:`, safeDetails(error));
+      return { ok: false, ...base, step, steps, message: describeAiError(error, step), details: safeDetails(error), seconds: Math.round((Date.now() - started) / 100) / 10 };
     }
   }
 

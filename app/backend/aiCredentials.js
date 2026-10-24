@@ -39,22 +39,77 @@ export function decryptJson(blob, secret) {
 
 // ---- checking what the admin pasted ----------------------------------------------------------------------------------------------------
 
-export function parseServiceAccount(text) {
-  let json;
-  try { json = typeof text === "string" ? JSON.parse(text) : text; } catch { return { ok: false, error: "That is not a JSON file. Paste the whole content of the key file you downloaded from Google Cloud (it starts with { and ends with })." }; }
-  if (!json || typeof json !== "object" || Array.isArray(json)) return { ok: false, error: "That is not a Google service-account key." };
-  if (json.type !== "service_account") return { ok: false, error: 'This JSON is not a service-account key (it should contain "type": "service_account"). In Google Cloud use IAM → Service accounts → Keys → Add key → JSON.' };
-  for (const field of ["project_id", "client_email", "private_key"]) {
-    if (typeof json[field] !== "string" || !json[field].trim()) return { ok: false, error: `The key is missing "${field}". Download the key file again from Google Cloud and paste all of it.` };
+// What arrives is often not the file exactly as Google made it — especially from a phone: an invisible byte-order mark, curly quotes, real line
+// breaks inside the private key, text around it, the whole thing wrapped in quotes. These are cleaned up before reading, so a good key is not refused
+// for how it was copied.
+function straighten(text) {
+  let t = String(text ?? "").replace(/^\uFEFF/, "").replace(/[\u200B-\u200D\u2060\u00A0]/g, " ").trim();
+  t = t.replace(/[“”„‟]/g, '"').replace(/[‘’]/g, "'");
+  // wrapped in quotes with the inside escaped ("{\"type\": …}")
+  if (t.startsWith('"') && t.endsWith('"') && t.length > 2) {
+    try { const inner = JSON.parse(t); if (typeof inner === "string") t = inner.trim(); } catch { /* not a wrapped string */ }
   }
-  if (!/-----BEGIN [A-Z ]*PRIVATE KEY-----/.test(json.private_key)) return { ok: false, error: 'The "private_key" in this file does not look right. Paste the file exactly as downloaded, without changes.' };
-  return { ok: true, serviceAccount: json, projectId: json.project_id, clientEmail: json.client_email };
+  // text before or after the braces
+  const first = t.indexOf("{");
+  const last = t.lastIndexOf("}");
+  if (first >= 0 && last > first && (first > 0 || last < t.length - 1)) t = t.slice(first, last + 1);
+  return t;
+}
+
+// raw line breaks / tabs inside a "string" are not allowed in JSON: write them as \n and \t
+function escapeRawBreaksInStrings(t) {
+  let out = "";
+  let inString = false;
+  for (let i = 0; i < t.length; i++) {
+    const ch = t[i];
+    if (inString) {
+      if (ch === "\\") { out += ch + (t[++i] ?? ""); continue; }
+      if (ch === '"') { inString = false; out += ch; continue; }
+      if (ch === "\n") { out += "\\n"; continue; }
+      if (ch === "\r") continue;
+      if (ch === "\t") { out += "\\t"; continue; }
+      out += ch;
+    } else {
+      if (ch === '"') inString = true;
+      out += ch;
+    }
+  }
+  return out;
+}
+
+export function parseServiceAccount(input) {
+  let json = input;
+  if (typeof input === "string") {
+    const text = straighten(input);
+    if (!text) return { ok: false, error: "Nothing was pasted. Choose the key file, or paste the whole content of it." };
+    if (/^AIza[\w-]{20,}$/.test(text)) return { ok: false, error: "That is an API key (it starts with AIza…), not a service-account file. Here a service-account JSON file is needed: in Google Cloud open IAM → Service accounts → your account → Keys → Add key → Create new key → JSON." };
+    if (!text.includes("{")) return { ok: false, error: "That does not look like the key file: it should start with { and end with }. Open the downloaded .json file, select ALL of its text and paste it, or use “Choose the JSON file”." };
+    try { json = JSON.parse(text); } catch {
+      try { json = JSON.parse(escapeRawBreaksInStrings(text)); } catch {
+        const cutOff = (text.match(/{/g) || []).length > (text.match(/}/g) || []).length;
+        return { ok: false, error: cutOff
+          ? "The text looks cut off — the closing } is missing. The copy stopped early (long text can be cut on a phone). Use “Choose the JSON file” instead, or copy the whole file again."
+          : "The text could not be read as a key file. It may have been changed while copying. Use “Choose the JSON file” with the file exactly as downloaded from Google Cloud." };
+      }
+    }
+  }
+  if (!json || typeof json !== "object" || Array.isArray(json)) return { ok: false, error: "That is not a Google service-account key." };
+  if (json.type && json.type !== "service_account") return { ok: false, error: `This file is a “${json.type}” key, not a service-account key. In Google Cloud use IAM → Service accounts → Keys → Add key → Create new key → JSON.` };
+  for (const field of ["project_id", "client_email", "private_key"]) {
+    if (typeof json[field] !== "string" || !json[field].trim()) return { ok: false, error: `The key is missing "${field}". Download the key file again from Google Cloud and use all of it.` };
+  }
+  // a private key whose line breaks were written twice ("\\n" as two letters) is put right
+  let privateKey = json.private_key.replace(/^\s+/, ""); // the trailing line break of the key is kept exactly as Google wrote it
+  if (!privateKey.includes("\n") && privateKey.includes("\\n")) privateKey = privateKey.replace(/\\n/g, "\n");
+  if (!/-----BEGIN [A-Z ]*PRIVATE KEY-----/.test(privateKey) || !/-----END [A-Z ]*PRIVATE KEY-----/.test(privateKey)) return { ok: false, error: 'The "private_key" in this file is incomplete or changed (it must start with -----BEGIN PRIVATE KEY----- and end with -----END PRIVATE KEY-----). Use the file exactly as downloaded.' };
+  const serviceAccount = { ...json, type: "service_account", private_key: privateKey };
+  return { ok: true, serviceAccount, projectId: serviceAccount.project_id.trim(), clientEmail: serviceAccount.client_email.trim() };
 }
 
 export const cleanLocation = (value) => (/^[a-z]+(?:-[a-z]+\d+)?$/.test(String(value ?? "").trim()) ? String(value).trim() : "us-central1");
 
 // Google's raw error -> a plain sentence that says what to do
-export function describeAiError(error) {
+export function describeAiError(error, step = null) {
   const raw = String(error?.message ?? error ?? "");
   const project = /projects\/([\w-]+)/.exec(raw)?.[1];
   if (/billing|dunning/i.test(raw)) return `Google says the billing account of this project${project ? ` (${project})` : ""} has a problem — usually an unpaid balance (Google calls it “dunning”), a closed or suspended account, or no billing account linked. Open Google Cloud → Billing, fix or link the billing account, then test again.`;
@@ -64,7 +119,13 @@ export function describeAiError(error) {
   if (/NOT_FOUND|404/i.test(raw)) return "Google could not find the AI model in this location. Check the Location (for example us-central1) and that the Vertex AI API is enabled in this project.";
   if (/RESOURCE_EXHAUSTED|429|quota/i.test(raw)) return "Google says this project is out of AI quota right now. Wait a few minutes, or raise the quota in Google Cloud.";
   if (/ENOTFOUND|ECONNRESET|ETIMEDOUT|fetch failed|timed out/i.test(raw)) return "The server could not reach Google just now. Try again in a minute.";
+  if (step === "signin") return "Google did not accept this key at sign-in (it may be disabled, deleted, or changed while copying). Create a new JSON key for the service account and use that file exactly as downloaded.";
   return `Google refused the test call: ${raw.slice(0, 300)}`;
+}
+
+// the raw text for the “Technical details” box: shortened, and any long secret-looking run removed
+export function safeDetails(error) {
+  return String(error?.message ?? error ?? "").replace(/-----BEGIN[\s\S]*?-----END [A-Z ]*-----/g, "[key removed]").replace(/[A-Za-z0-9+\/=_-]{60,}/g, "[long text removed]").slice(0, 700);
 }
 
 // ---- the live holder --------------------------------------------------------------------------------------------------------------------

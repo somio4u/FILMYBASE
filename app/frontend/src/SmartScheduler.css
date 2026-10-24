@@ -94,3 +94,8 @@
 .ai-loc input { padding: 6px 8px; border-radius: 8px; border: 1px solid var(--border-subtle, rgba(138,180,248,.4)); background: var(--bg-input, rgba(0,0,0,.25)); color: inherit; width: 140px; }
 .ai-paste { display: grid; gap: 4px; font-size: .85rem; }
 .ai-paste textarea { padding: 8px 10px; border-radius: 8px; border: 1px solid var(--border-subtle, rgba(138,180,248,.4)); background: var(--bg-input, rgba(0,0,0,.25)); color: inherit; font-family: ui-monospace, monospace; font-size: .78rem; width: 100%; box-sizing: border-box; }
+.ai-steps { list-style: none; margin: 4px 0; padding: 0; display: grid; gap: 4px; font-size: .88rem; }
+.ai-step.is-ok { color: #6fdc8c; } .ai-step.is-bad { color: #ff8a8a; } .ai-step.is-skip { opacity: .55; } .ai-step small { opacity: .8; }
+.ai-details summary { cursor: pointer; font-size: .85rem; opacity: .85; }
+.ai-details pre { white-space: pre-wrap; overflow-wrap: anywhere; font-size: .75rem; padding: 8px 10px; border-radius: 8px; background: rgba(0,0,0,.3); }
+.ai-step.is-warn { color: #f5b800; }

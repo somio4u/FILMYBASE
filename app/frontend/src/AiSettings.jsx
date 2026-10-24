@@ -3,10 +3,24 @@ import './SmartScheduler.css'
 
 // Settings (admin only): which Google Vertex key the whole app uses. Paste or upload the JSON key, TEST it (a real tiny AI call), then save —
 // the app switches at once, no deploy, nothing to change on the server. The key is never shown again after saving.
+// What the screen says for each way the server can answer (or not answer) — never a blank error
+function whyNot(status, data) {
+  if (data?.error) return data.error
+  if (status === 401) return 'You are logged out. Log in again as admin and retry.'
+  if (status === 403) return 'Only the admin login can change these settings.'
+  if (status === 404) return 'The server does not have this page yet — it is probably still updating after a deploy. Wait two minutes, refresh the page and try again.'
+  if (status === 413) return 'That is far too big to be a key file. Use the small .json file downloaded from Google Cloud.'
+  if (status === 429) return 'Too many tries in a short time. Wait a minute and try again.'
+  if (status >= 500) return `The server had a problem (code ${status}). Wait a minute and try again.`
+  return `The server answered with an unexpected reply (code ${status}).`
+}
 async function call(backendUrl, path, options) {
-  const response = await fetch(`${backendUrl}${path}`, options)
+  let response
+  try { response = await fetch(`${backendUrl}${path}`, options) } catch {
+    return { ok: false, status: 0, data: { error: 'The server could not be reached. It may be restarting or asleep — wait a minute and try again.' } }
+  }
   const data = await response.json().catch(() => ({}))
-  return { ok: response.ok, status: response.status, data }
+  return { ok: response.ok, status: response.status, data: response.ok ? data : { ...data, error: whyNot(response.status, data) } }
 }
 const json = (method, body) => ({ method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
 const when = (iso) => (iso ? new Date(iso).toLocaleString() : '')
@@ -14,8 +28,9 @@ const when = (iso) => (iso ? new Date(iso).toLocaleString() : '')
 // a quick look at what was pasted, so the admin sees which project it belongs to before testing
 function peek(text) {
   try {
-    const j = JSON.parse(text)
-    if (j?.type === 'service_account' && j.project_id && j.client_email) return { projectId: j.project_id, email: j.client_email }
+    const cleaned = String(text).replace(/^\uFEFF/, '').replace(/[“”]/g, '"').trim()
+    const j = JSON.parse(cleaned.slice(cleaned.indexOf('{'), cleaned.lastIndexOf('}') + 1))
+    if (j?.project_id && j.client_email && j.private_key) return { projectId: j.project_id, email: j.client_email }
   } catch { /* not valid yet */ }
   return null
 }
@@ -31,6 +46,7 @@ export default function AiSettings({ backendUrl, onBack }) {
   const [saving, setSaving] = useState(false)
   const [asking, setAsking] = useState('') // '' | 'remove' | 'anyway'
   const [message, setMessage] = useState('')
+  const [fileNote, setFileNote] = useState('')
   const fileInput = useRef(null)
 
   const load = useCallback(async () => {
@@ -57,16 +73,22 @@ export default function AiSettings({ backendUrl, onBack }) {
     const file = event.target.files?.[0]
     event.target.value = ''
     if (!file) return
-    setText(await file.text()); setResult(null); setMessage('')
+    setResult(null); setMessage('')
+    if (file.size > 100000) { setFileNote(`“${file.name}” is ${Math.round(file.size / 1024)} KB — far too big for a key file (they are about 2 KB).`); return }
+    try {
+      const content = await file.text()
+      setText(content)
+      setFileNote(content.trim() ? `Read “${file.name}” (${content.length} characters).` : `“${file.name}” is empty.`)
+    } catch { setFileNote(`Could not read “${file.name}”. Try pasting its text instead.`) }
   }
 
   async function test() {
     setTesting(true); setResult(null); setMessage('')
     try {
       const r = await call(backendUrl, '/api/settings/ai/test', json('POST', { key: text, location }))
-      if (r.status === 400) setResult({ ok: false, message: r.data.error })
+      if (!r.ok) setResult({ ok: false, message: r.data.error, steps: [{ key: 'format', ok: false }] })
       else setResult({ ...r.data, forText: text + '|' + location })
-    } catch { setResult({ ok: false, message: 'The server could not be reached. Try again in a minute.' }) }
+    } catch { setResult({ ok: false, message: 'Something unexpected went wrong in this page. Refresh it and try again.' }) }
     setTesting(false)
   }
 
@@ -114,24 +136,36 @@ export default function AiSettings({ backendUrl, onBack }) {
         <div className="ai-form">
           <div className="ai-row">
             <button type="button" className="ss-back" onClick={() => fileInput.current?.click()}>📄 Choose the JSON file</button>
-            <input ref={fileInput} type="file" accept=".json,application/json" onChange={readFile} hidden />
+            <input ref={fileInput} type="file" onChange={readFile} hidden />
             <label className="ai-loc">Location <input value={location} onChange={(e) => { setLocation(e.target.value); setResult(null) }} spellCheck={false} /></label>
           </div>
           <label className="ai-paste">…or paste the whole content of the key file
             <textarea rows={5} value={text} onChange={(e) => { setText(e.target.value); setResult(null); setMessage('') }} placeholder={'{ "type": "service_account", "project_id": "…", … }'} spellCheck={false} autoComplete="off" />
           </label>
+          {fileNote && <p className="ss-muted">{fileNote}</p>}
           {seen && <p className="ss-muted">This key belongs to project <b>{seen.projectId}</b> ({seen.email}).</p>}
-          {text && !seen && <p className="ss-muted">This does not look like a complete service-account key yet.</p>}
+          {text && !seen && <p className="ss-muted">This page cannot preview the text, but that is fine — press “1 · Test this key”: the server reads it more carefully and tells you exactly what is wrong, if anything.</p>}
 
           <div className="ai-row">
             <button type="button" className="ss-go" disabled={!text.trim() || testing || saving} onClick={test}>{testing ? 'Testing…' : '1 · Test this key'}</button>
             <button type="button" className="ss-go" disabled={!tested || saving || testing} onClick={() => save(false)}>{saving ? 'Saving…' : '2 · Save and use this key'}</button>
           </div>
           {testing && <p className="sync-live">⏳ Asking Google with this key… <b>{seconds}s</b> (usually under 10 seconds, at most 45). A short test question is being sent; nothing is saved yet.</p>}
-          {result?.ok && <p className="ss-note" role="status">✓ This key works — project {result.projectId} answered in {result.seconds}s. Now press “2 · Save and use this key”.</p>}
+
+          {result?.steps && (
+            <ul className="ai-steps">
+              {[['format', 'The key file was read'], ['signin', 'Google accepts the key (sign-in)'], ['vertex', 'Vertex AI answers a test question'], ['pro', 'The best-quality (Pro) model answers']].map(([k, label]) => {
+                const st = result.steps.find((x) => x.key === k)
+                const state = !st ? 'skip' : st.warn ? 'warn' : st.ok ? 'ok' : 'bad'
+                return <li key={k} className={`ai-step is-${state}`}>{state === 'ok' ? '✓' : state === 'bad' ? '✗' : state === 'warn' ? '⚠' : '○'} {label}{st?.note ? <small> — {st.note}</small> : null}</li>
+              })}
+            </ul>
+          )}
+          {result?.ok && <p className="ss-note" role="status">✓ This key works — project {result.projectId} answered in {result.seconds}s. Now press “2 · Save and use this key”.{result.warnings?.length ? ' One warning above: read it before saving.' : ''}</p>}
           {result && !result.ok && (
             <div role="alert">
               <p className="ss-error">✗ {result.message}</p>
+              {result.details && <details className="ai-details"><summary>Technical details (send this if you need help)</summary><pre>{`Project: ${result.projectId}\nService account: ${result.clientEmail}\nLocation: ${result.location}\nStopped at: ${result.step}\nGoogle said: ${result.details}`}</pre></details>}
               {result.projectId && asking !== 'anyway' && <button type="button" className="ss-back" onClick={() => setAsking('anyway')}>Save it anyway…</button>}
               {asking === 'anyway' && (
                 <p className="sync-ask">Save a key that failed its test? The app would then use it and its AI tasks would fail the same way until it is fixed in Google Cloud.{' '}

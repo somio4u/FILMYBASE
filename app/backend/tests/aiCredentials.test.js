@@ -201,6 +201,23 @@ test("a plain Google API key: found inside whatever was pasted, and the other ki
   assert.equal(detectKind(""), null);
 });
 
+const AQ_KEY = "AQ.Ab8RN6" + "z".repeat(44);
+
+test("Google's newer AQ. keys are accepted as keys (found in messy text, kind detected), and Google's 401 for them is explained without over-claiming", () => {
+  const r = parseApiKey(AQ_KEY);
+  assert.equal(r.ok, true); assert.equal(r.apiKey, AQ_KEY); assert.equal(r.format, "AQ"); assert.equal(r.hint, "…zzzz");
+  assert.equal(parseApiKey(`export GEMINI_API_KEY="${AQ_KEY}"\n`).apiKey, AQ_KEY);
+  assert.equal(parseApiKey(`${AQ_KEY.slice(0, 15)}\n${AQ_KEY.slice(15)}`).apiKey, AQ_KEY); // broken over two lines
+  assert.equal(parseApiKey(REAL_LOOKING_KEY).format, "AIza");
+  assert.equal(detectKind(AQ_KEY), "apikey");
+  assert.equal(parseApiKey("AQ.short").ok, false);
+  // the exact reply Google's real server gave for a made-up AQ. key
+  const raw = 'got status: 401 Unauthorized. {"error":{"code":401,"message":"API key not valid. Please pass a valid API key.","status":"UNAUTHENTICATED","details":[{"reason":"ACCESS_TOKEN_TYPE_UNSUPPORTED"}]}}';
+  const said = describeAiError(new Error(raw));
+  assert.match(said, /cannot be told from here/); assert.match(said, /last 4 characters/); assert.match(said, /Credentials/); assert.match(said, /Vertex/);
+  assert.doesNotMatch(said, /^This is a Google problem/);
+});
+
 test("API-key problems get plain sentences (invalid key, restricted key, no prepaid credit)", () => {
   assert.match(describeAiError(new Error('400 API key not valid. Please pass a valid API key. {"status":"INVALID_ARGUMENT","reason":"API_KEY_INVALID"}')), /not valid.*AIza/);
   assert.match(describeAiError(new Error('403 Requests from referer <empty> are blocked. {"reason":"API_KEY_HTTP_REFERRER_BLOCKED"}')), /restrictions/);
@@ -273,6 +290,11 @@ test("Settings routes with a Google API key: tested and saved like the other kin
     const s = JSON.parse(saved.text);
     assert.equal(s.source, "saved"); assert.equal(s.kind, "apikey"); assert.equal(s.activeKeyHint, "…xxxx"); assert.equal(s.saved.savedBy, "Admin Asha");
     assert.ok(!saved.text.includes(REAL_LOOKING_KEY));
+    // the newer AQ. key goes the same way, and the kind is worked out from it
+    const aq = JSON.parse((await call("POST", "/api/settings/ai/test", { key: AQ_KEY })).text);
+    assert.equal(aq.ok, true); assert.equal(aq.kind, "apikey"); assert.equal(aq.keyHint, "…zzzz");
+    const aqSaved = JSON.parse((await call("PUT", "/api/settings/ai", { key: `  ${AQ_KEY}\n` })).text);
+    assert.equal(aqSaved.kind, "apikey"); assert.equal(aqSaved.activeKeyHint, "…zzzz");
     // kind left out: it is worked out from what was pasted
     const auto = JSON.parse((await call("POST", "/api/settings/ai/test", { key: JSON.stringify(key("auto-project")) })).text);
     assert.equal(auto.kind, "vertex"); assert.equal(auto.projectId, "auto-project");
@@ -281,3 +303,32 @@ test("Settings routes with a Google API key: tested and saved like the other kin
 });
 
 after(async () => { await db.end(); });
+
+test("a refused AQ. key whose Vertex-express probe succeeded is explained as 'the key is fine, this app does not use that route yet'", { skip: !up }, async () => {
+  const pg2 = new pg.Pool({ database: process.env.TEST_DB || "filmmaking_app_test", user: process.env.PGUSER || "root", host: process.env.PGHOST || "/var/run/postgresql" });
+  try {
+    await ensureAiCredentialsSchema(pg2);
+    const creds = createAiCredentials({ env: { SETTINGS_ENCRYPTION_KEY: "x".repeat(24) } }); creds.attach(pg2);
+    let probe = { ok: true, status: 200, text: "" };
+    const app = express(); app.use(express.json());
+    registerAiSettingsRoutes(app, pg2, {
+      requireRole: () => (req, res, next) => { req.user = { id: 1, name: "A" }; next(); },
+      aiCredentials: creds,
+      testCandidate: async () => { const e = new Error('got status: 401 . {"error":{"message":"API key not valid.","details":[{"reason":"ACCESS_TOKEN_TYPE_UNSUPPORTED"}]}}'); e.step = "answer"; e.express = probe; throw e; },
+    });
+    const server = app.listen(0);
+    const base = `http://127.0.0.1:${server.address().port}`;
+    const post = async () => JSON.parse(await (await fetch(`${base}/api/settings/ai/test`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ key: AQ_KEY }) })).text());
+    try {
+      const good = await post();
+      assert.equal(good.ok, false);
+      assert.deepEqual(good.steps.map((s) => [s.key, s.ok]), [["format", true], ["answer", false], ["express", true]]);
+      assert.match(good.message, /GOOD NEWS/); assert.match(good.details, /Vertex express route: HTTP 200 \(accepted\)/);
+      probe = { ok: false, status: 401, text: "API key not valid" };
+      const bad = await post();
+      assert.deepEqual(bad.steps.map((s) => [s.key, s.ok]), [["format", true], ["answer", false], ["express", false]]);
+      assert.doesNotMatch(bad.message, /GOOD NEWS/); assert.match(bad.details, /HTTP 401 API key not valid/);
+      assert.ok(!JSON.stringify(good).includes(AQ_KEY) && !JSON.stringify(bad).includes(AQ_KEY), "the key must not come back in any reply");
+    } finally { server.close(); }
+  } finally { await pg2.end(); }
+});

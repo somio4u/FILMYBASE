@@ -20572,7 +20572,20 @@ registerAiSettingsRoutes(app, db, {
       try {
         await ask(buildAiClient({ apiKey: candidate.apiKey, source: "candidate", kind: "apikey" }));
         report?.("answer", `Google answered with this key (model ${GEMINI_MODEL_NAME})`);
-      } catch (error) { error.step = "answer"; throw error; }
+      } catch (error) {
+        error.step = "answer";
+        // Google's newer "AQ." keys are refused by the Gemini API for some people. For a refused key, also try Vertex's "express" route — for
+        // DIAGNOSIS ONLY (the app does not use that route): it tells whether the key is good and only this route is the problem.
+        if (/401|UNAUTHENTICATED|ACCESS_TOKEN_TYPE|API key not valid/i.test(String(error?.message))) {
+          try {
+            const response = await fetch(`https://aiplatform.googleapis.com/v1/publishers/google/models/${GEMINI_MODEL_NAME}:generateContent`, {
+              method: "POST", headers: { "x-goog-api-key": candidate.apiKey, "Content-Type": "application/json" }, body: proBody, signal: AbortSignal.timeout(30000),
+            });
+            error.express = { ok: response.ok, status: response.status, text: response.ok ? "" : (await response.text()).slice(0, 300) };
+          } catch (probeError) { error.express = { ok: false, status: 0, text: String(probeError.message).slice(0, 200) }; }
+        }
+        throw error;
+      }
       // the best-quality (Pro) model: a warning only
       for (const target of STORY_BRAIN_MODELS) {
         try {

@@ -108,21 +108,25 @@ export function parseServiceAccount(input) {
 
 // ---- a plain Google (AI Studio) API key: AIza… ----------------------------------------------------------------------------------------------
 
+// Google has issued two shapes of API key: the long-standing "AIza…" and, from AI Studio lately, the newer "AQ.…" (an “authentication key”, with a dot in it).
+const API_KEY_SHAPE = /(?:AIza[0-9A-Za-z_\-]{30,}|AQ\.[0-9A-Za-z_\-.]{20,})/;
+const API_KEY_ROUGH = /(?:AIza[0-9A-Za-z_\-]{20,}|AQ\.[0-9A-Za-z_\-.]{12,})/;
+
 export function parseApiKey(input) {
   const text = String(input ?? "").replace(/^\uFEFF/, "").trim();
-  if (!text) return { ok: false, error: "Nothing was pasted. Paste the API key (it starts with AIza…)." };
-  if (text.includes("{") && /service_account|private_key/.test(text)) return { ok: false, error: "That is a service-account file (Vertex), not an API key. Choose “Vertex (JSON file)” above, or paste the key that starts with AIza…." };
-  const found = /AIza[0-9A-Za-z_\-]{30,}/.exec(text.replace(/\s+/g, ""));
-  if (!found) return { ok: false, error: "That does not look like a Google API key. It starts with AIza… and is about 39 characters, with no spaces. Create one in Google AI Studio → Get API key (aistudio.google.com/apikey)." };
-  return { ok: true, apiKey: found[0], hint: `…${found[0].slice(-4)}` };
+  if (!text) return { ok: false, error: "Nothing was pasted. Paste the API key (it starts with AIza… or AQ.…)." };
+  if (text.includes("{") && /service_account|private_key/.test(text)) return { ok: false, error: "That is a service-account file (Vertex), not an API key. Choose “Vertex (JSON file)” above, or paste the key that starts with AIza… or AQ.…" };
+  const found = API_KEY_SHAPE.exec(text.replace(/\s+/g, ""));
+  if (!found) return { ok: false, error: "That does not look like a Google API key. Google keys start with AIza… (about 39 characters) or AQ.… (newer, longer, with a dot after AQ) and have no spaces. Create one in Google AI Studio → Get API key (aistudio.google.com/apikey) and copy all of it." };
+  return { ok: true, apiKey: found[0], hint: `…${found[0].slice(-4)}`, format: found[0].startsWith("AQ.") ? "AQ" : "AIza" };
 }
 
-// which kind did the admin paste? ("vertex" = a JSON file, "apikey" = AIza…), or null when it cannot be told
+// which kind did the admin paste? ("vertex" = a JSON file, "apikey" = AIza… / AQ.…), or null when it cannot be told
 export function detectKind(text) {
   const t = String(text ?? "").replace(/^\uFEFF/, "").trim();
   if (!t) return null;
   if (t.includes("{")) return "vertex";
-  if (/AIza[0-9A-Za-z_\-]{20,}/.test(t.replace(/\s+/g, ""))) return "apikey";
+  if (API_KEY_ROUGH.test(t.replace(/\s+/g, ""))) return "apikey";
   return null;
 }
 
@@ -132,6 +136,7 @@ export const cleanLocation = (value) => (/^[a-z]+(?:-[a-z]+\d+)?$/.test(String(v
 export function describeAiError(error, step = null) {
   const raw = String(error?.message ?? error ?? "");
   const project = /projects\/([\w-]+)/.exec(raw)?.[1];
+  if (/ACCESS_TOKEN_TYPE_UNSUPPORTED|API keys are not supported by this API|Expected OAuth2 access token/i.test(raw)) return "Google's Gemini API rejected this key (401, “API key not valid”). For the newer “AQ.” keys Google gives exactly this reply both for a key that is wrong or deleted AND — as many people report — for keys that are fine, so it cannot be told from here. First check the key is complete (compare its last 4 characters shown above with the key in AI Studio) and not deleted. If it is right, it is Google's side. People report these ways out (not confirmed here): (1) create the key in Google Cloud Console → APIs & Services → Credentials → Create credentials → API key, restricted to “Generative Language API” (that kind starts with AIza…); (2) use a Vertex service-account JSON file instead; (3) try again later — Google is still rolling the new keys out.";
   if (/API key not valid|API_KEY_INVALID|API key expired|invalid API key/i.test(raw)) return "Google says this API key is not valid. Check it was copied completely (it starts with AIza… and has no spaces) and that it is a key from Google AI Studio (aistudio.google.com/apikey) that has not been deleted.";
   if (/API_KEY_HTTP_REFERRER_BLOCKED|API_KEY_IP_ADDRESS_BLOCKED|API_KEY_SERVICE_BLOCKED|referer .* blocked|are blocked/i.test(raw)) return "This API key has restrictions (only certain websites, IP addresses or services). A server cannot use it. In Google Cloud → APIs & Services → Credentials, open the key and set “Application restrictions: None” (and allow the Generative Language API), or create a new unrestricted key.";
   if (/prepayment|credits? (are|is) depleted|spending cap|exceeded your (current )?quota.*billing/i.test(raw)) return "This Google AI Studio account has run out of prepaid credit (or hit its spending cap). Open aistudio.google.com → Billing and add credit, then test again.";

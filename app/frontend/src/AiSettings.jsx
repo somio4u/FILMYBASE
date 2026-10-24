@@ -30,7 +30,7 @@ function looksLike(text) {
   const t = String(text ?? '').replace(/^\uFEFF/, '').trim()
   if (!t) return null
   if (t.includes('{')) return 'vertex'
-  if (/AIza[0-9A-Za-z_-]{20,}/.test(t.replace(/\s+/g, ''))) return 'apikey'
+  if (/(?:AIza[0-9A-Za-z_-]{20,}|AQ\.[0-9A-Za-z_.-]{12,})/.test(t.replace(/\s+/g, ''))) return 'apikey'
   return null
 }
 function peek(text) {
@@ -74,7 +74,8 @@ export default function AiSettings({ backendUrl, onBack }) {
     return () => clearInterval(id)
   }, [testing])
 
-  const apiPeek = kind === 'apikey' && /AIza[0-9A-Za-z_-]{30,}/.test(text.replace(/\s+/g, '')) ? `…${text.replace(/\s+/g, '').match(/AIza[0-9A-Za-z_-]{30,}/)[0].slice(-4)}` : null
+  const apiKeyInText = kind === 'apikey' ? text.replace(/\s+/g, '').match(/(?:AIza[0-9A-Za-z_-]{30,}|AQ\.[0-9A-Za-z_.-]{20,})/)?.[0] : null
+  const apiPeek = apiKeyInText ? `…${apiKeyInText.slice(-4)}` : null
   const seen = kind === 'vertex' ? peek(text) : null
   // pasting the other kind switches the choice by itself
   const putText = (value) => { setText(value); setResult(null); setMessage(''); const l = looksLike(value); if (l && l !== kind) setKind(l) }
@@ -151,7 +152,7 @@ export default function AiSettings({ backendUrl, onBack }) {
         </div>
         <p className="ss-muted">{kind === 'vertex'
           ? 'Vertex: the .json file of a service account from Google Cloud (IAM → Service accounts → Keys → Add key → JSON). Billed to that Google Cloud project.'
-          : 'Google API key: the key that starts with AIza… from Google AI Studio (aistudio.google.com/apikey). Billed to that AI Studio account (free tier or prepaid credit).'}</p>
+          : 'Google API key: the key from Google AI Studio (aistudio.google.com/apikey) — it starts with AIza… or, for newer keys, AQ.… Billed to that AI Studio account (free tier or prepaid credit).'}</p>
         <div className="ai-form">
           <div className="ai-row">
             <button type="button" className="ss-back" onClick={() => fileInput.current?.click()}>{kind === 'vertex' ? '📄 Choose the JSON file' : '📄 Choose a text file with the key'}</button>
@@ -159,13 +160,13 @@ export default function AiSettings({ backendUrl, onBack }) {
             {kind === 'vertex' && <label className="ai-loc">Location <input value={location} onChange={(e) => { setLocation(e.target.value); setResult(null) }} spellCheck={false} /></label>}
           </div>
           <label className="ai-paste">{kind === 'vertex' ? '…or paste the whole content of the key file' : '…or paste the API key'}
-            <textarea rows={kind === 'vertex' ? 5 : 2} value={text} onChange={(e) => putText(e.target.value)} placeholder={kind === 'vertex' ? '{ "type": "service_account", "project_id": "…", … }' : 'AIzaSy…'} spellCheck={false} autoComplete="off" />
+            <textarea rows={kind === 'vertex' ? 5 : 2} value={text} onChange={(e) => putText(e.target.value)} placeholder={kind === 'vertex' ? '{ "type": "service_account", "project_id": "…", … }' : 'AIzaSy…   or   AQ.Ab8…'} spellCheck={false} autoComplete="off" />
           </label>
           {fileNote && <p className="ss-muted">{fileNote}</p>}
           {seen && <p className="ss-muted">This key belongs to project <b>{seen.projectId}</b> ({seen.email}).</p>}
           {apiPeek && <p className="ss-muted">An API key ending in <b>{apiPeek}</b> was found in the text.</p>}
           {text && kind === 'vertex' && !seen && <p className="ss-muted">This page cannot preview the text, but that is fine — press “1 · Test this key”: the server reads it more carefully and tells you exactly what is wrong, if anything.</p>}
-          {text && kind === 'apikey' && !apiPeek && <p className="ss-muted">No key starting with AIza… found yet.</p>}
+          {text && kind === 'apikey' && !apiPeek && <p className="ss-muted">No key starting with AIza… or AQ. found yet.</p>}
 
           <div className="ai-row">
             <button type="button" className="ss-go" disabled={!text.trim() || testing || saving} onClick={test}>{testing ? 'Testing…' : '1 · Test this key'}</button>
@@ -176,7 +177,7 @@ export default function AiSettings({ backendUrl, onBack }) {
           {result?.steps && (
             <ul className="ai-steps">
               {(result.kind === 'apikey'
-                ? [['format', 'The key was read'], ['answer', 'Google answers with this key'], ['pro', 'The best-quality (Pro) model answers']]
+                ? [['format', 'The key was read'], ['answer', 'Google answers with this key'], ['express', 'Vertex “express” route accepts it (diagnosis only)'], ['pro', 'The best-quality (Pro) model answers']].filter(([k]) => k !== 'express' || result.steps.some((x) => x.key === 'express'))
                 : [['format', 'The key file was read'], ['signin', 'Google accepts the key (sign-in)'], ['vertex', 'Vertex AI answers a test question'], ['pro', 'The best-quality (Pro) model answers']]).map(([k, label]) => {
                 const st = result.steps.find((x) => x.key === k)
                 const state = !st ? 'skip' : st.warn ? 'warn' : st.ok ? 'ok' : 'bad'

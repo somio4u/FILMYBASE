@@ -36,8 +36,16 @@ export function registerAiSettingsRoutes(app, db, { requireRole, aiCredentials, 
     } catch (error) {
       const step = error?.step ?? "vertex";
       steps.push({ key: step, ok: false });
-      console.error(`AI key test (${key.kind}) failed at "${step}":`, safeDetails(error));
-      return { ok: false, ...base, step, steps, message: describeAiError(error, step), details: safeDetails(error), seconds: Math.round((Date.now() - started) / 100) / 10 };
+      let message = describeAiError(error, step);
+      let details = safeDetails(error);
+      if (error?.express) {
+        // the diagnostic probe of Vertex's "express" route (see server.js): shown as its own step and in the details
+        steps.push({ key: "express", ok: error.express.ok, note: error.express.ok ? "accepted this key" : `refused it too (HTTP ${error.express.status})` });
+        details += `\nVertex express route: HTTP ${error.express.status}${error.express.text ? ` ${safeDetails(error.express.text)}` : " (accepted)"}`;
+        if (error.express.ok) message += " GOOD NEWS: Google's Vertex “express” route DOES accept this key — so the key itself is fine. This app does not use that route yet; send the Technical details below to the developer and support can be added.";
+      }
+      console.error(`AI key test (${key.kind}) failed at "${step}":`, details.slice(0, 400));
+      return { ok: false, ...base, step, steps, message, details, seconds: Math.round((Date.now() - started) / 100) / 10 };
     }
   }
 

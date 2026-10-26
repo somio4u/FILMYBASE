@@ -46,6 +46,7 @@ import { registerAdRoutes } from "./adRoutes.js";
 import { registerProductionSyncRoutes } from "./productionSync.js";
 import { createJobStore, ensureJobSchema, shouldResume } from "./jobStore.js";
 import { repairStoredTransitions, withoutTransitions } from "./transitionNames.js";
+import { repairStoredLabels, stripEchoedLabel } from "./echoedLabels.js";
 import { withModelFallback } from "./modelFallback.js";
 import { createAiCredentials, describeAiError, ensureAiCredentialsSchema, providerEnv, summariseModels } from "./aiCredentials.js";
 import { registerAiSettingsRoutes } from "./aiSettingsRoutes.js";
@@ -11484,7 +11485,7 @@ async function generateMovieScriptCorrections(scenes, dialogueLanguage, characte
     .join("\n\n");
   const result = await generateJsonContent({
     model: AI_MOVIE_DIALOGUE_MODEL_NAME,
-    contents: `The story's characters (spell their names exactly like this): ${characterNames.join(", ") || "(none listed)"}.\n\n${text}\n\nReturn "corrections": one entry for each piece that needed a correction, with its exact id and the corrected text. Leave out pieces that are already correct.`,
+    contents: `The story's characters (spell their names exactly like this): ${characterNames.join(", ") || "(none listed)"}.\n\n${text}\n\nReturn "corrections": one entry for each piece that needed a correction, with its exact id and the corrected text ONLY — never write the label (ACTION:, DIALOGUE line of …, ACTING NOTE of …) or the [id] inside the text. Leave out pieces that are already correct.`,
     config: {
       systemInstruction: buildMovieScriptCorrectorPrompt(dialogueLanguage),
       responseMimeType: "application/json",
@@ -11508,7 +11509,7 @@ async function generateMovieScriptCorrections(scenes, dialogueLanguage, characte
   const corrections = new Map(
     (Array.isArray(result.corrections) ? result.corrections : [])
       .filter((c) => typeof c?.id === "string" && typeof c.text === "string" && c.text.trim())
-      .map((c) => [c.id.trim(), c.text])
+      .map((c) => [c.id.trim(), stripEchoedLabel(c.text)]) // the model sometimes writes back the "ACTION:" label it was shown
   );
   const fixes = (Array.isArray(result.fixes) ? result.fixes : []).filter((f) => typeof f?.fix === "string" && f.fix.trim());
   return { pieces, corrections, fixes };
@@ -11544,7 +11545,7 @@ async function movieCharacterNamesForSceneList(sceneListId) {
 // The elements as the screen sends them after typing: plain strings.
 function cleanMovieEditedElements(elements) {
   if (!Array.isArray(elements)) return [];
-  const text = (value) => (typeof value === "string" ? value.trim() : "");
+  const text = (value) => (typeof value === "string" ? stripEchoedLabel(value).trim() : ""); // also takes off a label an earlier save left in
   const modifiers = ["none", "CONT'D", "O.S.", "V.O.", "ECHOING"];
   return elements
     .map((element) => {
@@ -20685,6 +20686,7 @@ ensureAiMovieSchema()
   .then(() => ensureJobSchema(db))
   .then(() => ensureAiCredentialsSchema(db))
   .then(async () => { try { await aiCredentials.load(); aiCredentials.startRefresh(); const c = aiCredentials.current(); console.log(`AI connection: ${c.source}${c.serviceAccount ? ` — project ${c.serviceAccount.project_id}, ${c.location}` : ""}${c.problem ? ` — PROBLEM: ${c.problem}` : ""}`); } catch (error) { console.error("Reading the saved AI key failed:", error.message); } })
+  .then(async () => { try { const fixed = await repairStoredLabels(db); if (fixed) console.log(`Screenplay: ${fixed} scene(s) had "ACTION:" written at the start of lines — corrected.`); } catch (error) { console.error("Label repair failed:", error.message); } })
   .then(async () => { try { const fixed = await repairStoredTransitions(db); if (fixed) console.log(`Screenplay: ${fixed} scene(s) had a transition (FREEZE. BREAK- …) written as a character — corrected.`); } catch (error) { console.error("Transition repair failed:", error.message); } })
   .then(async () => { try { await productionSync.resume(); await resumeAdSheetJobs(); } catch (error) { console.error("Resuming interrupted background jobs failed:", error.message); } })
   .then(() => ensureAllProductionSchemas(db))

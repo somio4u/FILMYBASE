@@ -7971,3 +7971,27 @@ body.is-script-edit-mode { overflow: hidden; }
 }
 .script-toolbar-mobile, .script-tools-close, .script-tools-backdrop { display: none; }
 @media (max-width: 640px) { .script-toolbar-mobile, .script-tools-close, .script-tools-backdrop { display: block; } }
+
+/* ---- phone polish (≤ 640px): the scene cards, the floating buttons, and fields that ran past the card edge ---- */
+@media (max-width: 640px) {
+  /* the scene cards at the top of the screenplay: wide enough to read the heading (two lines), and a bigger ⋮ to tap */
+  .script-nav-row { flex: 0 0 auto; min-width: 150px; max-width: 230px; }
+  .script-nav-item { max-width: none; }
+  .script-nav-heading { white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; text-overflow: clip; }
+  .script-nav-more { width: 36px; min-height: 44px; opacity: 0.85; }
+
+  /* the round buttons that float over the page (Speak here, Changes): smaller, see-through a little, no caption on top of the text */
+  .voice-writer-button { width: 52px; height: 52px; opacity: 0.92; }
+  .voice-writer-caption { display: none; }
+  .changes-chat-toggle { width: 46px; height: 46px; opacity: 0.92; }
+
+  /* Shoot Schedule: "when are the artists / locations free" — name on its own line, the field across the whole card */
+  .availability-row { flex-wrap: wrap; row-gap: 4px; }
+  .availability-row-name { flex: 1 0 100%; }
+  .availability-row .mic-field-wrap { flex: 1 0 100%; min-width: 0; width: 100%; }
+  .availability-dates-input { min-width: 0; max-width: 100%; box-sizing: border-box; font-size: 16px; }
+
+  /* Script Breakdown: the download buttons stay inside the card and may wrap onto two lines */
+  .ad-sheet-panel > *, .download-choice, .download-choice-trigger { max-width: 100%; box-sizing: border-box; }
+  .download-choice-trigger { white-space: normal; text-align: center; }
+}

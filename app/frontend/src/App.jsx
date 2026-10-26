@@ -4827,7 +4827,7 @@ function MovieScreenplayWorkspace({
               🏷 {t.sceneTagOpen}{tagOf(index) ? ` · ${t.sceneTagLabels[tagOf(index).tag]}` : ''}
             </button>
           )}
-          {draftOf(index) && !editing && (
+          {draftOf(index) && (
             <button type="button" className="scene-tag-open" onClick={() => { selectScene(index, false); setToolsOpen(true) }}>⋯ {t.sceneToolsOpen}</button>
           )}
         </div>
@@ -5321,6 +5321,7 @@ function MovieScreenplayWorkspace({
         </p>
         {renderHeadingForm(index)}
         {renderTagBox(index)}
+        {renderMobileTag(index)}
         <ScriptEditor
           ref={editorRef}
           elements={editing.elements}

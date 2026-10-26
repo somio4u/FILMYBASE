@@ -7942,4 +7942,32 @@ body.is-script-edit-mode { overflow: hidden; }
   .scene-tag-panel.is-inline .scene-tag-note { font-size: 1rem; } /* 16px: the phone does not zoom in when typing */
   /* the old place (the tools panel far below) would only repeat them */
   .script-tools > .scene-tag-panel { display: none; }
+
+  /* "⋯ Tools" under the heading opens the scene tools panel as a sheet from the bottom of the screen instead of far below the script */
+  .scene-mobile-buttons { display: flex; flex-wrap: wrap; gap: 8px; }
+  .script-tools { display: none; }
+  .script-tools.is-sheet-open {
+    display: block; position: fixed; left: 8px; right: 8px; bottom: 8px; top: auto; z-index: 870;
+    max-height: 78vh; overflow-y: auto; box-sizing: border-box; padding: 12px;
+    background: #0c101e; backdrop-filter: none; -webkit-backdrop-filter: none;
+    border: 1px solid var(--glass-border, rgba(255, 255, 255, 0.15)); box-shadow: 0 -8px 40px rgba(0, 0, 0, 0.55);
+  }
+  .script-tools-close { display: block; position: sticky; top: 0; z-index: 1; margin: 0 0 8px auto; min-height: 36px; }
+  .script-tools-backdrop { position: fixed; inset: 0; z-index: 860; background: rgba(2, 6, 24, 0.55); }
+  /* while a scene is being typed the writing bar below is used instead of the copy in this panel */
+  .script-tools .script-toolbar { display: none; }
+
+  /* the writing tools while typing: a compact bar fixed at the bottom of the screen, always in reach (a phone keyboard has no Tab key) */
+  .script-toolbar-mobile {
+    display: block; position: fixed; left: 0; right: 0; bottom: 0; z-index: 850; box-sizing: border-box;
+    padding: 8px 80px 8px 10px; background: #0c101e; border-top: 1px solid var(--glass-border, rgba(255, 255, 255, 0.15)); box-shadow: 0 -6px 24px rgba(0, 0, 0, 0.4);
+  }
+  :root[data-theme='light'] .script-tools.is-sheet-open, :root[data-theme='light'] .script-toolbar-mobile { background: #f4f5f9; }
+  body:has(.script-toolbar-mobile) .chat-viewport { padding-bottom: 150px; } /* the last lines stay above the bar */
+  .script-toolbar-mobile .script-toolbar { margin: 0; padding: 0; border: 0; background: transparent; gap: 6px; }
+  .script-toolbar-mobile .script-toolbar-types, .script-toolbar-mobile .script-toolbar-mods { flex-wrap: nowrap; overflow-x: auto; padding-bottom: 2px; }
+  .script-toolbar-mobile .script-toolbar button { min-height: 36px; white-space: nowrap; flex: 0 0 auto; }
+  .script-toolbar-mobile .script-toolbar-actions { justify-content: flex-start; }
 }
+.script-toolbar-mobile, .script-tools-close, .script-tools-backdrop { display: none; }
+@media (max-width: 640px) { .script-toolbar-mobile, .script-tools-close, .script-tools-backdrop { display: block; } }

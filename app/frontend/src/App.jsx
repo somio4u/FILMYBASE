@@ -485,6 +485,8 @@ const LABELS = {
     sceneTagLabels: { change: 'Change', check: 'Check', new: 'New', done: 'Done' },
     sceneTagPanelTitle: 'Tag this scene (for the writer)',
     sceneTagOpen: 'Tag',
+    sceneToolsOpen: 'Tools',
+    sceneToolsClose: 'Close',
     sceneTagNotePlaceholder: 'Note for the writer (optional)',
     sceneTagClear: 'Remove tag',
     sceneTagMarkDone: 'Mark done',
@@ -1429,6 +1431,8 @@ const LABELS = {
     sceneTagLabels: { change: 'ବଦଳାଅ', check: 'ଦେଖ', new: 'ନୂଆ ଲେଖ', done: 'ହୋଇଗଲା' },
     sceneTagPanelTitle: 'ଏହି ସିନ୍‌ରେ ନିଶାଣ ଲଗାଅ (ଲେଖକଙ୍କ ପାଇଁ)',
     sceneTagOpen: 'ନିଶାଣ',
+    sceneToolsOpen: 'ଟୁଲ୍ସ',
+    sceneToolsClose: 'ବନ୍ଦ',
     sceneTagNotePlaceholder: 'ଲେଖକଙ୍କ ପାଇଁ ନୋଟ୍ (ଇଚ୍ଛାଧୀନ)',
     sceneTagClear: 'ନିଶାଣ ହଟାଅ',
     sceneTagMarkDone: 'ହୋଇଗଲା',
@@ -4488,6 +4492,7 @@ function MovieScreenplayWorkspace({
   const [tags, setTags] = useState({}) // scene key -> { tag, note, by, doneBy }: the admin's colour tags
   const [onlyTasks, setOnlyTasks] = useState(false) // show only the scenes that still need work
   const [tagNote, setTagNote] = useState('') // the admin's note box in the scene panel
+  const [toolsOpen, setToolsOpen] = useState(false) // phone only: the scene tools panel, opened as a sheet from the scene's "Tools" button
   const [tagOpenKey, setTagOpenKey] = useState(null) // phone only: the scene whose tag buttons are open right under its heading
   // a change made from this screen is already on it; the next check only has to learn the new "list hash"
   const onSceneListChanged = (content) => { syncRef.current.hash = null; setTimeout(() => syncRef.current.tick?.(), 400); return onSceneListChangedFromParent?.(content) }
@@ -4564,6 +4569,7 @@ function MovieScreenplayWorkspace({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [editingDraftId])
 
+  useEffect(() => { if (editing) setToolsOpen(false) }, [Boolean(editing)])
   function selectScene(index, scrollToIt) {
     setSelectedIndex(index)
     if (scrollToIt) document.getElementById(`movie-script-scene-${index}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
@@ -4810,15 +4816,21 @@ function MovieScreenplayWorkspace({
   }
   // phone only (the button is hidden by CSS on bigger screens): "🏷 Tag" under the scene heading opens the tag buttons on the scene itself
   function renderMobileTag(index) {
-    if (onProgress) return null // only the admin tags scenes
     const key = keyOf(index)
-    const open = tagOpenKey === key
+    const open = !onProgress && tagOpenKey === key
     return (
       <div className="scene-tag-mobile" onClick={(event) => event.stopPropagation()}>
-        <button type="button" className={`scene-tag-open${open ? ' is-open' : ''}`} aria-expanded={open}
-          onClick={() => { selectScene(index, false); setTagOpenKey(open ? null : key) }}>
-          🏷 {t.sceneTagOpen}{tagOf(index) ? ` · ${t.sceneTagLabels[tagOf(index).tag]}` : ''}
-        </button>
+        <div className="scene-mobile-buttons">
+          {!onProgress && (
+            <button type="button" className={`scene-tag-open${open ? ' is-open' : ''}`} aria-expanded={open}
+              onClick={() => { selectScene(index, false); setTagOpenKey(open ? null : key) }}>
+              🏷 {t.sceneTagOpen}{tagOf(index) ? ` · ${t.sceneTagLabels[tagOf(index).tag]}` : ''}
+            </button>
+          )}
+          {draftOf(index) && !editing && (
+            <button type="button" className="scene-tag-open" onClick={() => { selectScene(index, false); setToolsOpen(true) }}>⋯ {t.sceneToolsOpen}</button>
+          )}
+        </div>
         {open && renderTagControls(index, ' is-inline')}
       </div>
     )
@@ -5592,7 +5604,9 @@ function MovieScreenplayWorkspace({
               })()}
             </div>
 
-            <aside className="script-tools" aria-label={t.scriptSelectedSceneTitle(numberOf(scene, sceneIndex))}>
+            {toolsOpen && <div className="script-tools-backdrop" onClick={() => setToolsOpen(false)} />}
+            <aside className={`script-tools${toolsOpen ? ' is-sheet-open' : ''}`} aria-label={t.scriptSelectedSceneTitle(numberOf(scene, sceneIndex))}>
+              <button type="button" className="script-tools-close cancel-button" onClick={() => setToolsOpen(false)}>✕ {t.sceneToolsClose}</button>
               <p className="script-panel-title">{t.scriptSelectedSceneTitle(numberOf(scene, sceneIndex))}</p>
               <p className="script-tools-heading">{scene ? movieSlugline(scene) : ''}</p>
               {!onProgress && renderTagControls(sceneIndex)}
@@ -5825,6 +5839,12 @@ function MovieScreenplayWorkspace({
 
       {editMode ? createPortal(screenplayCard, document.body) : screenplayCard}
 
+      {editing && editing.key === selectedKey && createPortal(
+        <div className="script-toolbar-mobile">
+          <ScriptToolbar compact editorRef={editorRef} activeType={activeLineType} lang={t.scriptToolbarLang} onSave={submitEdit} onCancel={() => setEditing(null)} saving={false} dirty={Boolean(editing.dirty)} />
+        </div>,
+        document.body
+      )}
       {ctxMenu && createPortal(
         <ul className="scene-ctx-menu" role="menu" style={{ left: Math.max(8, Math.min(ctxMenu.x, window.innerWidth - 270)), top: Math.max(8, Math.min(ctxMenu.y, window.innerHeight - 380)) }} onClick={(e) => e.stopPropagation()}>
           {[

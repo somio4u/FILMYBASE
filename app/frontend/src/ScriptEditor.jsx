@@ -291,23 +291,25 @@ const TOOLBAR_LABELS = {
 }
 
 // the writing tools in the right-hand panel: the kind of the line the cursor is in, the (V.O.) type endings, save
-export function ScriptToolbar({ editorRef, activeType, lang = 'en', onSave, onCancel, saving, dirty }) {
+export function ScriptToolbar({ editorRef, activeType, lang = 'en', onSave, onCancel, saving, dirty, compact = false }) {
   const L = TOOLBAR_LABELS[lang] ?? TOOLBAR_LABELS.en
   // the buttons must not take the cursor out of the page
   const keep = (event) => event.preventDefault()
   return (
-    <div className="script-toolbar" role="toolbar" aria-label={L.title}>
-      <p className="script-toolbar-title">{L.title}{dirty ? <span className="script-toolbar-dirty"> · {L.unsaved}</span> : null}</p>
+    <div className={`script-toolbar${compact ? ' is-compact' : ''}`} role="toolbar" aria-label={L.title}>
+      {!compact && <p className="script-toolbar-title">{L.title}{dirty ? <span className="script-toolbar-dirty"> · {L.unsaved}</span> : null}</p>}
       <div className="script-toolbar-types">
         {LINE_TYPES.map((type) => (
           <button key={type} type="button" className={activeType === type ? 'is-active' : ''} aria-pressed={activeType === type} onMouseDown={keep} onClick={() => editorRef.current?.setType(type)}>{L.types[type]}</button>
         ))}
       </div>
-      <p className="script-toolbar-sub">{L.modifiers}</p>
-      <div className="script-toolbar-mods">
-        {MODIFIERS.map((m) => <button key={m} type="button" disabled={activeType !== 'character'} onMouseDown={keep} onClick={() => editorRef.current?.toggleModifier(m)}>({m})</button>)}
-      </div>
-      <ul className="script-toolbar-how">{L.how.map((line) => <li key={line}>{line}</li>)}</ul>
+      {(!compact || activeType === 'character') && <p className="script-toolbar-sub">{L.modifiers}</p>}
+      {(!compact || activeType === 'character') && (
+        <div className="script-toolbar-mods">
+          {MODIFIERS.map((m) => <button key={m} type="button" disabled={activeType !== 'character'} onMouseDown={keep} onClick={() => editorRef.current?.toggleModifier(m)}>({m})</button>)}
+        </div>
+      )}
+      {!compact && <ul className="script-toolbar-how">{L.how.map((line) => <li key={line}>{line}</li>)}</ul>}
       <div className="script-toolbar-actions">
         <button type="button" className="cancel-button" onClick={onCancel} disabled={saving}>{L.cancel}</button>
         <button type="button" className="choose-button" onClick={onSave} disabled={saving}>{saving ? L.saving : L.save}</button>

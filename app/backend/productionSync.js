@@ -49,7 +49,13 @@ export function registerProductionSyncRoutes(app, db, tools) {
   const allowed = requireRole("admin", "production_manager");
 
   // every change of a job is also written to the database, so a restart of the server cannot make it vanish
-  const persist = (job) => jobStore.save(job.id, job, job.status).catch((e) => console.error("Saving the synchronization state failed:", e.message));
+  // The saves of one job run one after another: otherwise an older "running" save could land after the final "done" one and the job would be started again after a restart.
+  const saving = new Map();
+  const persist = (job) => {
+    const next = (saving.get(job.id) ?? Promise.resolve()).then(() => jobStore.save(job.id, job, job.status)).catch((e) => console.error("Saving the synchronization state failed:", e.message));
+    saving.set(job.id, next);
+    return next;
+  };
 
   async function run(job, sceneListId) {
     const step = (key) => job.steps.find((s) => s.key === key);

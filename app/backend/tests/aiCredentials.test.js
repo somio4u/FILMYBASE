@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import express from "express";
 import pg from "pg";
 import crypto from "node:crypto";
-import { cleanLocation, createAiCredentials, providerEnv, detectKind, parseApiKey, safeDetails, decryptJson, describeAiError, encryptJson, ensureAiCredentialsSchema, lockSecret, parseServiceAccount } from "../aiCredentials.js";
+import { summariseModels, cleanLocation, createAiCredentials, providerEnv, detectKind, parseApiKey, safeDetails, decryptJson, describeAiError, encryptJson, ensureAiCredentialsSchema, lockSecret, parseServiceAccount } from "../aiCredentials.js";
 import { registerAiSettingsRoutes } from "../aiSettingsRoutes.js";
 
 const { privateKey } = crypto.generateKeyPairSync("rsa", { modulusLength: 2048, privateKeyEncoding: { type: "pkcs8", format: "pem" }, publicKeyEncoding: { type: "spki", format: "pem" } });
@@ -353,4 +353,22 @@ test("NOTHING saved in Settings = the app runs exactly as it did before: the ser
   assert.equal(providerEnv(env, { source: "saved", kind: "vertex" }).GEMINI_API_KEY, "");
   assert.equal(providerEnv(env, { source: "saved", kind: "apikey", apiKey: "AQ.mine" }).GEMINI_API_KEY, "AQ.mine");
   assert.equal(providerEnv(env, { source: "saved-unreadable" }).GEMINI_API_KEY, "");
+});
+
+test("summariseModels: says which models a key sees and which the app needs are missing", () => {
+  const listing = { models: [
+    { name: "models/gemini-2.5-flash", supportedGenerationMethods: ["generateContent"] },
+    { name: "models/gemini-2.5-flash-image", supportedGenerationMethods: ["generateContent"] },
+    { name: "models/text-embedding-004", supportedGenerationMethods: ["embedContent"] },
+  ] };
+  const some = summariseModels(listing, ["gemini-2.5-flash", "gemini-3.8-flash"]);
+  assert.deepEqual(some.missing, ["gemini-3.8-flash"]);
+  assert.equal(some.warn, true);
+  assert.match(some.note, /gemini-2\.5-flash/);
+  assert.match(some.note, /does NOT see them: gemini-3\.8-flash/);
+  assert.doesNotMatch(some.note, /embedding/);
+  const all = summariseModels(listing, ["gemini-2.5-flash"]);
+  assert.equal(all.warn, false);
+  assert.match(all.note, /Every model the app uses is available/);
+  assert.equal(summariseModels({}, ["x"]).warn, true);
 });

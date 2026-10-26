@@ -165,6 +165,21 @@ export function safeDetails(error) {
   return String(error?.message ?? error ?? "").replace(/-----BEGIN[\s\S]*?-----END [A-Z ]*-----/g, "[key removed]").replace(/[A-Za-z0-9+\/=_-]{60,}/g, "[long text removed]").slice(0, 700);
 }
 
+// The Test's "which models does this key see" step. `listing` is Google's models reply ({ models: [{ name: "models/gemini-2.5-flash", supportedGenerationMethods: [...] }] }).
+// `needed` = the model names the app uses. Returns a short plain sentence and whether something the app needs is missing.
+export function summariseModels(listing, needed = []) {
+  const all = (listing?.models ?? []).map((m) => ({ name: String(m.name ?? "").replace(/^models\//, ""), methods: m.supportedGenerationMethods ?? [] })).filter((m) => m.name);
+  if (!all.length) return { missing: needed.slice(), note: "Google listed no models for this key", warn: true };
+  const names = new Set(all.map((m) => m.name));
+  const missing = needed.filter((n) => !names.has(n));
+  const text = all.filter((m) => /^gemini-/.test(m.name) && m.methods.includes("generateContent") && !/image|tts|embedding|live|audio|robotics|computer-use/.test(m.name)).map((m) => m.name).sort();
+  const shown = text.slice(0, 25).join(", ") + (text.length > 25 ? `, … (+${text.length - 25} more)` : "");
+  const base = `${all.length} models visible. Text models: ${shown || "none"}`;
+  return missing.length
+    ? { missing, warn: true, note: `${base}. The app uses these, but this key does NOT see them: ${missing.join(", ")}` }
+    : { missing, warn: false, note: `${base}. Every model the app uses is available` };
+}
+
 // ---- the live holder --------------------------------------------------------------------------------------------------------------------
 
 export async function ensureAiCredentialsSchema(db) {

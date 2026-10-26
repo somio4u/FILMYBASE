@@ -177,7 +177,7 @@ export default function AiSettings({ backendUrl, onBack }) {
           {result?.steps && (
             <ul className="ai-steps">
               {(result.kind === 'apikey'
-                ? [['format', 'The key was read'], ['answer', 'Google answers with this key'], ['express', 'Vertex “express” route accepts it (diagnosis only)'], ['pro', 'The best-quality (Pro) model answers']].filter(([k]) => k !== 'express' || result.steps.some((x) => x.key === 'express'))
+                ? [['format', 'The key was read'], ['models', 'Models this key can use'], ['answer', 'Google answers with this key'], ['express', 'Vertex “express” route accepts it (diagnosis only)'], ['pro', 'The best-quality (Pro) model answers']].filter(([k]) => k !== 'express' || result.steps.some((x) => x.key === 'express'))
                 : [['format', 'The key file was read'], ['signin', 'Google accepts the key (sign-in)'], ['vertex', 'Vertex AI answers a test question'], ['pro', 'The best-quality (Pro) model answers']]).map(([k, label]) => {
                 const st = result.steps.find((x) => x.key === k)
                 const state = !st ? 'skip' : st.warn ? 'warn' : st.ok ? 'ok' : 'bad'

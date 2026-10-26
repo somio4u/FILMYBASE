@@ -2206,3 +2206,8 @@ Plain version: every project is now a set of **drafts**. Opening a project shows
 - [x] **Safer than before in two spots:** a saved key that can no longer be read now gives a clear message instead of quietly using another key (main AI and media helper); and a broken `GOOGLE_SERVICE_ACCOUNT_JSON` on the server is now reported loudly in the log (before, the server refused to start).
 - [x] Settings does nothing until the admin presses Save; opening the page, testing, or leaving it changes nothing (Test never saves). "Remove the saved key" returns to the server's own key at once.
 - **Next step:** owner says "deploy".
+
+### Settings → API key Test: "Models this key can use" step (2026-10-26)
+- Built: when testing a Google API key, the Test now also asks Google which models the key can see, and shows the text models plus a warning if any model the app uses (flash, image, voice, Pro) is missing. Shows even when the test question fails, so the exact reason is visible. Warning only; nothing else changed.
+- Tested: unit test for the model-list summary (17/17 in aiCredentials tests), frontend build ok. NOT tested with a real key (none in the sandbox). Full suite not re-run yet; not deployed.
+- Next: user runs Test with the API key after deploy and pastes the Test steps + "Technical details"; fix from that.

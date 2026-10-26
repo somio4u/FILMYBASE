@@ -46,7 +46,7 @@ import { registerAdRoutes } from "./adRoutes.js";
 import { registerProductionSyncRoutes } from "./productionSync.js";
 import { createJobStore, ensureJobSchema, shouldResume } from "./jobStore.js";
 import { repairStoredTransitions, withoutTransitions } from "./transitionNames.js";
-import { createAiCredentials, describeAiError, ensureAiCredentialsSchema, providerEnv } from "./aiCredentials.js";
+import { createAiCredentials, describeAiError, ensureAiCredentialsSchema, providerEnv, summariseModels } from "./aiCredentials.js";
 import { registerAiSettingsRoutes } from "./aiSettingsRoutes.js";
 import { ensureLocationRenameSchema, registerLocationRenameRoutes } from "./locationRename.js";
 import { ensureSceneTagSchema, registerSceneTagRoutes } from "./sceneTags.js";
@@ -20570,6 +20570,14 @@ registerAiSettingsRoutes(app, db, {
     const proWarning = () => { if (lastProblem) report?.("pro", describeAiError(new Error(lastProblem)), { warn: true }); };
 
     if (candidate.kind === "apikey") {
+      // which models does this key see? Asked first and only a warning, so it also shows up when the test question below fails.
+      try {
+        const response = await fetch("https://generativelanguage.googleapis.com/v1beta/models?pageSize=200", { headers: { "x-goog-api-key": candidate.apiKey }, signal: AbortSignal.timeout(20000) });
+        if (response.ok) {
+          const seen = summariseModels(await response.json(), [GEMINI_MODEL_NAME, "gemini-2.5-flash", "gemini-2.5-flash-image", "gemini-2.5-flash-preview-tts", ...STORY_BRAIN_MODELS.map((m) => m.model).slice(0, 1)]);
+          report?.("models", seen.note, { warn: seen.warn });
+        } else report?.("models", `Google would not list models (HTTP ${response.status}): ${(await response.text()).slice(0, 150)}`, { warn: true });
+      } catch (error) { report?.("models", `Could not ask Google for the model list: ${error.message}`, { warn: true }); }
       // a plain Google AI Studio key: does Google answer with it?
       try {
         await ask(buildAiClient({ apiKey: candidate.apiKey, source: "candidate", kind: "apikey" }));

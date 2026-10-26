@@ -369,6 +369,6 @@ test("summariseModels: says which models a key sees and which the app needs are 
   assert.doesNotMatch(some.note, /embedding/);
   const all = summariseModels(listing, ["gemini-2.5-flash"]);
   assert.equal(all.warn, false);
-  assert.match(all.note, /Every model the app uses is available/);
+  assert.match(all.note, /All are in Google/);
   assert.equal(summariseModels({}, ["x"]).warn, true);
 });

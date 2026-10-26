@@ -2211,3 +2211,9 @@ Plain version: every project is now a set of **drafts**. Opening a project shows
 - Built: when testing a Google API key, the Test now also asks Google which models the key can see, and shows the text models plus a warning if any model the app uses (flash, image, voice, Pro) is missing. Shows even when the test question fails, so the exact reason is visible. Warning only; nothing else changed.
 - Tested: unit test for the model-list summary (17/17 in aiCredentials tests), frontend build ok. NOT tested with a real key (none in the sandbox). Full suite not re-run yet; not deployed.
 - Next: user runs Test with the API key after deploy and pastes the Test steps + "Technical details"; fix from that.
+
+### API key: switched-off Gemini models are swapped automatically (2026-10-26)
+- Found from the user's Test: Google says "gemini-2.5-flash-lite is no longer available to new users" (404) — the key was fine, the model name was retired for new keys. The model list still shows it, so the list proves nothing; the Test's models line now says so.
+- Built: for plain API keys only (Vertex untouched), if Google answers that a model is gone, the same call is repeated once with the newer model (2.5-flash-lite→3.5-flash-lite, 2.5-flash→3.5-flash, 2.5-pro→3.1-pro-preview) and remembered. The Test says which model really answered. New file modelFallback.js + tests.
+- Not verified with a real key: whether gemini-3.5-flash answers for this key (3.5-flash-lite is the name Google gave); pictures/voice (gemini-2.5-flash-image / -preview-tts) and Pro are unchanged and may need the same treatment. Not deployed yet.
+- Next: user deploys, re-runs Test; then try one real feature (e.g. Synchronize) and report any error.

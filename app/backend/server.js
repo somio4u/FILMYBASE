@@ -46,6 +46,7 @@ import { registerAdRoutes } from "./adRoutes.js";
 import { registerProductionSyncRoutes } from "./productionSync.js";
 import { createJobStore, ensureJobSchema, shouldResume } from "./jobStore.js";
 import { repairStoredTransitions, withoutTransitions } from "./transitionNames.js";
+import { withModelFallback } from "./modelFallback.js";
 import { createAiCredentials, describeAiError, ensureAiCredentialsSchema, providerEnv, summariseModels } from "./aiCredentials.js";
 import { registerAiSettingsRoutes } from "./aiSettingsRoutes.js";
 import { ensureLocationRenameSchema, registerLocationRenameRoutes } from "./locationRename.js";
@@ -114,11 +115,11 @@ useApiKeySource(() => aiCredentials.current().apiKey);
 let aiClient = null;
 let aiClientFor = "";
 let aiMeteringDb = null;
-function buildAiClient(credentials = aiCredentials.current()) {
+function buildAiClient(credentials = aiCredentials.current(), onSwitch = (from, to) => console.log(`Google no longer serves ${from} to this API key — using ${to} instead.`)) {
   const sa = credentials.serviceAccount;
   return sa
     ? new GoogleGenAI({ vertexai: true, project: sa.project_id, location: credentials.location, googleAuthOptions: { credentials: sa } })
-    : new GoogleGenAI({ apiKey: credentials.apiKey ?? process.env.GEMINI_API_KEY });
+    : withModelFallback(new GoogleGenAI({ apiKey: credentials.apiKey ?? process.env.GEMINI_API_KEY }), { onSwitch }); // plain API keys: a switched-off model is swapped for its newer one
 }
 // one short name for "which key is this": a changed key means a new client
 const credentialsId = (c) => `${c.source}|${c.kind}|${c.location}|${c.serviceAccount?.client_email}|${c.serviceAccount?.private_key_id}|${c.serviceAccount?.project_id}|${c.apiKey ? c.apiKey.slice(-6) : ""}`;
@@ -20580,8 +20581,9 @@ registerAiSettingsRoutes(app, db, {
       } catch (error) { report?.("models", `Could not ask Google for the model list: ${error.message}`, { warn: true }); }
       // a plain Google AI Studio key: does Google answer with it?
       try {
-        await ask(buildAiClient({ apiKey: candidate.apiKey, source: "candidate", kind: "apikey" }));
-        report?.("answer", `Google answered with this key (model ${GEMINI_MODEL_NAME})`);
+        let usedModel = GEMINI_MODEL_NAME;
+        await ask(buildAiClient({ apiKey: candidate.apiKey, source: "candidate", kind: "apikey" }, (from, to) => { usedModel = to; }));
+        report?.("answer", usedModel === GEMINI_MODEL_NAME ? `Google answered with this key (model ${usedModel})` : `Google answered with this key — ${GEMINI_MODEL_NAME} is switched off for new keys, so the app uses ${usedModel} instead`);
       } catch (error) {
         error.step = "answer";
         // Google's newer "AQ." keys are refused by the Gemini API for some people. For a refused key, also try Vertex's "express" route — for

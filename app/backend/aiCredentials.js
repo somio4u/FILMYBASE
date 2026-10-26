@@ -177,7 +177,7 @@ export function summariseModels(listing, needed = []) {
   const base = `${all.length} models visible. Text models: ${shown || "none"}`;
   return missing.length
     ? { missing, warn: true, note: `${base}. The app uses these, but this key does NOT see them: ${missing.join(", ")}` }
-    : { missing, warn: false, note: `${base}. Every model the app uses is available` };
+    : { missing, warn: false, note: `${base}. All are in Google's list (the list does not prove a model still answers — the next step does)` };
 }
 
 // ---- the live holder --------------------------------------------------------------------------------------------------------------------

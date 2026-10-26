@@ -484,6 +484,7 @@ const LABELS = {
     syncEditingThis: (who) => `${who} is editing this scene right now`,
     sceneTagLabels: { change: 'Change', check: 'Check', new: 'New', done: 'Done' },
     sceneTagPanelTitle: 'Tag this scene (for the writer)',
+    sceneTagOpen: 'Tag',
     sceneTagNotePlaceholder: 'Note for the writer (optional)',
     sceneTagClear: 'Remove tag',
     sceneTagMarkDone: 'Mark done',
@@ -1427,6 +1428,7 @@ const LABELS = {
     syncEditingThis: (who) => `${who} ଏବେ ଏହି ସିନ୍ ଏଡିଟ୍ କରୁଛନ୍ତି`,
     sceneTagLabels: { change: 'ବଦଳାଅ', check: 'ଦେଖ', new: 'ନୂଆ ଲେଖ', done: 'ହୋଇଗଲା' },
     sceneTagPanelTitle: 'ଏହି ସିନ୍‌ରେ ନିଶାଣ ଲଗାଅ (ଲେଖକଙ୍କ ପାଇଁ)',
+    sceneTagOpen: 'ନିଶାଣ',
     sceneTagNotePlaceholder: 'ଲେଖକଙ୍କ ପାଇଁ ନୋଟ୍ (ଇଚ୍ଛାଧୀନ)',
     sceneTagClear: 'ନିଶାଣ ହଟାଅ',
     sceneTagMarkDone: 'ହୋଇଗଲା',
@@ -4486,6 +4488,7 @@ function MovieScreenplayWorkspace({
   const [tags, setTags] = useState({}) // scene key -> { tag, note, by, doneBy }: the admin's colour tags
   const [onlyTasks, setOnlyTasks] = useState(false) // show only the scenes that still need work
   const [tagNote, setTagNote] = useState('') // the admin's note box in the scene panel
+  const [tagOpenKey, setTagOpenKey] = useState(null) // phone only: the scene whose tag buttons are open right under its heading
   // a change made from this screen is already on it; the next check only has to learn the new "list hash"
   const onSceneListChanged = (content) => { syncRef.current.hash = null; setTimeout(() => syncRef.current.tick?.(), 400); return onSceneListChangedFromParent?.(content) }
   const [saveAll, setSaveAll] = useState(null) // { done, total } while "Save all changes" is working
@@ -4783,6 +4786,44 @@ function MovieScreenplayWorkspace({
     selectScene(taskIndexes.find((i) => i > sceneIndex) ?? taskIndexes[0], true)
   }
   useEffect(() => { setTagNote(tags[selectedKey]?.note ?? '') }, [selectedKey, tags[selectedKey]?.note])
+  // the admin's tag buttons + note for one scene. On a big screen they sit in the tools panel beside the page; on a phone that panel falls far
+  // below the whole script, so there the same buttons open right under the scene heading (renderMobileTag).
+  function renderTagControls(index, extraClass = '') {
+    return (
+      <div className={`scene-tag-panel${extraClass}`} onClick={(event) => event.stopPropagation()}>
+        <p className="script-panel-title">{t.sceneTagPanelTitle}</p>
+        <div className="scene-tag-choices">
+          {Object.keys(SCENE_TAG_COLORS).map((tg) => (
+            <button key={tg} type="button" className={`scene-tag-choice${tagOf(index)?.tag === tg ? ' is-active' : ''}`} style={{ '--tag-color': SCENE_TAG_COLORS[tg] }}
+              onClick={() => setSceneTag(index, tg, tagNote)}>
+              {t.sceneTagLabels[tg]}
+            </button>
+          ))}
+        </div>
+        <input className="scene-tag-note" type="text" maxLength={500} value={tagNote} placeholder={t.sceneTagNotePlaceholder}
+          onChange={(event) => setTagNote(event.target.value)}
+          onBlur={() => { const cur = tagOf(index); if (cur && tagNote !== cur.note) setSceneTag(index, cur.tag, tagNote) }}
+          onKeyDown={(event) => { if (event.key === 'Enter') event.currentTarget.blur() }} />
+        {tagOf(index) && <button type="button" className="cancel-button" onClick={() => setSceneTag(index, null)}>{t.sceneTagClear}</button>}
+      </div>
+    )
+  }
+  // phone only (the button is hidden by CSS on bigger screens): "🏷 Tag" under the scene heading opens the tag buttons on the scene itself
+  function renderMobileTag(index) {
+    if (onProgress) return null // only the admin tags scenes
+    const key = keyOf(index)
+    const open = tagOpenKey === key
+    return (
+      <div className="scene-tag-mobile" onClick={(event) => event.stopPropagation()}>
+        <button type="button" className={`scene-tag-open${open ? ' is-open' : ''}`} aria-expanded={open}
+          onClick={() => { selectScene(index, false); setTagOpenKey(open ? null : key) }}>
+          🏷 {t.sceneTagOpen}{tagOf(index) ? ` · ${t.sceneTagLabels[tagOf(index).tag]}` : ''}
+        </button>
+        {open && renderTagControls(index, ' is-inline')}
+      </div>
+    )
+  }
+
   // the tag's box under a scene heading: what is asked, the note, who asked — and for the writer a button to say "done"
   function renderTagBox(index) {
     const tg = tagOf(index)
@@ -5457,6 +5498,7 @@ function MovieScreenplayWorkspace({
                         </p>
                         {renderHeadingForm(index)}
                         {renderTagBox(index)}
+                        {renderMobileTag(index)}
                         {d && Array.isArray(d.elements) ? (
                           renderElements(d.elements)
                         ) : (
@@ -5553,24 +5595,7 @@ function MovieScreenplayWorkspace({
             <aside className="script-tools" aria-label={t.scriptSelectedSceneTitle(numberOf(scene, sceneIndex))}>
               <p className="script-panel-title">{t.scriptSelectedSceneTitle(numberOf(scene, sceneIndex))}</p>
               <p className="script-tools-heading">{scene ? movieSlugline(scene) : ''}</p>
-              {!onProgress && (
-                <div className="scene-tag-panel">
-                  <p className="script-panel-title">{t.sceneTagPanelTitle}</p>
-                  <div className="scene-tag-choices">
-                    {Object.keys(SCENE_TAG_COLORS).map((tg) => (
-                      <button key={tg} type="button" className={`scene-tag-choice${tagOf(sceneIndex)?.tag === tg ? ' is-active' : ''}`} style={{ '--tag-color': SCENE_TAG_COLORS[tg] }}
-                        onClick={() => setSceneTag(sceneIndex, tg, tagNote)}>
-                        {t.sceneTagLabels[tg]}
-                      </button>
-                    ))}
-                  </div>
-                  <input className="scene-tag-note" type="text" maxLength={500} value={tagNote} placeholder={t.sceneTagNotePlaceholder}
-                    onChange={(event) => setTagNote(event.target.value)}
-                    onBlur={() => { const cur = tagOf(sceneIndex); if (cur && tagNote !== cur.note) setSceneTag(sceneIndex, cur.tag, tagNote) }}
-                    onKeyDown={(event) => { if (event.key === 'Enter') event.currentTarget.blur() }} />
-                  {tagOf(sceneIndex) && <button type="button" className="cancel-button" onClick={() => setSceneTag(sceneIndex, null)}>{t.sceneTagClear}</button>}
-                </div>
-              )}
+              {!onProgress && renderTagControls(sceneIndex)}
               <div className="script-tools-meta" key={`meta-${groupIndex}-${sceneIndex}`}>
                 {typeof scene?.estimatedMinutes === 'number' && <span>{t.aiMovieSceneDurationLabel(scene.estimatedMinutes)}</span>}
                 {scene?.purpose && <span>{t.scenePurposeLabels[scene.purpose]}</span>}

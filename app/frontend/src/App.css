@@ -7929,3 +7929,17 @@ body.is-script-edit-mode { overflow: hidden; }
 .scene-tag-choice.is-active { background: var(--tag-color); color: #fff; font-weight: 700; }
 .scene-tag-note { width: 100%; box-sizing: border-box; margin-bottom: 8px; padding: 7px 10px; border-radius: 8px; border: 1px solid var(--border-subtle); background: var(--bg-input); color: inherit; font: inherit; font-size: 0.85rem; }
 .script-nav-item:has(.scene-tag-dot) .script-nav-heading { padding-right: 18px; }
+
+/* Scene tags on a phone: the tools panel that holds them falls far below the script, so a "Tag" button sits under each scene heading and
+   opens the same buttons right there. Hidden on bigger screens. */
+.scene-tag-mobile { display: none; }
+@media (max-width: 640px) {
+  .scene-tag-mobile { display: block; margin: 4px 0 10px; font-family: var(--font-body, system-ui, sans-serif); text-transform: none; text-align: left; }
+  .scene-tag-open { padding: 6px 14px; border-radius: 999px; border: 1px solid var(--border-subtle); background: var(--bg-input, rgba(255, 255, 255, 0.06)); color: inherit; font: inherit; font-size: 0.82rem; cursor: pointer; min-height: 36px; }
+  .scene-tag-open.is-open { outline: 2px solid currentColor; }
+  .scene-tag-panel.is-inline { margin: 8px 0 4px; background: var(--bg-input, rgba(255, 255, 255, 0.05)); color: var(--script-ink, inherit); }
+  .scene-tag-panel.is-inline .scene-tag-choice { min-height: 36px; padding: 6px 14px; font-size: 0.9rem; }
+  .scene-tag-panel.is-inline .scene-tag-note { font-size: 1rem; } /* 16px: the phone does not zoom in when typing */
+  /* the old place (the tools panel far below) would only repeat them */
+  .script-tools > .scene-tag-panel { display: none; }
+}

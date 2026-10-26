@@ -3,20 +3,26 @@
 // from the AI's answer, from text on its way to being saved, and from scenes that were already saved with it.
 // Only the exact labels the app itself writes are removed (upper-case ACTION:, DIALOGUE line of NAME:, ACTING NOTE of NAME:, [S1.3], [action]).
 
-const LABEL = /^\s*(?:\[S\d+\.\d+\]\s*)?(?:\[(?:ACTION|action|dialogue|DIALOGUE|transition|TRANSITION)\]\s*|ACTION\s*:\s*|DIALOGUE line of [^:\n]{1,60}:\s*|ACTING NOTE of [^:\n]{1,60}:\s*)/;
+const LABEL = /^\s*(?:\[S\d+\.\d+\]\s*)?(?:\[(?:ACTION|action|dialogue|DIALOGUE|transition|TRANSITION)\]\s*|ACTION\s*:\s*|DIALOGUE\s*:\s*|TRANSITION\s*:\s*|ACTING NOTE\s*:\s*|DIALOGUE line of [^:\n]{1,60}:\s*|ACTING NOTE of [^:\n]{1,60}:\s*)/;
 
-export function stripEchoedLabel(text) {
+// `character` (dialogue only): the speaker's own name written back in front of the words ("RAHUL: Come here.") is taken off too
+export function stripEchoedLabel(text, character = "") {
   if (typeof text !== "string") return text;
   let out = text;
   for (let i = 0; i < 3 && LABEL.test(out); i++) out = out.replace(LABEL, ""); // "[S1.3] ACTION: ACTION: x" too
+  const name = String(character ?? "").trim();
+  if (name.length > 1 && out.toUpperCase().startsWith(`${name.toUpperCase()}:`)) out = out.slice(name.length + 1);
   return out === text ? text : out.trimStart();
 }
+
+// the same for a { en, hi } pair (the AI Movie scenes)
+export const stripEchoedLabelPair = (pair) => (pair && typeof pair === "object" ? { ...pair, ...(typeof pair.en === "string" ? { en: stripEchoedLabel(pair.en) } : {}), ...(typeof pair.hi === "string" ? { hi: stripEchoedLabel(pair.hi) } : {}) } : pair);
 
 // scene content -> { content, changed } with the labels taken off every text / acting note
 export function repairLabelElements(content) {
   let changed = false;
   const elements = (content?.elements ?? []).map((element) => {
-    const text = stripEchoedLabel(element?.text);
+    const text = stripEchoedLabel(element?.text, element?.type === "dialogue" ? element?.character : "");
     const parenthetical = stripEchoedLabel(element?.parenthetical);
     if (text === element?.text && parenthetical === element?.parenthetical) return element;
     changed = true;

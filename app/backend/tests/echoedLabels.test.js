@@ -43,3 +43,19 @@ test("startup repair: the newest version loses its labels as a NEW version; a se
     await db.end();
   }
 });
+
+test("the speaker's own name written back, and the other label forms, are taken off too", () => {
+  assert.equal(stripEchoedLabel("RAHUL: Come here.", "RAHUL"), "Come here.");
+  assert.equal(stripEchoedLabel("Rahul: Come here.", "RAHUL"), "Come here.");
+  assert.equal(stripEchoedLabel("RAHUL: Come here.", ""), "RAHUL: Come here."); // without a known speaker nothing is guessed
+  assert.equal(stripEchoedLabel("MEERA: Come here.", "RAHUL"), "MEERA: Come here."); // another name is real text
+  assert.equal(stripEchoedLabel("DIALOGUE: Come here."), "Come here.");
+  assert.equal(stripEchoedLabel("TRANSITION: CUT TO:"), "CUT TO:");
+  const out = repairLabelElements({ elements: [{ type: "dialogue", character: "RAHUL", text: "RAHUL: Come here." }] });
+  assert.equal(out.content.elements[0].text, "Come here.");
+});
+
+test("an { en, hi } pair loses the labels in both languages", async () => {
+  const { stripEchoedLabelPair } = await import("../echoedLabels.js");
+  assert.deepEqual(stripEchoedLabelPair({ en: "ACTION: He runs.", hi: "ACTION: वह दौड़ता है।" }), { en: "He runs.", hi: "वह दौड़ता है।" });
+});

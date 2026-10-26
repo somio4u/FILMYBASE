@@ -46,7 +46,7 @@ import { registerAdRoutes } from "./adRoutes.js";
 import { registerProductionSyncRoutes } from "./productionSync.js";
 import { createJobStore, ensureJobSchema, shouldResume } from "./jobStore.js";
 import { repairStoredTransitions, withoutTransitions } from "./transitionNames.js";
-import { repairStoredLabels, stripEchoedLabel } from "./echoedLabels.js";
+import { repairStoredLabels, stripEchoedLabel, stripEchoedLabelPair } from "./echoedLabels.js";
 import { withModelFallback } from "./modelFallback.js";
 import { createAiCredentials, describeAiError, ensureAiCredentialsSchema, providerEnv, summariseModels } from "./aiCredentials.js";
 import { registerAiSettingsRoutes } from "./aiSettingsRoutes.js";
@@ -6499,7 +6499,7 @@ async function generateAiMovieScriptCheckCorrections(beatMeta, beatNumber, scene
   const corrections = new Map(
     (Array.isArray(result.corrections) ? result.corrections : [])
       .filter((c) => typeof c?.id === "string" && typeof c.en === "string" && typeof c.hi === "string" && c.en.trim() && c.hi.trim())
-      .map((c) => [c.id.trim(), { en: c.en, hi: c.hi }])
+      .map((c) => [c.id.trim(), stripEchoedLabelPair({ en: c.en, hi: c.hi })])
   );
   const fixes = (Array.isArray(result.fixes) ? result.fixes : []).filter((f) => typeof f?.fix === "string" && f.fix.trim());
   return { pieces, corrections, fixes };
@@ -11550,7 +11550,8 @@ function cleanMovieEditedElements(elements) {
   return elements
     .map((element) => {
       const type = ["action", "dialogue", "transition", "flashback"].includes(element?.type) ? element.type : "action";
-      const cleaned = { type, character: text(element?.character).toUpperCase(), text: text(element?.text) };
+      const cleaned = { type, character: text(element?.character).toUpperCase(), text: "" };
+      cleaned.text = typeof element?.text === "string" ? stripEchoedLabel(element.text, type === "dialogue" ? cleaned.character : "").trim() : "";
       if (type === "dialogue") {
         cleaned.characterModifier = modifiers.includes(element?.characterModifier) ? element.characterModifier : "none";
         cleaned.parenthetical = text(element?.parenthetical).replace(/^\(\s*|\s*\)$/g, "");
@@ -12467,13 +12468,13 @@ note: one short friendly sentence for the writer, like a close friend talking, i
       type: ["action", "dialogue", "transition"].includes(e.type) ? e.type : "action",
       character: e.type === "dialogue" ? String(e.character ?? "").trim().toUpperCase() : "",
       ...(e.type === "dialogue" && String(e.parenthetical ?? "").trim() ? { parenthetical: String(e.parenthetical).trim() } : {}),
-      text: String(e.text).trim(),
+      text: stripEchoedLabel(String(e.text), e.type === "dialogue" ? String(e.character ?? "") : "").trim(),
     }));
   // Unless they named a place, the lines go to the default spot (the cursor
   // while editing, otherwise the end) — not wherever the model guesses.
   const spoken = parsed.placeSaid === true && Number.isInteger(parsed.insertAfterLine);
   const insertAfter = Math.max(0, Math.min(existingElements.length, spoken ? parsed.insertAfterLine : fallbackAfter));
-  return { transcript: String(parsed.transcript ?? "").trim(), elements, insertAfter, edits: parsed.edits ?? [], rewritten: parsed.rewrittenElements ?? [], sceneActions: allowSceneActions ? cleanSceneActions(parsed.sceneActions) : [], note: String(parsed.note ?? "").trim() };
+  return { transcript: String(parsed.transcript ?? "").trim(), elements, insertAfter, edits: (parsed.edits ?? []).map((e) => ({ ...e, text: stripEchoedLabel(e.text, e.character) })), rewritten: (parsed.rewrittenElements ?? []).map((e) => ({ ...e, text: stripEchoedLabel(e.text, e.type === "dialogue" ? e.character : "") })), sceneActions: allowSceneActions ? cleanSceneActions(parsed.sceneActions) : [], note: String(parsed.note ?? "").trim() };
 }
 
 // Every 🎤 mic button in the app: the person speaks Odia, Hindi or English
@@ -19702,7 +19703,7 @@ async function translateScreenplaySceneElements(elements, sourceLanguage, target
   pieceIndexes.forEach((i, n) => {
     const line = parsed.lines?.[n];
     if (!line) return;
-    translated[i] = { ...translated[i], text: line.text, parenthetical: line.parenthetical || translated[i].parenthetical };
+    translated[i] = { ...translated[i], text: stripEchoedLabel(line.text, translated[i].type === "dialogue" ? translated[i].character : ""), parenthetical: stripEchoedLabel(line.parenthetical) || translated[i].parenthetical };
   });
   return translated;
 }

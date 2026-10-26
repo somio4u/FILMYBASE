@@ -7995,3 +7995,16 @@ body.is-script-edit-mode { overflow: hidden; }
   .ad-sheet-panel > *, .download-choice, .download-choice-trigger { max-width: 100%; box-sizing: border-box; }
   .download-choice-trigger { white-space: normal; text-align: center; }
 }
+
+/* ---- the installed app on a phone: the content runs under the status bar / notch, so everything pinned to the top or bottom edge keeps
+   clear of those areas (env(safe-area-inset-*) is 0 in a normal browser tab, so nothing changes there) ---- */
+@media (max-width: 768px) {
+  .mobile-topbar { box-sizing: border-box; height: calc(52px + env(safe-area-inset-top, 0px)); padding: env(safe-area-inset-top, 0px) 14px 0; }
+  .chat-viewport { padding-top: calc(52px + env(safe-area-inset-top, 0px)); }
+  .sidebar { padding-top: env(safe-area-inset-top, 0px); box-sizing: border-box; }
+}
+@media (max-width: 640px) {
+  .perf-toggle, .fullscreen-toggle, .odia-toggle { margin-top: env(safe-area-inset-top, 0px); }
+  .ai-movie-screenplay-current-card.is-edit-mode { padding-top: calc(52px + env(safe-area-inset-top, 0px)); }
+  .script-toolbar-mobile { padding-bottom: calc(8px + env(safe-area-inset-bottom, 0px)); }
+}

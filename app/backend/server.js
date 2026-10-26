@@ -46,6 +46,7 @@ import { registerAdRoutes } from "./adRoutes.js";
 import { registerProductionSyncRoutes } from "./productionSync.js";
 import { createJobStore, ensureJobSchema, shouldResume } from "./jobStore.js";
 import { repairStoredTransitions, withoutTransitions } from "./transitionNames.js";
+import { formatFinalDraft } from "./finalDraftFormat.js";
 import { repairStoredLabels, stripEchoedLabel, stripEchoedLabelPair } from "./echoedLabels.js";
 import { withModelFallback } from "./modelFallback.js";
 import { createAiCredentials, describeAiError, ensureAiCredentialsSchema, providerEnv, summariseModels } from "./aiCredentials.js";
@@ -11565,7 +11566,8 @@ function cleanMovieEditedElements(elements) {
 
 async function insertMovieScreenplayVersion(previousRow, elements, extra = {}) {
   // a version made by the AI is never a "draft" (a draft = the writer's own text, saved at once, AI check still to come)
-  const content = { ...previousRow.content, elements, draft: undefined, ...extra };
+  // an AI-checked save is also put into Final Draft form (a writer's own quick "draft" save is kept exactly as typed)
+  const content = { ...previousRow.content, elements: extra.draft ? elements : formatFinalDraft(elements), draft: undefined, ...extra };
   const inserted = await db.query(
     "INSERT INTO screenplay_scenes (scene_list_id, episode_index, scene_index, content) VALUES ($1, $2, $3, $4) RETURNING id, episode_index, scene_index, status, feedback, created_at",
     [previousRow.scene_list_id, previousRow.episode_index, previousRow.scene_index, JSON.stringify(content)]

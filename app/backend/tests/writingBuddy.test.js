@@ -103,3 +103,11 @@ test("only people who may edit are told they can propose changes; others are tol
 test("writers may resolve a Buddy proposal on their own project", () => {
   assert.ok(matchWriterRoute("POST", "/api/assistant/12/resolve"));
 });
+
+test("the Buddy is told to write every screenplay line in Odia, with English capital character names and casual Odia dialogue", () => {
+  const prompt = buddySystemPrompt({ user: { name: "A", role: "admin" }, scenePack: "x", canEdit: true });
+  assert.match(prompt, /SCREENPLAY WRITING RULES/);
+  assert.match(prompt, /written in ODIA, in Odia script: action lines AND dialogue/);
+  assert.match(prompt, /CHARACTER NAMES stay in English capital letters/);
+  assert.match(prompt, /ତୁ \/ ତୋ/);
+});

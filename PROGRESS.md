@@ -2319,3 +2319,10 @@ Plain version: every project is now a set of **drafts**. Opening a project shows
 - Tests: tests/writingBuddy.test.js now 9. Checked with a FAKE Gemini in desktop + phone browsers (card, no tag leak, survives reload, Apply changed line 1, gone after reload). Fixed: card text too faint in dark mode.
 - NOT checked: the real AI deciding well when to propose (AI blocked here by Google billing); the app only shows a card when the tag is present and nothing changes without Apply.
 - NEXT: Step 3 — spoken replies and backend rebuild actions.
+
+### Buddy writes the screenplay in Odia, Mahakali style (2026-10-30)
+- User: "Buddy should write dialogue in Odia, everything in Odia, in the format we used for Mahakali."
+- Buddy's rules (writingBuddy.js, "SCREENPLAY WRITING RULES"): every screenplay line it drafts or proposes — action, dialogue, acting notes — is in Odia script, even if the person talks Hindi/English; scene headings, transitions and CHARACTER NAMES stay English capitals; casual spoken Odia (ତୁ form, everyday words); no invented events. Its chat talk stays in the language the person writes. Applying a change still goes through the voice-edit machine, which also checks the script of every line in code.
+- Test added (tests/writingBuddy.test.js, now 10). NOT checked with the real AI (blocked here).
+- Asked the user: should Buddy's chat talk also be Odia (not only the screenplay lines)? Left as is until told.
+- Open (user report, not started): PDF import that keeps dialogue — analyse the PDF first (stage, scenes written vs one-liner only), report, then put it in the right stage. Proposed 2 steps (analyse+report, then place by stage); waiting for the user's go-ahead.

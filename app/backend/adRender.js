@@ -1,6 +1,6 @@
 // Turns an AD document spec (see adSheets.js) into an Excel file or a PDF. Both show exactly the same rows.
 import ExcelJS from "exceljs";
-import PDFDocument from "pdfkit";
+import ScriptAwarePDF from "./mixedScriptPdf.js";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -41,7 +41,7 @@ export async function renderXlsx(spec) {
 
 export function renderPdf(spec) {
   return new Promise((resolve, reject) => {
-    const doc = new PDFDocument({ size: "A4", layout: "landscape", margin: 28, bufferPages: true, info: { Title: spec.title } });
+    const doc = new ScriptAwarePDF({ size: "A4", layout: "landscape", margin: 28, bufferPages: true, info: { Title: spec.title } });
     doc.registerFont("odiaRegular", path.join(FONTS, "NotoSansOriya.ttf"));
     doc.registerFont("odiaBold", path.join(FONTS, "NotoSansOriya-Bold.ttf"));
     doc.registerFont("hindiRegular", path.join(FONTS, "NotoSansDevanagari-Regular.ttf"));

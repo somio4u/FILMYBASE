@@ -1,7 +1,7 @@
 // A PDF of every IMAGE command (prompt) of the film, ready to copy into any image generator:
 //   Characters, Environments, Properties (one model-sheet prompt each) and Shots (one first-frame prompt each,
 //   grouped by scene). Pure function: lists in, PDF bytes out — no database here.
-import PDFDocument from "pdfkit";
+import ScriptAwarePDF from "./mixedScriptPdf.js";
 
 const SECTIONS = [
   { key: "character", title: "Characters", note: "One reference sheet per character. Generate these first, then reuse them so the face and costume stay the same in every shot." },
@@ -21,7 +21,7 @@ export function groupAssets(assets) {
 // fileName is what the picture must be SAVED AS (no extension); it is what lets the app connect the picture when it is uploaded back.
 export function buildPromptsPdf({ title, assets, shots, waitingShots = 0, aspectRatio = "16:9", style = "", references = [] }) {
   return new Promise((resolve, reject) => {
-    const doc = new PDFDocument({ size: "A4", margin: 48, info: { Title: `${title} — image commands` } });
+    const doc = new ScriptAwarePDF({ size: "A4", margin: 48, info: { Title: `${title} — image commands` } });
     const chunks = [];
     doc.on("data", (c) => chunks.push(c));
     doc.on("end", () => resolve(Buffer.concat(chunks)));

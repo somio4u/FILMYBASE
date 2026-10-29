@@ -8,7 +8,7 @@ import { moveIndex, moveInArray, moveCaseSql, validMove } from "./sceneOrder.js"
 import { applyVoiceEdits, changeTotal, cleanSceneActions, wrongScriptLines, SCRIPT_NAMES } from "./voiceEdits.js";
 import { GoogleGenAI, Type } from "@google/genai";
 import { Pool } from "pg";
-import PDFDocument from "pdfkit";
+import ScriptAwarePDF from "./mixedScriptPdf.js";
 import ExcelJS from "exceljs";
 import PptxGenJS from "pptxgenjs";
 import { buildCastingPpt } from "./castingPpt.js";
@@ -7066,7 +7066,7 @@ function aiMovieCourierText(text) {
 
 function renderAiMovieScreenplayPdf(res, { title, scenes, lang }) {
   const P = AI_MOVIE_PDF;
-  const doc = new PDFDocument({
+  const doc = new ScriptAwarePDF({
     size: "LETTER",
     margins: { top: P.top, bottom: P.bottom, left: P.pageLeft, right: 612 - P.pageRight },
     bufferPages: true,
@@ -9077,7 +9077,7 @@ app.get("/api/pitch-deck/:id/export", requireLogin, async (req, res) => {
     const headerFont = lang === "or" ? "odiaBold" : lang === "hi" ? "hindiBold" : "impact";
     const bodyFont = lang === "or" ? "odiaRegular" : lang === "hi" ? "hindiRegular" : "Helvetica";
 
-    const doc = new PDFDocument({ size: "A4", layout: "landscape", margin: 0 });
+    const doc = new ScriptAwarePDF({ size: "A4", layout: "landscape", margin: 0 });
 
     doc.registerFont("odiaRegular", FONTS.odiaRegular);
     doc.registerFont("odiaBold", FONTS.odiaBold);
@@ -14449,7 +14449,7 @@ app.get("/api/script-breakdown/:id/export", requireLogin, async (req, res) => {
       (breakdown.costumeRecommendations ?? []).map((rec) => [rec.character.toLowerCase(), rec])
     );
 
-    const doc = new PDFDocument({ size: "A4", margin: 50 });
+    const doc = new ScriptAwarePDF({ size: "A4", margin: 50 });
     doc.registerFont("odiaRegular", FONTS.odiaRegular);
     doc.registerFont("odiaBold", FONTS.odiaBold);
     doc.registerFont("hindiRegular", FONTS.hindiRegular);
@@ -14716,7 +14716,7 @@ app.get("/api/script-breakdown/:id/export-ad-sheet", requireLogin, async (req, r
           ? { title: "स्क्रिप्ट ब्रेकडाउन शीट", scn: "SCN", description: "दृश्य विवरण", type: "TYPE", dn: "D/N", location: "मुख्य स्थान", characters: "मुख्य किरदार", extras: "अतिरिक्त कलाकार", property: "सामग्री", costume: "पोशाक/टिप्पणी" }
           : { title: "SCRIPT BREAKDOWN SHEET", scn: "SCN", description: "SCENE DESCRIPTION", type: "TYPE", dn: "D/N", location: "PRIMARY LOCATION", characters: "MAIN CHARACTERS", extras: "EXTRAS", property: "PROPERTY", costume: "COSTUME / REMARKS" };
 
-    const doc = new PDFDocument({ size: "A4", layout: "landscape", margin: 24 });
+    const doc = new ScriptAwarePDF({ size: "A4", layout: "landscape", margin: 24 });
     doc.registerFont("odiaRegular", FONTS.odiaRegular);
     doc.registerFont("odiaBold", FONTS.odiaBold);
     doc.registerFont("hindiRegular", FONTS.hindiRegular);
@@ -14968,7 +14968,7 @@ function renderCharacterScriptPdf(res, characterLabel, lang, scenes) {
         ? { title: "CHARACTER SCRIPT", action: "क्रिया" }
         : { title: "CHARACTER SCRIPT", action: "Action" };
 
-  const doc = new PDFDocument({ size: "A4", margin: 50 });
+  const doc = new ScriptAwarePDF({ size: "A4", margin: 50 });
   doc.registerFont("odiaRegular", FONTS.odiaRegular);
   doc.registerFont("odiaBold", FONTS.odiaBold);
   doc.registerFont("hindiRegular", FONTS.hindiRegular);
@@ -16255,7 +16255,7 @@ app.get("/api/shoot-schedule/:id/export", requireLogin, async (req, res) => {
     }
     const notAvailableLabel = lang === "or" ? "—" : "—";
 
-    const doc = new PDFDocument({ size: "A4", layout: "landscape", margin: 24 });
+    const doc = new ScriptAwarePDF({ size: "A4", layout: "landscape", margin: 24 });
     doc.registerFont("odiaRegular", FONTS.odiaRegular);
     doc.registerFont("odiaBold", FONTS.odiaBold);
     doc.registerFont("hindiRegular", FONTS.hindiRegular);
@@ -16751,7 +16751,7 @@ app.get("/api/shoot-schedule/:id/export-day", requireLogin, async (req, res) => 
               day: "Day", episode: "Episode", scene: "Scene", scenes: "scenes", notCast: "Not yet cast", none: "Nothing found for this day.",
             };
 
-    const doc = new PDFDocument({ size: "A4", margin: 50 });
+    const doc = new ScriptAwarePDF({ size: "A4", margin: 50 });
     doc.registerFont("odiaRegular", FONTS.odiaRegular);
     doc.registerFont("odiaBold", FONTS.odiaBold);
     doc.registerFont("hindiRegular", FONTS.hindiRegular);
@@ -17155,7 +17155,7 @@ app.get("/api/shoot-schedule/:id/call-sheet", requireLogin, async (req, res) => 
     const bodyFont = lang === "or" ? "odiaRegular" : lang === "hi" ? "hindiRegular" : "Helvetica";
     const headerFont = lang === "or" ? "odiaBold" : lang === "hi" ? "hindiBold" : "Helvetica-Bold";
 
-    const doc = new PDFDocument({ size: "A4", margin: 24 });
+    const doc = new ScriptAwarePDF({ size: "A4", margin: 24 });
     doc.registerFont("odiaRegular", FONTS.odiaRegular);
     doc.registerFont("odiaBold", FONTS.odiaBold);
     doc.registerFont("hindiRegular", FONTS.hindiRegular);
@@ -19780,7 +19780,7 @@ function safeUpper(value, fallback) {
 function renderFullScreenplayPdf(res, deck, sceneList, scenesByEpisode, { onlyEpisode = null, fileLabel = "full-screenplay" } = {}) {
   const isSeries = Array.isArray(sceneList.episodeScenes);
   const margin = 72; // 1 inch, standard screenplay margin
-  const doc = new PDFDocument({ size: "LETTER", margin });
+  const doc = new ScriptAwarePDF({ size: "LETTER", margin });
   doc.registerFont("odiaRegular", FONTS.odiaRegular);
   doc.registerFont("odiaBold", FONTS.odiaBold);
   doc.registerFont("hindiRegular", FONTS.hindiRegular);
@@ -20074,7 +20074,7 @@ app.get("/api/auto-pipeline/:id/synopses-pdf", requireLogin, async (req, res) =>
   const tidy = (text) => cleanPastedStory(text, { patterns: boilerplate }).text;
   const title = pick(deck?.title) || bible?.promise?.title || "Story";
   try {
-    const doc = new PDFDocument({ size: "A4", margin: 56, bufferPages: true, info: { Title: `${title} — Episode synopses` } });
+    const doc = new ScriptAwarePDF({ size: "A4", margin: 56, bufferPages: true, info: { Title: `${title} — Episode synopses` } });
     registerScriptFonts(doc, FONTS);
     res.setHeader("Content-Type", "application/pdf");
     res.setHeader("Content-Disposition", `attachment; filename="episode-synopses-${run.id}.pdf"`);

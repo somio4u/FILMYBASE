@@ -111,3 +111,10 @@ test("the Buddy is told to write every screenplay line in Odia, with English cap
   assert.match(prompt, /CHARACTER NAMES stay in English capital letters/);
   assert.match(prompt, /ତୁ \/ ତୋ/);
 });
+
+test("the Buddy is told to talk in casual Odia whatever language the person writes, keeping button names and character names in English", () => {
+  const prompt = buddySystemPrompt({ user: { name: "A", role: "admin" }, scenePack: "x" });
+  assert.match(prompt, /ALWAYS talk in ODIA, in Odia script, whatever language the person writes/);
+  assert.match(prompt, /button names exactly as in the guide/);
+  assert.doesNotMatch(prompt, /Reply in the language and script the person used/);
+});

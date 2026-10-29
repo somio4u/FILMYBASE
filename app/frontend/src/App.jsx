@@ -116,6 +116,13 @@ async function downloadWithLogin(url) {
   link.remove()
   setTimeout(() => URL.revokeObjectURL(blobUrl), 60000)
 }
+// The server's answer as JSON, or a plain sentence about what came back instead (a proxy's HTML error page, a gateway timeout …) — so a failed
+// long request says WHAT happened instead of only "Oops".
+async function readServerAnswer(response) {
+  const text = await response.text().catch(() => '')
+  try { return { data: JSON.parse(text), problem: null } } catch { return { data: null, problem: `The server answered with HTTP ${response.status}${response.statusText ? ` ${response.statusText}` : ''} instead of a normal answer.` } }
+}
+
 document.addEventListener('click', (event) => {
   const link = event.target.closest?.('a[href]')
   if (!savedSessionToken() || !link || !link.href.startsWith(`${BACKEND_URL}/api/`)) return
@@ -728,6 +735,7 @@ const LABELS = {
     episodeLabel: 'Episode',
     hookLabel: 'Hook',
     genericError: 'Oops, something went wrong. Give it a sec and try again.',
+    longRequestConnectionLost: 'The connection broke before the answer came back (a long job on a phone can do that). The server may still have made your project — open YOUR PROJECTS in the menu and look before you try again. Your text is still in the box.',
     breakdownTimedOutError: "This script is taking way longer than usual to analyze. It's probably still running in the background — check back in a few minutes, or refresh the page.",
     screenplayUploadedToast: 'Screenplay uploaded! Now hit "Break down the script" below to get the breakdown (characters, props, locations and more).',
     missingCharacterNamePlaceholder: 'Missed a character? Type their name…',
@@ -1679,6 +1687,7 @@ const LABELS = {
     episodeLabel: 'ଏପିସୋଡ୍',
     hookLabel: 'ହୁକ୍',
     genericError: 'ଆରେ, କିଛି ଗଡ଼ବଡ଼ ହେଇଗଲା। ଟିକେ ରହି ଆଉ ଥରେ ଚେଷ୍ଟା କର।',
+    longRequestConnectionLost: 'ଉତ୍ତର ଆସିବା ଆଗରୁ ସଂଯୋଗ କଟିଗଲା (ଫୋନ୍‌ରେ ଲମ୍ବା କାମରେ ଏମିତି ହୋଇପାରେ)। ସର୍ଭର ହୁଏତ ତୁମ ପ୍ରୋଜେକ୍ଟ ବନେଇ ସାରିଥାଇପାରେ — ଆଉଥରେ ଚେଷ୍ଟା କରିବା ଆଗରୁ ମେନୁରେ ତୁମ ପ୍ରୋଜେକ୍ଟ ତାଲିକା ଦେଖ। ତୁମ ଲେଖା ବକ୍ସରେ ଅଛି।',
     breakdownTimedOutError: 'ଏ ସ୍କ୍ରିପ୍ଟ ଆନାଲାଇଜ୍ କରିବାକୁ ବହୁତ ବେଶି ସମୟ ଲାଗୁଛି ଭାଇ। ବୋଧହୁଏ ପଛରେ ଏବେ ବି ଚାଲୁଛି — କିଛି ମିନିଟ୍ ପରେ ପୁଣି ଦେଖ, ନହେଲେ ପେଜ୍ ରିଫ୍ରେସ୍ କର।',
     screenplayUploadedToast: 'ସ୍କ୍ରିନପ୍ଲେ ଅପଲୋଡ୍ ହେଇଗଲା! ଏବେ ବ୍ରେକଡାଉନ୍ (ଚରିତ୍ର, ପ୍ରପ୍ସ, ଲୋକେସନ୍ ଆଉ ବାକି ସବୁ) ପାଇଁ ତଳେ "ସ୍କ୍ରିପ୍ଟ ବ୍ରେକଡାଉନ୍ କର" ଦବା।',
     missingCharacterNamePlaceholder: 'କିଏ ଛାଡ଼ିଗଲା କି? ନାଁ ଲେଖ…',
@@ -10959,16 +10968,26 @@ function App() {
           ? '/api/skip-to-bitsheet'
           : '/api/skip-to-scenelist'
 
+    let response
     try {
-      const response = await fetch(`${BACKEND_URL}${endpoint}`, {
+      response = await fetch(`${BACKEND_URL}${endpoint}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ pastedText: skipPastedText, runtimeMinutes: buildFormatObject().runtimeMinutes ?? skipRuntimeMinutes, format: buildFormatObject() }),
       })
-      const data = await response.json()
+    } catch {
+      // the connection broke while the server was (maybe) still working — the project may exist already
+      setErrorMessage(t.longRequestConnectionLost)
+      loadProjectList()
+      setIsSkippingAhead(false)
+      return
+    }
 
-      if (!response.ok) {
-        setErrorMessage(data.error || t.genericError)
+    try {
+      const { data, problem } = await readServerAnswer(response)
+      if (!response.ok || !data) {
+        setErrorMessage(data?.error || problem || t.genericError)
+        loadProjectList()
         setIsSkippingAhead(false)
         return
       }
@@ -10977,8 +10996,8 @@ function App() {
       setStartStage('idea')
       await loadProject(data.conceptId)
       loadProjectList()
-    } catch {
-      setErrorMessage(t.genericError)
+    } catch (error) {
+      setErrorMessage(`${t.genericError} (${String(error?.message ?? error).slice(0, 120)})`)
     }
 
     setIsSkippingAhead(false)
@@ -15143,7 +15162,8 @@ function App() {
           </div>
         </div>
 
-        {(currentUser.role === 'admin' || isProductionOnly) && (
+        {/* the project list: the admin sees all, a "Production only" login and an Independent Writer see the ones they made */}
+        {(currentUser.role === 'admin' || isProductionOnly || isIndependentWriter) && (
         <div className="sidebar-section">
           <h4 className="sidebar-section-title">{t.sidebarHistoryLabel}</h4>
           <p className="sidebar-section-note">{t.sidebarHistoryNote}</p>
@@ -15170,6 +15190,7 @@ function App() {
                       {ICONS.pencil}
                     </button>
                   )}
+                  {!isScreenplayWriter && (
                   <button
                     className="sidebar-history-icon-button"
                     onClick={() => handlePinToggleClick(item)}
@@ -15177,6 +15198,7 @@ function App() {
                   >
                     {ICONS.pin}
                   </button>
+                  )}
                   {(currentUser.role === 'admin' || isProductionOnly) && (
                     <button
                       className="sidebar-history-icon-button"

@@ -2311,3 +2311,11 @@ Plain version: every project is now a set of **drafts**. Opening a project shows
 - Code: backend/writingBuddy.js, routes GET/DELETE /api/assistant/:sceneListId/history and POST .../message in server.js, writerAccess.js, frontend BuddyChat.jsx/css, App.jsx. Tests: tests/writingBuddy.test.js (6).
 - Checked: with a FAKE Gemini (history reaches the AI, system prompt has guide + scene facts, history saved/cleared, 400/401/404), and the panel in a desktop and a phone-size browser. NOT checked: real AI answers (AI is blocked here by Google billing).
 - NEXT: Step 2 — scene edits from the chat with a confirm/"Apply" button (reusing the voice-edit pipeline); Step 3 — spoken replies and backend rebuild actions.
+
+### Buddy chat — Step 2: it can CHANGE the scene (with your OK) (2026-10-30)
+- User said "kadam 2 shuru karo". When you ask the Buddy to change the scene on screen (shorten, extend, rewrite, translate…), it says what it will do and a yellow card appears: "Proposed change: <instruction>" with ✓ Apply and "No thanks". NOTHING changes until Apply is pressed.
+- Apply runs the instruction through the SAME machine as the 🎙 voice edit (/api/screenplay/scene/voice with typed instruction): new version with ↶ Undo; if the scene is open in Edit the lines go into the open edit; the orb's progress panel shows the steps; a green note in the chat says what changed.
+- How: the Buddy ends its reply with a hidden last line [[EDIT: instruction]]; the server strips it (writingBuddy.js extractProposal) and saves the card in agent_chat_messages.proposed_action. A broken tag is dropped. Only admin + the two writer roles may propose. Only the newest open card can be applied; a card for another scene asks you to open it; a card never returns after Apply / No thanks (POST /api/assistant/:id/resolve, allowed for writers).
+- Tests: tests/writingBuddy.test.js now 9. Checked with a FAKE Gemini in desktop + phone browsers (card, no tag leak, survives reload, Apply changed line 1, gone after reload). Fixed: card text too faint in dark mode.
+- NOT checked: the real AI deciding well when to propose (AI blocked here by Google billing); the app only shows a card when the tag is present and nothing changes without Apply.
+- NEXT: Step 3 — spoken replies and backend rebuild actions.

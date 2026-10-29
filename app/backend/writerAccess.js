@@ -33,7 +33,7 @@ export const WRITER_ROUTES = [
   ["^(POST)$", /^\/api\/(generate-storylines|skip-to-synopsis|skip-to-bitsheet|skip-to-scenelist)$/, "newProject"],
   // the Buddy chat in the screenplay screen (the project is checked through its scene list)
   ["^(GET|DELETE)$", /^\/api\/assistant\/(\d+)\/history$/, "sceneList"],
-  ["^(POST)$", /^\/api\/assistant\/(\d+)\/message$/, "sceneList"],
+  ["^(POST)$", /^\/api\/assistant\/(\d+)\/(message|resolve)$/, "sceneList"],
   // following the "Let's go" job (its own jobs only — the route checks whose it is)
   ["^(GET)$", /^\/api\/skip-jobs\/(current|[A-Za-z0-9-]+)$/, null],
   // "Upload PDF instead" in the Idea / Synopsis / Bit Sheet / Scene one-liners boxes: Adu reads the pages of a PDF (a background job, polled)

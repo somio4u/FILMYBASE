@@ -45,3 +45,15 @@
   .buddy-panel { right: 0; left: 0; bottom: 0; width: 100%; height: min(78vh, 640px); border-radius: 18px 18px 0 0; }
   .buddy-input { padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px)); }
 }
+
+.buddy-msg.is-note { background: #eef7ee; border: 1px solid #bfdcbf; }
+.buddy-proposal { margin-top: 8px; padding: 8px 10px; border-radius: 10px; background: #fff8e6; border: 1px solid #ecd9a0; }
+.buddy-proposal blockquote { margin: 4px 0 8px; padding: 0; font-size: 0.92em; }
+.buddy-proposal-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.buddy-apply, .buddy-dismiss { min-height: 40px; padding: 0 14px; border-radius: 10px; border: 1px solid #c9a94a; background: #fff; font: inherit; cursor: pointer; }
+.buddy-apply { background: #1f7a3d; border-color: #1f7a3d; color: #fff; font-weight: 600; }
+.buddy-apply:disabled, .buddy-dismiss:disabled { opacity: 0.6; cursor: default; }
+.buddy-proposal-done { color: #1f7a3d; font-weight: 600; }
+.buddy-proposal, .buddy-proposal small, .buddy-proposal blockquote { color: #3b2f05; }
+.buddy-msg.is-note, .buddy-msg.is-note p { color: #12351c; }
+.buddy-apply { color: #fff !important; }

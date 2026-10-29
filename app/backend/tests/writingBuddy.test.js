@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { BUDDY_GUIDE, BUDDY_PERSONA, buddySystemPrompt, historyToContents, rolePhrase, sceneContextText } from "../writingBuddy.js";
+import { BUDDY_GUIDE, BUDDY_PERSONA, buddySystemPrompt, extractProposal, historyToContents, rolePhrase, sceneContextText } from "../writingBuddy.js";
 import { matchWriterRoute } from "../writerAccess.js";
 
 const sceneList = {
@@ -66,7 +66,7 @@ test("the conversation is sent back as the model's turns, newest 30, always star
 
 test("the system prompt carries the persona, the honesty rules, the app guide, the person's role and the scene", () => {
   const prompt = buddySystemPrompt({ user: { name: "Chandan", role: "independent_writer" }, scenePack: "SELECTED SCENE: scene 7" });
-  for (const part of ["Name: Chandan", "Independent Writer", "SELECTED SCENE: scene 7", "you can only TALK", "NEVER say or imply that you changed", "Edit this scene", "Director Screenplay"]) assert.ok(prompt.includes(part), part);
+  for (const part of ["Name: Chandan", "Independent Writer", "SELECTED SCENE: scene 7", "only way anything in the screenplay changes", "NEVER say or imply that you already changed", "Edit this scene", "Director Screenplay"]) assert.ok(prompt.includes(part), part);
   assert.equal(rolePhrase("admin").startsWith("Admin"), true);
   assert.ok(BUDDY_PERSONA.length > 500 && BUDDY_GUIDE.length > 1500);
 });
@@ -77,4 +77,29 @@ test("the chat routes are open to the writers, for their own project only (check
   assert.equal(matchWriterRoute("POST", "/api/assistant/31/message")?.kind, "sceneList");
   assert.equal(matchWriterRoute("PUT", "/api/assistant/31/message"), null);
   assert.equal(matchWriterRoute("GET", "/api/assistant/abc/history"), null);
+});
+
+test("a reply that ends with [[EDIT: …]] becomes a proposal; the tag never reaches the reader; a broken tag is dropped", () => {
+  const a = extractProposal("I will cut the priest's speech in half. Press Apply if you like it.\n[[EDIT: Shorten PUJARI's line 2 to one sentence.]]");
+  assert.equal(a.instruction, "Shorten PUJARI's line 2 to one sentence.");
+  assert.equal(a.text, "I will cut the priest's speech in half. Press Apply if you like it.");
+  const b = extractProposal("Just an answer, no change.");
+  assert.deepEqual(b, { text: "Just an answer, no change.", instruction: null });
+  const c = extractProposal("Okay.\n[[EDIT: half written");
+  assert.equal(c.instruction, null);
+  assert.equal(c.text, "Okay.");
+  assert.equal(extractProposal("Hi [[EDIT: ]]").instruction, null);
+});
+
+test("only people who may edit are told they can propose changes; others are told they cannot", () => {
+  const withEdit = buddySystemPrompt({ user: { name: "A", role: "admin" }, scenePack: "x", canEdit: true });
+  const without = buddySystemPrompt({ user: { name: "A", role: "director" }, scenePack: "x" });
+  assert.match(withEdit, /\[\[EDIT:/);
+  assert.match(withEdit, /never say it is already done/);
+  assert.doesNotMatch(without, /\[\[EDIT:/);
+  assert.match(without, /cannot change the screenplay from this chat/);
+});
+
+test("writers may resolve a Buddy proposal on their own project", () => {
+  assert.ok(matchWriterRoute("POST", "/api/assistant/12/resolve"));
 });

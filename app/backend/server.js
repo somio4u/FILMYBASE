@@ -38,7 +38,7 @@ import { setupProductionMedia } from "./productionMedia.js";
 import { registerDesignTaskRoutes } from "./designTasks.js";
 import { registerSubmissionRoutes, designerGatekeeper, DESIGNER_ROLE } from "./designSubmissions.js";
 import { sessionTokenOf } from "./sessionToken.js";
-import { buddySystemPrompt, sceneContextText, historyToContents } from "./writingBuddy.js";
+import { buddySystemPrompt, sceneContextText, historyToContents, extractProposal } from "./writingBuddy.js";
 import { createSkipStartJobs, publicView as publicSkipJob } from "./skipStartJobs.js";
 import { WRITER_ROLE, INDEPENDENT_WRITER_ROLE, isWriterRole, userHasConcept, writerGatekeeper, ensureWriterSchema, registerWriterRoutes } from "./writerAccess.js";
 import { usageContext, installGeminiMetering, ensureUsageSchema, registerUsageRoutes, setSceneListResolver } from "./usageLedger.js";
@@ -20128,8 +20128,8 @@ app.get("/api/assistant/:sceneListId/history", requireLogin, async (req, res) =>
   const ctx = await buddyAccess(req, res);
   if (!ctx) return;
   const rows = (await db.query(
-    `SELECT id, role, content, created_at FROM (
-       SELECT id, role, content, created_at FROM agent_chat_messages WHERE concept_id = $1 AND stage_key = $2 ORDER BY created_at DESC, id DESC LIMIT 100) latest
+    `SELECT id, role, content, proposed_action, resolved, created_at FROM (
+       SELECT id, role, content, proposed_action, resolved, created_at FROM agent_chat_messages WHERE concept_id = $1 AND stage_key = $2 ORDER BY created_at DESC, id DESC LIMIT 100) latest
      ORDER BY created_at ASC, id ASC`, [ctx.conceptId, buddyStageKey(req)])).rows;
   res.json({ messages: rows });
 });
@@ -20165,7 +20165,9 @@ app.post("/api/assistant/:sceneListId/message", requireLogin, async (req, res) =
       dialogueLanguage = row?.content?.dialogueLanguage ?? null;
     }
     const scenePack = sceneContextText({ title: title?.title || title?.concept_text?.slice(0, 80), sceneList: sl, episodeIndex, sceneIndex: sceneIndex ?? -1, elements, dialogueLanguage, estimateSeconds: estimateScreenSeconds });
-    const system = buddySystemPrompt({ user: req.user, scenePack });
+    // who may let the Buddy change the scene on screen: the same people who can use the voice edit (admin and the two writer roles)
+    const canEdit = sceneIndex !== null && (req.user.role === "admin" || isWriterRole(req.user.role));
+    const system = buddySystemPrompt({ user: req.user, scenePack, canEdit });
 
     const past = (await db.query(
       "SELECT role, content FROM agent_chat_messages WHERE concept_id = $1 AND stage_key = $2 ORDER BY created_at DESC, id DESC LIMIT $3", [ctx.conceptId, stageKey, BUDDY_MEMORY])).rows.reverse();
@@ -20178,7 +20180,11 @@ app.post("/api/assistant/:sceneListId/message", requireLogin, async (req, res) =
     });
     const reply = String(response.text ?? "").trim();
     if (!reply) throw new Error("The Buddy had nothing to say this time. Please ask again.");
-    const assistantRow = (await db.query("INSERT INTO agent_chat_messages (concept_id, stage_key, role, content) VALUES ($1, $2, 'assistant', $3) RETURNING id, role, content, created_at", [ctx.conceptId, stageKey, reply])).rows[0];
+    const proposal = extractProposal(reply);
+    if (!proposal.text && !proposal.instruction) throw new Error("The Buddy had nothing to say this time. Please ask again.");
+    const proposed = canEdit && proposal.instruction ? { type: "scene_edit", instruction: proposal.instruction, episodeIndex, sceneIndex } : null;
+    const assistantRow = (await db.query("INSERT INTO agent_chat_messages (concept_id, stage_key, role, content, proposed_action) VALUES ($1, $2, 'assistant', $3, $4) RETURNING id, role, content, proposed_action, resolved, created_at",
+      [ctx.conceptId, stageKey, proposal.text || proposal.instruction, proposed ? JSON.stringify(proposed) : null])).rows[0];
     res.json({ userMessage: userRow, assistantMessage: assistantRow });
   } catch (error) {
     console.error("Buddy chat failed:", error.message);
@@ -20186,6 +20192,18 @@ app.post("/api/assistant/:sceneListId/message", requireLogin, async (req, res) =
     if (userRow) await db.query("DELETE FROM agent_chat_messages WHERE id = $1", [userRow.id]).catch(() => {});
     res.status(502).json({ error: error.message });
   }
+});
+
+// the person pressed Apply or No thanks on a proposal: it is marked done so it never offers itself again (the change itself runs through the voice edit)
+app.post("/api/assistant/:sceneListId/resolve", requireLogin, async (req, res) => {
+  const ctx = await buddyAccess(req, res);
+  if (!ctx) return;
+  const messageId = Number(req.body?.messageId);
+  if (!Number.isInteger(messageId)) { res.status(400).json({ error: "Which message?" }); return; }
+  const done = await db.query("UPDATE agent_chat_messages SET resolved = true WHERE id = $1 AND concept_id = $2 AND stage_key = $3 AND proposed_action IS NOT NULL RETURNING id",
+    [messageId, ctx.conceptId, buddyStageKey(req)]);
+  if (done.rows.length === 0) { res.status(404).json({ error: "That proposal was not found." }); return; }
+  res.json({ ok: true });
 });
 
 // Every episode's synopsis for a story run, as one PDF: the Story Bible's synopsis and cliffhanger for each episode (when the

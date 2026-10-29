@@ -4188,9 +4188,12 @@ function VoiceWriterButton({ t, sceneListId, episodeIndex, sceneIndex, sceneNumb
   }
 
   // Step 2: the writer said "Yes, do it" — the confirmed words (not the audio) go to the agent, and every step is shown.
-  async function runInstruction() {
-    const text = confirm?.transcript.trim()
-    if (!text) return
+  // `given` = words from the Buddy chat's Apply button (already shown to the writer and confirmed there); returns a short result for the chat
+  async function runInstruction(given) {
+    const text = (typeof given === 'string' ? given : confirm?.transcript)?.trim()
+    if (!text) return { ok: false, text: '' }
+    if (phase === 'working') return { ok: false, text: V('Another change is still running — wait for it to finish.', 'ଆଉ ଗୋଟେ ବଦଳ ଚାଲିଛି — ସରିବା ଯାଏ ଅପେକ୍ଷା କର।') }
+    let outcome = { ok: false, text: t.genericError }
     setConfirm(null)
     setPhase('working')
     setLog([])
@@ -4210,6 +4213,7 @@ function VoiceWriterButton({ t, sceneListId, episodeIndex, sceneIndex, sceneNumb
       const data = await response.json()
       if (!response.ok) {
         report.done(understood, data.error || t.genericError, 'error')
+        outcome = { ok: false, text: data.error || t.genericError }
       } else {
         const c = data.changes ?? {}
         const parts = [c.rewrote ? V('wrote the scene again', 'ସିନ୍ ପୁଣି ଲେଖିଲା') : null, c.added ? V(`added ${c.added} line(s)`, `${c.added}ଟା ଲାଇନ୍ ଯୋଡ଼ିଲା`) : null, c.changed ? V(`changed ${c.changed} line(s)`, `${c.changed}ଟା ଲାଇନ୍ ବଦଳାଇଲା`) : null, c.removed ? V(`removed ${c.removed} line(s)`, `${c.removed}ଟା ଲାଇନ୍ ହଟାଇଲା`) : null].filter(Boolean)
@@ -4226,11 +4230,16 @@ function VoiceWriterButton({ t, sceneListId, episodeIndex, sceneIndex, sceneNumb
         if (parts.length && data.note) report.done(report.step(''), data.note, 'ok')
         if (sceneActions.length) await onSceneActions?.(sceneActions, report, V)
         report.done(report.step(''), V('Done.', 'ହେଇଗଲା।'), 'ok')
+        outcome = {
+          ok: true,
+          text: `${parts.length ? `${V('Done — in the scene it', 'ହେଲା — ସିନ୍‌ରେ ସେ')} ${parts.join(', ')}.` : V('Done.', 'ହେଇଗଲା।')} ${data.draft ? V('It is in your open edit — press "Save my changes" to keep it.', 'ତୋ ଖୋଲା ଏଡିଟ୍‌ରେ ଅଛି — ରଖିବାକୁ "ମୋ ଚେଞ୍ଜ ସେଭ୍ କର" ଦବା।') : data.scene ? V('Saved as a new version — ↶ Undo takes it back.', 'ନୂଆ ଭର୍ସନ୍ ଭାବେ ସେଭ୍ ହେଲା — ↶ Undo ଦେଲେ ଫେରିଯିବ।') : ''}`.trim(),
+        }
       }
     } catch {
       report.done(understood, t.genericError, 'error')
     }
     setPhase('idle')
+    return outcome
   }
 
   function cancelConfirm() {
@@ -4323,7 +4332,7 @@ function VoiceWriterButton({ t, sceneListId, episodeIndex, sceneIndex, sceneNumb
       {buddyOpen && (
         <BuddyChat
           backendUrl={BACKEND_URL} sceneListId={sceneListId} episodeIndex={episodeIndex} sceneIndex={sceneIndex} sceneNumber={sceneNumber}
-          lang={lang} onClose={() => setBuddyOpen(false)}
+          lang={lang} onClose={() => setBuddyOpen(false)} onApplyEdit={runInstruction} busy={phase !== 'idle'}
           renderMic={(onResult) => <MicButton t={t} onResult={onResult} className="buddy-mic" title={V('Speak', 'କୁହ')} listeningTitle={V('Stop', 'ବନ୍ଦ କର')} />}
         />
       )}

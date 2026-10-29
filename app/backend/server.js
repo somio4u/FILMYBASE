@@ -47,6 +47,7 @@ import { registerProductionSyncRoutes } from "./productionSync.js";
 import { createJobStore, ensureJobSchema, shouldResume } from "./jobStore.js";
 import { repairStoredTransitions, withoutTransitions } from "./transitionNames.js";
 import { formatFinalDraft } from "./finalDraftFormat.js";
+import { directorScenes, writeDirectorPdf, buildDirectorDocx } from "./directorScreenplay.js";
 import { repairStoredLabels, stripEchoedLabel, stripEchoedLabelPair } from "./echoedLabels.js";
 import { withModelFallback } from "./modelFallback.js";
 import { createAiCredentials, describeAiError, ensureAiCredentialsSchema, providerEnv, summariseModels } from "./aiCredentials.js";
@@ -20047,6 +20048,49 @@ app.get("/api/scene-lists/:id/screenplay-pdf", requireLogin, async (req, res) =>
     renderFullScreenplayPdf(res, data.deck, data.sceneList, data.scenesByEpisode, { onlyEpisode: episode, fileLabel });
   } catch (error) {
     console.error("Screenplay PDF export failed:", error.message);
+    if (!res.headersSent) res.status(500).json({ error: error.message });
+    else res.end();
+  }
+});
+
+// "Director Screenplay" (admin): the screenplay in the director's own scene-sheet layout — the left half of every page empty for his notes,
+// action in ( brackets ), NAME : words, "Cut to...." closing every scene, "Pg- N" — as PDF or Word (?format=docx). For one episode
+// (?episode=N), or the whole film / all episodes. No AI: the lines are printed exactly as saved (see directorScreenplay.js).
+app.get("/api/scene-lists/:id/director-screenplay", requireRole("admin"), async (req, res) => {
+  if (!/^\d+$/.test(req.params.id)) {
+    res.status(400).json({ error: "Invalid scene list id." });
+    return;
+  }
+  const data = await fetchSceneListScreenplayData(req.params.id, null);
+  if (data.error) {
+    res.status(data.status).json({ error: data.error });
+    return;
+  }
+  const isSeries = Array.isArray(data.sceneList.episodeScenes);
+  const episode = req.query.episode === undefined ? null : Number(req.query.episode);
+  if (episode !== null && (!isSeries || !Number.isInteger(episode) || episode < 0 || episode >= data.sceneList.episodeScenes.length)) {
+    res.status(400).json({ error: "That episode doesn't exist." });
+    return;
+  }
+  const fileLabel = episode === null ? (isSeries ? "all-episodes" : "screenplay") : `episode-${episode + 1}`;
+  const fileBase = `${(data.deck.title?.en ?? "screenplay").replace(/[^a-z0-9]+/gi, "-")}-director-screenplay-${fileLabel}-${formatExportTimestamp()}`;
+  try {
+    const scenes = directorScenes(data.deck, data.sceneList, data.scenesByEpisode, { onlyEpisode: episode });
+    if (req.query.format === "docx") {
+      const buffer = await Packer.toBuffer(buildDirectorDocx(scenes));
+      res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.wordprocessingml.document");
+      res.setHeader("Content-Disposition", `attachment; filename="${fileBase}.docx"`);
+      res.send(buffer);
+      return;
+    }
+    const doc = new ScriptAwarePDF({ size: "A4", margin: 50, bufferPages: true, info: { Title: `${data.deck.title?.en ?? "Screenplay"} — Director Screenplay` } });
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", `attachment; filename="${fileBase}.pdf"`);
+    doc.pipe(res);
+    writeDirectorPdf(doc, scenes, { fonts: FONTS });
+    doc.end();
+  } catch (error) {
+    console.error("Director screenplay export failed:", error.message);
     if (!res.headersSent) res.status(500).json({ error: error.message });
     else res.end();
   }

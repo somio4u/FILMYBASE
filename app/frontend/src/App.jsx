@@ -475,6 +475,9 @@ const LABELS = {
     approvalButtonEpisode: (n) => `⬇ Episode ${n} — approval format (Word)`,
     approvalButtonFilm: '⬇ Approval format (Word)',
     approvalButtonAll: '⬇ All episodes — approval format (zip)',
+    directorEpisode: (n) => `⬇ Episode ${n} — Director Screenplay`,
+    directorFilm: '⬇ Director Screenplay',
+    directorAll: '⬇ All episodes — Director Screenplay',
     approvalRunning: (done, total) => (total ? `Preparing… ${done} of ${total} scenes` : 'Preparing…'),
     approvalReady: (name) => `✅ File ready — tap here to save ${name}`,
     syncConflict: (label, by) => `${by || 'Someone'} changed ${label} while you were on it. Your words are safe — choose:`,
@@ -1421,6 +1424,9 @@ const LABELS = {
     approvalButtonEpisode: (n) => `⬇ ଏପିସୋଡ୍ ${n} — ଅନୁମୋଦନ ଫର୍ମାଟ୍ (Word)`,
     approvalButtonFilm: '⬇ ଅନୁମୋଦନ ଫର୍ମାଟ୍ (Word)',
     approvalButtonAll: '⬇ ସବୁ ଏପିସୋଡ୍ — ଅନୁମୋଦନ ଫର୍ମାଟ୍ (zip)',
+    directorEpisode: (n) => `⬇ ଏପିସୋଡ୍ ${n} — Director Screenplay`,
+    directorFilm: '⬇ Director Screenplay',
+    directorAll: '⬇ ସବୁ ଏପିସୋଡ୍ — Director Screenplay',
     approvalRunning: (done, total) => (total ? `ପ୍ରସ୍ତୁତ ହେଉଛି… ${total} ମଧ୍ୟରୁ ${done} ଦୃଶ୍ୟ` : 'ପ୍ରସ୍ତୁତ ହେଉଛି…'),
     approvalReady: (name) => `✅ ଫାଇଲ୍ ପ୍ରସ୍ତୁତ — ${name} ସେଭ୍ କରିବାକୁ ଏଠାରେ ଦବାନ୍ତୁ`,
     syncConflict: (label, by) => `${label} ତୁମେ କାମ କରୁଥିବା ବେଳେ ${by || 'ଅନ୍ୟ ଜଣେ'} ବଦଳାଇଲେ। ତୁମ ଲେଖା ସୁରକ୍ଷିତ — ବାଛ:`,
@@ -5588,6 +5594,17 @@ function MovieScreenplayWorkspace({
                       <ApprovalFormatButton key={`approval-${group.episodeIndex}`} sceneListId={sceneList.id} episodeIndex={group.episodeIndex} t={t}
                         label={group.episodeIndex === null ? t.approvalButtonFilm : t.approvalButtonEpisode(group.episodeIndex + 1)} />
                     )}
+                    {/* admin only: the screenplay in the director's own layout (empty left half for his notes, "Cut to...." closing every scene) */}
+                    {!onProgress && (
+                      <DownloadChoiceButton
+                        key={`director-${group.episodeIndex}`}
+                        t={t}
+                        label={group.episodeIndex === null ? t.directorFilm : t.directorEpisode(group.episodeIndex + 1)}
+                        pdfUrl={`${BACKEND_URL}/api/scene-lists/${sceneList.id}/director-screenplay${group.episodeIndex === null ? '' : `?episode=${group.episodeIndex}`}`}
+                        excelUrl={`${BACKEND_URL}/api/scene-lists/${sceneList.id}/director-screenplay?${group.episodeIndex === null ? '' : `episode=${group.episodeIndex}&`}format=docx`}
+                        excelLabel={t.downloadFormatWord}
+                      />
+                    )}
                     {group.episodeIndex !== null && group.episodeIndex === groups.length - 1 && (
                       <DownloadChoiceButton
                         t={t}
@@ -5599,6 +5616,16 @@ function MovieScreenplayWorkspace({
                     )}
                     {!onProgress && group.episodeIndex !== null && group.episodeIndex === groups.length - 1 && (
                       <ApprovalFormatButton key="approval-all" sceneListId={sceneList.id} all t={t} label={t.approvalButtonAll} />
+                    )}
+                    {!onProgress && group.episodeIndex !== null && group.episodeIndex === groups.length - 1 && (
+                      <DownloadChoiceButton
+                        key="director-all"
+                        t={t}
+                        label={t.directorAll}
+                        pdfUrl={`${BACKEND_URL}/api/scene-lists/${sceneList.id}/director-screenplay`}
+                        excelUrl={`${BACKEND_URL}/api/scene-lists/${sceneList.id}/director-screenplay?format=docx`}
+                        excelLabel={t.downloadFormatWord}
+                      />
                     )}
                   </div>
                 )

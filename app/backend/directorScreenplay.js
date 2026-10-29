@@ -1,13 +1,19 @@
 // "Director Screenplay": the screenplay laid out like the director's own scene sheets —
 //   SCENE - 01 (centred), then Location / Time / Character, a double rule, and below it the scene:
 //   the LEFT HALF OF THE PAGE IS EMPTY (the director writes his notes there), action in ( brackets ), dialogue as  NAME : words,
-//   transitions on the right, and "Pg- N" at the foot of every page. Every scene starts on a new page.
+//   transitions on the right ("Cut to...." closes every scene), and "Pg- N" at the foot of every page. Every scene starts on a new page.
 // The screenplay's own lines are NEVER changed: each action, dialogue, acting note and transition is printed exactly as saved.
 // Only the scene heading is split into the Location / Time / Character lines (from the same data as the heading).
 
 import { AlignmentType, BorderStyle, Document, Footer, PageNumber, Paragraph, Table, TableCell, TableRow, TextRun, VerticalAlign, WidthType } from "docx";
 
 const pad2 = (n) => String(n).padStart(2, "0");
+
+// The director's sheets close EVERY scene with "Cut to....". It is added at the end of the printed scene (the screenplay itself is not
+// changed) — unless the scene already ends with a transition of its own, which is then kept as it is.
+export const CUT_TO = "Cut to....";
+const endsWithCut = (elements) => elements.length > 0 && elements[elements.length - 1].type === "transition";
+const withCutTo = (elements) => (endsWithCut(elements) ? elements : [...elements, { type: "transition", text: CUT_TO, added: true }]);
 
 // ---- the scenes, in order, ready to print --------------------------------------------------------------------------------------------
 // -> [{ episodeIndex, episodeTitle, firstInEpisode, number, intExt, location, time, characters, elements }]
@@ -25,7 +31,7 @@ export function directorScenes(deck, sceneList, scenesByEpisode, { onlyEpisode =
       location: scene.location?.en ?? "",
       time: scene.timeOfDay ?? "",
       characters: row.content?.charactersPresent ?? [],
-      elements: row.content?.elements ?? [],
+      elements: withCutTo(row.content?.elements ?? []),
     });
   };
   if (isSeries) {

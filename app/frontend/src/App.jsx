@@ -7273,6 +7273,7 @@ function PdfUploadButton({ backendUrl, text, onText }) {
     try {
       const body = new FormData()
       body.append('file', file)
+      body.append('mode', 'auto') // read the pages as laid out, then look at what the PDF really contains (stage, written scenes, one-liners)
       const start = await fetch(`${backendUrl}/api/story-from-pdf`, { method: 'POST', body })
       const started = await start.json().catch(() => ({}))
       if (!start.ok) throw new Error(started.error || 'Could not upload the PDF.')
@@ -7303,6 +7304,42 @@ function PdfUploadButton({ backendUrl, text, onText }) {
           {note.summary}{note.title ? ` Title: ${note.title}.` : ''} Please read the text once, then continue.
           {note.warnings?.length > 0 && <> <strong>Check:</strong> {note.warnings.join(' ')}</>}
         </p>
+      )}
+      {note?.analysis && !busy && <PdfFindings analysis={note.analysis} report={note.report ?? []} />}
+    </div>
+  )
+}
+
+// "What I found in your PDF": the result of looking at the PDF before anything is made from it — which stage it is at, how many scenes are
+// really written (with their dialogue) and which have only a one-line summary. Nothing is changed by this card.
+function PdfFindings({ analysis, report }) {
+  const [open, setOpen] = useState(false)
+  const scenes = analysis.scenes ?? []
+  const written = analysis.totals?.written ?? 0
+  const losesWords = analysis.stage === 'screenplay'
+  return (
+    <div className={`pdf-findings${losesWords ? ' is-warning' : ''}`}>
+      <strong>🔎 What I found in your PDF</strong>
+      {report.map((line, i) => <p key={i}>{line}</p>)}
+      {losesWords && (
+        <p className="pdf-findings-warn">
+          ⚠ This PDF already has written scenes ({written}). If you start from “Scene One-Liners”, “Bit Sheet” or “Synopsis” below, only the short summaries are kept and the dialogue is NOT carried over. Do not press Let's go yet — the next update will put these written scenes into your project exactly as they are.
+        </p>
+      )}
+      {scenes.length > 0 && (
+        <>
+          <button type="button" className="cancel-button" onClick={() => setOpen((o) => !o)}>{open ? 'Hide the scene list' : `Show all ${scenes.length} scenes`}</button>
+          {open && (
+            <ol className="pdf-findings-scenes">
+              {scenes.map((sc) => (
+                <li key={`${sc.episode}-${sc.number}`} className={`is-${sc.state}`}>
+                  <span aria-hidden="true">{sc.state === 'written' ? '✓' : '✎'}</span> {analysis.totals.episodes > 1 ? `Ep ${sc.episode} · ` : ''}Scene {sc.number} — {sc.heading}
+                  <small> {sc.state === 'written' ? `written (${sc.dialogueLines} dialogue, ${sc.actionLines} action)` : sc.state === 'one_liner' ? 'one-line summary only' : 'empty'}</small>
+                </li>
+              ))}
+            </ol>
+          )}
+        </>
       )}
     </div>
   )

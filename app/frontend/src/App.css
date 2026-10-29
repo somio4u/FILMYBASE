@@ -8008,3 +8008,12 @@ body.is-script-edit-mode { overflow: hidden; }
   .ai-movie-screenplay-current-card.is-edit-mode { padding-top: calc(52px + env(safe-area-inset-top, 0px)); }
   .script-toolbar-mobile { padding-bottom: calc(8px + env(safe-area-inset-bottom, 0px)); }
 }
+
+.pdf-findings { margin-top: 10px; padding: 12px 14px; border-radius: 12px; border: 1px solid #9bb8e8; background: #eef4ff; color: #14284d; font-size: 0.95em; }
+.pdf-findings p { margin: 6px 0; color: inherit; }
+.pdf-findings.is-warning { border-color: #e0b04a; background: #fff6e0; color: #4a3500; }
+.pdf-findings-warn { font-weight: 600; }
+.pdf-findings-scenes { margin: 8px 0 0; padding-left: 20px; max-height: 260px; overflow: auto; }
+.pdf-findings-scenes li { margin: 3px 0; }
+.pdf-findings-scenes li.is-written { color: #14532d; }
+.pdf-findings-scenes small { opacity: 0.8; }

@@ -33,6 +33,7 @@ export const WRITER_ROUTES = [
   ["^(POST)$", /^\/api\/(generate-storylines|skip-to-synopsis|skip-to-bitsheet|skip-to-scenelist|import-pdf-screenplay)$/, "newProject"],
   // the Buddy chat in the screenplay screen (the project is checked through its scene list)
   ["^(GET|DELETE)$", /^\/api\/assistant\/(\d+)\/history$/, "sceneList"],
+  ["^(POST)$", /^\/api\/scene-lists\/(\d+)\/pdf-fill$/, "sceneList"],
   ["^(POST)$", /^\/api\/assistant\/(\d+)\/(message|resolve)$/, "sceneList"],
   // following the "Let's go" job (its own jobs only — the route checks whose it is)
   ["^(GET)$", /^\/api\/skip-jobs\/(current|[A-Za-z0-9-]+)$/, null],

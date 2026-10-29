@@ -5774,6 +5774,7 @@ function MovieScreenplayWorkspace({
                   </>
                 )}
               </div>
+              {screenplay && <PdfFillPanel backendUrl={BACKEND_URL} sceneListId={sceneList.id} onDone={() => onReloadScenes?.()} />}
               {screenplay && (
                 <div className="script-scene-manage">
                   <p className="script-panel-title">{t.sceneManageTitle}</p>
@@ -7306,6 +7307,132 @@ function PdfUploadButton({ backendUrl, text, onText, onImportScreenplay }) {
         </p>
       )}
       {note?.analysis && !busy && <PdfFindings analysis={note.analysis} report={note.report ?? []} onImport={onImportScreenplay ? () => onImportScreenplay({ text: note.text, title: note.title }) : null} />}
+    </div>
+  )
+}
+
+// "Re-read a PDF into THIS project": upload the PDF, see what it holds, see exactly which scene of the project each written scene would go into
+// (and which are left alone and why), then press the button. Only written text is filled in; the scene list never changes (server: pdfFill.js).
+function PdfFillPanel({ backendUrl, sceneListId, onDone }) {
+  const inputRef = useRef(null)
+  const [phase, setPhase] = useState('idle') // idle | reading | planning | plan | applying | done
+  const [progress, setProgress] = useState('')
+  const [startedAt, setStartedAt] = useState(0)
+  const [seconds, setSeconds] = useState(0)
+  const [read, setRead] = useState(null) // the PDF reading result (text, analysis, report)
+  const [plan, setPlan] = useState(null)
+  const [replaceWritten, setReplaceWritten] = useState(false)
+  const [result, setResult] = useState(null)
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    if (phase === 'idle' || phase === 'plan' || phase === 'done') return undefined
+    const id = setInterval(() => setSeconds(Math.round((Date.now() - startedAt) / 1000)), 500)
+    return () => clearInterval(id)
+  }, [phase, startedAt])
+
+  const post = async (apply, replace) => {
+    const response = await fetch(`${backendUrl}/api/scene-lists/${sceneListId}/pdf-fill`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text: read.text, apply, replaceWritten: replace }),
+    })
+    const { data, problem } = await readServerAnswer(response)
+    if (!response.ok || !data) throw new Error(data?.error || problem || 'Something went wrong. Please try again.')
+    return data
+  }
+
+  async function handleFile(event) {
+    const file = event.target.files?.[0]
+    event.target.value = ''
+    if (!file) return
+    setError(''); setResult(null); setPlan(null); setRead(null)
+    setStartedAt(Date.now()); setSeconds(0)
+    setPhase('reading'); setProgress('Uploading the PDF…')
+    try {
+      const body = new FormData()
+      body.append('file', file)
+      body.append('mode', 'auto')
+      const start = await fetch(`${backendUrl}/api/story-from-pdf`, { method: 'POST', body })
+      const started = await start.json().catch(() => ({}))
+      if (!start.ok) throw new Error(started.error || 'Could not upload the PDF.')
+      const got = await waitForPdfJob(backendUrl, started.jobId, setProgress)
+      setRead(got)
+      setPhase('planning'); setProgress('Matching the PDF\u2019s scenes with this project’s scenes…')
+      const response = await fetch(`${backendUrl}/api/scene-lists/${sceneListId}/pdf-fill`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text: got.text, apply: false, replaceWritten: false }),
+      })
+      const { data, problem } = await readServerAnswer(response)
+      if (!response.ok || !data) throw new Error(data?.error || problem || 'Something went wrong. Please try again.')
+      setPlan(data); setPhase('plan')
+    } catch (e) {
+      setError(e.message); setPhase('idle')
+    }
+  }
+
+  async function refreshPlan(replace) {
+    setReplaceWritten(replace)
+    try { setPlan(await post(false, replace)) } catch (e) { setError(e.message) }
+  }
+
+  async function apply() {
+    setPhase('applying'); setStartedAt(Date.now()); setSeconds(0); setProgress('Putting the written scenes into this project…'); setError('')
+    try {
+      const data = await post(true, replaceWritten)
+      setResult(data); setPhase('done')
+      onDone?.()
+    } catch (e) {
+      setError(`${e.message} Nothing was changed.`); setPhase('plan')
+    }
+  }
+
+  const reset = () => { setPhase('idle'); setRead(null); setPlan(null); setResult(null); setError('') }
+  const busy = phase === 'reading' || phase === 'planning' || phase === 'applying'
+  const labelOf = { fill: '✓ will be filled in', skip_written: '⏭ already written — left as it is', not_sure: '❓ not sure which scene — left alone', pdf_one_liner: '✎ only a one-line summary in the PDF' }
+  return (
+    <div className="pdf-fill-panel">
+      <input ref={inputRef} type="file" accept="application/pdf,.pdf" onChange={handleFile} style={{ display: 'none' }} />
+      {phase === 'idle' && (
+        <button type="button" className="cancel-button" onClick={() => inputRef.current?.click()}>📄 Re-read a PDF into this project (fill in written scenes)</button>
+      )}
+      {busy && <p className="floating-agent-stage-line"><span className="floating-agent-spinner" aria-hidden="true" /><span>{progress} <b>{Math.floor(seconds / 60)}m {String(seconds % 60).padStart(2, '0')}s</b> — you can wait here.</span></p>}
+      {error && <p className="feedback-note">{error}</p>}
+      {read?.analysis && (phase === 'plan' || phase === 'done') && <div className="pdf-findings"><strong>🔎 What I found in your PDF</strong>{(read.report ?? []).slice(0, 2).map((line, i) => <p key={i}>{line}</p>)}</div>}
+      {phase === 'plan' && plan && (
+        <div className="pdf-findings">
+          <strong>Where each scene of the PDF would go</strong>
+          <p>
+            {plan.counts.fill} to fill in{plan.counts.replace ? ` (${plan.counts.replace} replacing an already written scene)` : ''} · {plan.counts.skipWritten} already written (left) · {plan.counts.notSure} not sure (left alone) · {plan.counts.pdfOneLiner} only a one-liner in the PDF.
+            The scene list itself is not changed.
+          </p>
+          {plan.warnings.map((w, i) => <p key={i} className="pdf-findings-warn">⚠ {w}</p>)}
+          <ol className="pdf-findings-scenes">
+            {plan.items.map((it, i) => (
+              <li key={i} className={`is-${it.action === 'fill' ? 'written' : it.action}`}>
+                {plan.items.some((x) => x.pdfEpisode !== plan.items[0].pdfEpisode) ? `Ep ${it.pdfEpisode} · ` : ''}PDF scene {it.pdfNumber} — {it.pdfHeading}
+                <small> {labelOf[it.action]}{it.projectHeading ? ` → project scene ${it.sceneIndex + 1}: ${it.projectHeading}` : ''}{it.action === 'fill' && it.pdfDialogue ? ` · ${it.pdfDialogue} dialogue lines` : ''}</small>
+              </li>
+            ))}
+          </ol>
+          {plan.counts.skipWritten > 0 || replaceWritten ? (
+            <label className="synopsis-switch">
+              <input type="checkbox" checked={replaceWritten} onChange={(e) => refreshPlan(e.target.checked)} />
+              <span>Also replace the scenes that are already written (the old version stays — ↶ Undo on the scene brings it back)</span>
+            </label>
+          ) : null}
+          <div className="script-scene-form-actions">
+            <button type="button" className="choose-button pdf-findings-import" onClick={apply} disabled={plan.counts.fill === 0}>
+              {plan.counts.fill === 0 ? 'Nothing to fill in' : `✓ Put ${plan.counts.fill} scene${plan.counts.fill === 1 ? '' : 's'} into this project`}
+            </button>
+            <button type="button" className="cancel-button" onClick={reset}>Cancel</button>
+          </div>
+        </div>
+      )}
+      {phase === 'done' && result && (
+        <div className="pdf-findings">
+          <p><strong>✓ Done.</strong> {result.filled} scene{result.filled === 1 ? '' : 's'} filled in, written exactly as in the PDF. Each one is a new version of the scene — ↶ Undo on a scene brings the old one back.</p>
+          <button type="button" className="cancel-button" onClick={reset}>OK</button>
+        </div>
+      )}
     </div>
   )
 }

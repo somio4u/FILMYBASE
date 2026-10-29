@@ -39,7 +39,9 @@ import { registerDesignTaskRoutes } from "./designTasks.js";
 import { registerSubmissionRoutes, designerGatekeeper, DESIGNER_ROLE } from "./designSubmissions.js";
 import { sessionTokenOf } from "./sessionToken.js";
 import { analyzeImportedText, reportLines } from "./importAnalysis.js";
-import { parseEpisodesFromText } from "./screenplayImport.js";
+import { languageOf, parseEpisodesFromText, sceneContent } from "./screenplayImport.js";
+import { planFill } from "./pdfFill.js";
+import { sceneState } from "./importAnalysis.js";
 import { buildScreenplayProject, saveScreenplayProject } from "./screenplayProject.js";
 import { buddySystemPrompt, sceneContextText, historyToContents, extractProposal } from "./writingBuddy.js";
 import { createSkipStartJobs, publicView as publicSkipJob } from "./skipStartJobs.js";
@@ -8055,6 +8057,63 @@ app.post("/api/import-pdf-screenplay", requireRole("admin"), async (req, res) =>
     res.json({ ...publicSkipJob(job), alreadyRunning });
   } catch (error) {
     console.error("Starting the PDF screenplay import failed:", error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// "Re-read a PDF into THIS project" (pdfFill.js): the PDF's written scenes are matched to the project's own scenes and only the written text is
+// filled in; the scene list is never changed. First call (apply false) only shows the plan; apply true writes each filled scene as a NEW version of
+// that scene (so ↶ Undo on the scene brings the old one back). A scene that is already written is skipped unless replaceWritten is true.
+app.post("/api/scene-lists/:id/pdf-fill", requireRole("admin"), async (req, res) => {
+  const sceneListId = Number(req.params.id);
+  const text = String(req.body?.text ?? "");
+  const apply = req.body?.apply === true;
+  const replaceWritten = req.body?.replaceWritten === true;
+  if (!Number.isInteger(sceneListId) || !text.trim()) { res.status(400).json({ error: "There is no PDF text to place. Read the PDF again." }); return; }
+  try {
+    const list = (await db.query("SELECT content, status FROM scene_lists WHERE id = $1", [sceneListId])).rows[0];
+    if (!list) { res.status(404).json({ error: "Project not found." }); return; }
+    if (list.status !== "approved") { res.status(400).json({ error: "The scene list must be approved before screenplay text can be placed." }); return; }
+    const running = await db.query("SELECT 1 FROM auto_pipeline_runs WHERE scene_list_id = $1 AND status = 'running' LIMIT 1", [sceneListId]);
+    if (running.rows.length > 0) { res.status(409).json({ error: "The AI is still writing this script. Try again once it has finished." }); return; }
+    const parsed = parseEpisodesFromText(text);
+    if (!parsed.episodes.some((e) => e.scenes.length > 0)) { res.status(422).json({ error: "I could not find any scenes in this PDF text (each scene needs a heading like “INT. PLACE - NIGHT”). Nothing was changed." }); return; }
+
+    const series = Array.isArray(list.content?.episodeScenes);
+    const projectEpisodes = series
+      ? list.content.episodeScenes.map((e, i) => ({ episodeIndex: i, scenes: e.scenes ?? [] }))
+      : [{ episodeIndex: null, scenes: list.content?.scenes ?? [] }];
+    const rows = (await db.query(
+      `SELECT DISTINCT ON (episode_index, scene_index) episode_index, scene_index, content FROM screenplay_scenes
+       WHERE scene_list_id = $1 ORDER BY episode_index, scene_index, created_at DESC, id DESC`, [sceneListId])).rows;
+    const previousOf = new Map(rows.map((r) => [`${r.episode_index}:${r.scene_index}`, r.content]));
+    const writtenKeys = new Set(rows.filter((r) => sceneState({ elements: r.content?.elements ?? [] }).state === "written").map((r) => `${r.episode_index}:${r.scene_index}`));
+    const plan = planFill({ projectEpisodes, pdfEpisodes: parsed.episodes, writtenKeys, replaceWritten });
+    const view = plan.items.map(({ pdf, ...item }) => ({ ...item, pdfLines: pdf.elements.length, pdfDialogue: pdf.elements.filter((e) => e.type === "dialogue").length }));
+
+    if (!apply) { res.json({ applied: false, counts: plan.counts, items: view, warnings: [...plan.warnings, ...parsed.warnings.filter((w) => !/has no content/.test(w))] }); return; }
+
+    const client = await db.connect();
+    let filled = 0;
+    try {
+      await client.query("BEGIN");
+      for (const item of plan.items.filter((i) => i.action === "fill")) {
+        const previous = previousOf.get(`${item.episodeIndex}:${item.sceneIndex}`) ?? {};
+        const language = languageOf(item.pdf.elements.map((e) => e.text).join("\n"));
+        const content = { ...previous, ...sceneContent(item.pdf, language) };
+        await client.query("INSERT INTO screenplay_scenes (scene_list_id, episode_index, scene_index, content) VALUES ($1, $2, $3, $4)", [sceneListId, item.episodeIndex, item.sceneIndex, JSON.stringify(content)]);
+        filled += 1;
+      }
+      await client.query("COMMIT");
+    } catch (error) {
+      await client.query("ROLLBACK").catch(() => {});
+      throw error;
+    } finally {
+      client.release();
+    }
+    res.json({ applied: true, filled, counts: plan.counts, items: view, warnings: plan.warnings });
+  } catch (error) {
+    console.error("Placing the PDF into the project failed:", error.message);
     res.status(500).json({ error: error.message });
   }
 });

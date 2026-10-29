@@ -30,6 +30,10 @@ test("the two writer roles, and what each may open — never anyone else's proje
 test("the routes that start a new project are matched as such; the automatic AI run and importing are not writer routes", () => {
   for (const path of ["/api/generate-storylines", "/api/skip-to-synopsis", "/api/skip-to-bitsheet", "/api/skip-to-scenelist"]) assert.equal(matchWriterRoute("POST", path)?.kind, "newProject", path);
   assert.equal(matchWriterRoute("GET", "/api/generate-storylines"), null);
+  // following the "Let's go" job: reading only, its own jobs (the route checks whose it is)
+  assert.ok(matchWriterRoute("GET", "/api/skip-jobs/current"));
+  assert.ok(matchWriterRoute("GET", "/api/skip-jobs/9e4a6f9a-c1a4-4639-9210-54fe3aebcb39"));
+  assert.equal(matchWriterRoute("POST", "/api/skip-jobs/current"), null);
   assert.equal(matchWriterRoute("POST", "/api/auto-pipeline/start"), null);
   assert.equal(matchWriterRoute("POST", "/api/concepts/import"), null);
   assert.equal(matchWriterRoute("DELETE", "/api/concepts/12"), null);

@@ -38,6 +38,7 @@ import { setupProductionMedia } from "./productionMedia.js";
 import { registerDesignTaskRoutes } from "./designTasks.js";
 import { registerSubmissionRoutes, designerGatekeeper, DESIGNER_ROLE } from "./designSubmissions.js";
 import { sessionTokenOf } from "./sessionToken.js";
+import { createSkipStartJobs, publicView as publicSkipJob } from "./skipStartJobs.js";
 import { WRITER_ROLE, INDEPENDENT_WRITER_ROLE, isWriterRole, userHasConcept, writerGatekeeper, ensureWriterSchema, registerWriterRoutes } from "./writerAccess.js";
 import { usageContext, installGeminiMetering, ensureUsageSchema, registerUsageRoutes, setSceneListResolver } from "./usageLedger.js";
 import { ensureApprovalFormatSchema, registerApprovalFormatRoutes } from "./approvalFormat.js";
@@ -7733,39 +7734,15 @@ const skipSeriesModels = {
 };
 
 // One handler for the three series start-from routes. Returns true when it handled the request (a series or vertical format).
-async function handleSkipSeries(stage, req, res) {
-  const raw = req.body?.format;
-  if (raw?.type !== "series" && raw?.type !== "vertical") return false;
-  try {
-    const built = await buildSeriesSkip({ stage, text: req.body.pastedText, format: raw, models: skipSeriesModels });
-    const conceptId = await saveSeriesSkip(db, built, { setTitle: setConceptTitleIfMissing, ownerUserId: newProjectOwner(req) });
-    res.json({ conceptId, note: [built.note, built.cleanup !== "Your paste needed no cleaning." ? built.cleanup : null].filter(Boolean).join(" "), episodes: built.parts.length, damaged: built.damaged });
-  } catch (error) {
-    console.error("Series start-from failed:", error.message);
-    res.status(error.status ?? 502).json({ error: error.message });
-  }
-  return true;
-}
 
-app.post("/api/skip-to-synopsis", requireRole("admin"), async (req, res) => {
-  if (await handleSkipSeries("synopsis", req, res)) return;
-  const { pastedText, runtimeMinutes } = req.body;
-  const minutes = Number(runtimeMinutes) > 0 ? Number(runtimeMinutes) : 90;
-
-  if (!pastedText || !pastedText.trim()) {
-    res.status(400).json({ error: "Paste some synopsis text first." });
-    return;
-  }
-
-  try {
-    const result = await generateSkipToSynopsis(pastedText, minutes);
-
+// Synopsis: saves what the AI made from the pasted text as a new project (called by the background job)
+async function saveSkipToSynopsis(result, minutes, ownerUserId) {
     const conceptResult = await db.query(
       "INSERT INTO concepts (concept_text, storylines, owner_user_id) VALUES ($1, $2, $3) RETURNING id",
       [
         result.concept,
         JSON.stringify([{ title: result.storylineTitle, logline: result.storylineLogline, summary: result.storylineSummary }]),
-        newProjectOwner(req),
+        ownerUserId,
       ]
     );
     const conceptId = conceptResult.rows[0].id;
@@ -7785,13 +7762,8 @@ app.post("/api/skip-to-synopsis", requireRole("admin"), async (req, res) => {
       JSON.stringify(pitchDeckContent),
     ]);
     await setConceptTitleIfMissing(conceptId, pitchDeckContent.title);
-
-    res.json({ conceptId });
-  } catch (error) {
-    console.error("Gemini API call failed:", error.message);
-    res.status(502).json({ error: error.message });
-  }
-});
+  return conceptId;
+}
 
 async function generateSkipToBitSheet(pastedText, runtimeMinutes) {
   const response = await ai.models.generateContent({
@@ -7842,25 +7814,14 @@ async function generateSkipToBitSheet(pastedText, runtimeMinutes) {
   return sanitizeBilingualContent(JSON.parse(response.text));
 }
 
-app.post("/api/skip-to-bitsheet", requireRole("admin"), async (req, res) => {
-  if (await handleSkipSeries("bitsheet", req, res)) return;
-  const { pastedText, runtimeMinutes } = req.body;
-  const minutes = Number(runtimeMinutes) > 0 ? Number(runtimeMinutes) : 90;
-
-  if (!pastedText || !pastedText.trim()) {
-    res.status(400).json({ error: "Paste some Bit Sheet text first." });
-    return;
-  }
-
-  try {
-    const result = await generateSkipToBitSheet(pastedText, minutes);
-
+// BitSheet: saves what the AI made from the pasted text as a new project (called by the background job)
+async function saveSkipToBitSheet(result, minutes, ownerUserId) {
     const conceptResult = await db.query(
       "INSERT INTO concepts (concept_text, storylines, owner_user_id) VALUES ($1, $2, $3) RETURNING id",
       [
         result.concept,
         JSON.stringify([{ title: result.storylineTitle, logline: result.storylineLogline, summary: result.storylineSummary }]),
-        newProjectOwner(req),
+        ownerUserId,
       ]
     );
     const conceptId = conceptResult.rows[0].id;
@@ -7904,13 +7865,8 @@ app.post("/api/skip-to-bitsheet", requireRole("admin"), async (req, res) => {
       threeActStructureId,
       JSON.stringify(bitSheetContent),
     ]);
-
-    res.json({ conceptId });
-  } catch (error) {
-    console.error("Gemini API call failed:", error.message);
-    res.status(502).json({ error: error.message });
-  }
-});
+  return conceptId;
+}
 
 async function generateSkipToSceneList(pastedText, runtimeMinutes) {
   const response = await ai.models.generateContent({
@@ -7963,25 +7919,14 @@ async function generateSkipToSceneList(pastedText, runtimeMinutes) {
   return sanitizeBilingualContent(JSON.parse(response.text));
 }
 
-app.post("/api/skip-to-scenelist", requireRole("admin"), async (req, res) => {
-  if (await handleSkipSeries("scenelist", req, res)) return;
-  const { pastedText, runtimeMinutes } = req.body;
-  const minutes = Number(runtimeMinutes) > 0 ? Number(runtimeMinutes) : 90;
-
-  if (!pastedText || !pastedText.trim()) {
-    res.status(400).json({ error: "Paste some scene one-liner text first." });
-    return;
-  }
-
-  try {
-    const result = await generateSkipToSceneList(pastedText, minutes);
-
+// SceneList: saves what the AI made from the pasted text as a new project (called by the background job)
+async function saveSkipToSceneList(result, minutes, ownerUserId) {
     const conceptResult = await db.query(
       "INSERT INTO concepts (concept_text, storylines, owner_user_id) VALUES ($1, $2, $3) RETURNING id",
       [
         result.concept,
         JSON.stringify([{ title: result.storylineTitle, logline: result.storylineLogline, summary: result.storylineSummary }]),
-        newProjectOwner(req),
+        ownerUserId,
       ]
     );
     const conceptId = conceptResult.rows[0].id;
@@ -8036,12 +7981,63 @@ app.post("/api/skip-to-scenelist", requireRole("admin"), async (req, res) => {
       bitSheetId,
       JSON.stringify(sceneListContent),
     ]);
+  return conceptId;
+}
 
-    res.json({ conceptId });
-  } catch (error) {
-    console.error("Gemini API call failed:", error.message);
-    res.status(502).json({ error: error.message });
+// ---- "Let's go" when starting FROM a synopsis / bit sheet / scene one-liners: a background job (see skipStartJobs.js) ----
+const SKIP_START = {
+  synopsis: { empty: "Paste some synopsis text first.", generate: generateSkipToSynopsis, save: saveSkipToSynopsis },
+  bitsheet: { empty: "Paste some Bit Sheet text first.", generate: generateSkipToBitSheet, save: saveSkipToBitSheet },
+  scenelist: { empty: "Paste some scene one-liner text first.", generate: generateSkipToSceneList, save: saveSkipToSceneList },
+};
+
+// the work itself: read the pasted text with AI, then save the project. `tools.progress(label)` tells the screen what is happening now.
+async function runSkipStart(stage, input, tools) {
+  const { body, ownerUserId } = input;
+  const raw = body.format;
+  if (raw?.type === "series" || raw?.type === "vertical") {
+    tools.progress("Reading your pasted episodes with AI — each batch of episodes takes a minute or two…");
+    const built = await buildSeriesSkip({ stage, text: body.pastedText, format: raw, models: skipSeriesModels, onProgress: (label) => tools.progress(`Reading with AI — ${label}`) });
+    tools.markSaving();
+    tools.progress("Saving your project…");
+    const conceptId = await saveSeriesSkip(db, built, { setTitle: setConceptTitleIfMissing, ownerUserId });
+    return { conceptId, note: [built.note, built.cleanup !== "Your paste needed no cleaning." ? built.cleanup : null].filter(Boolean).join(" "), episodes: built.parts.length, damaged: built.damaged };
   }
+  const spec = SKIP_START[stage];
+  const minutes = Number(body.runtimeMinutes) > 0 ? Number(body.runtimeMinutes) : 90;
+  tools.progress("Reading your pasted text with AI — this usually takes one to three minutes…");
+  const result = await spec.generate(body.pastedText, minutes);
+  tools.markSaving();
+  tools.progress("Saving your project…");
+  return { conceptId: await spec.save(result, minutes, ownerUserId) };
+}
+const skipStartJobs = createSkipStartJobs({ jobStore, run: runSkipStart });
+
+for (const stage of Object.keys(SKIP_START)) {
+  app.post(`/api/skip-to-${stage}`, requireRole("admin"), async (req, res) => {
+    const { pastedText, runtimeMinutes, format } = req.body ?? {};
+    if (!pastedText || !String(pastedText).trim()) {
+      res.status(400).json({ error: SKIP_START[stage].empty });
+      return;
+    }
+    try {
+      const { job, alreadyRunning } = await skipStartJobs.start({ userId: req.user.id, stage, input: { body: { pastedText, runtimeMinutes, format }, ownerUserId: newProjectOwner(req) } });
+      res.json({ ...publicSkipJob(job), alreadyRunning });
+    } catch (error) {
+      console.error("Starting the start-from job failed:", error.message);
+      res.status(500).json({ error: error.message });
+    }
+  });
+}
+
+// the job of the person asking (never somebody else's): the newest one — a reloaded screen asks for it — or one by id
+app.get("/api/skip-jobs/current", requireRole("admin"), async (req, res) => {
+  res.json(publicSkipJob(await skipStartJobs.currentFor(req.user.id)) ?? { jobId: null });
+});
+app.get("/api/skip-jobs/:id", requireRole("admin"), async (req, res) => {
+  const job = await skipStartJobs.get(req.params.id);
+  if (!job || job.userId !== req.user.id) { res.status(404).json({ error: "This job was not found." }); return; }
+  res.json(publicSkipJob(job));
 });
 
 // --- Production Management, entirely on its own: import an already-written
@@ -20752,7 +20748,7 @@ ensureAiMovieSchema()
   .then(async () => { try { await aiCredentials.load(); aiCredentials.startRefresh(); const c = aiCredentials.current(); console.log(`AI connection: ${c.source}${c.serviceAccount ? ` — project ${c.serviceAccount.project_id}, ${c.location}` : ""}${c.problem ? ` — PROBLEM: ${c.problem}` : ""}`); } catch (error) { console.error("Reading the saved AI key failed:", error.message); } })
   .then(async () => { try { const fixed = await repairStoredLabels(db); if (fixed) console.log(`Screenplay: ${fixed} scene(s) had "ACTION:" written at the start of lines — corrected.`); } catch (error) { console.error("Label repair failed:", error.message); } })
   .then(async () => { try { const fixed = await repairStoredTransitions(db); if (fixed) console.log(`Screenplay: ${fixed} scene(s) had a transition (FREEZE. BREAK- …) written as a character — corrected.`); } catch (error) { console.error("Transition repair failed:", error.message); } })
-  .then(async () => { try { await productionSync.resume(); await resumeAdSheetJobs(); } catch (error) { console.error("Resuming interrupted background jobs failed:", error.message); } })
+  .then(async () => { try { await productionSync.resume(); await resumeAdSheetJobs(); await skipStartJobs.resume(); } catch (error) { console.error("Resuming interrupted background jobs failed:", error.message); } })
   .then(() => ensureAllProductionSchemas(db))
   .then(async (failures) => { try { const made = await backfillDrafts(db); await failInterruptedRequests(db); if (made) console.log(`Draft Management: ${made} existing project(s) are now Draft 1 of their project.`); } catch (error) { console.error("Draft backfill failed:", error.message); } return failures; })
   .catch((error) => console.error("Schema setup failed:", error.message))

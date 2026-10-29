@@ -7,6 +7,7 @@ import NamesPlaces from './NamesPlaces.jsx'
 import { useState, useEffect, useRef, useMemo, useCallback, useContext, createContext, Fragment, lazy, Suspense } from 'react'
 import { createPortal } from 'react-dom'
 import ScriptEditor, { ScriptToolbar } from './ScriptEditor.jsx'
+import StartProgress from './StartProgress.jsx'
 import { cleanForSave, collectCharacterNames } from './scriptDoc.js'
 import { splitSceneContexts } from './sceneContexts.js'
 import './App.css'
@@ -8417,6 +8418,8 @@ function App() {
   const [skipPastedText, setSkipPastedText] = useState('')
   const [skipRuntimeMinutes, setSkipRuntimeMinutes] = useState(120)
   const [isSkippingAhead, setIsSkippingAhead] = useState(false)
+  const [skipJobId, setSkipJobId] = useState(null) // the background job that makes the project (Let's go)
+  const [skipRunning, setSkipRunning] = useState(false)
   const [storylines, setStorylines] = useState(null)
   const [isLoading, setIsLoading] = useState(false)
   const [pitchDeck, setPitchDeck] = useState(null)
@@ -10955,6 +10958,14 @@ function App() {
     }
   }
 
+  // the project made by "Let's go" is ready: land in it
+  async function finishSkipStart(result) {
+    setSkipPastedText('')
+    setStartStage('idea')
+    if (result?.conceptId) await loadProject(result.conceptId)
+    loadProjectList()
+  }
+
   async function handleSkipAheadSubmit() {
     if (!skipPastedText.trim()) return
 
@@ -10992,10 +11003,14 @@ function App() {
         return
       }
 
-      setSkipPastedText('')
-      setStartStage('idea')
-      await loadProject(data.conceptId)
-      loadProjectList()
+      // the server now makes the project in the background and answers with a job to follow (an older server answered with the project itself)
+      if (data.jobId) {
+        setSkipRunning(true)
+        setSkipJobId(data.jobId)
+        setIsSkippingAhead(false)
+        return
+      }
+      await finishSkipStart(data)
     } catch (error) {
       setErrorMessage(`${t.genericError} (${String(error?.message ?? error).slice(0, 120)})`)
     }
@@ -15220,6 +15235,7 @@ function App() {
       <main className="chat-viewport">
     <div className={`concept-page${activeAgent === 'story' ? ' movie-editor' : ''}`} id="stage-idea">
       {errorMessage && <div className="error-banner">{errorMessage}</div>}
+      {currentUser && activeAgent === 'story' && <StartProgress backendUrl={BACKEND_URL} jobId={skipJobId} onDone={finishSkipStart} onRunningChange={setSkipRunning} />}
       {toastMessage && <div className="success-banner">{toastMessage}</div>}
 
       {activeAgent === 'masterList' && (
@@ -15520,9 +15536,9 @@ function App() {
                 <button
                   className="choose-button"
                   onClick={handleSkipAheadSubmit}
-                  disabled={isSkippingAhead || !skipPastedText.trim()}
+                  disabled={isSkippingAhead || skipRunning || !skipPastedText.trim()}
                 >
-                  {isSkippingAhead ? t.skipContinueButtonLoading : t.skipContinueButton}
+                  {isSkippingAhead || skipRunning ? t.skipContinueButtonLoading : t.skipContinueButton}
                 </button>
               </div>
               <p className="skip-ahead-quota-note">{t.skipQuotaNote}</p>

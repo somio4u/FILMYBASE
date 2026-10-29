@@ -39,6 +39,8 @@ import { registerDesignTaskRoutes } from "./designTasks.js";
 import { registerSubmissionRoutes, designerGatekeeper, DESIGNER_ROLE } from "./designSubmissions.js";
 import { sessionTokenOf } from "./sessionToken.js";
 import { analyzeImportedText, reportLines } from "./importAnalysis.js";
+import { parseEpisodesFromText } from "./screenplayImport.js";
+import { buildScreenplayProject, saveScreenplayProject } from "./screenplayProject.js";
 import { buddySystemPrompt, sceneContextText, historyToContents, extractProposal } from "./writingBuddy.js";
 import { createSkipStartJobs, publicView as publicSkipJob } from "./skipStartJobs.js";
 import { WRITER_ROLE, INDEPENDENT_WRITER_ROLE, isWriterRole, userHasConcept, writerGatekeeper, ensureWriterSchema, registerWriterRoutes } from "./writerAccess.js";
@@ -7996,6 +7998,16 @@ const SKIP_START = {
 // the work itself: read the pasted text with AI, then save the project. `tools.progress(label)` tells the screen what is happening now.
 async function runSkipStart(stage, input, tools) {
   const { body, ownerUserId } = input;
+  if (stage === "screenplay") {
+    // a PDF that is already a written screenplay: no AI — every scene is kept as written (screenplayProject.js)
+    tools.progress("Reading the scenes of your screenplay…");
+    const parsed = parseEpisodesFromText(body.pastedText);
+    const built = buildScreenplayProject(parsed, { title: body.title, format: body.format });
+    tools.markSaving();
+    tools.progress(`Saving your project — ${built.summary.scenes} scenes (${built.summary.written} written out)…`);
+    const conceptId = await saveScreenplayProject(db, built, { setTitle: setConceptTitleIfMissing, ownerUserId });
+    return { conceptId, note: `Your screenplay is in: ${built.summary.scenes} scenes${built.summary.episodes > 1 ? ` in ${built.summary.episodes} episodes` : ""}. ${built.summary.written} scene${built.summary.written === 1 ? " is" : "s are"} written out exactly as in your file${built.summary.notWritten ? `; ${built.summary.notWritten} ${built.summary.notWritten === 1 ? "has" : "have"} only a one-line summary and show${built.summary.notWritten === 1 ? "s" : ""} as “not written yet”` : ""}.`, episodes: built.summary.episodes, damaged: false };
+  }
   const raw = body.format;
   if (raw?.type === "series" || raw?.type === "vertical") {
     tools.progress("Reading your pasted episodes with AI — each batch of episodes takes a minute or two…");
@@ -8031,6 +8043,21 @@ for (const stage of Object.keys(SKIP_START)) {
     }
   });
 }
+
+// "Make my project from this PDF screenplay": the text of a PDF that was found to be a written screenplay (see importAnalysis.js)
+app.post("/api/import-pdf-screenplay", requireRole("admin"), async (req, res) => {
+  const { pastedText, title, format } = req.body ?? {};
+  if (!pastedText || !String(pastedText).trim()) { res.status(400).json({ error: "There is no screenplay text to import. Upload the PDF again." }); return; }
+  const parsed = parseEpisodesFromText(String(pastedText));
+  if (!parsed.episodes.some((e) => e.scenes.length > 0)) { res.status(422).json({ error: "I could not find any scenes in this text (each scene needs a heading like “INT. PLACE - NIGHT”). Nothing was made." }); return; }
+  try {
+    const { job, alreadyRunning } = await skipStartJobs.start({ userId: req.user.id, stage: "screenplay", input: { body: { pastedText: String(pastedText), title: String(title ?? "").slice(0, 200), format }, ownerUserId: newProjectOwner(req) } });
+    res.json({ ...publicSkipJob(job), alreadyRunning });
+  } catch (error) {
+    console.error("Starting the PDF screenplay import failed:", error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
 
 // the job of the person asking (never somebody else's): the newest one — a reloaded screen asks for it — or one by id
 app.get("/api/skip-jobs/current", requireRole("admin"), async (req, res) => {

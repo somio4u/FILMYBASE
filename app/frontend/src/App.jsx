@@ -7254,7 +7254,7 @@ function looksGarbled(text) {
   return boxes > 3 || latin1 > 10 || strayMarks > 15
 }
 
-function PdfUploadButton({ backendUrl, text, onText }) {
+function PdfUploadButton({ backendUrl, text, onText, onImportScreenplay }) {
   const inputRef = useRef(null)
   const [busy, setBusy] = useState(false)
   const [progress, setProgress] = useState('')
@@ -7305,15 +7305,16 @@ function PdfUploadButton({ backendUrl, text, onText }) {
           {note.warnings?.length > 0 && <> <strong>Check:</strong> {note.warnings.join(' ')}</>}
         </p>
       )}
-      {note?.analysis && !busy && <PdfFindings analysis={note.analysis} report={note.report ?? []} />}
+      {note?.analysis && !busy && <PdfFindings analysis={note.analysis} report={note.report ?? []} onImport={onImportScreenplay ? () => onImportScreenplay({ text: note.text, title: note.title }) : null} />}
     </div>
   )
 }
 
 // "What I found in your PDF": the result of looking at the PDF before anything is made from it — which stage it is at, how many scenes are
 // really written (with their dialogue) and which have only a one-line summary. Nothing is changed by this card.
-function PdfFindings({ analysis, report }) {
+function PdfFindings({ analysis, report, onImport }) {
   const [open, setOpen] = useState(false)
+  const [starting, setStarting] = useState(false)
   const scenes = analysis.scenes ?? []
   const written = analysis.totals?.written ?? 0
   const losesWords = analysis.stage === 'screenplay'
@@ -7323,8 +7324,16 @@ function PdfFindings({ analysis, report }) {
       {report.map((line, i) => <p key={i}>{line}</p>)}
       {losesWords && (
         <p className="pdf-findings-warn">
-          ⚠ This PDF already has written scenes ({written}). If you start from “Scene One-Liners”, “Bit Sheet” or “Synopsis” below, only the short summaries are kept and the dialogue is NOT carried over. Do not press Let's go yet — the next update will put these written scenes into your project exactly as they are.
+          {onImport
+            ? `⚠ Do not use “Let's go” below for this PDF: it would keep only short summaries and the dialogue of the ${written} written scene${written === 1 ? '' : 's'} would be lost. Press the green button instead — it puts every scene into your project exactly as it is written.`
+            : `⚠ This PDF already has written scenes (${written}). Starting from “Scene One-Liners”, “Bit Sheet” or “Synopsis” keeps only short summaries — the dialogue would NOT be carried over.`}
         </p>
+      )}
+      {losesWords && onImport && (
+        <button type="button" className="choose-button pdf-findings-import" disabled={starting}
+          onClick={async () => { setStarting(true); try { await onImport() } finally { setStarting(false) } }}>
+          {starting ? 'Starting…' : `✓ Make my project from this screenplay (${analysis.totals.scenes} scenes, nothing skipped)`}
+        </button>
       )}
       {scenes.length > 0 && (
         <>
@@ -11022,6 +11031,25 @@ function App() {
     setStartStage('idea')
     if (result?.conceptId) await loadProject(result.conceptId)
     loadProjectList()
+  }
+
+  // a PDF that is already a written screenplay: the server makes the project from it, every scene as written (a background job, followed by the progress card)
+  async function importPdfScreenplay({ text, title }) {
+    setErrorMessage(null)
+    let response
+    try {
+      response = await fetch(`${BACKEND_URL}/api/import-pdf-screenplay`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pastedText: text, title, format: buildFormatObject() }),
+      })
+    } catch {
+      setErrorMessage(t.longRequestConnectionLost)
+      loadProjectList()
+      return
+    }
+    const { data, problem } = await readServerAnswer(response)
+    if (!response.ok || !data) { setErrorMessage(data?.error || problem || t.genericError); return }
+    if (data.jobId) { setSkipRunning(true); setSkipJobId(data.jobId); window.scrollTo({ top: 0, behavior: 'smooth' }) }
   }
 
   async function handleSkipAheadSubmit() {
@@ -15588,7 +15616,7 @@ function App() {
                   onResult={(text) => setSkipPastedText((prev) => (prev.trim() ? `${prev.trim()} ${text}` : text))}
                 />
               </div>
-              <PdfUploadButton backendUrl={BACKEND_URL} text={skipPastedText} onText={setSkipPastedText} />
+              <PdfUploadButton backendUrl={BACKEND_URL} text={skipPastedText} onText={setSkipPastedText} onImportScreenplay={importPdfScreenplay} />
               <div className="skip-ahead-controls">
                 {formatType !== 'film' && <span className="skip-ahead-runtime-label">Paste all episodes in this one box. Start each one with a heading like “Episode 1”, “Episode 2”…</span>}
                 <button

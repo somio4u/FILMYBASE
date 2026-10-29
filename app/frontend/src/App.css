@@ -8019,3 +8019,6 @@ body.is-script-edit-mode { overflow: hidden; }
 .pdf-findings-scenes small { opacity: 0.8; }
 .pdf-findings .cancel-button { color: #14284d; background: #fff; border: 1px solid #9bb8e8; }
 .pdf-findings.is-warning .cancel-button { color: #4a3500; border-color: #e0b04a; }
+
+.pdf-findings-import { margin: 6px 0 10px; background: #1f7a3d; border-color: #1f7a3d; color: #fff; font-weight: 600; }
+.pdf-findings-import:disabled { opacity: 0.6; }

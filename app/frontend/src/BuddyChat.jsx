@@ -12,6 +12,7 @@ const TEXT = {
     placeholder: 'Type here, or press the mic and speak…',
     send: 'Send', thinking: 'Buddy is thinking', newChat: 'New chat', closeLabel: 'Close',
     confirmNew: 'Start a new conversation? The Buddy will forget this one.', autoSend: 'Send when I stop speaking',
+    listen: 'Listen', stopListen: 'Stop', readAloud: 'Read replies aloud', noVoice: 'This device has no Odia voice, so it cannot read Odia aloud. (Phones with Google text-to-speech and the Odia language pack installed usually can.) You can still read the replies.', speakFail: 'Could not read this aloud.',
     loadFail: 'Could not load the earlier conversation.', failed: 'The Buddy could not answer.', retryNote: 'Your message is back in the box — press Send to try again.',
     notYet: 'I can also change the scene for you: tell me what you want, and I will show it first — nothing changes until you press Apply.',
     proposes: 'Proposed change', older: 'An older suggestion — ask again if you still want it.', apply: '✓ Apply', dismiss: 'No thanks', applying: 'Applying…', applied: 'Applied', dismissed: 'Skipped', otherScene: (n) => `This was for scene ${n}. Open that scene to apply it.`, busyNote: 'Another change is running — wait for it.',
@@ -23,11 +24,22 @@ const TEXT = {
     placeholder: 'ଏଠି ଲେଖ, କିମ୍ବା ମାଇକ୍ ଦବାଇ କୁହ…',
     send: 'ପଠାଅ', thinking: 'ବଡ଼ି ଭାବୁଛି', newChat: 'ନୂଆ ଚାଟ୍', closeLabel: 'ବନ୍ଦ',
     confirmNew: 'ନୂଆ କଥାବାର୍ତ୍ତା ଆରମ୍ଭ କରିବ? ବଡ଼ି ଏହାକୁ ଭୁଲିଯିବ।', autoSend: 'କହିବା ସରିଲେ ନିଜେ ପଠାଅ',
+    listen: 'ଶୁଣ', stopListen: 'ବନ୍ଦ', readAloud: 'ଉତ୍ତର ପଢ଼ି ଶୁଣାଅ', noVoice: 'ଏହି ଡିଭାଇସ୍‌ରେ ଓଡ଼ିଆ ଅଵାଜ୍ ନାହିଁ, ତେଣୁ ଓଡ଼ିଆ ପଢ଼ି ଶୁଣାଇପାରିବ ନାହିଁ। (ଯେଉଁ ଫୋନ୍‌ରେ Google text-to-speech ଓ ଓଡ଼ିଆ ଭାଷା ପ୍ୟାକ୍ ଅଛି ସେଥିରେ ସାଧାରଣତଃ ହୁଏ।) ଉତ୍ତର ତ ପଢ଼ିପାରିବ।', speakFail: 'ଏହାକୁ ପଢ଼ି ଶୁଣାଇ ହେଲା ନାହିଁ।',
     loadFail: 'ଆଗର କଥାବାର୍ତ୍ତା ଆଣିହେଲା ନାହିଁ।', failed: 'ବଡ଼ି ଉତ୍ତର ଦେଇପାରିଲା ନାହିଁ।', retryNote: 'ତୁମ ମେସେଜ୍ ବକ୍ସରେ ଫେରିଆସିଲା — ପୁଣି ପଠାଅ।',
     notYet: 'ମୁଁ ସିନ୍ ବଦଳେଇ ବି ପାରିବି: କୁହ କଣ ଚାହୁଁ, ମୁଁ ପ୍ରଥମେ ଦେଖେଇବି — Apply ଦବେଇଲେ ହିଁ ବଦଳିବ।',
     proposes: 'ପ୍ରସ୍ତାବିତ ବଦଳ', older: 'ପୁରୁଣା ପ୍ରସ୍ତାବ — ଦରକାର ହେଲେ ପୁଣି କୁହ।', apply: '✓ Apply', dismiss: 'ଦରକାର ନାହିଁ', applying: 'ଲାଗୁଛି…', applied: 'ଲାଗିଗଲା', dismissed: 'ଛାଡ଼ିଦେଲା', otherScene: (n) => `ଏହା ସିନ୍ ${n} ପାଇଁ ଥିଲା। ସେହି ସିନ୍ ଖୋଲି Apply କର।`, busyNote: 'ଆଉ ଗୋଟେ ବଦଳ ଚାଲିଛି — ଅପେକ୍ଷା କର।',
     starters: ['ଏହି ସିନ୍ କେତେ ମିନିଟ୍‌ର?', 'ତୁମେ କେଉଁ କାମରେ ସାହାଯ୍ୟ କରିପାରିବ?', 'ଏହି ସିନ୍‌କୁ କେମିତି ଲମ୍ବା କରିବି?'],
   },
+}
+
+// Reading a reply aloud with the device's own voice (the browser's speech synthesis — free, nothing is sent anywhere). Odia voices are rare, so the
+// voices are looked up first; with none, the person is told plainly instead of hearing garbage.
+const speechApi = () => (typeof window !== 'undefined' && 'speechSynthesis' in window && typeof window.SpeechSynthesisUtterance !== 'undefined' ? window.speechSynthesis : null)
+const spokenForm = (text) => String(text ?? '').replace(/\[\[[\s\S]*?\]\]/g, ' ').replace(/[*_`#>]/g, '').replace(/\s+/g, ' ').trim()
+function findOdiaVoice() {
+  const api = speechApi()
+  if (!api) return null
+  return api.getVoices().find((v) => /^or([-_]|$)/i.test(v.lang)) ?? null
 }
 
 export default function BuddyChat({ backendUrl, sceneListId, episodeIndex, sceneIndex, sceneNumber, lang = 'en', onClose, renderMic, onApplyEdit, busy = false }) {
@@ -39,6 +51,11 @@ export default function BuddyChat({ backendUrl, sceneListId, episodeIndex, scene
   const [seconds, setSeconds] = useState(0)
   const [error, setError] = useState('')
   const [autoSend, setAutoSend] = useState(() => { try { return localStorage.getItem('filmybase:buddyAutoSend') !== '0' } catch { return true } })
+  const [readAloud, setReadAloud] = useState(() => { try { return localStorage.getItem('filmybase:buddyReadAloud') === '1' } catch { return false } })
+  const [speakingId, setSpeakingId] = useState(null)
+  const readAloudRef = useRef(readAloud)
+  const speakRef = useRef(null)
+  const [voiceNote, setVoiceNote] = useState('')
   const listRef = useRef(null)
   const alive = useRef(true)
   const base = `${backendUrl}/api/assistant/${sceneListId}`
@@ -79,6 +96,7 @@ export default function BuddyChat({ backendUrl, sceneListId, episodeIndex, scene
       if (!alive.current) return
       if (!response.ok) throw new Error(data.error || `${L.failed} (HTTP ${response.status})`)
       setMessages((m) => [...m.filter((x) => x.id !== temp.id), data.userMessage, data.assistantMessage])
+      if (readAloudRef.current && data.assistantMessage?.content) speakRef.current?.(data.assistantMessage)
     } catch (e) {
       if (!alive.current) return
       setMessages((m) => m.filter((x) => x.id !== temp.id)) // the question got no answer: it goes back into the box
@@ -86,6 +104,31 @@ export default function BuddyChat({ backendUrl, sceneListId, episodeIndex, scene
       setError(`${e.message || L.failed} — ${L.retryNote}`)
     } finally { if (alive.current) setSending(null) }
   }, [base, episodeIndex, sceneIndex, sending, L.failed, L.retryNote])
+
+  const stopSpeaking = useCallback(() => { try { speechApi()?.cancel() } catch { /* nothing is speaking */ } setSpeakingId(null) }, [])
+  const speak = useCallback((message) => {
+    const api = speechApi()
+    if (!api) { setVoiceNote(L.noVoice); return }
+    const voice = findOdiaVoice()
+    if (!voice) { setVoiceNote(L.noVoice); return }
+    setVoiceNote('')
+    api.cancel()
+    const utterance = new window.SpeechSynthesisUtterance(spokenForm(message.content))
+    utterance.voice = voice
+    utterance.lang = voice.lang
+    utterance.onend = () => { if (alive.current) setSpeakingId((id) => (id === message.id ? null : id)) }
+    utterance.onerror = () => { if (alive.current) { setSpeakingId(null); setVoiceNote(L.speakFail) } }
+    setSpeakingId(message.id)
+    api.speak(utterance)
+  }, [L.noVoice, L.speakFail])
+  // voices can arrive a moment after the page loads
+  useEffect(() => {
+    const api = speechApi()
+    if (!api) return undefined
+    const warm = () => api.getVoices()
+    api.addEventListener?.('voiceschanged', warm)
+    return () => { api.removeEventListener?.('voiceschanged', warm); try { api.cancel() } catch { /* nothing */ } }
+  }, [])
 
   // Apply / No thanks on a proposal card. Apply runs the instruction through the voice edit (onApplyEdit), then tells the server it is done
   // and adds the result as a note in the chat.
@@ -113,6 +156,8 @@ export default function BuddyChat({ backendUrl, sceneListId, episodeIndex, scene
 
   // only the newest open proposal can be applied; older ones are superseded
   const lastOpenId = [...messages].reverse().find((x) => x.proposed_action?.type === 'scene_edit' && !x.resolved)?.id
+  readAloudRef.current = readAloud
+  speakRef.current = speak
   const spoken = (words) => { if (autoSend) send(words); else setText((t) => (t.trim() ? `${t.trim()} ${words}` : words)) }
 
   return (
@@ -139,6 +184,11 @@ export default function BuddyChat({ backendUrl, sceneListId, episodeIndex, scene
         {messages.map((m) => (
           <div key={m.id} className={`buddy-msg is-${m.role}${m.local && !m.system ? ' is-local' : ''}${m.system ? ' is-note' : ''}`}>
             <p>{m.content}</p>
+            {m.role === 'assistant' && !m.system && !m.local && m.content && (
+              <button type="button" className="buddy-listen" onClick={() => (speakingId === m.id ? stopSpeaking() : speak(m))}>
+                {speakingId === m.id ? `■ ${L.stopListen}` : `🔊 ${L.listen}`}
+              </button>
+            )}
             {m.proposed_action?.type === 'scene_edit' && (
               <div className="buddy-proposal">
                 <small>{L.proposes}</small>
@@ -163,6 +213,7 @@ export default function BuddyChat({ backendUrl, sceneListId, episodeIndex, scene
         {sending && <div className="buddy-msg is-assistant is-thinking"><p>⏳ {L.thinking}… <b>{seconds}s</b></p></div>}
       </div>
 
+      {voiceNote && <p className="buddy-note buddy-voice-note" role="status">{voiceNote}</p>}
       {error && <p className="buddy-error" role="alert">{error}</p>}
 
       <form className="buddy-input" onSubmit={(e) => { e.preventDefault(); send(text) }}>
@@ -175,6 +226,10 @@ export default function BuddyChat({ backendUrl, sceneListId, episodeIndex, scene
           <label className="buddy-auto">
             <input type="checkbox" checked={autoSend} onChange={(e) => { setAutoSend(e.target.checked); try { localStorage.setItem('filmybase:buddyAutoSend', e.target.checked ? '1' : '0') } catch { /* fine */ } }} />
             {L.autoSend}
+          </label>
+          <label className="buddy-auto">
+            <input type="checkbox" checked={readAloud} onChange={(e) => { setReadAloud(e.target.checked); if (!e.target.checked) stopSpeaking(); try { localStorage.setItem('filmybase:buddyReadAloud', e.target.checked ? '1' : '0') } catch { /* fine */ } }} />
+            {L.readAloud}
           </label>
           {renderMic?.(spoken)}
           <button type="submit" className="buddy-send" disabled={Boolean(sending) || !text.trim()}>{L.send}</button>

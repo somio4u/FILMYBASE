@@ -57,3 +57,7 @@
 .buddy-proposal, .buddy-proposal small, .buddy-proposal blockquote { color: #3b2f05; }
 .buddy-msg.is-note, .buddy-msg.is-note p { color: #12351c; }
 .buddy-apply { color: #fff !important; }
+
+.buddy-listen { margin-top: 6px; min-height: 36px; padding: 0 12px; border-radius: 999px; border: 1px solid rgba(120,140,200,0.5); background: transparent; color: inherit; font: inherit; font-size: 0.85em; cursor: pointer; }
+.buddy-voice-note { margin: 4px 12px; font-size: 0.85em; }
+.buddy-input-row { flex-wrap: wrap; row-gap: 6px; }

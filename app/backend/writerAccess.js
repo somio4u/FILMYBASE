@@ -1,11 +1,21 @@
-// The "Screenplay writer" login (role "screenplay_writer"): a person assigned to ONE project who writes its screenplay and dialogue.
-// He gets the Story & Screenplay tools of that project — the story stages, writing and editing scenes, the voice assistant, change
+// The "Story & Screenplay Writer" login (role "screenplay_writer"): a person who creates his OWN projects (concepts.owner_user_id) and writes their
+// story, screenplay and dialogue — and, if the admin also assigned him a project (users.concept_id), that one too. He never sees anybody else's project.
+// He gets the Story & Screenplay tools of those projects — the story stages, writing and editing scenes, the voice assistant, change
 // language, rename a character, scene list tools, exports of the script — and nothing else: no production, pictures, video, budget,
 // no other project, no team management. Like the "Production only" login, every request must match the list below, and where the
 // route names a project (directly or through a pitch deck, scene list …) it must be the project he is assigned to.
 // The place where he stopped (stage, episode, scene) is saved on the server, so any device opens the page where he left off.
 
 export const WRITER_ROLE = "screenplay_writer";
+
+// May this user work on this project? The admin: any. Anyone else: the project assigned to him, or (a writer) a project he created himself.
+// `user.ownedConceptIds` is filled in with every request of a writer (getCurrentUser in server.js).
+export function userHasConcept(user, conceptId) {
+  if (!user || conceptId == null) return false;
+  if (user.role === "admin") return true;
+  if (user.concept_id != null && String(user.concept_id) === String(conceptId)) return true;
+  return Array.isArray(user.ownedConceptIds) && user.ownedConceptIds.includes(String(conceptId));
+}
 
 // [method regex, path regex, what the path/body names]
 export const WRITER_ROUTES = [
@@ -15,6 +25,8 @@ export const WRITER_ROUTES = [
   ["^(GET)$", /^\/api\/concepts$/, null], // the route lists only his own project
   ["^(GET)$", /^\/api\/concepts\/(\d+)\/full$/, "concept"],
   ["^(POST)$", /^\/api\/concepts\/(\d+)\/title$/, "concept"],
+  // starting a NEW project of his own (the Idea stage, or "start from" a synopsis / bit sheet / scene one-liners): it becomes his (owner_user_id)
+  ["^(POST)$", /^\/api\/(generate-storylines|skip-to-synopsis|skip-to-bitsheet|skip-to-scenelist)$/, "newProject"],
   // the story stages
   ["^(POST)$", /^\/api\/pitch-deck$/, "bodyConcept"],
   ["^(POST)$", /^\/api\/pitch-deck\/(\d+)\/(approve|request-changes|format|episode-title)$/, "pitchDeck"],
@@ -66,6 +78,7 @@ export async function writerTargetConcept(db, kind, match, req, sceneListConcept
   const BIT = "SELECT pd.concept_id FROM bit_sheets b JOIN three_act_structures t ON t.id = b.three_act_structure_id JOIN pitch_decks pd ON pd.id = t.pitch_deck_id WHERE b.id = $1";
   const CHAR = "SELECT pd.concept_id FROM character_sheets c JOIN pitch_decks pd ON pd.id = c.pitch_deck_id WHERE c.id = $1";
   switch (kind) {
+    case "newProject": return null; // names no project yet — the gatekeeper lets it through, the route makes the new project his
     case "concept": return match[1];
     case "bodyConcept": return isId(req.body?.conceptId) ? Number(req.body.conceptId) : null;
     case "pitchDeck": return one(PITCH, match[1]);
@@ -94,12 +107,13 @@ export function writerGatekeeper(db, sceneListConceptId) {
     if (req.user?.role !== WRITER_ROLE || !req.path.startsWith("/api/")) { next(); return; }
     const rule = matchWriterRoute(req.method, req.path);
     if (!rule) { res.status(403).json({ error: "This login can only write the screenplay of its own project." }); return; }
-    if (rule.kind) {
+    if (rule.kind && rule.kind !== "newProject") {
       const concept = await writerTargetConcept(db, rule.kind, rule.match, req, sceneListConceptId);
-      if (concept == null || req.user.concept_id == null || String(concept) !== String(req.user.concept_id)) {
+      if (!userHasConcept(req.user, concept)) {
         res.status(403).json({ error: "You don't have access to this project." });
         return;
       }
+      req.writerConceptId = concept;
     }
     req.writerAllowed = true;
     // note what he changed (which episode) once the request has succeeded — shown to the admin as "Work details"
@@ -137,7 +151,7 @@ export function workOf(method, path, body) {
 async function logWork(db, user, entry) {
   await db.query(
     "INSERT INTO writer_activity (user_id, concept_id, episode_index, scene_index, action) VALUES ($1, $2, $3, $4, $5)",
-    [user.id, user.concept_id ?? null, entry.episodeIndex, entry.sceneIndex, entry.action]
+    [user.id, entry.conceptId ?? user.concept_id ?? null, entry.episodeIndex, entry.sceneIndex, entry.action]
   );
 }
 
@@ -148,7 +162,7 @@ async function recordWriterWork(db, req) {
     const row = (await db.query("SELECT episode_index, scene_index FROM screenplay_scenes WHERE id = $1", [work.sceneRowId])).rows[0];
     if (row) { work.episodeIndex = row.episode_index; work.sceneIndex = row.scene_index; }
   }
-  await logWork(db, req.user, work);
+  await logWork(db, req.user, { ...work, conceptId: req.writerConceptId ?? null });
 }
 
 export async function ensureWriterSchema(db) {

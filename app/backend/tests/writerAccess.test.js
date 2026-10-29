@@ -13,6 +13,7 @@ test("a screenplay writer may use the story and screenplay tools", () => {
     ["POST", "/api/scene-lists/7/rename-character"], ["POST", "/api/scene-lists/7/convert-language"], ["GET", "/api/scene-lists/7/screenplay-pdf"],
     ["POST", "/api/pitch-deck/3/approve"], ["POST", "/api/pitch-deck/3/episode-title"], ["POST", "/api/bit-sheet/4/request-changes"], ["POST", "/api/character-sheet/5/find-characters"],
     ["GET", "/api/writer/progress"], ["PUT", "/api/writer/progress"], ["POST", "/api/auth/logout"],
+    ["POST", "/api/generate-storylines"], ["POST", "/api/skip-to-synopsis"], ["POST", "/api/skip-to-bitsheet"], ["POST", "/api/skip-to-scenelist"], // starting his own new project
   ]) assert.ok(ok(m, p), `${m} ${p} should be allowed`);
 });
 
@@ -23,7 +24,7 @@ test("everything else is refused: production, pictures, video, budget, team, oth
     ["POST", "/api/script-breakdown"], ["POST", "/api/shoot-schedule"], ["GET", "/api/crew"], ["POST", "/api/crew"],
     ["POST", "/api/scene-lists/7/send-to-ai-production"], ["POST", "/api/scene-lists/7/reimport-screenplay"],
     ["POST", "/api/production/4/generate"], ["GET", "/api/production/4/settings"], ["POST", "/api/ai-movie/projects/4/auto-production"],
-    ["POST", "/api/generate-storylines"], ["POST", "/api/auto-pipeline/start"], ["GET", "/api/drafts"], ["GET", "/api/adu/current"],
+    ["POST", "/api/auto-pipeline/start"], ["GET", "/api/drafts"], ["GET", "/api/adu/current"],
     ["GET", "/api/concepts/latest"], ["GET", "/api/pitch-deck/latest"], ["GET", "/api/scene-list/latest"],
     ["DELETE", "/api/screenplay/scene"], ["GET", "/api/screenplay/scene/voice"],
   ]) assert.ok(!ok(m, p), `${m} ${p} must be refused`);

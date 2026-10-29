@@ -79,9 +79,9 @@ export async function buildSeriesSkip({ stage, text, format: rawFormat, models, 
 }
 
 // Saves what buildSeriesSkip made, with the same statuses the film start-from paths use. Returns the new project's id.
-export async function saveSeriesSkip(db, built, { setTitle = async () => {} } = {}) {
+export async function saveSeriesSkip(db, built, { setTitle = async () => {}, ownerUserId = null } = {}) {
   const J = JSON.stringify;
-  const concept = (await db.query("INSERT INTO concepts (concept_text, storylines) VALUES ($1, $2) RETURNING id", [built.concept, J([built.storyline])])).rows[0].id;
+  const concept = (await db.query("INSERT INTO concepts (concept_text, storylines, owner_user_id) VALUES ($1, $2, $3) RETURNING id", [built.concept, J([built.storyline]), ownerUserId])).rows[0].id;
   const deckStatus = built.stage === "synopsis" ? null : "approved";
   const deckRow = deckStatus
     ? await db.query("INSERT INTO pitch_decks (concept_id, content, status) VALUES ($1, $2, $3) RETURNING id", [concept, J(built.deck), deckStatus])

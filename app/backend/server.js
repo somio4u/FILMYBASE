@@ -37,7 +37,7 @@ import { createProviders } from "./providers.js";
 import { setupProductionMedia } from "./productionMedia.js";
 import { registerDesignTaskRoutes } from "./designTasks.js";
 import { registerSubmissionRoutes, designerGatekeeper, DESIGNER_ROLE } from "./designSubmissions.js";
-import { WRITER_ROLE, writerGatekeeper, ensureWriterSchema, registerWriterRoutes } from "./writerAccess.js";
+import { WRITER_ROLE, userHasConcept, writerGatekeeper, ensureWriterSchema, registerWriterRoutes } from "./writerAccess.js";
 import { usageContext, installGeminiMetering, ensureUsageSchema, registerUsageRoutes, setSceneListResolver } from "./usageLedger.js";
 import { ensureApprovalFormatSchema, registerApprovalFormatRoutes } from "./approvalFormat.js";
 import { actorOf, byLabel, trackSceneAuthors } from "./sceneAuthors.js";
@@ -1518,8 +1518,16 @@ async function getCurrentUser(req) {
      WHERE s.token = $1 AND s.expires_at > now()`,
     [token]
   );
-  return result.rows[0] ?? null;
+  const user = result.rows[0] ?? null;
+  // a writer works on the projects he created himself (plus the one the admin may have assigned): their ids ride along with every request
+  if (user?.role === WRITER_ROLE) {
+    user.ownedConceptIds = (await db.query("SELECT id FROM concepts WHERE owner_user_id = $1", [user.id])).rows.map((r) => String(r.id));
+  }
+  return user;
 }
+
+// the owner stamped on a new project: a writer owns what he creates (the admin's projects have no owner)
+const newProjectOwner = (req) => (req.user?.role === WRITER_ROLE ? req.user.id : null);
 
 // Attaches req.user (or leaves it null) — used on every route so handlers
 // can check who's asking without repeating the lookup.
@@ -1726,8 +1734,8 @@ app.post("/api/auth/users", requireRole("admin"), async (req, res) => {
   // with no assignment would otherwise see every project in the system.
   // A "Production only" login isn't assigned a project — it sees only the
   // screenplays it uploads itself.
-  if (role !== "admin" && role !== PRODUCTION_ONLY_ROLE && role !== DESIGNER_ROLE && !conceptId) {
-    res.status(400).json({ error: "Director, Production Manager and Screenplay Writer accounts must be assigned to a project." });
+  if (role !== "admin" && role !== PRODUCTION_ONLY_ROLE && role !== DESIGNER_ROLE && role !== WRITER_ROLE && !conceptId) {
+    res.status(400).json({ error: "Director and Production Manager accounts must be assigned to a project." });
     return;
   }
 
@@ -1735,7 +1743,7 @@ app.post("/api/auth/users", requireRole("admin"), async (req, res) => {
   try {
     const result = await db.query(
       "INSERT INTO users (name, username, password_hash, password_salt, role, concept_id) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id, name, username, role, concept_id",
-      [name, username.toLowerCase(), hash, salt, role, role === "admin" || role === PRODUCTION_ONLY_ROLE || role === DESIGNER_ROLE ? null : conceptId]
+      [name, username.toLowerCase(), hash, salt, role, role === "admin" || role === PRODUCTION_ONLY_ROLE || role === DESIGNER_ROLE ? null : conceptId || null]
     );
     res.json(result.rows[0]);
   } catch (error) {
@@ -1926,8 +1934,8 @@ app.post("/api/generate-storylines", requireRole("admin"), async (req, res) => {
     const initialTitle = parsed.storylines[0]?.title?.en ?? null;
 
     const insertResult = await db.query(
-      "INSERT INTO concepts (concept_text, storylines, title) VALUES ($1, $2, $3) RETURNING id",
-      [concept, JSON.stringify(parsed.storylines), initialTitle]
+      "INSERT INTO concepts (concept_text, storylines, title, owner_user_id) VALUES ($1, $2, $3, $4) RETURNING id",
+      [concept, JSON.stringify(parsed.storylines), initialTitle, newProjectOwner(req)]
     );
 
     res.json({ conceptId: insertResult.rows[0].id, ...parsed });
@@ -1966,6 +1974,11 @@ app.get("/api/concepts", requireLogin, async (req, res) => {
       ? await db.query(
           "SELECT id, concept_text, title, pinned, project_type, created_at FROM concepts WHERE owner_user_id = $1 AND project_type = 'production' ORDER BY pinned DESC, created_at DESC",
           [req.user.id]
+        )
+      : req.user.role === WRITER_ROLE
+      ? await db.query(
+          "SELECT id, concept_text, title, pinned, project_type, created_at FROM concepts WHERE id = $1 OR owner_user_id = $2 ORDER BY pinned DESC, created_at DESC",
+          [req.user.concept_id ?? null, req.user.id]
         )
       : await db.query(
           "SELECT id, concept_text, title, pinned, project_type, created_at FROM concepts WHERE id = $1 ORDER BY pinned DESC, created_at DESC",
@@ -2721,7 +2734,7 @@ async function generateAgentChatReply(stageKey, stateSummaryText, history, userM
 function requireConceptAccess(req, conceptId) {
   // A production-only login was already checked against the project's owner by the gatekeeper.
   if (req.user.role === PRODUCTION_ONLY_ROLE) return Boolean(req.productionOnlyAllowed);
-  return req.user.role === "admin" || String(req.user.concept_id) === String(conceptId);
+  return req.user.role === "admin" || userHasConcept(req.user, conceptId);
 }
 
 // No fileFilter — a handwritten multi-page note might be several photos,
@@ -7724,7 +7737,7 @@ async function handleSkipSeries(stage, req, res) {
   if (raw?.type !== "series" && raw?.type !== "vertical") return false;
   try {
     const built = await buildSeriesSkip({ stage, text: req.body.pastedText, format: raw, models: skipSeriesModels });
-    const conceptId = await saveSeriesSkip(db, built, { setTitle: setConceptTitleIfMissing });
+    const conceptId = await saveSeriesSkip(db, built, { setTitle: setConceptTitleIfMissing, ownerUserId: newProjectOwner(req) });
     res.json({ conceptId, note: [built.note, built.cleanup !== "Your paste needed no cleaning." ? built.cleanup : null].filter(Boolean).join(" "), episodes: built.parts.length, damaged: built.damaged });
   } catch (error) {
     console.error("Series start-from failed:", error.message);
@@ -7747,10 +7760,11 @@ app.post("/api/skip-to-synopsis", requireRole("admin"), async (req, res) => {
     const result = await generateSkipToSynopsis(pastedText, minutes);
 
     const conceptResult = await db.query(
-      "INSERT INTO concepts (concept_text, storylines) VALUES ($1, $2) RETURNING id",
+      "INSERT INTO concepts (concept_text, storylines, owner_user_id) VALUES ($1, $2, $3) RETURNING id",
       [
         result.concept,
         JSON.stringify([{ title: result.storylineTitle, logline: result.storylineLogline, summary: result.storylineSummary }]),
+        newProjectOwner(req),
       ]
     );
     const conceptId = conceptResult.rows[0].id;
@@ -7841,10 +7855,11 @@ app.post("/api/skip-to-bitsheet", requireRole("admin"), async (req, res) => {
     const result = await generateSkipToBitSheet(pastedText, minutes);
 
     const conceptResult = await db.query(
-      "INSERT INTO concepts (concept_text, storylines) VALUES ($1, $2) RETURNING id",
+      "INSERT INTO concepts (concept_text, storylines, owner_user_id) VALUES ($1, $2, $3) RETURNING id",
       [
         result.concept,
         JSON.stringify([{ title: result.storylineTitle, logline: result.storylineLogline, summary: result.storylineSummary }]),
+        newProjectOwner(req),
       ]
     );
     const conceptId = conceptResult.rows[0].id;
@@ -7961,10 +7976,11 @@ app.post("/api/skip-to-scenelist", requireRole("admin"), async (req, res) => {
     const result = await generateSkipToSceneList(pastedText, minutes);
 
     const conceptResult = await db.query(
-      "INSERT INTO concepts (concept_text, storylines) VALUES ($1, $2) RETURNING id",
+      "INSERT INTO concepts (concept_text, storylines, owner_user_id) VALUES ($1, $2, $3) RETURNING id",
       [
         result.concept,
         JSON.stringify([{ title: result.storylineTitle, logline: result.storylineLogline, summary: result.storylineSummary }]),
+        newProjectOwner(req),
       ]
     );
     const conceptId = conceptResult.rows[0].id;
@@ -17436,7 +17452,7 @@ async function userOwnsSceneList(user, sceneListId) {
     [sceneListId]
   );
   const conceptId = result.rows[0]?.concept_id;
-  return conceptId != null && String(conceptId) === String(user.concept_id);
+  return conceptId != null && userHasConcept(user, conceptId);
 }
 
 // Memory storage rather than disk — savePhotoBuffer() decides where the
@@ -20020,7 +20036,7 @@ app.get("/api/scene-lists/:id/screenplay-pdf", requireLogin, async (req, res) =>
     res.status(data.status).json({ error: data.error });
     return;
   }
-  if (req.user.role !== "admin" && String(req.user.concept_id) !== String(data.conceptId)) {
+  if (req.user.role !== "admin" && !userHasConcept(req.user, data.conceptId)) {
     res.status(403).json({ error: "You don't have access to this project." });
     return;
   }

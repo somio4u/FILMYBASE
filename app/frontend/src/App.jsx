@@ -120,11 +120,12 @@ const LABELS = {
     logoutButton: 'Log out',
     manageUsersButton: 'Team & logins',
     assignProjectPlaceholder: 'Pick a project…',
+    assignProjectOptionalPlaceholder: 'No project (he creates his own) — or pick one to give him…',
     roleAdmin: 'Admin',
     roleDirector: 'Director',
     roleProductionManager: 'Production Manager',
     roleProductionOnly: 'Production only',
-    roleScreenplayWriter: 'Story & Screenplay Writer (story, screenplay & dialogues of one project)',
+    roleScreenplayWriter: 'Story & Screenplay Writer (creates his own projects: story, screenplay & dialogues)',
     writerLastWorked: (when, where) => `last worked ${when}${where ? ` — ${where}` : ''}`,
     writerNeverWorked: 'has not opened it yet',
     workDetailsButton: '📋 Work details',
@@ -1069,11 +1070,12 @@ const LABELS = {
     logoutButton: 'ଲଗ୍ ଆଉଟ୍ କର',
     manageUsersButton: 'ଟିମ୍ ଆଉ ଲଗ୍ ଇନ୍',
     assignProjectPlaceholder: 'ପ୍ରୋଜେକ୍ଟ ବାଛ…',
+    assignProjectOptionalPlaceholder: 'ପ୍ରୋଜେକ୍ଟ ନାହିଁ (ସେ ନିଜେ ବନାଏ) — କିମ୍ବା ତାକୁ ଦେବାକୁ ଗୋଟିଏ ବାଛ…',
     roleAdmin: 'ଆଡମିନ୍',
     roleDirector: 'ଡାଇରେକ୍ଟର',
     roleProductionManager: 'ପ୍ରଡକ୍ସନ୍ ମ୍ୟାନେଜର୍',
     roleProductionOnly: 'ଖାଲି ପ୍ରଡକ୍ସନ୍',
-    roleScreenplayWriter: 'ଗପ ଓ ସ୍କ୍ରିନ୍‌ପ୍ଲେ ରାଇଟର୍ (ଗୋଟିଏ ପ୍ରୋଜେକ୍ଟର ଗପ, ସ୍କ୍ରିନ୍‌ପ୍ଲେ ଓ ଡାଇଲଗ୍)',
+    roleScreenplayWriter: 'ଗପ ଓ ସ୍କ୍ରିନ୍‌ପ୍ଲେ ରାଇଟର୍ (ନିଜ ପ୍ରୋଜେକ୍ଟ ବନାଏ: ଗପ, ସ୍କ୍ରିନ୍‌ପ୍ଲେ ଓ ଡାଇଲଗ୍)',
     writerLastWorked: (when, where) => `ଶେଷ କାମ ${when}${where ? ` — ${where}` : ''}`,
     writerNeverWorked: 'ଏପର୍ଯ୍ୟନ୍ତ ଖୋଲିନି',
     workDetailsButton: '📋 କାମର ବିବରଣୀ',
@@ -8816,7 +8818,8 @@ function App() {
   // the admin can import a new screenplay or re-run/edit the breakdown, so
   // a team can't repurpose the analysis pipeline for something else.
   const canAnalyzeScript = currentUser?.role === 'admin' || isProductionOnly
-  const isScopedToOneProject = currentUser?.role !== 'admin'
+  // the writer is NOT tied to one project: he creates and works on his own (the admin may also give him one)
+  const isScopedToOneProject = currentUser?.role !== 'admin' && !isScreenplayWriter
 
   function buildFormatObject() {
     if (formatType === 'series' || formatType === 'vertical') {
@@ -10577,7 +10580,7 @@ function App() {
       setUserManagementError(t.newUserMissingFields(missing.join(', ')))
       return
     }
-    if (newUserRole !== 'admin' && newUserRole !== 'production' && newUserRole !== 'designer' && !newUserConceptId) {
+    if (newUserRole !== 'admin' && newUserRole !== 'production' && newUserRole !== 'designer' && newUserRole !== 'screenplay_writer' && !newUserConceptId) {
       setUserManagementError(t.newUserNeedsProject)
       return
     }
@@ -14947,7 +14950,7 @@ function App() {
                   </select>
                   {newUserRole !== 'admin' && newUserRole !== 'production' && newUserRole !== 'designer' && (
                     <select value={newUserConceptId} onChange={(e) => setNewUserConceptId(e.target.value)}>
-                      <option value="">{t.assignProjectPlaceholder}</option>
+                      <option value="">{newUserRole === 'screenplay_writer' ? t.assignProjectOptionalPlaceholder : t.assignProjectPlaceholder}</option>
                       {projectHistory.filter((p) => newUserRole !== 'screenplay_writer' || (p.projectType ?? 'story') === 'story').map((p) => (
                         <option key={p.id} value={p.id}>{p.title || p.conceptText?.slice(0, 40) || `#${p.id}`}</option>
                       ))}

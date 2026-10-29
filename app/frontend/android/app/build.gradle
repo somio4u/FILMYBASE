@@ -16,6 +16,16 @@ android {
             ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
     }
+    // Two builds of the same app (both open the live site): "standard" = FilmyBase as before; "writer" = "FilmyBase Writers" for the
+    // Independent Writers, with its own application id so both can sit on one phone (assembleWriterDebug -> independent.apk).
+    flavorDimensions = ["audience"]
+    productFlavors {
+        standard { dimension = "audience" }
+        writer {
+            dimension = "audience"
+            applicationId = "app.filmybase.writer"
+        }
+    }
     buildTypes {
         release {
             minifyEnabled false

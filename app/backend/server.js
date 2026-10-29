@@ -37,6 +37,7 @@ import { createProviders } from "./providers.js";
 import { setupProductionMedia } from "./productionMedia.js";
 import { registerDesignTaskRoutes } from "./designTasks.js";
 import { registerSubmissionRoutes, designerGatekeeper, DESIGNER_ROLE } from "./designSubmissions.js";
+import { sessionTokenOf } from "./sessionToken.js";
 import { WRITER_ROLE, INDEPENDENT_WRITER_ROLE, isWriterRole, userHasConcept, writerGatekeeper, ensureWriterSchema, registerWriterRoutes } from "./writerAccess.js";
 import { usageContext, installGeminiMetering, ensureUsageSchema, registerUsageRoutes, setSceneListResolver } from "./usageLedger.js";
 import { ensureApprovalFormatSchema, registerApprovalFormatRoutes } from "./approvalFormat.js";
@@ -1407,7 +1408,7 @@ function formatWithGenreLabel(format, genre, lang) {
 // wildcard origin. FRONTEND_URL will be the deployed Vercel URL in
 // production; defaults to the local Vite dev server.
 const FRONTEND_URL = process.env.FRONTEND_URL || "http://localhost:5173";
-app.use(cors({ origin: FRONTEND_URL, credentials: true }));
+app.use(cors({ origin: FRONTEND_URL, credentials: true, exposedHeaders: ["Content-Disposition"] })); // the page reads the file name of a download from this header
 app.use(cookieParser());
 // A pasted-in screenplay (the /import-screenplay-for-production text route)
 // can easily run past Express's 100kb default — a real feature-length or
@@ -1509,7 +1510,7 @@ function verifyPassword(password, salt, expectedHash) {
 }
 
 async function getCurrentUser(req) {
-  const token = req.cookies?.[SESSION_COOKIE];
+  const token = sessionTokenOf(req, SESSION_COOKIE);
   if (!token) return null;
 
   const result = await db.query(
@@ -1707,11 +1708,11 @@ app.post("/api/auth/login", async (req, res) => {
     sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
     expires: expiresAt,
   });
-  res.json({ name: user.name, username: user.username, role: user.role, conceptId: user.concept_id });
+  res.json({ name: user.name, username: user.username, role: user.role, conceptId: user.concept_id, ...(req.body?.returnToken === true ? { sessionToken: token } : {}) });
 });
 
 app.post("/api/auth/logout", async (req, res) => {
-  const token = req.cookies?.[SESSION_COOKIE];
+  const token = sessionTokenOf(req, SESSION_COOKIE);
   if (token) await db.query("DELETE FROM sessions WHERE token = $1", [token]);
   res.clearCookie(SESSION_COOKIE);
   res.json({ ok: true });

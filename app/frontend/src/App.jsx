@@ -92,6 +92,36 @@ const CURRENT_AI_MOVIE_PROJECT_STORAGE_KEY = 'filmmaking-app:currentAiMovieProje
 // without having to add `credentials: 'include'` to dozens of call sites
 // individually.
 const nativeFetch = window.fetch.bind(window)
+
+// A browser that refuses cross-site cookies (iPhone Safari, Chrome with "block third-party cookies", some app WebViews) never sends the login
+// cookie, because this page (Vercel) and the server (Render) are different sites: the login looked fine but every later call came back
+// "Please log in." For such a browser the login's session token is kept here and sent with every request in an Authorization header (the server
+// accepts it like the cookie; see sessionTokenOf in server.js). A browser whose cookie works never stores it.
+const SESSION_TOKEN_KEY = 'filmybase:sessionToken'
+const savedSessionToken = () => { try { return localStorage.getItem(SESSION_TOKEN_KEY) } catch { return null } }
+const saveSessionToken = (token) => { try { if (token) localStorage.setItem(SESSION_TOKEN_KEY, token); else localStorage.removeItem(SESSION_TOKEN_KEY) } catch { /* private window: the login just lasts until the page is closed */ } }
+const withLoginHeader = (headers, token) => { const out = new Headers(headers ?? {}); out.set('Authorization', `Bearer ${token}`); return out }
+
+// A download link opens in the browser without the Authorization header, so for such a browser the file is fetched with it and then saved
+async function downloadWithLogin(url) {
+  const response = await fetch(url)
+  if (!response.ok) { window.alert((await response.json().catch(() => ({}))).error || 'The download did not work. Please log in again.'); return }
+  const name = /filename="?([^";]+)"?/i.exec(response.headers.get('Content-Disposition') ?? '')?.[1] ?? 'download'
+  const blobUrl = URL.createObjectURL(await response.blob())
+  const link = document.createElement('a')
+  link.href = blobUrl
+  link.download = name
+  document.body.appendChild(link)
+  link.click()
+  link.remove()
+  setTimeout(() => URL.revokeObjectURL(blobUrl), 60000)
+}
+document.addEventListener('click', (event) => {
+  const link = event.target.closest?.('a[href]')
+  if (!savedSessionToken() || !link || !link.href.startsWith(`${BACKEND_URL}/api/`)) return
+  event.preventDefault()
+  downloadWithLogin(link.href)
+}, true)
 // Any save / generate / rewrite request (not the background polling GETs)
 // also tells the animated AI background the AI is working, so it speeds up
 // and glows until the answer comes back.
@@ -99,7 +129,8 @@ window.fetch = (url, options = {}) => {
   const method = (options.method || 'GET').toUpperCase()
   const signalsWork = method !== 'GET' && String(url).startsWith(BACKEND_URL)
   if (signalsWork) window.dispatchEvent(new CustomEvent(AI_ACTIVITY_EVENT, { detail: { delta: 1 } }))
-  const request = nativeFetch(url, { ...options, credentials: 'include' })
+  const token = savedSessionToken()
+  const request = nativeFetch(url, { ...options, ...(token && String(url).startsWith(BACKEND_URL) ? { headers: withLoginHeader(options.headers, token) } : {}), credentials: 'include' })
   if (signalsWork) {
     const done = () => window.dispatchEvent(new CustomEvent(AI_ACTIVITY_EVENT, { detail: { delta: -1 } }))
     request.then(done, done)
@@ -9247,6 +9278,7 @@ function App() {
     fetch(`${BACKEND_URL}/api/auth/me`)
       .then((res) => res.json())
       .then((data) => {
+        if (!data) saveSessionToken(null) // an expired login: forget its token
         setCurrentUser(data)
         // A restored session (page reload) needs this too, not just a
         // fresh login — otherwise a director's browser defaults to the
@@ -9263,18 +9295,23 @@ function App() {
     setLoginError(null)
 
     try {
+      saveSessionToken(null) // a fresh login starts without an old token
       const response = await fetch(`${BACKEND_URL}/api/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username: loginUsername, password: loginPassword }),
+        body: JSON.stringify({ username: loginUsername, password: loginPassword, returnToken: true }),
       })
-      const data = await response.json()
+      const { sessionToken, ...data } = await response.json()
 
       if (!response.ok) {
         setLoginError(data.error || t.genericError)
         setIsLoggingIn(false)
         return
       }
+
+      // does this browser keep the login cookie? If not, the token is kept and sent in a header (see the top of this file)
+      const cookieWorks = await fetch(`${BACKEND_URL}/api/auth/me`).then((r) => r.json()).catch(() => null)
+      if (!cookieWorks && sessionToken) saveSessionToken(sessionToken)
 
       setCurrentUser(data)
       setLoginPassword('')
@@ -9288,6 +9325,7 @@ function App() {
 
   async function handleLogoutClick() {
     await fetch(`${BACKEND_URL}/api/auth/logout`, { method: 'POST' })
+    saveSessionToken(null)
     setCurrentUser(null)
     localStorage.removeItem(CURRENT_CONCEPT_STORAGE_KEY)
   }

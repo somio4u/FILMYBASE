@@ -31,6 +31,9 @@ export const WRITER_ROUTES = [
   ["^(POST)$", /^\/api\/concepts\/(\d+)\/title$/, "concept"],
   // starting a NEW project of his own (only the Independent Writer; the Idea stage, or "start from" a synopsis / bit sheet / scene one-liners): it becomes his (owner_user_id)
   ["^(POST)$", /^\/api\/(generate-storylines|skip-to-synopsis|skip-to-bitsheet|skip-to-scenelist)$/, "newProject"],
+  // "Upload PDF instead" in the Idea / Synopsis / Bit Sheet / Scene one-liners boxes: Adu reads the pages of a PDF (a background job, polled)
+  ["^(POST)$", /^\/api\/story-from-pdf$/, null],
+  ["^(GET)$", /^\/api\/story-from-pdf\/[A-Za-z0-9-]+$/, null],
   // the story stages
   ["^(POST)$", /^\/api\/pitch-deck$/, "bodyConcept"],
   ["^(POST)$", /^\/api\/pitch-deck\/(\d+)\/(approve|request-changes|format|episode-title)$/, "pitchDeck"],

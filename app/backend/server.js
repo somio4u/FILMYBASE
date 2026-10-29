@@ -38,6 +38,7 @@ import { setupProductionMedia } from "./productionMedia.js";
 import { registerDesignTaskRoutes } from "./designTasks.js";
 import { registerSubmissionRoutes, designerGatekeeper, DESIGNER_ROLE } from "./designSubmissions.js";
 import { sessionTokenOf } from "./sessionToken.js";
+import { buddySystemPrompt, sceneContextText, historyToContents } from "./writingBuddy.js";
 import { createSkipStartJobs, publicView as publicSkipJob } from "./skipStartJobs.js";
 import { WRITER_ROLE, INDEPENDENT_WRITER_ROLE, isWriterRole, userHasConcept, writerGatekeeper, ensureWriterSchema, registerWriterRoutes } from "./writerAccess.js";
 import { usageContext, installGeminiMetering, ensureUsageSchema, registerUsageRoutes, setSceneListResolver } from "./usageLedger.js";
@@ -20106,6 +20107,84 @@ app.get("/api/scene-lists/:id/director-screenplay", requireRole("admin"), async 
     console.error("Director screenplay export failed:", error.message);
     if (!res.headersSent) res.status(500).json({ error: error.message });
     else res.end();
+  }
+});
+
+// ---- The Buddy: a chat friend in the screenplay screen (writingBuddy.js). One conversation per person and project, remembered in agent_chat_messages
+// (stage_key "buddy:<user id>"); every message also carries a fresh look at the scene the person is on. Step 1: it only talks (no changes to the screenplay).
+const BUDDY_MAX_TEXT = 4000;
+const BUDDY_MEMORY = 30; // messages sent back to the model with each new one
+const buddyStageKey = (req) => `buddy:${req.user.id}`;
+
+async function buddyAccess(req, res) {
+  const id = req.params.sceneListId;
+  const conceptId = /^\d+$/.test(id) ? await sceneListConceptId(id) : null;
+  if (conceptId == null) { res.status(404).json({ error: "Project not found." }); return null; }
+  if (!requireConceptAccess(req, conceptId)) { res.status(403).json({ error: "You don't have access to this project." }); return null; }
+  return { sceneListId: Number(id), conceptId };
+}
+
+app.get("/api/assistant/:sceneListId/history", requireLogin, async (req, res) => {
+  const ctx = await buddyAccess(req, res);
+  if (!ctx) return;
+  const rows = (await db.query(
+    `SELECT id, role, content, created_at FROM (
+       SELECT id, role, content, created_at FROM agent_chat_messages WHERE concept_id = $1 AND stage_key = $2 ORDER BY created_at DESC, id DESC LIMIT 100) latest
+     ORDER BY created_at ASC, id ASC`, [ctx.conceptId, buddyStageKey(req)])).rows;
+  res.json({ messages: rows });
+});
+
+app.delete("/api/assistant/:sceneListId/history", requireLogin, async (req, res) => {
+  const ctx = await buddyAccess(req, res);
+  if (!ctx) return;
+  await db.query("DELETE FROM agent_chat_messages WHERE concept_id = $1 AND stage_key = $2", [ctx.conceptId, buddyStageKey(req)]);
+  res.json({ ok: true });
+});
+
+app.post("/api/assistant/:sceneListId/message", requireLogin, async (req, res) => {
+  const ctx = await buddyAccess(req, res);
+  if (!ctx) return;
+  const text = String(req.body?.text ?? "").trim();
+  if (!text) { res.status(400).json({ error: "Write or say something first." }); return; }
+  if (text.length > BUDDY_MAX_TEXT) { res.status(400).json({ error: `That message is too long (more than ${BUDDY_MAX_TEXT} characters). Please shorten it.` }); return; }
+  const episodeIndex = Number.isInteger(req.body?.episodeIndex) ? req.body.episodeIndex : null;
+  const sceneIndex = Number.isInteger(req.body?.sceneIndex) ? req.body.sceneIndex : null;
+  const stageKey = buddyStageKey(req);
+  let userRow = null;
+  try {
+    // what the person is looking at right now: the project, the scene list, and the written lines of the selected scene
+    const sl = (await db.query("SELECT content FROM scene_lists WHERE id = $1", [ctx.sceneListId])).rows[0]?.content ?? {};
+    const title = (await db.query("SELECT title, concept_text FROM concepts WHERE id = $1", [ctx.conceptId])).rows[0];
+    let elements = null;
+    let dialogueLanguage = null;
+    if (sceneIndex !== null) {
+      const row = (await db.query(
+        "SELECT content FROM screenplay_scenes WHERE scene_list_id = $1 AND episode_index IS NOT DISTINCT FROM $2 AND scene_index = $3 ORDER BY created_at DESC, id DESC LIMIT 1",
+        [ctx.sceneListId, Array.isArray(sl.episodeScenes) ? episodeIndex : null, sceneIndex])).rows[0];
+      elements = row?.content?.elements ?? null;
+      dialogueLanguage = row?.content?.dialogueLanguage ?? null;
+    }
+    const scenePack = sceneContextText({ title: title?.title || title?.concept_text?.slice(0, 80), sceneList: sl, episodeIndex, sceneIndex: sceneIndex ?? -1, elements, dialogueLanguage, estimateSeconds: estimateScreenSeconds });
+    const system = buddySystemPrompt({ user: req.user, scenePack });
+
+    const past = (await db.query(
+      "SELECT role, content FROM agent_chat_messages WHERE concept_id = $1 AND stage_key = $2 ORDER BY created_at DESC, id DESC LIMIT $3", [ctx.conceptId, stageKey, BUDDY_MEMORY])).rows.reverse();
+    userRow = (await db.query("INSERT INTO agent_chat_messages (concept_id, stage_key, role, content, author_name) VALUES ($1, $2, 'user', $3, $4) RETURNING id, role, content, created_at", [ctx.conceptId, stageKey, text, req.user.name])).rows[0];
+
+    const response = await ai.models.generateContent({
+      model: MODEL_TIERS.flash.model,
+      contents: [...historyToContents(past, { max: BUDDY_MEMORY }), { role: "user", parts: [{ text }] }],
+      config: { systemInstruction: system, temperature: 0.7, maxOutputTokens: 4096 },
+    });
+    const reply = String(response.text ?? "").trim();
+    if (!reply) throw new Error("The Buddy had nothing to say this time. Please ask again.");
+    const assistantRow = (await db.query("INSERT INTO agent_chat_messages (concept_id, stage_key, role, content) VALUES ($1, $2, 'assistant', $3) RETURNING id, role, content, created_at", [ctx.conceptId, stageKey, reply])).rows[0];
+    res.json({ userMessage: userRow, assistantMessage: assistantRow });
+  } catch (error) {
+    console.error("Buddy chat failed:", error.message);
+    // a question that got no answer is not kept in the conversation (the screen keeps it in the box, so a retry starts clean)
+    if (userRow) await db.query("DELETE FROM agent_chat_messages WHERE id = $1", [userRow.id]).catch(() => {});
+    res.status(502).json({ error: error.message });
   }
 });
 

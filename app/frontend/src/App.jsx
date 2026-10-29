@@ -8,6 +8,7 @@ import { useState, useEffect, useRef, useMemo, useCallback, useContext, createCo
 import { createPortal } from 'react-dom'
 import ScriptEditor, { ScriptToolbar } from './ScriptEditor.jsx'
 import StartProgress from './StartProgress.jsx'
+import BuddyChat from './BuddyChat.jsx'
 import { cleanForSave, collectCharacterNames } from './scriptDoc.js'
 import { splitSceneContexts } from './sceneContexts.js'
 import './App.css'
@@ -3998,6 +3999,7 @@ function VoiceWriterButton({ t, sceneListId, episodeIndex, sceneIndex, sceneNumb
   const [confirm, setConfirm] = useState(null) // what was heard, waiting for the writer's OK: { transcript, english, editing, translating, edited }
   const [log, setLog] = useState([]) // what the agent is doing / did: [{ id, kind: 'work' | 'ok' | 'error', text }]
   const logId = useRef(0)
+  const [buddyOpen, setBuddyOpen] = useState(false) // the Buddy chat (BuddyChat.jsx), opened from the 💬 badge on the orb
   const lang = t.scriptToolbarLang === 'or' ? 'or' : 'en'
   const V = (en, or) => (lang === 'or' ? or : en)
   const [seconds, setSeconds] = useState(0)
@@ -4315,6 +4317,16 @@ function VoiceWriterButton({ t, sceneListId, episodeIndex, sceneIndex, sceneNumb
           {phase === 'confirm' && V('Confirm', 'ନିଶ୍ଚିତ କର')}
         </span>
       </button>
+      {/* the Buddy: a chat friend that remembers the conversation and knows the app and this scene */}
+      <button type="button" className="buddy-badge" style={{ left: left + orbSize - 16, top: Math.max(4, top - 12) }} onClick={() => setBuddyOpen((open) => !open)}
+        aria-label={V('Chat with the Buddy', 'ବଡ଼ି ସହ କଥା ହୁଅ')} title={V('Chat with the Buddy', 'ବଡ଼ି ସହ କଥା ହୁଅ')}>💬</button>
+      {buddyOpen && (
+        <BuddyChat
+          backendUrl={BACKEND_URL} sceneListId={sceneListId} episodeIndex={episodeIndex} sceneIndex={sceneIndex} sceneNumber={sceneNumber}
+          lang={lang} onClose={() => setBuddyOpen(false)}
+          renderMic={(onResult) => <MicButton t={t} onResult={onResult} className="buddy-mic" title={V('Speak', 'କୁହ')} listeningTitle={V('Stop', 'ବନ୍ଦ କର')} />}
+        />
+      )}
     </>,
     document.body,
   )

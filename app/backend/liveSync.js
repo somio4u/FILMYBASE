@@ -37,7 +37,7 @@ export function parseSceneKey(key) {
 export function registerLiveSyncRoutes(app, db, requireRole) {
   const presence = new Map();
 
-  app.get("/api/scene-lists/:id/sync", requireRole("admin", "screenplay_writer"), async (req, res) => {
+  app.get("/api/scene-lists/:id/sync", requireRole("admin", "screenplay_writer", "independent_writer"), async (req, res) => {
     const id = Number(req.params.id);
     const list = (await db.query("SELECT md5(content::text) AS hash, content FROM scene_lists WHERE id = $1", [id])).rows[0];
     if (!list) { res.status(404).json({ error: "Scene list not found" }); return; }

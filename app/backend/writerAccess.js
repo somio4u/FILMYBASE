@@ -1,14 +1,18 @@
-// The "Story & Screenplay Writer" login (role "screenplay_writer"): a person who creates his OWN projects (concepts.owner_user_id) and writes their
-// story, screenplay and dialogue — and, if the admin also assigned him a project (users.concept_id), that one too. He never sees anybody else's project.
-// He gets the Story & Screenplay tools of those projects — the story stages, writing and editing scenes, the voice assistant, change
+// Two writer logins share everything below:
+//  • "Story & Screenplay Writer" (role "screenplay_writer"): a person the admin ASSIGNS to ONE project (users.concept_id), which he writes.
+//  • "Independent Writer" (role "independent_writer"): nobody assigns him a project — he starts his OWN projects (concepts.owner_user_id) and writes
+//    them, as many as he likes. He never sees anybody else's project.
+// Each gets the Story & Screenplay tools of his project(s) — the story stages, writing and editing scenes, the voice assistant, change
 // language, rename a character, scene list tools, exports of the script — and nothing else: no production, pictures, video, budget,
 // no other project, no team management. Like the "Production only" login, every request must match the list below, and where the
 // route names a project (directly or through a pitch deck, scene list …) it must be the project he is assigned to.
 // The place where he stopped (stage, episode, scene) is saved on the server, so any device opens the page where he left off.
 
 export const WRITER_ROLE = "screenplay_writer";
+export const INDEPENDENT_WRITER_ROLE = "independent_writer";
+export const isWriterRole = (role) => role === WRITER_ROLE || role === INDEPENDENT_WRITER_ROLE;
 
-// May this user work on this project? The admin: any. Anyone else: the project assigned to him, or (a writer) a project he created himself.
+// May this user work on this project? The admin: any. Anyone else: the project assigned to him, or (an independent writer) a project he created.
 // `user.ownedConceptIds` is filled in with every request of a writer (getCurrentUser in server.js).
 export function userHasConcept(user, conceptId) {
   if (!user || conceptId == null) return false;
@@ -25,7 +29,7 @@ export const WRITER_ROUTES = [
   ["^(GET)$", /^\/api\/concepts$/, null], // the route lists only his own project
   ["^(GET)$", /^\/api\/concepts\/(\d+)\/full$/, "concept"],
   ["^(POST)$", /^\/api\/concepts\/(\d+)\/title$/, "concept"],
-  // starting a NEW project of his own (the Idea stage, or "start from" a synopsis / bit sheet / scene one-liners): it becomes his (owner_user_id)
+  // starting a NEW project of his own (only the Independent Writer; the Idea stage, or "start from" a synopsis / bit sheet / scene one-liners): it becomes his (owner_user_id)
   ["^(POST)$", /^\/api\/(generate-storylines|skip-to-synopsis|skip-to-bitsheet|skip-to-scenelist)$/, "newProject"],
   // the story stages
   ["^(POST)$", /^\/api\/pitch-deck$/, "bodyConcept"],
@@ -104,9 +108,13 @@ export async function writerTargetConcept(db, kind, match, req, sceneListConcept
 // Express middleware: lets a writer's request through (req.writerAllowed) only if it is on the list and about his own project.
 export function writerGatekeeper(db, sceneListConceptId) {
   return async (req, res, next) => {
-    if (req.user?.role !== WRITER_ROLE || !req.path.startsWith("/api/")) { next(); return; }
+    if (!isWriterRole(req.user?.role) || !req.path.startsWith("/api/")) { next(); return; }
     const rule = matchWriterRoute(req.method, req.path);
     if (!rule) { res.status(403).json({ error: "This login can only write the screenplay of its own project." }); return; }
+    if (rule.kind === "newProject" && req.user.role !== INDEPENDENT_WRITER_ROLE) {
+      res.status(403).json({ error: "This login works on the project it was given — it cannot start new projects." });
+      return;
+    }
     if (rule.kind && rule.kind !== "newProject") {
       const concept = await writerTargetConcept(db, rule.kind, rule.match, req, sceneListConceptId);
       if (!userHasConcept(req.user, concept)) {
@@ -227,7 +235,7 @@ export function registerWriterRoutes(app, db, requireRole) {
   });
   app.put("/api/writer/progress", async (req, res) => {
     if (!req.user) { res.status(401).json({ error: "Please log in." }); return; }
-    if (req.user.role !== WRITER_ROLE) { res.json({ saved: false }); return; } // only a writer's place is remembered
+    if (!isWriterRole(req.user.role)) { res.json({ saved: false }); return; } // only a writer's place is remembered
     const state = cleanProgress(req.body);
     const before = (await db.query("SELECT state FROM writer_progress WHERE user_id = $1", [req.user.id])).rows[0]?.state;
     if (state.stage === "screenplay" && (before?.stage !== "screenplay" || before?.groupIndex !== state.groupIndex)) {

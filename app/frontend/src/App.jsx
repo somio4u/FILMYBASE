@@ -120,12 +120,12 @@ const LABELS = {
     logoutButton: 'Log out',
     manageUsersButton: 'Team & logins',
     assignProjectPlaceholder: 'Pick a project…',
-    assignProjectOptionalPlaceholder: 'No project (he creates his own) — or pick one to give him…',
     roleAdmin: 'Admin',
     roleDirector: 'Director',
     roleProductionManager: 'Production Manager',
     roleProductionOnly: 'Production only',
-    roleScreenplayWriter: 'Story & Screenplay Writer (creates his own projects: story, screenplay & dialogues)',
+    roleScreenplayWriter: 'Story & Screenplay Writer (one project you give him: story, screenplay & dialogues)',
+    roleIndependentWriter: 'Independent Writer (no project given — he creates his own projects)',
     writerLastWorked: (when, where) => `last worked ${when}${where ? ` — ${where}` : ''}`,
     writerNeverWorked: 'has not opened it yet',
     workDetailsButton: '📋 Work details',
@@ -166,6 +166,7 @@ const LABELS = {
     noProjectsInStageNote: 'Nothing here yet.',
     noOneAssignedNote: 'No one on this yet',
     writerRoleLabel: 'Writer',
+    independentWriterRoleLabel: 'Independent writer',
     adRoleLabel: 'AD',
     directorRoleLabel: 'Director',
     newProductionButton: 'Start a new production',
@@ -1070,12 +1071,12 @@ const LABELS = {
     logoutButton: 'ଲଗ୍ ଆଉଟ୍ କର',
     manageUsersButton: 'ଟିମ୍ ଆଉ ଲଗ୍ ଇନ୍',
     assignProjectPlaceholder: 'ପ୍ରୋଜେକ୍ଟ ବାଛ…',
-    assignProjectOptionalPlaceholder: 'ପ୍ରୋଜେକ୍ଟ ନାହିଁ (ସେ ନିଜେ ବନାଏ) — କିମ୍ବା ତାକୁ ଦେବାକୁ ଗୋଟିଏ ବାଛ…',
     roleAdmin: 'ଆଡମିନ୍',
     roleDirector: 'ଡାଇରେକ୍ଟର',
     roleProductionManager: 'ପ୍ରଡକ୍ସନ୍ ମ୍ୟାନେଜର୍',
     roleProductionOnly: 'ଖାଲି ପ୍ରଡକ୍ସନ୍',
-    roleScreenplayWriter: 'ଗପ ଓ ସ୍କ୍ରିନ୍‌ପ୍ଲେ ରାଇଟର୍ (ନିଜ ପ୍ରୋଜେକ୍ଟ ବନାଏ: ଗପ, ସ୍କ୍ରିନ୍‌ପ୍ଲେ ଓ ଡାଇଲଗ୍)',
+    roleScreenplayWriter: 'ଗପ ଓ ସ୍କ୍ରିନ୍‌ପ୍ଲେ ରାଇଟର୍ (ତୁମେ ଦେଇଥିବା ଗୋଟିଏ ପ୍ରୋଜେକ୍ଟ: ଗପ, ସ୍କ୍ରିନ୍‌ପ୍ଲେ ଓ ଡାଇଲଗ୍)',
+    roleIndependentWriter: 'ସ୍ୱାଧୀନ ଲେଖକ (ପ୍ରୋଜେକ୍ଟ ଦିଆଯାଏ ନାହିଁ — ସେ ନିଜ ପ୍ରୋଜେକ୍ଟ ନିଜେ ବନାଏ)',
     writerLastWorked: (when, where) => `ଶେଷ କାମ ${when}${where ? ` — ${where}` : ''}`,
     writerNeverWorked: 'ଏପର୍ଯ୍ୟନ୍ତ ଖୋଲିନି',
     workDetailsButton: '📋 କାମର ବିବରଣୀ',
@@ -1116,6 +1117,7 @@ const LABELS = {
     noProjectsInStageNote: 'ଏଠି ଏଯାଏଁ କିଛି ନାହିଁ।',
     noOneAssignedNote: 'ଏଯାଏଁ କାହାକୁ ଦିଆଯାଇନି',
     writerRoleLabel: 'ଲେଖକ',
+    independentWriterRoleLabel: 'ସ୍ୱାଧୀନ ଲେଖକ',
     adRoleLabel: 'AD',
     directorRoleLabel: 'ଡାଇରେକ୍ଟର',
     newProductionButton: 'ନୂଆ ପ୍ରଡକ୍ସନ୍ ଆରମ୍ଭ କର',
@@ -2750,6 +2752,9 @@ const FLOATING_AGENT_FRAME_SETS = {
 // Adu (the auto screenplay agent buddy) stays hidden until the admin types
 // "activate adu" in any writing box; "deactivate adu" sends him away. The
 // choice is remembered in this browser.
+// the two writer logins: the Story & Screenplay Writer (one project given by the admin) and the Independent Writer (makes his own projects)
+const isWriterRole = (role) => role === 'screenplay_writer' || role === 'independent_writer'
+
 const ADU_ACTIVE_STORAGE_KEY = 'filmybase.aduActive'
 const ADU_EVENT = 'filmybase:adu'
 const ADU_COMMAND = /\b(de)?activate\s+adu\b/i
@@ -8804,7 +8809,8 @@ function App() {
   // work — and sees nothing outside Production Management.
   const isProductionOnly = currentUser?.role === 'production'
   // A "Screenplay writer" login: the Story & Screenplay tools of ONE assigned project, opened straight at the screenplay where he stopped.
-  const isScreenplayWriter = currentUser?.role === 'screenplay_writer'
+  const isIndependentWriter = currentUser?.role === 'independent_writer'
+  const isScreenplayWriter = isWriterRole(currentUser?.role)
   // A screenplay writer's login starts with Odia (Akruti layout) typing already switched on
   useEffect(() => {
     if (isScreenplayWriter) window.dispatchEvent(new Event('filmybase:odia-on'))
@@ -8818,8 +8824,8 @@ function App() {
   // the admin can import a new screenplay or re-run/edit the breakdown, so
   // a team can't repurpose the analysis pipeline for something else.
   const canAnalyzeScript = currentUser?.role === 'admin' || isProductionOnly
-  // the writer is NOT tied to one project: he creates and works on his own (the admin may also give him one)
-  const isScopedToOneProject = currentUser?.role !== 'admin' && !isScreenplayWriter
+  // an Independent Writer is NOT tied to one project: he starts and works on his own
+  const isScopedToOneProject = currentUser?.role !== 'admin' && !isIndependentWriter
 
   function buildFormatObject() {
     if (formatType === 'series' || formatType === 'vertical') {
@@ -8858,7 +8864,7 @@ function App() {
   }
 
   async function loadCrewMembers(sceneListId) {
-    if (currentUser?.role === 'screenplay_writer') return // crew is Production Management, not his
+    if (isWriterRole(currentUser?.role)) return // crew is Production Management, not his
     const response = await fetch(`${BACKEND_URL}/api/crew?sceneListId=${sceneListId}`)
     if (!response.ok) return
     setCrewMembers(await response.json())
@@ -9246,7 +9252,7 @@ function App() {
         // fresh login — otherwise a director's browser defaults to the
         // 'story' agent (its initial state) and Story & Screenplay's
         // content renders even though its nav entry is hidden.
-        if (data && data.role !== 'admin') setActiveAgent(data.role === 'screenplay_writer' ? 'story' : 'production')
+        if (data && data.role !== 'admin') setActiveAgent(isWriterRole(data.role) ? 'story' : 'production')
       })
       .catch(() => setCurrentUser(null))
   }, [])
@@ -9272,7 +9278,7 @@ function App() {
 
       setCurrentUser(data)
       setLoginPassword('')
-      if (data.role !== 'admin') setActiveAgent(data.role === 'screenplay_writer' ? 'story' : 'production')
+      if (data.role !== 'admin') setActiveAgent(isWriterRole(data.role) ? 'story' : 'production')
     } catch {
       setLoginError(t.genericError)
     }
@@ -10580,7 +10586,7 @@ function App() {
       setUserManagementError(t.newUserMissingFields(missing.join(', ')))
       return
     }
-    if (newUserRole !== 'admin' && newUserRole !== 'production' && newUserRole !== 'designer' && newUserRole !== 'screenplay_writer' && !newUserConceptId) {
+    if (newUserRole !== 'admin' && newUserRole !== 'production' && newUserRole !== 'designer' && newUserRole !== 'independent_writer' && !newUserConceptId) {
       setUserManagementError(t.newUserNeedsProject)
       return
     }
@@ -10643,7 +10649,7 @@ function App() {
       }
     }
 
-    if (currentUser.role !== 'director' && currentUser.role !== 'production' && currentUser.role !== 'screenplay_writer') {
+    if (currentUser.role !== 'director' && currentUser.role !== 'production' && !isWriterRole(currentUser.role)) {
       fetch(`${BACKEND_URL}/api/google/status`)
         .then((res) => res.json())
         .then((data) => setGoogleConnected(data.connected))
@@ -14902,13 +14908,13 @@ function App() {
                       <span className="breakdown-item-meta">
                         ({u.username} — {u.role}{u.project_title ? ` — ${u.project_title}` : ''})
                       </span>
-                      {u.role === 'screenplay_writer' && (
+                      {isWriterRole(u.role) && (
                         <span className="breakdown-item-meta"> · {u.last_worked_at
                           ? t.writerLastWorked(new Date(u.last_worked_at).toLocaleString(), u.last_worked_state?.stage === 'screenplay' ? `${t.stageScreenplayLabel}: ${(u.last_worked_state.groupIndex ?? 0) + 1}.${(u.last_worked_state.sceneIndex ?? 0) + 1}` : t.stageIdeaLabel)
                           : t.writerNeverWorked}</span>
                       )}
                     </span>
-                    {u.role === 'screenplay_writer' && (
+                    {isWriterRole(u.role) && (
                       <button className="breakdown-action-button" onClick={() => toggleWorkDetails(u.id)}>{t.workDetailsButton}</button>
                     )}
                     <button className="breakdown-action-button crew-member-remove" onClick={() => handleDeleteUserClick(u.id)}>
@@ -14945,12 +14951,13 @@ function App() {
                     <option value="director">{t.roleDirector}</option>
                     <option value="production">{t.roleProductionOnly}</option>
                     <option value="screenplay_writer">{t.roleScreenplayWriter}</option>
+                    <option value="independent_writer">{t.roleIndependentWriter}</option>
                     <option value="designer">Designer (design tasks only)</option>
                     <option value="admin">{t.roleAdmin}</option>
                   </select>
-                  {newUserRole !== 'admin' && newUserRole !== 'production' && newUserRole !== 'designer' && (
+                  {newUserRole !== 'admin' && newUserRole !== 'production' && newUserRole !== 'designer' && newUserRole !== 'independent_writer' && (
                     <select value={newUserConceptId} onChange={(e) => setNewUserConceptId(e.target.value)}>
-                      <option value="">{newUserRole === 'screenplay_writer' ? t.assignProjectOptionalPlaceholder : t.assignProjectPlaceholder}</option>
+                      <option value="">{t.assignProjectPlaceholder}</option>
                       {projectHistory.filter((p) => newUserRole !== 'screenplay_writer' || (p.projectType ?? 'story') === 'story').map((p) => (
                         <option key={p.id} value={p.id}>{p.title || p.conceptText?.slice(0, 40) || `#${p.id}`}</option>
                       ))}
@@ -15192,7 +15199,7 @@ function App() {
                         <div className="master-list-assignments">
                           {project.assignedUsers.map((u, i) => (
                             <span key={i} className="master-list-assignment-badge">
-                              {u.role === 'production_manager' ? t.adRoleLabel : u.role === 'screenplay_writer' ? t.writerRoleLabel : t.directorRoleLabel}: {u.name}
+                              {u.role === 'production_manager' ? t.adRoleLabel : u.role === 'independent_writer' ? t.independentWriterRoleLabel : u.role === 'screenplay_writer' ? t.writerRoleLabel : t.directorRoleLabel}: {u.name}
                             </span>
                           ))}
                         </div>
@@ -15246,7 +15253,7 @@ function App() {
                           {project.assignedUsers.length === 0 && <span className="breakdown-item-meta">{t.noOneAssignedNote}</span>}
                           {project.assignedUsers.map((u, i) => (
                             <span key={i} className="master-list-assignment-badge">
-                              {u.role === 'production_manager' ? t.adRoleLabel : u.role === 'screenplay_writer' ? t.writerRoleLabel : t.directorRoleLabel}: {u.name}
+                              {u.role === 'production_manager' ? t.adRoleLabel : u.role === 'independent_writer' ? t.independentWriterRoleLabel : u.role === 'screenplay_writer' ? t.writerRoleLabel : t.directorRoleLabel}: {u.name}
                             </span>
                           ))}
                         </div>

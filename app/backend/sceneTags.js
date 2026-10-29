@@ -26,7 +26,7 @@ export async function ensureSceneTagSchema(db) {
 // What this person may do with a scene's tag: the admin anything (a tag, or null = clear); the writer only turn an existing tag into "done".
 export function allowedChange(role, existingTag, wanted) {
   if (role === "admin") return wanted === null || TAGS.includes(wanted);
-  if (role === "screenplay_writer") return Boolean(existingTag) && existingTag !== "done" && wanted === "done";
+  if (role === "screenplay_writer" || role === "independent_writer") return Boolean(existingTag) && existingTag !== "done" && wanted === "done";
   return false;
 }
 
@@ -39,7 +39,7 @@ export async function listTags(db, sceneListId) {
 }
 
 export function registerSceneTagRoutes(app, db, requireRole) {
-  app.put("/api/scene-lists/:id/scene-tag", requireRole("admin", "screenplay_writer"), async (req, res) => {
+  app.put("/api/scene-lists/:id/scene-tag", requireRole("admin", "screenplay_writer", "independent_writer"), async (req, res) => {
     const sceneListId = Number(req.params.id);
     const episodeIndex = req.body.episodeIndex === null || req.body.episodeIndex === undefined ? null : Number(req.body.episodeIndex);
     const sceneIndex = Number(req.body.sceneIndex);
@@ -61,7 +61,7 @@ export function registerSceneTagRoutes(app, db, requireRole) {
         return;
       }
       const me = byLabel(req.user);
-      if (req.user.role === "screenplay_writer") {
+      if (req.user.role === "screenplay_writer" || req.user.role === "independent_writer") {
         await client.query("UPDATE scene_tags SET tag = 'done', done_by = $2, done_at = now() WHERE id = $1", [existing.id, me]);
       } else {
         await client.query(`DELETE FROM scene_tags WHERE ${where}`, [sceneListId, episodeIndex, sceneIndex]);

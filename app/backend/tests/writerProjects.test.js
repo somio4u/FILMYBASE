@@ -1,10 +1,19 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { WRITER_ROLE, matchWriterRoute, userHasConcept, writerGatekeeper } from "../writerAccess.js";
+import { WRITER_ROLE, INDEPENDENT_WRITER_ROLE, isWriterRole, matchWriterRoute, userHasConcept, writerGatekeeper } from "../writerAccess.js";
 
-const writer = (extra = {}) => ({ id: 9, role: WRITER_ROLE, concept_id: null, ownedConceptIds: ["12", "15"], ...extra });
+// the Independent Writer: no project given, he owns the ones he creates
+const writer = (extra = {}) => ({ id: 9, role: INDEPENDENT_WRITER_ROLE, concept_id: null, ownedConceptIds: ["12", "15"], ...extra });
+// the Story & Screenplay Writer: one project given by the admin
+const assignedWriter = (extra = {}) => ({ id: 10, role: WRITER_ROLE, concept_id: 40, ownedConceptIds: [], ...extra });
 
-test("a writer may work on the projects he created and on the one the admin assigned — never on anyone else's", () => {
+test("the two writer roles, and what each may open — never anyone else's project", () => {
+  assert.equal(INDEPENDENT_WRITER_ROLE, "independent_writer");
+  assert.equal(WRITER_ROLE, "screenplay_writer");
+  assert.ok(isWriterRole("independent_writer") && isWriterRole("screenplay_writer"));
+  assert.ok(!isWriterRole("director") && !isWriterRole("admin") && !isWriterRole(undefined));
+  assert.equal(userHasConcept(assignedWriter(), 40), true);
+  assert.equal(userHasConcept(assignedWriter(), 12), false);
   assert.equal(userHasConcept(writer(), 12), true);
   assert.equal(userHasConcept(writer(), "15"), true);
   assert.equal(userHasConcept(writer(), 13), false);
@@ -18,7 +27,7 @@ test("a writer may work on the projects he created and on the one the admin assi
   assert.equal(userHasConcept(null, 12), false);
 });
 
-test("the routes that start a new project are for a writer, the automatic AI run and importing are not", () => {
+test("the routes that start a new project are matched as such; the automatic AI run and importing are not writer routes", () => {
   for (const path of ["/api/generate-storylines", "/api/skip-to-synopsis", "/api/skip-to-bitsheet", "/api/skip-to-scenelist"]) assert.equal(matchWriterRoute("POST", path)?.kind, "newProject", path);
   assert.equal(matchWriterRoute("GET", "/api/generate-storylines"), null);
   assert.equal(matchWriterRoute("POST", "/api/auto-pipeline/start"), null);
@@ -37,7 +46,7 @@ async function run(user, method, path, { body = {}, sceneListConcept = {} } = {}
   return result;
 }
 
-test("the gatekeeper lets a writer open his own projects, start a new one, and refuses other people's projects", async () => {
+test("an Independent Writer opens his own projects and starts new ones; other people's projects are refused", async () => {
   const own = await run(writer(), "GET", "/api/concepts/12/full");
   assert.equal(own.passed, true);
   assert.equal(String(own.conceptId), "12");
@@ -46,12 +55,18 @@ test("the gatekeeper lets a writer open his own projects, start a new one, and r
   assert.equal(other.status, 403);
   const fresh = await run(writer({ ownedConceptIds: [] }), "POST", "/api/generate-storylines", { body: { concept: "x" } });
   assert.equal(fresh.passed, true);
-  const assigned = await run(writer({ concept_id: 40, ownedConceptIds: [] }), "GET", "/api/concepts/40/full");
-  assert.equal(assigned.passed, true);
   const viaSceneList = await run(writer(), "GET", "/api/scene-lists/7/screenplay-pdf", { sceneListConcept: { 7: 15 } });
   assert.equal(viaSceneList.passed, true);
   const viaOthersSceneList = await run(writer(), "GET", "/api/scene-lists/8/screenplay-pdf", { sceneListConcept: { 8: 99 } });
   assert.equal(viaOthersSceneList.status, 403);
-  const production = await run(writer(), "GET", "/api/crew");
-  assert.equal(production.status, 403);
+  assert.equal((await run(writer(), "GET", "/api/crew")).status, 403);
+});
+
+test("the Story & Screenplay Writer keeps to the project he was given and cannot start new projects", async () => {
+  assert.equal((await run(assignedWriter(), "GET", "/api/concepts/40/full")).passed, true);
+  assert.equal((await run(assignedWriter(), "GET", "/api/concepts/12/full")).status, 403);
+  const start = await run(assignedWriter(), "POST", "/api/generate-storylines", { body: { concept: "x" } });
+  assert.equal(start.passed, false);
+  assert.equal(start.status, 403);
+  for (const path of ["/api/skip-to-synopsis", "/api/skip-to-bitsheet", "/api/skip-to-scenelist"]) assert.equal((await run(assignedWriter(), "POST", path)).status, 403, path);
 });

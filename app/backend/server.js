@@ -37,7 +37,7 @@ import { createProviders } from "./providers.js";
 import { setupProductionMedia } from "./productionMedia.js";
 import { registerDesignTaskRoutes } from "./designTasks.js";
 import { registerSubmissionRoutes, designerGatekeeper, DESIGNER_ROLE } from "./designSubmissions.js";
-import { WRITER_ROLE, userHasConcept, writerGatekeeper, ensureWriterSchema, registerWriterRoutes } from "./writerAccess.js";
+import { WRITER_ROLE, INDEPENDENT_WRITER_ROLE, isWriterRole, userHasConcept, writerGatekeeper, ensureWriterSchema, registerWriterRoutes } from "./writerAccess.js";
 import { usageContext, installGeminiMetering, ensureUsageSchema, registerUsageRoutes, setSceneListResolver } from "./usageLedger.js";
 import { ensureApprovalFormatSchema, registerApprovalFormatRoutes } from "./approvalFormat.js";
 import { actorOf, byLabel, trackSceneAuthors } from "./sceneAuthors.js";
@@ -1519,15 +1519,15 @@ async function getCurrentUser(req) {
     [token]
   );
   const user = result.rows[0] ?? null;
-  // a writer works on the projects he created himself (plus the one the admin may have assigned): their ids ride along with every request
-  if (user?.role === WRITER_ROLE) {
+  // an Independent Writer works on the projects he created himself: their ids ride along with every request (the Story & Screenplay Writer only has the project the admin assigned)
+  if (user?.role === INDEPENDENT_WRITER_ROLE) {
     user.ownedConceptIds = (await db.query("SELECT id FROM concepts WHERE owner_user_id = $1", [user.id])).rows.map((r) => String(r.id));
   }
   return user;
 }
 
-// the owner stamped on a new project: a writer owns what he creates (the admin's projects have no owner)
-const newProjectOwner = (req) => (req.user?.role === WRITER_ROLE ? req.user.id : null);
+// the owner stamped on a new project: an independent writer owns what he creates (the admin's projects have no owner)
+const newProjectOwner = (req) => (req.user?.role === INDEPENDENT_WRITER_ROLE ? req.user.id : null);
 
 // Attaches req.user (or leaves it null) — used on every route so handlers
 // can check who's asking without repeating the lookup.
@@ -1555,7 +1555,7 @@ function requireRole(...roles) {
       return;
     }
     // A "Screenplay writer" login reaches a route only after writerGatekeeper (writerAccess.js) matched it and checked it is his project.
-    if (req.user.role === WRITER_ROLE && req.writerAllowed) {
+    if (isWriterRole(req.user.role) && req.writerAllowed) {
       next();
       return;
     }
@@ -1726,7 +1726,7 @@ app.get("/api/auth/me", async (req, res) => {
 app.post("/api/auth/users", requireRole("admin"), async (req, res) => {
   const { name, username, password, role, conceptId } = req.body;
 
-  if (!name || !username || !password || !["director", "production_manager", "admin", PRODUCTION_ONLY_ROLE, DESIGNER_ROLE, WRITER_ROLE].includes(role)) {
+  if (!name || !username || !password || !["director", "production_manager", "admin", PRODUCTION_ONLY_ROLE, DESIGNER_ROLE, WRITER_ROLE, INDEPENDENT_WRITER_ROLE].includes(role)) {
     res.status(400).json({ error: "Name, username, password, and a valid role are required." });
     return;
   }
@@ -1734,8 +1734,8 @@ app.post("/api/auth/users", requireRole("admin"), async (req, res) => {
   // with no assignment would otherwise see every project in the system.
   // A "Production only" login isn't assigned a project — it sees only the
   // screenplays it uploads itself.
-  if (role !== "admin" && role !== PRODUCTION_ONLY_ROLE && role !== DESIGNER_ROLE && role !== WRITER_ROLE && !conceptId) {
-    res.status(400).json({ error: "Director and Production Manager accounts must be assigned to a project." });
+  if (role !== "admin" && role !== PRODUCTION_ONLY_ROLE && role !== DESIGNER_ROLE && role !== INDEPENDENT_WRITER_ROLE && !conceptId) {
+    res.status(400).json({ error: "Director, Production Manager and Story & Screenplay Writer accounts must be assigned to a project." });
     return;
   }
 
@@ -1743,7 +1743,7 @@ app.post("/api/auth/users", requireRole("admin"), async (req, res) => {
   try {
     const result = await db.query(
       "INSERT INTO users (name, username, password_hash, password_salt, role, concept_id) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id, name, username, role, concept_id",
-      [name, username.toLowerCase(), hash, salt, role, role === "admin" || role === PRODUCTION_ONLY_ROLE || role === DESIGNER_ROLE ? null : conceptId || null]
+      [name, username.toLowerCase(), hash, salt, role, role === "admin" || role === PRODUCTION_ONLY_ROLE || role === DESIGNER_ROLE || role === INDEPENDENT_WRITER_ROLE ? null : conceptId]
     );
     res.json(result.rows[0]);
   } catch (error) {
@@ -1975,10 +1975,10 @@ app.get("/api/concepts", requireLogin, async (req, res) => {
           "SELECT id, concept_text, title, pinned, project_type, created_at FROM concepts WHERE owner_user_id = $1 AND project_type = 'production' ORDER BY pinned DESC, created_at DESC",
           [req.user.id]
         )
-      : req.user.role === WRITER_ROLE
+      : req.user.role === INDEPENDENT_WRITER_ROLE
       ? await db.query(
-          "SELECT id, concept_text, title, pinned, project_type, created_at FROM concepts WHERE id = $1 OR owner_user_id = $2 ORDER BY pinned DESC, created_at DESC",
-          [req.user.concept_id ?? null, req.user.id]
+          "SELECT id, concept_text, title, pinned, project_type, created_at FROM concepts WHERE owner_user_id = $1 ORDER BY pinned DESC, created_at DESC",
+          [req.user.id]
         )
       : await db.query(
           "SELECT id, concept_text, title, pinned, project_type, created_at FROM concepts WHERE id = $1 ORDER BY pinned DESC, created_at DESC",

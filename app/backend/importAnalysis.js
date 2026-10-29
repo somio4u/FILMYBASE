@@ -122,7 +122,8 @@ export function reportLines(a) {
   if (a.stage === "screenplay") {
     out.push(`It has ${t.scenes} scene${t.scenes === 1 ? "" : "s"}${t.episodes > 1 ? ` in ${t.episodes} episodes` : ""}. ${t.written} ${t.written === 1 ? "is" : "are"} written out (with ${t.dialogueLines} dialogue lines in all)${t.oneLiner + t.empty ? `, and ${t.oneLiner + t.empty} ${t.oneLiner + t.empty === 1 ? "has" : "have"} only a one-line summary and still need${t.oneLiner + t.empty === 1 ? "s" : ""} to be written` : ", nothing is missing"}.`);
     if (a.characters.length) out.push(`Speaking characters: ${a.characters.slice(0, 12).map((c) => `${c.name} (${c.lines})`).join(", ")}${a.characters.length > 12 ? " …" : ""}.`);
-    out.push(`Plan: the ${t.written} written scene${t.written === 1 ? "" : "s"} go in exactly as they are, word for word, and stay editable${t.oneLiner + t.empty ? `; the ${t.oneLiner + t.empty} one-liner scene${t.oneLiner + t.empty === 1 ? "" : "s"} go in as “not written yet”, ready for you to write` : ""}. Nothing is skipped.`);
+    const rest = t.oneLiner + t.empty;
+    out.push(`Planned for the next update (not done yet): the ${t.written} written scene${t.written === 1 ? "" : "s"} will go into your project exactly as they are, word for word, and stay editable${rest ? `; the ${rest} one-liner scene${rest === 1 ? "" : "s"} will go in as “not written yet”, ready for you to write` : ""}. Nothing will be skipped.`);
   } else if (a.stage === "scene_list") {
     out.push(`It has ${t.scenes} scene${t.scenes === 1 ? "" : "s"}, each with only a one-line summary. No dialogue is written yet, so none is lost by starting from the scene one-liners.`);
   } else if (a.stage === "bit_sheet") {

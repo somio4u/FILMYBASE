@@ -8017,3 +8017,5 @@ body.is-script-edit-mode { overflow: hidden; }
 .pdf-findings-scenes li { margin: 3px 0; }
 .pdf-findings-scenes li.is-written { color: #14532d; }
 .pdf-findings-scenes small { opacity: 0.8; }
+.pdf-findings .cancel-button { color: #14284d; background: #fff; border: 1px solid #9bb8e8; }
+.pdf-findings.is-warning .cancel-button { color: #4a3500; border-color: #e0b04a; }

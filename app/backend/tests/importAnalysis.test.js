@@ -39,7 +39,8 @@ test("a screenplay with some scenes written and some only one-liners: both group
   assert.match(text, /3 scenes/);
   assert.match(text, /2 are written out/);
   assert.match(text, /1 has only a one-line summary/);
-  assert.match(text, /word for word/);
+  assert.match(text, /Planned for the next update \(not done yet\)[^]*word for word/);
+  assert.match(text, /the 1 one-liner scene will go in/);
 });
 
 test("a numbered list of scene headings with one-liners is the scene one-liners stage (no dialogue to lose)", () => {

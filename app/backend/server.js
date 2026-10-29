@@ -38,6 +38,7 @@ import { setupProductionMedia } from "./productionMedia.js";
 import { registerDesignTaskRoutes } from "./designTasks.js";
 import { registerSubmissionRoutes, designerGatekeeper, DESIGNER_ROLE } from "./designSubmissions.js";
 import { sessionTokenOf } from "./sessionToken.js";
+import { analyzeImportedText, reportLines } from "./importAnalysis.js";
 import { buddySystemPrompt, sceneContextText, historyToContents, extractProposal } from "./writingBuddy.js";
 import { createSkipStartJobs, publicView as publicSkipJob } from "./skipStartJobs.js";
 import { WRITER_ROLE, INDEPENDENT_WRITER_ROLE, isWriterRole, userHasConcept, writerGatekeeper, ensureWriterSchema, registerWriterRoutes } from "./writerAccess.js";
@@ -19290,13 +19291,24 @@ const pdfReadJobs = new Map();
 const pdfUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 25 * 1024 * 1024 } });
 
 // Starts the background read; returns the job id. `kind` is "story" or "screenplay".
+// kind "auto": the pages are read as they are laid out (so dialogue, speakers and scene headings stay on their own lines), then the text is
+// looked at (importAnalysis.js) to learn which stage the PDF is at. Story-like material (synopsis, idea, characters, beats) is then joined
+// into paragraphs the usual way; screenplay material is never re-flowed. The answer carries `analysis` and a plain-language `report`.
 function startPdfReadJob(buffer, kind) {
   for (const [id, job] of pdfReadJobs) if (Date.now() - job.startedAt > 60 * 60 * 1000) pdfReadJobs.delete(id);
   const id = crypto.randomUUID();
   const job = { id, status: "reading", progress: "Starting", startedAt: Date.now() };
   pdfReadJobs.set(id, job);
-  readStoryFromPdf(buffer, { kind, ask: brainAsker(newUsage(), (label) => { job.progress = label; }), onProgress: (label) => { job.progress = label; } })
-    .then((result) => Object.assign(job, { status: "done", progress: "Done", result }))
+  readStoryFromPdf(buffer, { kind: kind === "auto" ? "screenplay" : kind, ask: brainAsker(newUsage(), (label) => { job.progress = label; }), onProgress: (label) => { job.progress = label; } })
+    .then((result) => {
+      if (kind === "auto") {
+        job.progress = "Looking at what the PDF contains";
+        const analysis = analyzeImportedText(result.text);
+        if (!["screenplay", "scene_list"].includes(analysis.stage)) result = { ...result, text: cleanPastedStory(result.text).text.trim() };
+        result = { ...result, analysis, report: reportLines(analysis) };
+      }
+      Object.assign(job, { status: "done", progress: "Done", result });
+    })
     .catch((error) => {
       console.error("PDF reading failed:", error.message);
       Object.assign(job, { status: "failed", error: error.status ? error.message : `Adu could not read this PDF (${String(error.message).slice(0, 160)}). Please try again.` });
@@ -19313,7 +19325,7 @@ app.post("/api/story-from-pdf", requireRole("admin"), pdfUpload.single("file"), 
     res.status(400).json({ error: "This does not look like a PDF file." });
     return;
   }
-  res.json({ jobId: startPdfReadJob(req.file.buffer, "story") });
+  res.json({ jobId: startPdfReadJob(req.file.buffer, req.body?.mode === "auto" ? "auto" : "story") });
 });
 
 // AI MOVIES: import a finished screenplay file. A PDF is read page by page by Adu (starts a job, same

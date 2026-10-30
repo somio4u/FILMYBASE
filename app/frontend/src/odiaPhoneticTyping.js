@@ -37,6 +37,7 @@ export async function loadCorpus(backendUrl) {
 }
 
 let busy = false // our own edit fires the same events; it must not be treated as typing
+let kept = null // { el, word }: the writer pressed Escape — this English word stays English (Space does not turn it into Odia)
 const lastConversion = new WeakMap() // text box -> { roman, shown }: the word just turned into Odia (Backspace right after it gives the English letters back)
 
 // the strip of choices: who is listening (the screen part), and what the choices are right now
@@ -120,7 +121,8 @@ export function phoneticInput(event) {
   const el = event.target
   if (!isTypingTarget(el)) return
   const word = pendingWord(el)
-  show(word ? { el, word, candidates: choicesFor(word) } : null)
+  if (kept && (kept.el !== el || kept.word !== word)) kept = null // another word now: Escape no longer applies
+  show(word && !(kept && kept.word === word) ? { el, word, candidates: choicesFor(word) } : null)
 }
 export const phoneticBlur = () => show(null)
 
@@ -146,6 +148,7 @@ export function phoneticBeforeInput(event) {
   if (event.inputType !== 'insertText' || !event.data || event.data.length !== 1 || !ENDS_A_WORD.test(event.data)) return
   const word = pendingWord(el)
   if (!word) return
+  if (kept && kept.el === el && kept.word === word) { kept = null; show(null); return } // Escape was pressed for this word: it stays English
   event.preventDefault()
   convertWord(el, word, event.data)
 }
@@ -161,9 +164,10 @@ export function phoneticKeyDown(event) {
       if (chooseChoice(Number(event.key))) event.preventDefault()
       return
     }
-    if (event.key === 'Escape') { show(null); return }
+    if (event.key === 'Escape') { kept = { el, word: active.word }; show(null); return }
   }
   if (event.key !== 'Enter') return
   const word = pendingWord(el)
-  if (word) convertWord(el, word)
+  if (word && !(kept && kept.el === el && kept.word === word)) convertWord(el, word)
+  kept = null
 }

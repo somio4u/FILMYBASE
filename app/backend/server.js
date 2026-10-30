@@ -40,6 +40,7 @@ import { registerSubmissionRoutes, designerGatekeeper, DESIGNER_ROLE } from "./d
 import { sessionTokenOf } from "./sessionToken.js";
 import { analyzeImportedText, numberedHeadingsToPlain, reportLines } from "./importAnalysis.js";
 import { ADD_KIND, createWriteScenesJobs, publicView as publicWriteJob } from "./writeScenesJobs.js";
+import { countOdiaWords, textsOfScene, textsOfSceneList } from "./odiaCorpus.js";
 import { languageOf, parseEpisodesFromText, sceneContent } from "./screenplayImport.js";
 import { planFill } from "./pdfFill.js";
 import { makeInsertedScenes, planInsertions, renumberSimpleScenes } from "./sceneInsert.js";
@@ -20222,6 +20223,41 @@ app.get("/api/scene-lists/:id/director-screenplay", requireRole("admin"), async 
     console.error("Director screenplay export failed:", error.message);
     if (!res.headersSent) res.status(500).json({ error: error.message });
     else res.end();
+  }
+});
+
+// The words the person's own scripts already contain, counted: the dictionary behind the phonetic Odia typing (odiaCorpus.js; the screen's odiaFuzzy.js
+// decides which of them a typed word means). The admin gets every project's words, anybody else only the words of the projects he can open.
+// Worked out at most every ten minutes per person.
+const odiaWordsCache = new Map();
+app.get("/api/odia-words", requireLogin, async (req, res) => {
+  const key = req.user.role === "admin" ? "all" : `user-${req.user.id}`;
+  const cached = odiaWordsCache.get(key);
+  if (cached && Date.now() - cached.at < 10 * 60 * 1000) { res.json({ words: cached.words }); return; }
+  try {
+    const chain = `LEFT JOIN bit_sheets bs ON bs.id = sl.bit_sheet_id LEFT JOIN three_act_structures tas ON tas.id = bs.three_act_structure_id LEFT JOIN pitch_decks pd ON pd.id = tas.pitch_deck_id`;
+    const scenes = (await db.query(
+      `SELECT s.content, COALESCE(sl.concept_id, pd.concept_id) AS concept_id
+       FROM (SELECT DISTINCT ON (scene_list_id, episode_index, scene_index) scene_list_id, content FROM screenplay_scenes
+             ORDER BY scene_list_id, episode_index, scene_index, created_at DESC, id DESC) s
+       JOIN scene_lists sl ON sl.id = s.scene_list_id ${chain}`)).rows;
+    const lists = (await db.query(`SELECT sl.content, COALESCE(sl.concept_id, pd.concept_id) AS concept_id FROM scene_lists sl ${chain}`)).rows;
+    const allowed = new Map(); // concept id -> may this person open it
+    const may = (conceptId) => {
+      if (req.user.role === "admin") return true;
+      if (conceptId == null) return false;
+      if (!allowed.has(conceptId)) allowed.set(conceptId, Boolean(requireConceptAccess(req, conceptId)));
+      return allowed.get(conceptId);
+    };
+    const texts = [];
+    for (const row of scenes) if (may(row.concept_id)) texts.push(...textsOfScene(row.content));
+    for (const row of lists) if (may(row.concept_id)) texts.push(...textsOfSceneList(row.content));
+    const words = countOdiaWords(texts);
+    odiaWordsCache.set(key, { at: Date.now(), words });
+    res.json({ words });
+  } catch (error) {
+    console.error("Counting the Odia words failed:", error.message);
+    res.json({ words: [] }); // typing still works with the rules and the built-in list
   }
 });
 

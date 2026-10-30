@@ -102,7 +102,7 @@ export default function OdiaKeyToggle() {
       {on && <button type="button" className="odia-toggle-keys" title={mode === 'phon' ? 'Show how to type' : 'Show the Odia keyboard'} onClick={() => setShow(!show)}>⌨</button>}
       {mode === 'phon' && show && (
         <div className="odia-keyboard odia-phonetic-help" role="note" aria-label="Typing Odia with English letters">
-          <p><b>Type the word in English letters, then press Space</b> — it turns into Odia.</p>
+          <p><b>Type the word in English letters, then press Space</b> — it turns into Odia. While you type, the Odia it can mean shows on top (from the words in your own scripts): <b>Space</b> takes the first, a <b>number</b> (or a tap) takes another — and the app remembers your pick. <b>Esc</b> keeps the English word.</p>
           <input type="text" className="odia-try" value={tryText} placeholder="try here: pabana + Space" onChange={(e) => setTryText(e.target.value)} aria-label="Try typing here" />
           {corpusNote && <p className="odia-corpus-note">{corpusNote}</p>}
           <details className="odia-mywords">

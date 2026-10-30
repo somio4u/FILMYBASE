@@ -43,6 +43,7 @@ export const WRITER_ROUTES = [
   // "Upload PDF instead" in the Idea / Synopsis / Bit Sheet / Scene one-liners boxes: Adu reads the pages of a PDF (a background job, polled)
   ["^(POST)$", /^\/api\/story-from-pdf$/, null],
   ["^(POST)$", /^\/api\/draft\/(analyze|read-file)$/, null],
+  ["^(GET)$", /^\/api\/odia-words$/, null],
   ["^(GET)$", /^\/api\/story-from-pdf\/[A-Za-z0-9-]+$/, null],
   // the story stages
   ["^(POST)$", /^\/api\/pitch-deck$/, "bodyConcept"],

@@ -39,9 +39,10 @@ import { registerDesignTaskRoutes } from "./designTasks.js";
 import { registerSubmissionRoutes, designerGatekeeper, DESIGNER_ROLE } from "./designSubmissions.js";
 import { sessionTokenOf } from "./sessionToken.js";
 import { analyzeImportedText, numberedHeadingsToPlain, reportLines } from "./importAnalysis.js";
-import { createWriteScenesJobs, publicView as publicWriteJob } from "./writeScenesJobs.js";
+import { ADD_KIND, createWriteScenesJobs, publicView as publicWriteJob } from "./writeScenesJobs.js";
 import { languageOf, parseEpisodesFromText, sceneContent } from "./screenplayImport.js";
 import { planFill } from "./pdfFill.js";
+import { makeInsertedScenes, planInsertions, renumberSimpleScenes } from "./sceneInsert.js";
 import { sceneState } from "./importAnalysis.js";
 import { buildScreenplayProject, saveScreenplayProject } from "./screenplayProject.js";
 import { buddySystemPrompt, sceneContextText, historyToContents, extractProposal, parseWriteSpec, unwrittenContextText } from "./writingBuddy.js";
@@ -10890,12 +10891,6 @@ function mergeSameSettingScenes(scenes) {
 
 // After a merge, scene numbers like "E7S1, E7S2, E7S6" are made sequential again
 // (keeping their prefix) when every number has that simple shape.
-function renumberSimpleScenes(scenes) {
-  const shapes = scenes.map((scene) => String(scene.sceneNumber ?? "").match(/^(.*?)(\d+)$/));
-  if (shapes.length === 0 || shapes.some((shape) => !shape)) return scenes;
-  return scenes.map((scene, i) => ({ ...scene, sceneNumber: `${shapes[0][1]}${i + 1}` }));
-}
-
 // Measured pacing problems, given to the scene list's story judge as review
 // notes (not blocking): one-beat scenes, overlong scenes, and an episode or
 // film with too few / too many scenes for its length.
@@ -12092,33 +12087,7 @@ app.post("/api/scene-lists/:id/scenes", requireRole("admin"), async (req, res) =
       return;
     }
     const { content, scenes } = locked;
-    const at = Math.max(0, Math.min(Number(position) || 0, scenes.length));
-    const neighbour = scenes[at - 1] ?? scenes[at] ?? {};
-    const text = (value) => {
-      const trimmed = String(value).trim();
-      return { en: trimmed, or: trimmed, hi: trimmed };
-    };
-    const newScene = {
-      actNumber: neighbour.actNumber ?? 1,
-      intExt: intExt === "EXT" ? "EXT" : "INT",
-      location: text(location),
-      timeOfDay: String(timeOfDay || "DAY").toUpperCase(),
-      oneLiner: text(oneLiner),
-      estimatedMinutes: Math.max(0.5, Math.min(15, Number(estimatedMinutes) || 2)),
-      purpose: neighbour.purpose ?? "plot_advancing",
-      addedByUser: true,
-      // the writer's own description is the only story this scene may have (see generateScreenplaySceneContent)
-      ...(strictContext === true ? { strictContext: true } : {}),
-    };
-    // Scene numbers ("12", "E3S4") stay sequential when they are simple;
-    // otherwise the new scene gets the film-industry style "12A".
-    const everyNumbered = scenes.length > 0 && scenes.every((s) => s.sceneNumber);
-    const simpleNumbers = everyNumbered && scenes.every((s) => /^(.*?)(\d+)$/.test(String(s.sceneNumber)));
-    if (simpleNumbers) newScene.sceneNumber = String(scenes[0].sceneNumber); // renumbered just below
-    else if (everyNumbered) newScene.sceneNumber = `${(scenes[at - 1] ?? scenes[0]).sceneNumber}A`;
-    let nextScenes = [...scenes.slice(0, at), newScene, ...scenes.slice(at)];
-    if (simpleNumbers) nextScenes = renumberSimpleScenes(nextScenes);
-
+    const { at, nextScenes } = makeInsertedScenes(scenes, position, { intExt, location, timeOfDay, oneLiner, estimatedMinutes, strictContext });
     await shiftScenePositions(client, sceneListId, episodeIndex, at, 1);
     const nextContent = withRecountedMinutes(withSceneArray(content, episodeIndex, nextScenes), episodeIndex);
     await client.query("UPDATE scene_lists SET content = $1 WHERE id = $2", [JSON.stringify(nextContent), sceneListId]);
@@ -20256,9 +20225,10 @@ app.get("/api/scene-lists/:id/director-screenplay", requireRole("admin"), async 
   }
 });
 
-// ---- "Write the scenes that are not written yet": a background job the Buddy offers (writeScenesJobs.js) ----
+// ---- What the Buddy can do that takes minutes — all background jobs (writeScenesJobs.js), each with visible progress, Stop, reload / restart safety:
+//   write the scenes that are not written yet · write written scenes AGAIN with the writer's notes (the old version stays: ↶ Undo) · add new scene one-liners ----
 // A scene counts as written when it has a saved screenplay row with lines in it; scenes that only exist in the scene list (one-liners) are the ones left.
-async function listUnwrittenScenes(sceneListId) {
+async function listSceneStates(sceneListId) {
   const list = (await db.query("SELECT content FROM scene_lists WHERE id = $1", [sceneListId])).rows[0]?.content;
   if (!list) return [];
   const rows = (await db.query(
@@ -20270,10 +20240,9 @@ async function listUnwrittenScenes(sceneListId) {
   const out = [];
   for (const group of groups) {
     group.scenes.forEach((scene, i) => {
-      if (written.has(`${group.episodeIndex ?? "film"}:${i}`)) return;
       const place = scene.location?.en || scene.location?.or || scene.location?.hi || "";
       out.push({
-        episodeIndex: group.episodeIndex, sceneIndex: i,
+        episodeIndex: group.episodeIndex, sceneIndex: i, written: written.has(`${group.episodeIndex ?? "film"}:${i}`),
         label: series ? `${group.episodeIndex + 1}.${i + 1}` : String(scene.sceneNumber ?? i + 1),
         heading: `${scene.intExt ?? "INT"}. ${place} - ${scene.timeOfDay ?? "DAY"}`,
         oneLiner: scene.oneLiner?.en || scene.oneLiner?.or || scene.oneLiner?.hi || "",
@@ -20283,14 +20252,103 @@ async function listUnwrittenScenes(sceneListId) {
   return out;
 }
 
-// writes ONE scene exactly like the "Write this scene" button (/api/screenplay/scene) does, and saves it
+// the scenes of the project's story in plain text, for the AI that plans new scenes
+function sceneListAsText(scenes) {
+  const one = (v) => (v && typeof v === "object" ? v.en || v.or || v.hi || "" : String(v ?? ""));
+  return scenes.map((s, i) => `${s.sceneNumber ?? i + 1}. ${s.intExt ?? "INT"}. ${one(s.location)} - ${s.timeOfDay ?? "DAY"} — ${one(s.oneLiner)} (${s.estimatedMinutes ?? 2} min)`).join("\n");
+}
+
+const EXTRA_SCENES_SCHEMA = {
+  type: Type.OBJECT,
+  properties: {
+    scenes: {
+      type: Type.ARRAY,
+      items: {
+        type: Type.OBJECT,
+        properties: {
+          afterScene: { type: Type.STRING },
+          intExt: { type: Type.STRING, enum: ["INT", "EXT"] },
+          location: BILINGUAL_TEXT_SCHEMA,
+          timeOfDay: { type: Type.STRING, enum: ["DAY", "NIGHT"] },
+          oneLiner: BILINGUAL_TEXT_SCHEMA,
+          estimatedMinutes: { type: Type.NUMBER },
+          purpose: { type: Type.STRING, enum: ["plot_advancing", "character_revealing"] },
+          turn: BILINGUAL_TEXT_SCHEMA,
+        },
+        required: ["afterScene", "intExt", "location", "timeOfDay", "oneLiner", "estimatedMinutes", "purpose", "turn"],
+      },
+    },
+  },
+  required: ["scenes"],
+};
+
+// plans `count` NEW scene one-liners that fit the story as it is now; each says which existing scene it comes right after ("0" = the very start)
+async function generateExtraSceneOneLiners({ deck, scenes, count, controllingIdea }) {
+  const contents = `The film: ${deck.title?.en ?? ""}\nLogline: ${deck.logline?.en ?? ""}\nPremise: ${deck.premise?.en ?? ""}\n${controllingIdea?.en ? `Controlling idea (theme): ${controllingIdea.en}\n` : ""}
+The scene list as it stands (number, place, time, what happens, minutes):
+${sceneListAsText(scenes)}
+
+Plan exactly ${count} NEW scenes to add to this film. The writer wants a longer film with more scenes. Rules:
+- Every new scene must fit the story and its characters as they are — deepen what is there (a build-up, a consequence, a quiet character moment, a twist's set-up). Do NOT repeat an existing scene, do NOT change the ending, do NOT invent a new storyline or a second ending.
+- For each new scene give "afterScene": the NUMBER of the existing scene it should come right after (use "0" only for the very beginning). Spread the new scenes where the story can use them rather than piling them in one spot.
+- Give the scene's place (just the place name, no time words), INT or EXT, DAY or NIGHT, a one-or-two-sentence one-liner of what happens and a turn (what changes), an estimate of its minutes (1 to 4), and its purpose.
+- Keep the places, names and the cultural texture of the existing scenes.`;
+  const parsed = await generateJsonContent({
+    model: STORY_WRITER_MODEL_NAME,
+    contents,
+    config: { systemInstruction: SCENE_SYSTEM_PROMPT, responseMimeType: "application/json", responseSchema: EXTRA_SCENES_SCHEMA, maxOutputTokens: 8192, temperature: 0.8 },
+  });
+  return (sanitizeBilingualContent(parsed).scenes ?? []).slice(0, count);
+}
+
+// one batch of the "add scenes" job: the AI plans the scenes, then they are put in (one transaction; the scenes after each new one move up, with their written text)
+async function addGeneratedScenesNow(sceneListId, item) {
+  const context = await fetchSceneListContext(sceneListId);
+  if (!context || context.scene_list_status !== "approved") throw new Error("The scene list must be approved before adding scenes.");
+  const scenes = context.scene_list_content.scenes;
+  if (!Array.isArray(scenes)) throw new Error("Adding scenes by number works for a film for now.");
+  const generated = await generateExtraSceneOneLiners({ deck: context.pitch_deck_content, scenes, count: item.count, controllingIdea: context.scene_list_content.controllingIdea });
+  if (generated.length === 0) throw new Error("The AI did not suggest any scene this time.");
+  const client = await db.connect();
+  try {
+    await client.query("BEGIN");
+    const locked = await lockSceneListForSceneEdit(client, sceneListId, null);
+    if (locked.error) throw new Error(locked.error);
+    let current = locked.scenes;
+    let content = locked.content;
+    for (const { position, fields } of planInsertions(current, generated)) { // the list may have changed while the AI thought: the plan is made on the list as it is NOW
+      const { at, nextScenes } = makeInsertedScenes(current, position, { ...fields, addedBy: "ai" });
+      await shiftScenePositions(client, sceneListId, null, at, 1);
+      current = nextScenes;
+    }
+    content = withRecountedMinutes(withSceneArray(content, null, current), null);
+    await client.query("UPDATE scene_lists SET content = $1 WHERE id = $2", [JSON.stringify(content), sceneListId]);
+    await client.query("COMMIT");
+  } catch (error) {
+    await client.query("ROLLBACK").catch(() => {});
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+// writes ONE scene exactly like the "Write this scene" button (/api/screenplay/scene) does, and saves it; with `revision` it writes the scene AGAIN
+// following the writer's notes, as a new version (↶ Undo brings the old one back)
 async function writeOneSceneNow(sceneListId, item, dialogueLanguage) {
   const context = await fetchSceneListContext(sceneListId);
   if (!context || context.scene_list_status !== "approved") throw new Error("The scene list must be approved before writing the screenplay.");
   const hasEpisode = item.episodeIndex !== null && item.episodeIndex !== undefined;
   const allScenes = hasEpisode ? context.scene_list_content.episodeScenes[item.episodeIndex].scenes : context.scene_list_content.scenes;
   const previousRow = item.sceneIndex > 0 ? await fetchLatestScreenplayScene(sceneListId, hasEpisode ? item.episodeIndex : null, item.sceneIndex - 1) : null;
-  const content = await generateScreenplaySceneContent(context.pitch_deck_content, allScenes, item.sceneIndex, previousRow ? previousRow.content.elements : null, context.scene_list_content.controllingIdea, undefined, dialogueLanguage);
+  let revision;
+  let language = dialogueLanguage;
+  if (item.rewrite) {
+    const own = await fetchLatestScreenplayScene(sceneListId, hasEpisode ? item.episodeIndex : null, item.sceneIndex);
+    if (!own?.content?.elements?.length) throw new Error("This scene is not written yet, so there is nothing to write again.");
+    revision = { feedback: item.feedback || "Write this scene again, a little better.", previous: own.content };
+    language = ["en", "hi", "or"].includes(own.content.dialogueLanguage) ? own.content.dialogueLanguage : dialogueLanguage;
+  }
+  const content = await generateScreenplaySceneContent(context.pitch_deck_content, allScenes, item.sceneIndex, previousRow ? previousRow.content.elements : null, context.scene_list_content.controllingIdea, revision, language);
   await db.query("INSERT INTO screenplay_scenes (scene_list_id, episode_index, scene_index, content) VALUES ($1, $2, $3, $4)", [sceneListId, hasEpisode ? item.episodeIndex : null, item.sceneIndex, JSON.stringify(content)]);
 }
 
@@ -20304,49 +20362,108 @@ async function projectDialogueLanguage(sceneListId) {
 const writeScenesJobs = createWriteScenesJobs({
   jobStore,
   isWritten: async (item) => {
+    if (item.rewrite) return false; // a rewrite is "done" only when this job has done it (the job remembers)
     const row = await fetchLatestScreenplayScene(item.sceneListId, item.episodeIndex ?? null, item.sceneIndex);
     return Array.isArray(row?.content?.elements) && row.content.elements.length > 0;
   },
+  describe: (item, number, total) => `${item.rewrite ? "Writing again" : "Writing"} scene ${item.label} (${number} of ${total})${item.heading ? ` — ${item.heading}` : ""}`,
   writeOne: (item) => writeOneSceneNow(item.sceneListId, item, item.language),
 });
 
-app.get("/api/scene-lists/:id/write-jobs/current", requireRole("admin"), async (req, res) => {
-  const job = await writeScenesJobs.currentFor(Number(req.params.id));
-  res.json(publicWriteJob(job) ?? { jobId: null });
+const addScenesJobs = createWriteScenesJobs({
+  jobStore,
+  kind: ADD_KIND,
+  isWritten: async (item) => {
+    const list = (await db.query("SELECT content FROM scene_lists WHERE id = $1", [item.sceneListId])).rows[0]?.content;
+    return (list?.scenes?.length ?? 0) >= item.expectedTotal; // this batch is already in (before a restart)
+  },
+  describe: (item, number, total) => `Planning ${item.count} new scene${item.count === 1 ? "" : "s"} that fit your story (part ${number} of ${total})`,
+  writeOne: (item) => addGeneratedScenesNow(item.sceneListId, item),
 });
 
-// body: { scope: "all" | "next" (with count) | "scenes" (with scenes: [{ episodeIndex, sceneIndex }]) }
+// the newest job of this scene list, of any kind (the screen shows one progress card)
+async function currentSceneJob(sceneListId) {
+  const jobs = [await writeScenesJobs.currentFor(sceneListId), await addScenesJobs.currentFor(sceneListId)].filter(Boolean);
+  return jobs.sort((a, b) => b.startedAt - a.startedAt)[0] ?? null;
+}
+
+// the scene list as it is now (the screen asks for it after the Buddy's "add scenes" job has put new scenes in)
+app.get("/api/scene-lists/:id/content", requireRole("admin"), async (req, res) => {
+  const row = (await db.query("SELECT content FROM scene_lists WHERE id = $1", [Number(req.params.id)])).rows[0];
+  if (!row) { res.status(404).json({ error: "Project not found." }); return; }
+  res.json({ sceneList: row.content });
+});
+
+app.get("/api/scene-lists/:id/write-jobs/current", requireRole("admin"), async (req, res) => {
+  res.json(publicWriteJob(await currentSceneJob(Number(req.params.id))) ?? { jobId: null });
+});
+
+// body: { scope: "all" | "next" (with count) | "scenes" (with scenes: [{ episodeIndex, sceneIndex }]) } — writes scenes that are not written yet
+//       { scope: "rewrite", scenes: [...], feedback } — writes written scenes AGAIN following the notes (the old versions stay)
+//       { scope: "add", count } — plans `count` new scene one-liners (a film)
 app.post("/api/scene-lists/:id/write-jobs", requireRole("admin"), async (req, res) => {
   const sceneListId = Number(req.params.id);
   try {
-    const list = (await db.query("SELECT status FROM scene_lists WHERE id = $1", [sceneListId])).rows[0];
+    const list = (await db.query("SELECT status, content FROM scene_lists WHERE id = $1", [sceneListId])).rows[0];
     if (!list) { res.status(404).json({ error: "Project not found." }); return; }
     if (list.status !== "approved") { res.status(400).json({ error: "The scene list must be approved before writing the screenplay." }); return; }
     const running = await db.query("SELECT 1 FROM auto_pipeline_runs WHERE scene_list_id = $1 AND status = 'running' LIMIT 1", [sceneListId]);
     if (running.rows.length > 0) { res.status(409).json({ error: "The AI is still writing this script. Try again once it has finished." }); return; }
-    const unwritten = await listUnwrittenScenes(sceneListId);
-    let chosen;
-    if (req.body?.scope === "all") chosen = unwritten;
-    else if (req.body?.scope === "next") chosen = unwritten.slice(0, Math.max(1, Math.min(200, Math.floor(Number(req.body.count)) || 1)));
-    else if (req.body?.scope === "scenes" && Array.isArray(req.body.scenes)) {
-      const wanted = new Set(req.body.scenes.map((s) => `${s?.episodeIndex ?? "film"}:${s?.sceneIndex}`));
-      chosen = unwritten.filter((s) => wanted.has(`${s.episodeIndex ?? "film"}:${s.sceneIndex}`));
-    } else { res.status(400).json({ error: "Which scenes? (all, the next few, or named ones)" }); return; }
-    if (chosen.length === 0) { res.status(400).json({ error: "There is nothing left to write there — every one of those scenes is already written." }); return; }
+    // one thing at a time: adding scenes moves the scene numbers under a writing job, and two writing jobs would write the same scenes twice
+    const scope = req.body?.scope;
+    const busyWith = await currentSceneJob(sceneListId);
+    if (busyWith?.status === "running") {
+      const sameKind = (busyWith.kind ?? "write-scenes") === (scope === "add" ? "add-scenes" : "write-scenes");
+      if (!sameKind) { res.status(409).json({ error: "Another job (writing or adding scenes) is still running here. Wait for it, or stop it first." }); return; }
+    }
     const language = ["en", "hi", "or"].includes(req.body?.language) ? req.body.language : await projectDialogueLanguage(sceneListId);
-    const items = chosen.map((s) => ({ ...s, sceneListId, language }));
+
+    if (scope === "add") {
+      if (!Array.isArray(list.content?.scenes)) { res.status(400).json({ error: "Adding scenes by number works for a film for now." }); return; }
+      const count = Math.floor(Number(req.body.count));
+      if (!(count >= 1 && count <= 40)) { res.status(400).json({ error: "How many scenes? Between 1 and 40." }); return; }
+      const BATCH = 10;
+      const have = list.content.scenes.length;
+      const items = [];
+      for (let done = 0, n = 0; done < count; n += 1) { const c = Math.min(BATCH, count - done); done += c; items.push({ episodeIndex: null, sceneIndex: n, label: `+${done}`, heading: "", count: c, expectedTotal: have + done, sceneListId }); }
+      const { job, alreadyRunning } = await addScenesJobs.start({ sceneListId, userId: req.user.id, items, language });
+      res.json({ ...publicWriteJob(job), alreadyRunning });
+      return;
+    }
+
+    const states = await listSceneStates(sceneListId);
+    const wanted = new Set((Array.isArray(req.body?.scenes) ? req.body.scenes : []).map((x) => `${x?.episodeIndex ?? "film"}:${x?.sceneIndex}`));
+    let chosen;
+    if (scope === "rewrite") {
+      chosen = states.filter((x) => x.written && wanted.has(`${x.episodeIndex ?? "film"}:${x.sceneIndex}`)).slice(0, 20);
+      if (chosen.length === 0) { res.status(400).json({ error: "None of those scenes is written yet, so there is nothing to write again." }); return; }
+      const feedback = String(req.body?.feedback ?? "").trim().slice(0, 1500);
+      const items = chosen.map((x) => ({ ...x, sceneListId, language, rewrite: true, feedback }));
+      const { job, alreadyRunning } = await writeScenesJobs.start({ sceneListId, userId: req.user.id, items, language });
+      res.json({ ...publicWriteJob(job), alreadyRunning });
+      return;
+    }
+    const unwritten = states.filter((x) => !x.written);
+    if (scope === "all") chosen = unwritten;
+    else if (scope === "next") chosen = unwritten.slice(0, Math.max(1, Math.min(200, Math.floor(Number(req.body.count)) || 1)));
+    else if (scope === "scenes") chosen = unwritten.filter((x) => wanted.has(`${x.episodeIndex ?? "film"}:${x.sceneIndex}`));
+    else { res.status(400).json({ error: "Which scenes? (all, the next few, or named ones)" }); return; }
+    if (chosen.length === 0) { res.status(400).json({ error: "There is nothing left to write there — every one of those scenes is already written." }); return; }
+    const items = chosen.map((x) => ({ ...x, sceneListId, language }));
     const { job, alreadyRunning } = await writeScenesJobs.start({ sceneListId, userId: req.user.id, items, language });
     res.json({ ...publicWriteJob(job), alreadyRunning });
   } catch (error) {
-    console.error("Starting the write-scenes job failed:", error.message);
+    console.error("Starting the scenes job failed:", error.message);
     res.status(500).json({ error: error.message });
   }
 });
 
 app.post("/api/scene-lists/:id/write-jobs/:jobId/stop", requireRole("admin"), async (req, res) => {
-  const job = await writeScenesJobs.get(req.params.jobId);
-  if (!job || job.sceneListId !== Number(req.params.id)) { res.status(404).json({ error: "This job was not found." }); return; }
-  res.json({ stopped: await writeScenesJobs.stop(req.params.jobId) });
+  const sceneListId = Number(req.params.id);
+  const job = (await writeScenesJobs.get(req.params.jobId)) ?? (await addScenesJobs.get(req.params.jobId));
+  if (!job || job.sceneListId !== sceneListId) { res.status(404).json({ error: "This job was not found." }); return; }
+  const stopped = (await writeScenesJobs.stop(req.params.jobId)) || (await addScenesJobs.stop(req.params.jobId));
+  res.json({ stopped });
 });
 
 // ---- The Buddy: a chat friend in the screenplay screen (writingBuddy.js). One conversation per person and project, remembered in agent_chat_messages
@@ -20405,10 +20522,11 @@ app.post("/api/assistant/:sceneListId/message", requireLogin, async (req, res) =
     }
     // who may let the Buddy change the screenplay from the chat: the same people who can use the voice edit (admin and the two writer roles)
     const canAct = req.user.role === "admin" || isWriterRole(req.user.role);
-    const unwritten = canAct ? await listUnwrittenScenes(ctx.sceneListId) : null;
+    const states = canAct ? await listSceneStates(ctx.sceneListId) : null;
+    const unwritten = states ? states.filter((x) => !x.written) : null;
     const totalScenes = Array.isArray(sl.episodeScenes) ? sl.episodeScenes.reduce((n, e) => n + (e.scenes?.length ?? 0), 0) : (sl.scenes?.length ?? 0);
     const sceneFacts = sceneContextText({ title: title?.title || title?.concept_text?.slice(0, 80), sceneList: sl, episodeIndex, sceneIndex: sceneIndex ?? -1, elements, dialogueLanguage, estimateSeconds: estimateScreenSeconds });
-    const scenePack = canAct ? `${sceneFacts}\n\n${unwrittenContextText(unwritten, totalScenes)}` : sceneFacts
+    const scenePack = canAct ? `${sceneFacts}\n\n${unwrittenContextText(unwritten, totalScenes, { writtenLabels: states.filter((x) => x.written).map((x) => x.label), targetScenes: Array.isArray(sl.scenes) ? sl.targetScenes : null })}` : sceneFacts
     const system = buddySystemPrompt({ user: req.user, scenePack, canEdit: canAct });
 
     const past = (await db.query(
@@ -20423,16 +20541,23 @@ app.post("/api/assistant/:sceneListId/message", requireLogin, async (req, res) =
     const reply = String(response.text ?? "").trim();
     if (!reply) throw new Error("The Buddy had nothing to say this time. Please ask again.");
     const proposal = extractProposal(reply);
-    if (!proposal.text && !proposal.instruction && !proposal.write) throw new Error("The Buddy had nothing to say this time. Please ask again.");
+    if (!proposal.text && !proposal.instruction && !proposal.write && !proposal.add && !proposal.rewrite) throw new Error("The Buddy had nothing to say this time. Please ask again.");
     let proposed = null;
+    const brief = ({ episodeIndex: e, sceneIndex: i, label, heading }) => ({ episodeIndex: e, sceneIndex: i, label, heading });
     if (canAct && proposal.instruction && sceneIndex !== null) proposed = { type: "scene_edit", instruction: proposal.instruction, episodeIndex, sceneIndex };
     else if (canAct && proposal.write) {
       // the scenes the Buddy named, checked against the scenes that really are not written yet (it can never "write" a written scene)
-      const chosen = parseWriteSpec(proposal.write, await listUnwrittenScenes(ctx.sceneListId));
-      if (chosen.length > 0) proposed = { type: "write_scenes", scenes: chosen.map(({ episodeIndex: e, sceneIndex: i, label, heading }) => ({ episodeIndex: e, sceneIndex: i, label, heading })), count: chosen.length };
+      const chosen = parseWriteSpec(proposal.write, (await listSceneStates(ctx.sceneListId)).filter((x) => !x.written));
+      if (chosen.length > 0) proposed = { type: "write_scenes", scenes: chosen.map(brief), count: chosen.length };
+    } else if (canAct && proposal.add && Array.isArray(sl.scenes)) {
+      proposed = { type: "add_scenes", count: proposal.add }; // a film only (the scenes of a series belong to its episodes)
+    } else if (canAct && proposal.rewrite && /^scenes?\b/i.test(proposal.rewrite.spec)) {
+      // only scenes that really are written can be written again
+      const chosen = parseWriteSpec(proposal.rewrite.spec, (await listSceneStates(ctx.sceneListId)).filter((x) => x.written)).slice(0, 10);
+      if (chosen.length > 0) proposed = { type: "rewrite_scenes", scenes: chosen.map(brief), count: chosen.length, feedback: proposal.rewrite.feedback };
     }
     const assistantRow = (await db.query("INSERT INTO agent_chat_messages (concept_id, stage_key, role, content, proposed_action) VALUES ($1, $2, 'assistant', $3, $4) RETURNING id, role, content, proposed_action, resolved, created_at",
-      [ctx.conceptId, stageKey, proposal.text || proposal.instruction || proposal.write, proposed ? JSON.stringify(proposed) : null])).rows[0];
+      [ctx.conceptId, stageKey, proposal.text || proposal.instruction || proposal.write || (proposal.add ? `[add ${proposal.add}]` : null) || proposal.rewrite?.spec, proposed ? JSON.stringify(proposed) : null])).rows[0];
     res.json({ userMessage: userRow, assistantMessage: assistantRow });
   } catch (error) {
     console.error("Buddy chat failed:", error.message);
@@ -21093,7 +21218,7 @@ ensureAiMovieSchema()
   .then(async () => { try { await aiCredentials.load(); aiCredentials.startRefresh(); const c = aiCredentials.current(); console.log(`AI connection: ${c.source}${c.serviceAccount ? ` — project ${c.serviceAccount.project_id}, ${c.location}` : ""}${c.problem ? ` — PROBLEM: ${c.problem}` : ""}`); } catch (error) { console.error("Reading the saved AI key failed:", error.message); } })
   .then(async () => { try { const fixed = await repairStoredLabels(db); if (fixed) console.log(`Screenplay: ${fixed} scene(s) had "ACTION:" written at the start of lines — corrected.`); } catch (error) { console.error("Label repair failed:", error.message); } })
   .then(async () => { try { const fixed = await repairStoredTransitions(db); if (fixed) console.log(`Screenplay: ${fixed} scene(s) had a transition (FREEZE. BREAK- …) written as a character — corrected.`); } catch (error) { console.error("Transition repair failed:", error.message); } })
-  .then(async () => { try { await productionSync.resume(); await resumeAdSheetJobs(); await skipStartJobs.resume(); await writeScenesJobs.resume(); } catch (error) { console.error("Resuming interrupted background jobs failed:", error.message); } })
+  .then(async () => { try { await productionSync.resume(); await resumeAdSheetJobs(); await skipStartJobs.resume(); await writeScenesJobs.resume(); await addScenesJobs.resume(); } catch (error) { console.error("Resuming interrupted background jobs failed:", error.message); } })
   .then(() => ensureAllProductionSchemas(db))
   .then(async (failures) => { try { const made = await backfillDrafts(db); await failInterruptedRequests(db); if (made) console.log(`Draft Management: ${made} existing project(s) are now Draft 1 of their project.`); } catch (error) { console.error("Draft backfill failed:", error.message); } return failures; })
   .catch((error) => console.error("Schema setup failed:", error.message))

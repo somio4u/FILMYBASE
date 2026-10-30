@@ -3998,7 +3998,7 @@ const VOICE_ORB_SIZE_PHONE = 60
 // the pen buddy). Not editing: what you say is written into the selected
 // scene and saved as a new version. Editing on the page (`editDraft` given):
 // the lines go into your unsaved edit where your cursor is, and you save.
-function VoiceWriterButton({ t, sceneListId, episodeIndex, sceneIndex, sceneNumber, blockedNote, editDraft, onAdded, onDraftLines, onSceneActions, onScenesChanged }) {
+function VoiceWriterButton({ t, sceneListId, episodeIndex, sceneIndex, sceneNumber, blockedNote, editDraft, onAdded, onDraftLines, onSceneActions, onScenesChanged, onSceneListChanged }) {
   const [phase, setPhase] = useState('idle') // idle | listening | understanding | confirm | working
   const [liveText, setLiveText] = useState('')
   const [message, setMessage] = useState(null) // { kind: 'done' | 'error', text }
@@ -4012,13 +4012,24 @@ function VoiceWriterButton({ t, sceneListId, episodeIndex, sceneIndex, sceneNumb
   const writeJobStatusRef = useRef(null)
   const scenesChangedRef = useRef(onScenesChanged)
   scenesChangedRef.current = onScenesChanged // a ref, so a new function on every render never restarts the polling
+  const listChangedRef = useRef(onSceneListChanged)
+  listChangedRef.current = onSceneListChanged
   const loadWriteJob = useCallback(async () => {
     try {
       const response = await fetch(`${BACKEND_URL}/api/scene-lists/${sceneListId}/write-jobs/current`)
       if (!response.ok) return null
       const data = await response.json()
       const job = data?.jobId ? data : null
-      if (writeJobStatusRef.current === 'running' && job && job.status !== 'running') scenesChangedRef.current?.()
+      if (writeJobStatusRef.current === 'running' && job && job.status !== 'running') {
+        // new scenes were put into the scene list: the list itself must be read again, not only the written scenes
+        if (job.kind === 'add-scenes') {
+          try {
+            const listResponse = await fetch(`${BACKEND_URL}/api/scene-lists/${sceneListId}/content`)
+            if (listResponse.ok) await listChangedRef.current?.((await listResponse.json()).sceneList)
+          } catch { /* the page shows them after the next reload */ }
+        }
+        scenesChangedRef.current?.()
+      }
       writeJobStatusRef.current = job?.status ?? null
       setWriteJob(job)
       return job
@@ -4030,17 +4041,18 @@ function VoiceWriterButton({ t, sceneListId, episodeIndex, sceneIndex, sceneNumb
     const id = setInterval(loadWriteJob, 4000)
     return () => clearInterval(id)
   }, [writeJob?.status, loadWriteJob])
-  async function startWriteJob(scenes) {
+  // `body` is the job asked for: { scope: 'scenes', scenes } write · { scope: 'rewrite', scenes, feedback } write again · { scope: 'add', count } add scenes
+  async function startWriteJob(body) {
     try {
       const response = await fetch(`${BACKEND_URL}/api/scene-lists/${sceneListId}/write-jobs`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ scope: 'scenes', scenes: scenes.map((x) => ({ episodeIndex: x.episodeIndex, sceneIndex: x.sceneIndex })) }),
+        body: JSON.stringify({ ...body, ...(body.scenes ? { scenes: body.scenes.map((x) => ({ episodeIndex: x.episodeIndex, sceneIndex: x.sceneIndex })) } : {}) }),
       })
       const { data, problem } = await readServerAnswer(response)
       if (!response.ok || !data) return { ok: false, text: data?.error || problem || t.genericError }
       writeJobStatusRef.current = data.status
       setWriteJob(data)
-      return { ok: true, text: data.alreadyRunning ? 'The writing was already running — it carries on.' : '' }
+      return { ok: true, text: data.alreadyRunning ? 'That was already running — it carries on.' : '' }
     } catch { return { ok: false, text: t.genericError } }
   }
   async function stopWriteJob() {
@@ -6025,6 +6037,7 @@ function MovieScreenplayWorkspace({
           onDraftLines={insertVoiceLines}
           onSceneActions={runAgentSceneActions}
           onScenesChanged={() => onReloadScenes?.()}
+          onSceneListChanged={(content) => onSceneListChanged?.(content)}
           onAdded={(data) => {
             setEditFixes(null)
             onSceneSaved?.(keyOf(sceneIndex), data)

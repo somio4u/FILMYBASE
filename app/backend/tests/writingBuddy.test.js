@@ -84,7 +84,7 @@ test("a reply that ends with [[EDIT: …]] becomes a proposal; the tag never rea
   assert.equal(a.instruction, "Shorten PUJARI's line 2 to one sentence.");
   assert.equal(a.text, "I will cut the priest's speech in half. Press Apply if you like it.");
   const b = extractProposal("Just an answer, no change.");
-  assert.deepEqual(b, { text: "Just an answer, no change.", instruction: null, write: null });
+  assert.deepEqual(b, { text: "Just an answer, no change.", instruction: null, write: null, add: null, rewrite: null });
   const c = extractProposal("Okay.\n[[EDIT: half written");
   assert.equal(c.instruction, null);
   assert.equal(c.text, "Okay.");
@@ -158,4 +158,38 @@ test("writers may use the write-scenes job routes of their own project", async (
   assert.equal(matchWriterRoute("GET", "/api/scene-lists/12/write-jobs/current")?.kind, "sceneList");
   assert.equal(matchWriterRoute("POST", "/api/scene-lists/12/write-jobs")?.kind, "sceneList");
   assert.equal(matchWriterRoute("POST", "/api/scene-lists/12/write-jobs/9e4a6f9a-c1a4-4639-9210-54fe3aebcb39/stop")?.kind, "sceneList");
+});
+
+test("[[ADD: n]] and [[REWRITE: scenes | notes]] become proposals; broken or empty ones do not", () => {
+  const add = extractProposal("I will add five scenes where the story can use them.\n[[ADD: 5]]");
+  assert.equal(add.add, 5);
+  assert.equal(add.write, null);
+  assert.equal(add.text, "I will add five scenes where the story can use them.");
+  assert.equal(extractProposal("x\n[[ADD: 0]]").add, null);
+  assert.equal(extractProposal("x\n[[ADD: 99]]").add, null); // never more than 40 at once
+  assert.equal(extractProposal("x\n[[ADD: many]]").add, null);
+  const rw = extractProposal("I will make scenes 7 and 9 tenser.\n[[REWRITE: scenes 7, 9 | Make both more tense: shorter lines, more silence.]]");
+  assert.deepEqual(rw.rewrite, { spec: "scenes 7, 9", feedback: "Make both more tense: shorter lines, more silence." });
+  assert.equal(rw.text, "I will make scenes 7 and 9 tenser.");
+  assert.equal(extractProposal("x\n[[REWRITE: scenes 7]]").rewrite, null); // no notes: nothing to follow
+  assert.equal(extractProposal("x\n[[REWRITE: scenes 7 | ]]").rewrite, null);
+  assert.equal(extractProposal("Sure.\n[[ADD: 3").text, "Sure.");
+  assert.equal(extractProposal("Sure.\n[[REWRITE: scenes 3 | more").rewrite, null);
+});
+
+test("the Buddy's information tells which scenes are written, and what total the writer wants", async () => {
+  const { unwrittenContextText } = await import("../writingBuddy.js");
+  const u = [{ label: "10", heading: "INT. A - DAY", oneLiner: "x" }];
+  const text = unwrittenContextText(u, 12, { writtenLabels: ["1", "2", "3", "4", "6", "8", "9", "11", "12"], targetScenes: 15 });
+  assert.match(text, /SCENES ALREADY WRITTEN: 1-4, 6, 8, 9, 11, 12\./);
+  assert.match(text, /THE WRITER WANTS 15 SCENES IN ALL; the list has 12, so 3 more scenes could be added\./);
+  assert.match(unwrittenContextText([], 12, { targetScenes: 10 }), /nothing more is needed for that/);
+  assert.doesNotMatch(unwrittenContextText(u, 12, {}), /THE WRITER WANTS/);
+});
+
+test("the Buddy is told how to offer adding scenes and writing written scenes again", () => {
+  const prompt = buddySystemPrompt({ user: { name: "A", role: "admin" }, scenePack: "x", canEdit: true });
+  assert.match(prompt, /\[\[ADD: 5\]\]/);
+  assert.match(prompt, /\[\[REWRITE: scenes 7, 9 \| /);
+  assert.match(prompt, /The old version of each scene is kept/);
 });

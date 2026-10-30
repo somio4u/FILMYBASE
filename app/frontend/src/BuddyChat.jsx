@@ -15,6 +15,7 @@ const TEXT = {
     listen: 'Listen', stopListen: 'Stop', readAloud: 'Read replies aloud', noVoice: 'This device has no Odia voice, so it cannot read Odia aloud. (Phones with Google text-to-speech and the Odia language pack installed usually can.) You can still read the replies.', speakFail: 'Could not read this aloud.',
     loadFail: 'Could not load the earlier conversation.', failed: 'The Buddy could not answer.', retryNote: 'Your message is back in the box — press Send to try again.',
     notYet: 'I can also change the scene for you: tell me what you want, and I will show it first — nothing changes until you press Apply.',
+    addProposes: (n) => `Add ${n} new scene${n === 1 ? '' : 's'}`, addAbout: 'The AI plans new one-line scenes that fit your story and puts them where it can use them. They start as “not written yet” — you can read, move, change or delete any of them. About a minute.', rewriteProposes: (n) => `Write ${n} scene${n === 1 ? '' : 's'} again`, rewriteAbout: (n) => `about ${n} minute${n === 1 ? '' : 's'} — the old version of each scene stays (↶ Undo on the scene brings it back)`, notes: 'Notes', addDone: '✓ The new scenes are in the list — read them, move or delete any', rewriteDone: (n) => `✓ ${n} scene${n === 1 ? '' : 's'} written again — ↶ Undo on a scene brings the old one back`,
     writeProposes: (n) => `Write ${n} scene${n === 1 ? '' : 's'}`, writeAbout: (n) => `about ${n} minute${n === 1 ? '' : 's'} (a minute or so per scene) — you can stop it any time`, writing: 'Writing', stop: '■ Stop', stopping: 'Stopping after this scene…', writeDone: (n) => `✓ ${n} scene${n === 1 ? '' : 's'} written`, writeFailedSome: (n) => `${n} could not be written`, writeStopped: (n) => `Stopped — ${n} scene${n === 1 ? '' : 's'} written`, writeError: 'Stopped with a problem', ok: 'OK', jobRunning: 'Another writing is running — wait for it or stop it.',
     proposes: 'Proposed change', older: 'An older suggestion — ask again if you still want it.', apply: '✓ Apply', dismiss: 'No thanks', applying: 'Applying…', applied: 'Applied', dismissed: 'Skipped', otherScene: (n) => `This was for scene ${n}. Open that scene to apply it.`, busyNote: 'Another change is running — wait for it.',
     starters: ['How long is this scene?', 'What can you help me with?', 'How do I make this scene longer?'],
@@ -28,6 +29,7 @@ const TEXT = {
     listen: 'ଶୁଣ', stopListen: 'ବନ୍ଦ', readAloud: 'ଉତ୍ତର ପଢ଼ି ଶୁଣାଅ', noVoice: 'ଏହି ଡିଭାଇସ୍‌ରେ ଓଡ଼ିଆ ଅଵାଜ୍ ନାହିଁ, ତେଣୁ ଓଡ଼ିଆ ପଢ଼ି ଶୁଣାଇପାରିବ ନାହିଁ। (ଯେଉଁ ଫୋନ୍‌ରେ Google text-to-speech ଓ ଓଡ଼ିଆ ଭାଷା ପ୍ୟାକ୍ ଅଛି ସେଥିରେ ସାଧାରଣତଃ ହୁଏ।) ଉତ୍ତର ତ ପଢ଼ିପାରିବ।', speakFail: 'ଏହାକୁ ପଢ଼ି ଶୁଣାଇ ହେଲା ନାହିଁ।',
     loadFail: 'ଆଗର କଥାବାର୍ତ୍ତା ଆଣିହେଲା ନାହିଁ।', failed: 'ବଡ଼ି ଉତ୍ତର ଦେଇପାରିଲା ନାହିଁ।', retryNote: 'ତୁମ ମେସେଜ୍ ବକ୍ସରେ ଫେରିଆସିଲା — ପୁଣି ପଠାଅ।',
     notYet: 'ମୁଁ ସିନ୍ ବଦଳେଇ ବି ପାରିବି: କୁହ କଣ ଚାହୁଁ, ମୁଁ ପ୍ରଥମେ ଦେଖେଇବି — Apply ଦବେଇଲେ ହିଁ ବଦଳିବ।',
+    addProposes: (n) => `${n}ଟି ନୂଆ ସିନ୍ ଯୋଡ଼ିବି`, addAbout: 'AI ତୁମ ଗପ ସହ ମେଳ ଖାଉଥିବା ନୂଆ ଏକ-ଲାଇନ ସିନ୍ ଭାବିବ ଓ ଯେଉଁଠି ଦରକାର ସେଠି ରଖିବ। ସେଗୁଡ଼ିକ "ଏବେ ଲେଖାହୋଇନାହିଁ" ଭାବେ ଆସିବ — ପଢ଼ିପାରିବୁ, ସ୍ଥାନ ବଦଳେଇପାରିବୁ, ବଦଳେଇପାରିବୁ କିମ୍ବା ହଟେଇପାରିବୁ। ପ୍ରାୟ ଏକ ମିନିଟ୍।', rewriteProposes: (n) => `${n}ଟି ସିନ୍ ପୁଣି ଲେଖିବି`, rewriteAbout: (n) => `ପ୍ରାୟ ${n} ମିନିଟ୍ — ପ୍ରତି ସିନ୍‌ର ପୁରୁଣା ଭର୍ସନ୍ ରହିବ (ସିନ୍‌ରେ ↶ Undo ଦେଲେ ଫେରିଆସିବ)`, notes: 'ନୋଟ୍', addDone: '✓ ନୂଆ ସିନ୍ ଲିଷ୍ଟରେ ଯୋଡ଼ାହେଲା — ପଢ଼, ସ୍ଥାନ ବଦଳା କିମ୍ବା ହଟା', rewriteDone: (n) => `✓ ${n}ଟି ସିନ୍ ପୁଣି ଲେଖାହେଲା — ସିନ୍‌ରେ ↶ Undo ଦେଲେ ପୁରୁଣା ଫେରିଆସିବ`,
     writeProposes: (n) => `${n}ଟି ସିନ୍ ଲେଖିବି`, writeAbout: (n) => `ପ୍ରାୟ ${n} ମିନିଟ୍ (ପ୍ରତି ସିନ୍‌ ପାଇଁ ପ୍ରାୟ ଏକ ମିନିଟ୍) — ଯେକୌଣସି ବେଳେ ବନ୍ଦ କରିପାରିବୁ`, writing: 'ଲେଖୁଛି', stop: '■ ବନ୍ଦ', stopping: 'ଏହି ସିନ୍ ପରେ ବନ୍ଦ ହେବ…', writeDone: (n) => `✓ ${n}ଟି ସିନ୍ ଲେଖା ହେଲା`, writeFailedSome: (n) => `${n}ଟି ଲେଖାଗଲା ନାହିଁ`, writeStopped: (n) => `ବନ୍ଦ ହେଲା — ${n}ଟି ସିନ୍ ଲେଖା ହୋଇଛି`, writeError: 'ସମସ୍ୟା ହୋଇ ବନ୍ଦ ହେଲା', ok: 'ଠିକ୍ ଅଛି', jobRunning: 'ଆଉ ଗୋଟେ ଲେଖା ଚାଲିଛି — ଅପେକ୍ଷା କର କିମ୍ବା ବନ୍ଦ କର।',
     proposes: 'ପ୍ରସ୍ତାବିତ ବଦଳ', older: 'ପୁରୁଣା ପ୍ରସ୍ତାବ — ଦରକାର ହେଲେ ପୁଣି କୁହ।', apply: '✓ Apply', dismiss: 'ଦରକାର ନାହିଁ', applying: 'ଲାଗୁଛି…', applied: 'ଲାଗିଗଲା', dismissed: 'ଛାଡ଼ିଦେଲା', otherScene: (n) => `ଏହା ସିନ୍ ${n} ପାଇଁ ଥିଲା। ସେହି ସିନ୍ ଖୋଲି Apply କର।`, busyNote: 'ଆଉ ଗୋଟେ ବଦଳ ଚାଲିଛି — ଅପେକ୍ଷା କର।',
     starters: ['ଏହି ସିନ୍ କେତେ ମିନିଟ୍‌ର?', 'ତୁମେ କେଉଁ କାମରେ ସାହାଯ୍ୟ କରିପାରିବ?', 'ଏହି ସିନ୍‌କୁ କେମିତି ଲମ୍ବା କରିବି?'],
@@ -72,7 +74,7 @@ function WriteProgress({ job, L, onStop }) {
         </>
       ) : (
         <>
-          <p>{job.status === 'done' ? L.writeDone(job.done) : job.status === 'stopped' ? L.writeStopped(job.done) : L.writeError} · {clock}</p>
+          <p>{job.status === 'done' ? (job.kind === 'add-scenes' ? L.addDone : job.rewrite ? L.rewriteDone(job.done) : L.writeDone(job.done)) : job.status === 'stopped' ? L.writeStopped(job.done) : L.writeError} · {clock}</p>
           {job.failed?.length > 0 && <small>{L.writeFailedSome(job.failed.length)}: {job.failed.map((f) => f.label).join(', ')} — {job.failed[0].error}</small>}
           {job.error && <small>{job.error}</small>}
           <button type="button" className="buddy-dismiss" onClick={dismiss}>{L.ok}</button>
@@ -179,9 +181,11 @@ export default function BuddyChat({ backendUrl, sceneListId, episodeIndex, scene
     if (apply) {
       setWorking(message.id)
       try {
-        note = message.proposed_action.type === 'write_scenes'
-          ? await onStartWrite?.(message.proposed_action.scenes)
-          : await onApplyEdit?.(message.proposed_action.instruction)
+        const action = message.proposed_action
+        note = action.type === 'write_scenes' ? await onStartWrite?.({ scope: 'scenes', scenes: action.scenes })
+          : action.type === 'add_scenes' ? await onStartWrite?.({ scope: 'add', count: action.count })
+            : action.type === 'rewrite_scenes' ? await onStartWrite?.({ scope: 'rewrite', scenes: action.scenes, feedback: action.feedback })
+              : await onApplyEdit?.(action.instruction)
       } catch { note = null }
       if (!alive.current) return
       setWorking(null)
@@ -199,7 +203,7 @@ export default function BuddyChat({ backendUrl, sceneListId, episodeIndex, scene
   }
 
   // only the newest open proposal can be applied; older ones are superseded
-  const lastOpenId = [...messages].reverse().find((x) => (x.proposed_action?.type === 'scene_edit' || x.proposed_action?.type === 'write_scenes') && !x.resolved)?.id
+  const lastOpenId = [...messages].reverse().find((x) => ['scene_edit', 'write_scenes', 'add_scenes', 'rewrite_scenes'].includes(x.proposed_action?.type) && !x.resolved)?.id
   readAloudRef.current = readAloud
   speakRef.current = speak
   const spoken = (words) => { if (autoSend) send(words); else setText((t) => (t.trim() ? `${t.trim()} ${words}` : words)) }
@@ -233,16 +237,18 @@ export default function BuddyChat({ backendUrl, sceneListId, episodeIndex, scene
                 {speakingId === m.id ? `■ ${L.stopListen}` : `🔊 ${L.listen}`}
               </button>
             )}
-            {(m.proposed_action?.type === 'scene_edit' || m.proposed_action?.type === 'write_scenes') && (() => {
+            {['scene_edit', 'write_scenes', 'add_scenes', 'rewrite_scenes'].includes(m.proposed_action?.type) && (() => {
               const action = m.proposed_action
-              const isWrite = action.type === 'write_scenes'
-              const here = isWrite || (action.sceneIndex === sceneIndex && (action.episodeIndex ?? null) === (episodeIndex ?? null))
+              const isJob = action.type !== 'scene_edit'
+              const here = isJob || (action.sceneIndex === sceneIndex && (action.episodeIndex ?? null) === (episodeIndex ?? null))
+              const title = action.type === 'write_scenes' ? L.writeProposes(action.count) : action.type === 'add_scenes' ? L.addProposes(action.count) : action.type === 'rewrite_scenes' ? L.rewriteProposes(action.count) : L.proposes
               return (
                 <div className="buddy-proposal">
-                  <small>{isWrite ? L.writeProposes(action.count) : L.proposes}</small>
-                  {isWrite
-                    ? <blockquote>{action.scenes.map((x) => x.label).join(', ')}<br /><small>{L.writeAbout(Math.max(1, action.count))}</small></blockquote>
-                    : <blockquote>{action.instruction}</blockquote>}
+                  <small>{title}</small>
+                  {action.type === 'write_scenes' && <blockquote>{action.scenes.map((x) => x.label).join(', ')}<br /><small>{L.writeAbout(Math.max(1, action.count))}</small></blockquote>}
+                  {action.type === 'add_scenes' && <blockquote><small>{L.addAbout}</small></blockquote>}
+                  {action.type === 'rewrite_scenes' && <blockquote>{action.scenes.map((x) => x.label).join(', ')}<br /><b>{L.notes}:</b> {action.feedback}<br /><small>{L.rewriteAbout(Math.max(1, action.count))}</small></blockquote>}
+                  {action.type === 'scene_edit' && <blockquote>{action.instruction}</blockquote>}
                   {m.resolved ? (
                     m.outcome ? <small className="buddy-proposal-done">{m.outcome === 'applied' ? `✓ ${L.applied}` : L.dismissed}</small> : null
                   ) : m.id !== lastOpenId ? (
@@ -251,10 +257,10 @@ export default function BuddyChat({ backendUrl, sceneListId, episodeIndex, scene
                     <small>{L.otherScene((action.sceneIndex ?? 0) + 1)}</small>
                   ) : (
                     <div className="buddy-proposal-actions">
-                      <button type="button" className="buddy-apply" onClick={() => resolve(m, true)} disabled={working !== null || busy || (isWrite && writeJob?.status === 'running')}>{working === m.id ? L.applying : isWrite ? `✓ ${L.writeProposes(action.count)}` : L.apply}</button>
+                      <button type="button" className="buddy-apply" onClick={() => resolve(m, true)} disabled={working !== null || busy || (isJob && writeJob?.status === 'running')}>{working === m.id ? L.applying : isJob ? `✓ ${title}` : L.apply}</button>
                       <button type="button" className="buddy-dismiss" onClick={() => resolve(m, false)} disabled={working !== null}>{L.dismiss}</button>
-                      {isWrite && writeJob?.status === 'running' && <small>{L.jobRunning}</small>}
-                      {!isWrite && busy && working === null && <small>{L.busyNote}</small>}
+                      {isJob && writeJob?.status === 'running' && <small>{L.jobRunning}</small>}
+                      {!isJob && busy && working === null && <small>{L.busyNote}</small>}
                     </div>
                   )}
                 </div>

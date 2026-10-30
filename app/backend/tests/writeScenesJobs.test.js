@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { createWriteScenesJobs, publicView, WRITE_KIND } from "../writeScenesJobs.js";
+import { ADD_KIND, createWriteScenesJobs, publicView, WRITE_KIND } from "../writeScenesJobs.js";
 
 function fakeStore() {
   const rows = new Map();
@@ -141,4 +141,25 @@ test("a reloaded screen finds the newest job of its scene list, and the kind is 
   assert.equal(found.total, 2);
   assert.equal(WRITE_KIND, "write-scenes");
   assert.equal(await fresh.currentFor(77), null);
+});
+
+test("another kind of job (adding scenes) has its own table kind, its own sentence, rewrites are marked, and the view says the kind", async () => {
+  const store = fakeStore();
+  const jobs = createWriteScenesJobs({ jobStore: store, kind: ADD_KIND, log: quiet, isWritten: async () => false, describe: (item, n, total) => `Planning ${item.count} new scenes (part ${n} of ${total})`, writeOne: async () => {} });
+  const a = await jobs.start({ sceneListId: 5, userId: 1, items: [{ episodeIndex: null, sceneIndex: 0, label: "+10", count: 10 }, { episodeIndex: null, sceneIndex: 1, label: "+15", count: 5 }], language: "or" });
+  const end = publicView(await settled(jobs, a.job.id));
+  assert.equal(end.kind, "add-scenes");
+  assert.equal(end.status, "done");
+  assert.equal(store.rows.get(a.job.id).kind, "add-scenes");
+  assert.equal(ADD_KIND, "add-scenes");
+  // a write job of the same scene list is a different job (kinds do not mix)
+  const write = createWriteScenesJobs({ jobStore: store, log: quiet, isWritten: async () => false, writeOne: async () => {} });
+  assert.equal(await write.currentFor(5), null);
+  // rewrite items are never skipped as "already written" and are marked in the done list
+  const rewriting = createWriteScenesJobs({ jobStore: store, log: quiet, isWritten: async (i) => !i.rewrite, writeOne: async () => {} });
+  const r = await rewriting.start({ sceneListId: 6, userId: 1, items: [{ episodeIndex: null, sceneIndex: 3, label: "4", rewrite: true, feedback: "tenser" }], language: "or" });
+  await settled(rewriting, r.job.id);
+  const stored = store.rows.get(r.job.id).state;
+  assert.equal(stored.done[0].rewrite, true);
+  assert.equal(stored.done[0].skipped, undefined);
 });

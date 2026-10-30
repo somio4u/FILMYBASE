@@ -1,5 +1,6 @@
 // "Write the scenes that are not written yet" as a BACKGROUND job (the Buddy offers it; the writer presses Apply). Scenes are written one after the other
-// by the same AI writer as the "Write this scene" button. The request only starts the job; the screen follows it: which scene is being written, how many
+// by the same AI writer as the "Write this scene" button. The same machine also runs the other things the Buddy offers that take minutes: writing a
+// scene AGAIN with the writer's notes (items marked rewrite) and adding new scene one-liners in batches (kind "add-scenes"). The request only starts the job; the screen follows it: which scene is being written, how many
 // are done, how long it has run. It survives a page reload (the job lives on the server) and a server restart (the job starts again and skips every scene
 // that is already written), and it can be stopped between two scenes. Jobs live in the shared background_jobs table (jobStore.js): kind "write-scenes".
 //
@@ -8,23 +9,26 @@ import crypto from "node:crypto";
 import { shouldResume } from "./jobStore.js";
 
 export const WRITE_KIND = "write-scenes";
+export const ADD_KIND = "add-scenes";
 const GIVE_UP_AFTER_FAILURES_IN_A_ROW = 3; // three scenes in a row that could not be written means something is wrong (quota, key): stop and say so
 
 // what the screen may see
 export function publicView(job, now = Date.now()) {
   if (!job) return null;
   return {
-    jobId: job.id, sceneListId: job.sceneListId, status: job.status, step: job.step, notice: job.notice ?? "",
+    jobId: job.id, kind: job.kind ?? WRITE_KIND, sceneListId: job.sceneListId, status: job.status, step: job.step, notice: job.notice ?? "",
     total: job.items.length, done: job.done.length, failed: job.failed, current: job.current ?? null,
-    stopRequested: Boolean(job.stopRequested), startedAt: job.startedAt, finishedAt: job.finishedAt ?? null, now,
+    rewrite: job.items.some((item) => item.rewrite), stopRequested: Boolean(job.stopRequested), startedAt: job.startedAt, finishedAt: job.finishedAt ?? null, now,
     error: job.status === "error" ? job.error : null,
   };
 }
 
 const keyOf = (item) => `${item.episodeIndex ?? "film"}:${item.sceneIndex}`;
+const defaultDescribe = (item, number, total) => `Writing scene ${item.label} (${number} of ${total})${item.heading ? ` — ${item.heading}` : ""}`;
 
 // writeOne(item) writes and saves ONE scene; isWritten(item) says whether a scene already has written lines
-export function createWriteScenesJobs({ jobStore, writeOne, isWritten, now = () => Date.now(), log = console }) {
+// `kind` names the sort of job in the shared table; `describe(item, number, total)` is the plain sentence shown while an item is being worked on
+export function createWriteScenesJobs({ jobStore, writeOne, isWritten, kind = WRITE_KIND, describe = defaultDescribe, now = () => Date.now(), log = console }) {
   const jobs = new Map(); // id -> job of this server run; the database answers for the rest
   const chains = new Map();
   const persist = (job) => {
@@ -39,13 +43,13 @@ export function createWriteScenesJobs({ jobStore, writeOne, isWritten, now = () 
       for (const item of job.items) {
         if (job.stopRequested) { job.status = "stopped"; job.step = "Stopped"; break; }
         if (job.done.some((d) => keyOf(d) === keyOf(item)) || job.failed.some((f) => keyOf(f) === keyOf(item))) continue;
-        if (await isWritten(item)) { job.done.push({ ...item, skipped: true }); continue; } // written meanwhile (by the writer, or before a restart)
+        if (await isWritten(item)) { job.done.push({ ...item, skipped: true }); continue; } // already done (written meanwhile by the writer, or before a restart)
         job.current = { ...item, startedAt: now() };
-        job.step = `Writing scene ${item.label} (${job.done.length + job.failed.length + 1} of ${job.items.length})${item.heading ? ` — ${item.heading}` : ""}`;
+        job.step = describe(item, job.done.length + job.failed.length + 1, job.items.length);
         await persist(job);
         try {
           await writeOne(item);
-          job.done.push({ episodeIndex: item.episodeIndex, sceneIndex: item.sceneIndex, label: item.label });
+          job.done.push({ episodeIndex: item.episodeIndex, sceneIndex: item.sceneIndex, label: item.label, ...(item.rewrite ? { rewrite: true } : {}) });
           failuresInARow = 0;
         } catch (error) {
           log.error(`Writing scene ${item.label} failed:`, error.message);
@@ -78,9 +82,9 @@ export function createWriteScenesJobs({ jobStore, writeOne, isWritten, now = () 
     async start({ sceneListId, userId, items, language }) {
       const running = await this.currentFor(sceneListId);
       if (running?.status === "running") return { job: running, alreadyRunning: true };
-      const job = { id: crypto.randomUUID(), sceneListId, userId, language, status: "running", step: "Starting…", items, done: [], failed: [], current: null, stopRequested: false, startedAt: now(), notice: "" };
+      const job = { id: crypto.randomUUID(), kind, sceneListId, userId, language, status: "running", step: "Starting…", items, done: [], failed: [], current: null, stopRequested: false, startedAt: now(), notice: "" };
       jobs.set(job.id, job);
-      await jobStore.insert(job.id, WRITE_KIND, sceneListId, String(sceneListId), { ...job });
+      await jobStore.insert(job.id, kind, sceneListId, String(sceneListId), { ...job });
       execute(job); // not awaited: the request is answered now
       return { job, alreadyRunning: false };
     },
@@ -93,7 +97,7 @@ export function createWriteScenesJobs({ jobStore, writeOne, isWritten, now = () 
     async currentFor(sceneListId) {
       let best = null;
       for (const job of jobs.values()) if (job.sceneListId === sceneListId && (!best || job.startedAt > best.startedAt)) best = job;
-      const stored = fromRow(await jobStore.latest(WRITE_KIND, sceneListId, String(sceneListId)));
+      const stored = fromRow(await jobStore.latest(kind, sceneListId, String(sceneListId)));
       return best && (!stored || best.startedAt >= stored.startedAt) ? best : stored;
     },
 
@@ -109,12 +113,12 @@ export function createWriteScenesJobs({ jobStore, writeOne, isWritten, now = () 
 
     // at server start: jobs that were running when the server stopped start again; scenes already written are skipped
     async resume() {
-      for (const row of await jobStore.running(WRITE_KIND)) {
+      for (const row of await jobStore.running(kind)) {
         const job = fromRow(row);
         const verdict = shouldResume(row);
         if (!verdict.resume) {
           job.status = "error"; job.finishedAt = now(); job.current = null;
-          job.error = `This was given up: ${verdict.why}. Ask the Buddy to write the remaining scenes again.`;
+          job.error = `This was given up: ${verdict.why}. Ask the Buddy to do it again.`;
           await persist(job);
           continue;
         }

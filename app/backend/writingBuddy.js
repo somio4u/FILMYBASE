@@ -93,7 +93,13 @@ export const BUDDY_EDIT_RULES = `PROPOSING CHANGES TO THE SCENE (you can do this
 HELPING TO WRITE THE SCENES THAT ARE NOT WRITTEN YET (you can do this)
 - The information below lists the scenes that exist only as a one-line plan ("NOT WRITTEN YET"). When the person wants help with them ("write the rest", "write the next 5", "write scene 7 and 9"), say in one or two sentences which scenes you would write (their numbers) and that each takes about a minute, then end your reply with ONE final line: [[WRITE: all]] or [[WRITE: next 5]] or [[WRITE: scenes 7, 9]] (use the scene numbers exactly as listed). The app shows a card with an Apply button; the scenes are written ONLY if they press it, and they can stop it any time. Never say they are already written.
 - If they ask how many scenes are left or what to do next, answer from the list and offer to write them (e.g. the next 5 first, so they can check the style). When the list says nothing is left, say that every scene is written.
-- This writes scenes in the project's own language, using the one-liner of each scene and the story so far. For a change to a scene that is already written use the [[EDIT: …]] tag instead. Use only one tag per reply, and only as the very last thing.`;
+- This writes scenes in the project's own language, using the one-liner of each scene and the story so far. For a change to a scene that is already written use the [[EDIT: …]] tag instead. Use only one tag per reply, and only as the very last thing.
+
+ADDING MORE SCENES (you can do this, for a film)
+- The information below may say how many scenes the writer WANTS in all and how many the list has. When they want more scenes ("make it 45 scenes", "add 5 scenes"), say how many you would add (the AI plans new one-line scenes that fit the story and puts them where the story can use them; the writer can read, move, change or delete each one, and they start as "not written yet"), then end your reply with [[ADD: 5]] (the number of NEW scenes, 1 to 40). Never say they are already added. If the wanted total is not more than what the list has, say so instead.
+
+WRITING WRITTEN SCENES AGAIN WITH THEIR NOTES (you can do this)
+- When the person wants one or more scenes that are ALREADY written redone differently ("make scene 7 and 9 more tense", "write scene 4 again, funnier"), say in a sentence what you will change, then end your reply with [[REWRITE: scenes 7, 9 | the notes for the AI writer, in English, saying what to change]]. The old version of each scene is kept (the writer can press ↶ Undo on the scene). Only for scenes that are written; for a small change to one scene on screen use [[EDIT: …]] instead.`;
 
 export const BUDDY_NO_EDIT_RULES = `CHANGING THE SCREENPLAY
 - You cannot change the screenplay from this chat for this person or in this view. If they ask, offer a draft in the chat and tell them which button to use.`;
@@ -168,22 +174,30 @@ export const BUDDY_STARTERS = {
 };
 
 export const WRITE_TAG = /\[\[\s*WRITE\s*:([\s\S]*?)\]\]\s*$/i;
+export const ADD_TAG = /\[\[\s*ADD\s*:([\s\S]*?)\]\]\s*$/i;
+export const REWRITE_TAG = /\[\[\s*REWRITE\s*:([\s\S]*?)\]\]\s*$/i;
 
-// Splits a reply into what the person reads, and the proposal at its end, if any: instruction (an EDIT of the scene on screen) or write (the spec of
-// a WRITE of scenes that are not written yet, like "all", "next 5" or "scenes 7, 9").
+// Splits a reply into what the person reads, and the proposal at its end, if any: instruction (an EDIT of the scene on screen), write (the spec of a
+// WRITE of scenes that are not written yet: "all", "next 5", "scenes 7, 9"), add (how many NEW scenes) or rewrite ({ spec, feedback } of scenes to write again).
 export function extractProposal(reply) {
   const text = String(reply ?? "");
+  const result = (cut, extra) => ({ text: text.slice(0, cut.index).trim(), instruction: null, write: null, add: null, rewrite: null, ...extra });
   const w = text.match(WRITE_TAG);
-  if (w) {
-    const write = w[1].trim().slice(0, 200);
-    return { text: text.slice(0, w.index).trim(), instruction: null, write: write || null };
+  if (w) return result(w, { write: w[1].trim().slice(0, 200) || null });
+  const a = text.match(ADD_TAG);
+  if (a) { const n = Math.floor(Number(String(a[1]).replace(/[^\d]/g, ""))); return result(a, { add: n >= 1 && n <= 40 ? n : null }); }
+  const r = text.match(REWRITE_TAG);
+  if (r) {
+    const [spec, ...rest] = r[1].split("|");
+    const feedback = rest.join("|").trim().slice(0, 1500);
+    return result(r, { rewrite: spec.trim() && feedback ? { spec: spec.trim().slice(0, 200), feedback } : null });
   }
   const m = text.match(EDIT_TAG);
   // a broken tag (no closing brackets) is never shown to the person
-  const stripBroken = (t) => t.replace(/\[\[\s*(?:EDIT|WRITE)\s*:[\s\S]*$/i, "").trim();
-  if (!m) return { text: stripBroken(text), instruction: null, write: null };
+  const stripBroken = (t) => t.replace(/\[\[\s*(?:EDIT|WRITE|ADD|REWRITE)\s*:[\s\S]*$/i, "").trim();
+  if (!m) return { text: stripBroken(text), instruction: null, write: null, add: null, rewrite: null };
   const instruction = m[1].trim().slice(0, 1500);
-  return { text: text.slice(0, m.index).trim(), instruction: instruction || null, write: null };
+  return { text: text.slice(0, m.index).trim(), instruction: instruction || null, write: null, add: null, rewrite: null };
 }
 
 // "all" | "next 5" | "scenes 7, 9" (labels as listed) -> the scenes of `unwritten` it means; only scenes that really are not written yet can be chosen
@@ -201,10 +215,33 @@ export function parseWriteSpec(spec, unwritten) {
   return [];
 }
 
-// the part of the Buddy's information about which scenes are still only a one-line plan
-export function unwrittenContextText(unwritten, totalScenes) {
+// "1, 3, 5-9" from a list of labels (only plain numbers are joined into ranges)
+function rangesOf(labels) {
+  const nums = labels.filter((l) => /^\d+$/.test(l)).map(Number).sort((a, b) => a - b);
+  const others = labels.filter((l) => !/^\d+$/.test(l));
+  const out = [];
+  for (let i = 0; i < nums.length; i += 1) {
+    let j = i;
+    while (nums[j + 1] === nums[j] + 1) j += 1;
+    out.push(j - i >= 2 ? `${nums[i]}-${nums[j]}` : nums.slice(i, j + 1).join(", "));
+    i = j;
+  }
+  return [...out, ...others].join(", ");
+}
+
+// the part of the Buddy's information about which scenes are written and which are still only a one-line plan; `extra`: { writtenLabels, targetScenes }
+export function unwrittenContextText(unwritten, totalScenes, extra = {}) {
   if (!Array.isArray(unwritten)) return "";
-  if (unwritten.length === 0) return `SCENES NOT WRITTEN YET: none — all ${totalScenes} scenes are written.`;
-  const shown = unwritten.slice(0, 60).map((u) => `${u.label}. ${u.heading}${u.oneLiner ? ` — ${u.oneLiner.slice(0, 140)}` : ""}`);
-  return [`SCENES NOT WRITTEN YET: ${unwritten.length} of ${totalScenes} (only the one-line plan exists; "next N" means the first N of this list):`, ...shown, ...(unwritten.length > 60 ? [`… and ${unwritten.length - 60} more`] : [])].join("\n");
+  const lines = [];
+  if (unwritten.length === 0) lines.push(`SCENES NOT WRITTEN YET: none — all ${totalScenes} scenes are written.`);
+  else {
+    const shown = unwritten.slice(0, 60).map((u) => `${u.label}. ${u.heading}${u.oneLiner ? ` — ${u.oneLiner.slice(0, 140)}` : ""}`);
+    lines.push(`SCENES NOT WRITTEN YET: ${unwritten.length} of ${totalScenes} (only the one-line plan exists; "next N" means the first N of this list):`, ...shown, ...(unwritten.length > 60 ? [`… and ${unwritten.length - 60} more`] : []));
+  }
+  if (Array.isArray(extra.writtenLabels) && extra.writtenLabels.length) lines.push(`SCENES ALREADY WRITTEN: ${rangesOf(extra.writtenLabels)}.`);
+  if (Number(extra.targetScenes) > 0) {
+    const want = Number(extra.targetScenes);
+    lines.push(want > totalScenes ? `THE WRITER WANTS ${want} SCENES IN ALL; the list has ${totalScenes}, so ${want - totalScenes} more scene${want - totalScenes === 1 ? "" : "s"} could be added.` : `The writer wanted ${want} scenes in all; the list has ${totalScenes}, so nothing more is needed for that.`);
+  }
+  return lines.join("\n");
 }

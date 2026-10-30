@@ -60,7 +60,7 @@ import { repairStoredTransitions, withoutTransitions } from "./transitionNames.j
 import { formatFinalDraft } from "./finalDraftFormat.js";
 import { directorScenes, writeDirectorPdf, buildDirectorDocx } from "./directorScreenplay.js";
 import { repairStoredLabels, stripEchoedLabel, stripEchoedLabelPair } from "./echoedLabels.js";
-import { withModelFallback } from "./modelFallback.js";
+import { withModelFallback, isVertexNotFound } from "./modelFallback.js";
 import { createAiCredentials, describeAiError, ensureAiCredentialsSchema, providerEnv, summariseModels, vertexHttpOptions } from "./aiCredentials.js";
 import { registerAiSettingsRoutes } from "./aiSettingsRoutes.js";
 import { ensureLocationRenameSchema, registerLocationRenameRoutes } from "./locationRename.js";
@@ -132,7 +132,7 @@ let aiMeteringDb = null;
 function buildAiClient(credentials = aiCredentials.current(), onSwitch = (from, to) => console.log(`Google no longer serves ${from} to this API key — using ${to} instead.`)) {
   const sa = credentials.serviceAccount;
   return sa
-    ? withModelFallback(new GoogleGenAI({ vertexai: true, project: sa.project_id, location: credentials.location, googleAuthOptions: { credentials: sa }, httpOptions: vertexHttpOptions(credentials.location) }), { onSwitch }) // a switched-off model is swapped for its newer one here too
+    ? withModelFallback(new GoogleGenAI({ vertexai: true, project: sa.project_id, location: credentials.location, googleAuthOptions: { credentials: sa }, httpOptions: vertexHttpOptions(credentials.location) }), { onSwitch, isRetired: isVertexNotFound }) // a switched-off model is swapped for its newer one here too
     : withModelFallback(new GoogleGenAI({ apiKey: credentials.apiKey ?? process.env.GEMINI_API_KEY }), { onSwitch }); // plain API keys: a switched-off model is swapped for its newer one
 }
 // one short name for "which key is this": a changed key means a new client

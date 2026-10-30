@@ -2432,3 +2432,7 @@ Plain version: every project is now a set of **drafts**. Opening a project shows
 ## 2026-10-30 — Vertex "global" location now works
 - The test showed the owner's project answers with `gemini-3.5-flash-lite` only at location **global**. The Gemini library (0.3) built a non-existent address (`global-aiplatform…`) for "global", so it could not be used. Now `global` gets the real host (`aiplatform.googleapis.com`). Owner: type `global` as the Location in Settings, then Test.
 - Not verified with a real project (sandbox blocks Google). The Pro/Story-Brain step already handled global itself.
+
+## 2026-10-30 — Vertex: any 404 now switches to the newer model
+- With Location `global`, Google answered the old `gemini-2.5-flash-lite` with "404 exception parsing response" — a wording the safety net did not recognise, so it never switched to `gemini-3.5-flash-lite` (which the diagnosis showed WORKS at global). On Vertex every 404 on a generate call now counts as "model not served here".
+- Not verified with a real project (sandbox blocks Google).

@@ -15,7 +15,10 @@ export const isModelRetiredError = (error) => {
   return /no longer available|not found for API version|is not found|NOT_FOUND/i.test(message) && /models?\//i.test(message);
 };
 
-export function withModelFallback(client, { replacements = MODEL_REPLACEMENTS, onSwitch = () => {} } = {}) {
+// On Vertex any 404 from a generate call means "this model is not served here" (the wording varies: "Publisher model … not found", "exception parsing response").
+export const isVertexNotFound = (error) => isModelRetiredError(error) || /\b404\b/.test(String(error?.message ?? error ?? ""));
+
+export function withModelFallback(client, { replacements = MODEL_REPLACEMENTS, onSwitch = () => {}, isRetired = isModelRetiredError } = {}) {
   const remembered = new Map(); // old model -> replacement that worked
   const models = client.models;
   for (const method of ["generateContent", "generateContentStream"]) {
@@ -27,7 +30,7 @@ export function withModelFallback(client, { replacements = MODEL_REPLACEMENTS, o
         return await original({ ...params, model: first }, ...rest);
       } catch (error) {
         const next = replacements[first];
-        if (!next || !isModelRetiredError(error)) throw error;
+        if (!next || !isRetired(error)) throw error;
         remembered.set(params.model, next);
         onSwitch(first, next);
         return original({ ...params, model: next }, ...rest);

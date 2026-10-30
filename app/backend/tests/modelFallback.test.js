@@ -33,3 +33,13 @@ test("Vertex's own wording of a switched-off model is recognised too", () => {
   assert.equal(isModelRetiredError(vertex), true);
   assert.equal(isModelRetiredError(new Error("429 quota exceeded")), false);
 });
+
+test("on Vertex any 404 is treated as 'model not served here' (Google's wording varies), a 429 is not", async () => {
+  const { isVertexNotFound } = await import("../modelFallback.js");
+  assert.equal(isVertexNotFound(new Error('got status: 404 Not Found. {"error":{"message":"exception parsing response","code":404}}')), true);
+  assert.equal(isVertexNotFound(new Error("got status: 429 quota")), false);
+  const c = fakeClient(["gemini-3.5-flash-lite"]);
+  c.models.generateContent = ((orig) => async (p) => { if (p.model === "gemini-2.5-flash-lite") throw new Error("got status: 404 Not Found. exception parsing response"); return orig(p); })(c.models.generateContent);
+  withModelFallback(c, { isRetired: isVertexNotFound });
+  assert.equal((await c.models.generateContent({ model: "gemini-2.5-flash-lite" })).model, "gemini-3.5-flash-lite");
+});

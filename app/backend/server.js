@@ -21192,7 +21192,21 @@ registerAiSettingsRoutes(app, db, {
       let usedModel = GEMINI_MODEL_NAME;
       await ask(buildAiClient({ serviceAccount, location, source: "candidate", kind: "vertex" }, (from, to) => { usedModel = to; }));
       report?.("vertex", usedModel === GEMINI_MODEL_NAME ? `Vertex AI answered (model ${usedModel}, location ${location})` : `Vertex AI answered — ${GEMINI_MODEL_NAME} is switched off for this project, so the app uses ${usedModel} instead (location ${location})`);
-    } catch (error) { error.step = "vertex"; throw error; }
+    } catch (error) {
+      error.step = "vertex";
+      // which model + location DOES this project answer with? Asked for diagnosis only: shown in the Technical details so nobody has to guess.
+      const tries = [["gemini-3.5-flash-lite", "global"], ["gemini-3.5-flash", "global"], ["gemini-3.5-flash-lite", location], ["gemini-3.5-flash", location], ["gemini-2.5-flash", "us-central1"], ["gemini-2.0-flash", "us-central1"], ["gemini-2.5-flash-lite", "us-central1"]];
+      const lines = [];
+      for (const [model, loc] of tries) {
+        try {
+          const host = loc === "global" ? "aiplatform.googleapis.com" : `${loc}-aiplatform.googleapis.com`;
+          const response = await fetch(`https://${host}/v1/projects/${serviceAccount.project_id}/locations/${loc}/publishers/google/models/${model}:generateContent`, { method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }, body: proBody, signal: AbortSignal.timeout(20000) });
+          lines.push(`${model} @ ${loc}: ${response.ok ? "WORKS" : `HTTP ${response.status} ${(await response.text()).replace(/\s+/g, " ").slice(0, 120)}`}`);
+        } catch (probeError) { lines.push(`${model} @ ${loc}: ${String(probeError.message).slice(0, 80)}`); }
+      }
+      error.probe = lines;
+      throw error;
+    }
     // step 4 — the best-quality (Pro) model, used by the Smart analysis and the Story Brain. A warning only: the key still works for everything else.
     for (const target of STORY_BRAIN_MODELS) {
       try {

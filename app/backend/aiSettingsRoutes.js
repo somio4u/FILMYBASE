@@ -38,6 +38,11 @@ export function registerAiSettingsRoutes(app, db, { requireRole, aiCredentials, 
       steps.push({ key: step, ok: false });
       let message = describeAiError(error, step);
       let details = safeDetails(error);
+      if (error?.probe?.length) {
+        details += `\nModels tried with this project (diagnosis):\n${error.probe.join("\n")}`;
+        const works = error.probe.find((line) => /WORKS$/.test(line));
+        if (works) message += ` This project DOES answer with ${works.replace(": WORKS", "")} — try that Location.`;
+      }
       if (error?.express) {
         // the diagnostic probe of Vertex's "express" route (see server.js): shown as its own step and in the details
         steps.push({ key: "express", ok: error.express.ok, note: error.express.ok ? "accepted this key" : `refused it too (HTTP ${error.express.status})` });

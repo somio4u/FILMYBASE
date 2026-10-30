@@ -22,8 +22,9 @@ export const ODIA_KEYS = {
 const TYPING_TAGS = ['INPUT', 'TEXTAREA']
 const BAD_INPUT_TYPES = ['password', 'number', 'email', 'url', 'date', 'time', 'file', 'checkbox', 'radio']
 
-function isTypingTarget(el) {
+export function isTypingTarget(el) {
   if (!el) return false
+  if (el.closest?.('.login-form, [data-no-odia]')) return false // the login boxes (a username is typed in English) and anything marked data-no-odia
   if (el.isContentEditable) return true
   if (!TYPING_TAGS.includes(el.tagName)) return false
   return !BAD_INPUT_TYPES.includes((el.type || '').toLowerCase())

@@ -8048,3 +8048,12 @@ body.is-script-edit-mode { overflow: hidden; }
 .agent-substages .stage-progress-item.is-optional .stage-progress-dot { width: 22px; height: 22px; border-radius: 50%; }
 .agent-substages .stage-progress-item.is-optional .stage-progress-dot::before { content: ""; }
 .agent-substages .stage-progress-item.is-optional.stage-done .stage-progress-dot::before { content: "✓"; font-size: 11px; }
+
+.odia-phonetic-help { max-width: 420px; max-height: 70vh; overflow: auto; text-align: left; font-size: 0.85rem; }
+.odia-phonetic-help table { width: 100%; border-collapse: collapse; margin: 6px 0; }
+.odia-phonetic-help td { padding: 3px 6px; border-top: 1px solid rgba(120,140,200,0.3); vertical-align: top; }
+.odia-phonetic-help code { font-weight: 700; }
+.odia-try { width: 100%; min-height: 34px; margin: 4px 0; font: inherit; }
+@media (max-width: 640px) {
+  .odia-phonetic-help { position: fixed; top: 56px; left: 8px; right: 8px; max-width: none; width: auto; max-height: calc(100vh - 72px); z-index: 100001; }
+}

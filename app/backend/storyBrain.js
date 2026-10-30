@@ -18,10 +18,21 @@ export const STORY_BRAIN_MODELS = [
   { model: "gemini-2.5-pro", location: "us-central1" },
 ];
 
+// Reading pages of a PDF is copying, not inventing: the lighter Flash models do it well, faster and cheaper, and (unlike Pro) are usually open to every
+// key. Flash first, the Pro models only as the last resort. Used by the PDF reader.
+export const PDF_READER_MODELS = [
+  { model: "gemini-3.5-flash", location: "global" },
+  { model: "gemini-2.5-flash", location: "us-central1" },
+  { model: "gemini-3.1-pro-preview", location: "global" },
+  { model: "gemini-2.5-pro", location: "us-central1" },
+];
+
 // A Pro model thinks before it answers; a big design request can take minutes.
 const BRAIN_CALL_TIMEOUT_MS = 10 * 60 * 1000;
 const BRAIN_MAX_OUTPUT_TOKENS = 65536;
 const RETRIES_PER_MODEL = 3;
+let retryDelayMs = 3000;
+export function setRetryDelayForTests(ms) { retryDelayMs = ms; }
 
 // Which Google key to use is asked at the moment of each call (see aiCredentials.js), so a key changed in Settings applies at once.
 // Until the server says otherwise, the server's own GOOGLE_SERVICE_ACCOUNT_JSON is used.
@@ -112,9 +123,10 @@ async function callModelOnce({ model, location }, { systemInstruction, contents,
 // One JSON answer from the best available model. Returns
 // { data, model, usage } — usage is the token count, so a run's cost can be
 // shown. Tries each model in STORY_BRAIN_MODELS in turn.
-export async function generateBrainJson({ systemInstruction, contents, responseSchema, maxOutputTokens = BRAIN_MAX_OUTPUT_TOKENS, label = "Story Brain" }) {
+export async function generateBrainJson({ systemInstruction, contents, responseSchema, maxOutputTokens = BRAIN_MAX_OUTPUT_TOKENS, label = "Story Brain", models = STORY_BRAIN_MODELS }) {
   let lastError;
-  for (const target of STORY_BRAIN_MODELS) {
+  const failures = []; // one line per model that gave up, so the screen shows EVERY reason, not only the last one
+  for (const target of models) {
     for (let attempt = 0; attempt < RETRIES_PER_MODEL; attempt++) {
       try {
         const result = await callModelOnce(target, { systemInstruction, contents, responseSchema, maxOutputTokens });
@@ -132,10 +144,16 @@ export async function generateBrainJson({ systemInstruction, contents, responseS
         // A bad JSON answer is worth one more try; so is a busy server.
         const retryable = error instanceof SyntaxError || error.retryable;
         console.error(`${label}: ${error.message.slice(0, 200)}${retryable ? " — retrying" : " — trying the next model"}`);
-        if (!retryable) break;
-        await new Promise((resolve) => setTimeout(resolve, 3000 * 2 ** attempt));
+        if (!retryable) { failures.push(error.message); break; }
+        if (attempt === RETRIES_PER_MODEL - 1) failures.push(error.message);
+        else await new Promise((resolve) => setTimeout(resolve, retryDelayMs * 2 ** attempt));
       }
     }
+  }
+  if (failures.length > 1) {
+    const combined = new Error(`No AI model could do this. ${failures.join(" | ")}`.slice(0, 900));
+    combined.status = lastError?.status;
+    throw combined;
   }
   throw lastError;
 }
@@ -404,10 +422,10 @@ function usageSummary(usage) {
 }
 
 // One Brain call that also adds its tokens to the run's usage.
-function brainAsker(usage, onProgress = () => {}) {
+function brainAsker(usage, onProgress = () => {}, models = STORY_BRAIN_MODELS) {
   return async (label, contents, responseSchema, systemInstruction = STORY_BRAIN_SYSTEM) => {
     onProgress(label);
-    const result = await generateBrainJson({ systemInstruction, contents, responseSchema, label: `Story Brain — ${label}` });
+    const result = await generateBrainJson({ systemInstruction, contents, responseSchema, label: `Story Brain — ${label}`, models });
     usage.calls++;
     usage.promptTokens += result.usage.promptTokenCount ?? 0;
     usage.outputTokens += result.usage.candidatesTokenCount ?? 0;

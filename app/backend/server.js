@@ -69,7 +69,7 @@ import { registerLiveSyncRoutes } from "./liveSync.js";
 import { registerChangeHistoryRoutes } from "./changeHistory.js";
 import { ensureScreenplayImportSchema, registerScreenplayImportRoutes } from "./screenplayImportRoutes.js";
 import { readStoryFromPdf } from "./pdfReader.js";
-import { useServiceAccountSource, useApiKeySource, STORY_BRAIN_MODELS, BIBLE_PASS_SCORE, brainAsker, newUsage, designStoryBible, generateBrainJson, reviseBibleWithNote, storyBibleToMarkdown } from "./storyBrain.js";
+import { useServiceAccountSource, useApiKeySource, STORY_BRAIN_MODELS, PDF_READER_MODELS, BIBLE_PASS_SCORE, brainAsker, newUsage, designStoryBible, generateBrainJson, reviseBibleWithNote, storyBibleToMarkdown } from "./storyBrain.js";
 import { ensureAiMovieStorySchema, getProjectModes, judgedStage, registerAiMovieStoryRoutes } from "./aiMovieStory.js";
 import { assertWithinBudget, recordSpend } from "./pipelineSettings.js";
 import { ensureCinematicSchema, registerSpectacleRoutes, createShotCutterHook } from "./spectacleDirector.js";
@@ -19390,7 +19390,7 @@ function startPdfReadJob(buffer, kind) {
   const id = crypto.randomUUID();
   const job = { id, status: "reading", progress: "Starting", startedAt: Date.now() };
   pdfReadJobs.set(id, job);
-  readStoryFromPdf(buffer, { kind: kind === "auto" ? "screenplay" : kind, ask: brainAsker(newUsage(), (label) => { job.progress = label; }), onProgress: (label) => { job.progress = label; } })
+  readStoryFromPdf(buffer, { kind: kind === "auto" ? "screenplay" : kind, ask: brainAsker(newUsage(), (label) => { job.progress = label; }, PDF_READER_MODELS), onProgress: (label) => { job.progress = label; } })
     .then((result) => {
       if (kind === "auto") {
         job.progress = "Looking at what the PDF contains";

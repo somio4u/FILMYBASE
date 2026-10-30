@@ -8057,3 +8057,6 @@ body.is-script-edit-mode { overflow: hidden; }
 @media (max-width: 640px) {
   .odia-phonetic-help { position: fixed; top: 56px; left: 8px; right: 8px; max-width: none; width: auto; max-height: calc(100vh - 72px); z-index: 100001; }
 }
+.odia-mywords { margin: 6px 0; }
+.odia-mywords textarea { width: 100%; font: inherit; }
+.odia-mywords summary { cursor: pointer; font-weight: 600; }

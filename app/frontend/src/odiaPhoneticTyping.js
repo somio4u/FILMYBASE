@@ -5,8 +5,19 @@
 // English word (a CHARACTER name, a scene heading) in between.
 import { isTypingTarget } from './odiaKeys.js'
 import { transliterate } from './odiaPhonetic.js'
+import { parseWordLines } from './odiaWords.js'
+
+// the writer's own words ("mun = ମୁଁ"), kept on this device; they win over the built-in list
+export const MY_WORDS_KEY = 'filmybase.odiaWords'
+export function myWords() {
+  try { return parseWordLines(Object.entries(JSON.parse(localStorage.getItem(MY_WORDS_KEY) || '{}')).map(([r, o]) => `${r} = ${o}`).join('\n')) } catch { return {} }
+}
+export function saveMyWords(words) {
+  try { localStorage.setItem(MY_WORDS_KEY, JSON.stringify(words)); return true } catch { return false }
+}
 
 let busy = false // our own edit fires the same events; it must not be treated as typing
+const lastConversion = new WeakMap() // text box -> { roman, shown }: the word just turned into Odia (Backspace right after it gives the English letters back)
 
 const ROMAN_WORD_AT_END = /[A-Za-z|~]+$/
 const ENDS_A_WORD = /^[\s.,;:!?()"'“”‘’\-–—…]$/ // typed characters that finish a word (a space is the main one)
@@ -44,8 +55,10 @@ function pendingWord(el) {
 function convertWord(el, word, after = '') {
   busy = true
   try {
+    const shown = transliterate(word, { words: myWords() })
     selectBeforeCaret(el, word.length)
-    document.execCommand('insertText', false, `${transliterate(word)}${after}`)
+    document.execCommand('insertText', false, `${shown}${after}`)
+    lastConversion.set(el, { roman: word, shown: `${shown}${after}` })
   } finally {
     busy = false
   }
@@ -56,6 +69,19 @@ export function phoneticBeforeInput(event) {
   if (busy || event.isComposing) return
   const el = event.target
   if (!isTypingTarget(el)) return
+  // Backspace straight after a word turned into Odia: the English letters come back (so a word that came out wrong can be typed again, e.g. with a
+  // capital for the thick sounds: kana → କନ, Backspace → kana, then kaNa → କଣ)
+  const done = lastConversion.get(el)
+  if (done) {
+    if (event.inputType === 'deleteContentBackward' && textBeforeCaret(el, done.shown.length) === done.shown) {
+      event.preventDefault()
+      busy = true
+      try { selectBeforeCaret(el, done.shown.length); document.execCommand('insertText', false, done.roman) } finally { busy = false }
+      lastConversion.delete(el)
+      return
+    }
+    lastConversion.delete(el) // anything else typed: the chance to take the conversion back is over
+  }
   if (event.inputType !== 'insertText' || !event.data || event.data.length !== 1 || !ENDS_A_WORD.test(event.data)) return
   const word = pendingWord(el)
   if (!word) return

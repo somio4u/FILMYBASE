@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
 import { ODIA_KEYS, odiaKeyHandler } from './odiaKeys.js'
 import { PHONETIC_HELP } from './odiaPhonetic.js'
-import { phoneticBeforeInput, phoneticKeyDown } from './odiaPhoneticTyping.js'
+import { myWords, phoneticBeforeInput, phoneticKeyDown, saveMyWords } from './odiaPhoneticTyping.js'
+import { parseWordLines, wordLines } from './odiaWords.js'
 
 const STORE = 'filmybase.odiaTyping'
 const ROWS = [
@@ -29,6 +30,8 @@ export default function OdiaKeyToggle() {
   const [show, setShow] = useState(false)
   const [lastOdia, setLastOdia] = useState(() => (readMode() === 'phon' ? 'phon' : 'key'))
   const [tryText, setTryText] = useState('')
+  const [wordsText, setWordsText] = useState(() => wordLines(myWords()))
+  const [wordsNote, setWordsNote] = useState('')
 
   useEffect(() => {
     const turnOn = () => setMode((m) => (m === 'en' ? 'key' : m))
@@ -77,6 +80,13 @@ export default function OdiaKeyToggle() {
         <div className="odia-keyboard odia-phonetic-help" role="note" aria-label="Typing Odia with English letters">
           <p><b>Type the word in English letters, then press Space</b> — it turns into Odia.</p>
           <input type="text" className="odia-try" value={tryText} placeholder="try here: pabana + Space" onChange={(e) => setTryText(e.target.value)} aria-label="Try typing here" />
+          <details className="odia-mywords">
+            <summary>My words — spellings that always come out my way</summary>
+            <p>One word per line, like <code>mun = ମୁଁ</code>. English letters cannot tell ନ from ଣ or ଲ from ଳ, so a word that keeps coming out wrong can be fixed here once. Kept on this device.</p>
+            <textarea rows={5} value={wordsText} placeholder={'kana = କଣ\nbhola = ଭୋଳ'} onChange={(e) => { setWordsText(e.target.value); setWordsNote('') }} aria-label="My words" />
+            <button type="button" className="odia-toggle-btn" onClick={() => { const words = parseWordLines(wordsText); setWordsNote(saveMyWords(words) ? `Saved ${Object.keys(words).length} word${Object.keys(words).length === 1 ? '' : 's'}.` : 'Could not save on this device.') }}>Save my words</button>
+            {wordsNote && <span role="status"> {wordsNote}</span>}
+          </details>
           <table>
             <tbody>
               {PHONETIC_HELP.map(([typed, gets, example]) => (
@@ -84,7 +94,7 @@ export default function OdiaKeyToggle() {
               ))}
             </tbody>
           </table>
-          <p>Space (or a full stop, comma or Enter) turns the word into Odia. <b>Ctrl+Space</b> switches to English (for CHARACTER names and scene headings) and back. Capital letters are for the thick sounds (T D N L).</p>
+          <p>Space (or a full stop, comma or Enter) turns the word into Odia; <b>Backspace</b> right after gives the English letters back. <b>Ctrl+Space</b> switches to English (for CHARACTER names and scene headings) and back. Capital letters are for the thick sounds (T D N L).</p>
         </div>
       )}
       {mode === 'key' && show && (

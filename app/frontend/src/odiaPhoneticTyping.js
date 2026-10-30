@@ -1,13 +1,17 @@
-// Phonetic Odia typing on the screen (the rules are in odiaPhonetic.js): while it is on, the letters you type are collected into a word and the word is
-// shown in Odia, redrawn after every key — pa → ପ, pab → ପବ, pabana → ପବନ. A space, a number, a full stop, Enter or moving the caret ends the word.
-// Backspace takes the last English letter off the word (and goes on until the Odia on screen really changes). It works in every text box and in the screenplay editor (the same boxes as the key-layout typing).
+// Phonetic Odia typing on the screen (the rules are in odiaPhonetic.js). You type the word in English letters and it stays English while you type
+// (pabana); when you press Space the word turns into Odia (ପବନ) and the space is added. The same happens before a full stop, comma, question mark and
+// the like, and when you press Enter. Nothing changes while the word is half typed, and a word you leave without a space stays as typed.
+// It works in every text box and in the screenplay editor (the same boxes as the key-layout typing). Ctrl+Space (OdiaKeyToggle) is the way to type an
+// English word (a CHARACTER name, a scene heading) in between.
 import { isTypingTarget } from './odiaKeys.js'
-import { isPhoneticKey, transliterate } from './odiaPhonetic.js'
+import { transliterate } from './odiaPhonetic.js'
 
-const words = new WeakMap() // text box -> { roman, shown }: the English letters of the word being typed, and the Odia now on screen for them
-let busy = false // our own edits fire the same events; they must not be treated as typing
+let busy = false // our own edit fires the same events; it must not be treated as typing
 
-// the `count` characters just before the caret (null when something is selected or there is no caret)
+const ROMAN_WORD_AT_END = /[A-Za-z|~]+$/
+const ENDS_A_WORD = /^[\s.,;:!?()"'“”‘’\-–—…]$/ // typed characters that finish a word (a space is the main one)
+
+// the text just before the caret (null when something is selected or there is no caret)
 function textBeforeCaret(el, count) {
   if (el.isContentEditable) {
     const sel = window.getSelection()
@@ -30,53 +34,40 @@ function selectBeforeCaret(el, count) {
   el.setSelectionRange(el.selectionStart - count, el.selectionStart)
 }
 
-// puts `next` where the word `previous` is (just before the caret)
-function replaceWord(el, previous, next) {
+// the English word right before the caret, or '' when there is none
+function pendingWord(el) {
+  const before = textBeforeCaret(el, 80)
+  return before ? (ROMAN_WORD_AT_END.exec(before)?.[0] ?? '') : ''
+}
+
+// replaces the English word before the caret with its Odia, and adds `after` (the space or the mark that was typed) right behind it
+function convertWord(el, word, after = '') {
   busy = true
   try {
-    if (previous) selectBeforeCaret(el, previous.length)
-    if (next) document.execCommand('insertText', false, next)
-    else if (previous) document.execCommand('delete')
+    selectBeforeCaret(el, word.length)
+    document.execCommand('insertText', false, `${transliterate(word)}${after}`)
   } finally {
     busy = false
   }
 }
 
-// is the word we remember still exactly where we left it, right before the caret? (not, after a click or an arrow key: then a new word starts)
-function currentWord(el) {
-  const word = words.get(el)
-  if (!word) return null
-  return textBeforeCaret(el, word.shown.length) === word.shown ? word : null
-}
-
+// Space and the marks that end a word
 export function phoneticBeforeInput(event) {
   if (busy || event.isComposing) return
   const el = event.target
   if (!isTypingTarget(el)) return
-  const { inputType, data } = event
+  if (event.inputType !== 'insertText' || !event.data || event.data.length !== 1 || !ENDS_A_WORD.test(event.data)) return
+  const word = pendingWord(el)
+  if (!word) return
+  event.preventDefault()
+  convertWord(el, word, event.data)
+}
 
-  if (inputType === 'insertText' && data && data.length === 1 && isPhoneticKey(data)) {
-    const word = currentWord(el)
-    const roman = `${word ? word.roman : ''}${data}`
-    const shown = transliterate(roman)
-    event.preventDefault()
-    replaceWord(el, word ? word.shown : '', shown)
-    words.set(el, { roman, shown })
-    return
-  }
-  if (inputType === 'deleteContentBackward') {
-    const word = currentWord(el)
-    if (word && word.roman) {
-      // a closing "a" shows nothing (it is built into the letter), so Backspace goes on until something visible has changed
-      let roman = word.roman.slice(0, -1)
-      let shown = transliterate(roman)
-      while (roman && shown === word.shown) { roman = roman.slice(0, -1); shown = transliterate(roman) }
-      event.preventDefault()
-      replaceWord(el, word.shown, shown)
-      if (roman) words.set(el, { roman, shown })
-      else words.delete(el)
-      return
-    }
-  }
-  words.delete(el) // a space, a number, Enter, paste, anything else: the word is finished
+// Enter: the editor handles it itself (a new line), so the word before the caret is converted first and the key then carries on
+export function phoneticKeyDown(event) {
+  if (busy || event.isComposing || event.key !== 'Enter' || event.ctrlKey || event.metaKey || event.altKey) return
+  const el = event.target
+  if (!isTypingTarget(el)) return
+  const word = pendingWord(el)
+  if (word) convertWord(el, word)
 }

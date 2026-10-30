@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { ODIA_KEYS, odiaKeyHandler } from './odiaKeys.js'
 import { PHONETIC_HELP } from './odiaPhonetic.js'
-import { phoneticBeforeInput } from './odiaPhoneticTyping.js'
+import { phoneticBeforeInput, phoneticKeyDown } from './odiaPhoneticTyping.js'
 
 const STORE = 'filmybase.odiaTyping'
 const ROWS = [
@@ -20,7 +20,7 @@ const LABEL_OF = { en: 'EN', key: 'ଓଡ଼ିଆ', phon: 'ଓଡ଼ିଆ·abc
 const TITLE_OF = {
   en: 'Typing in English — tap for Odia (key layout)',
   key: 'Typing in Odia (Akruti key layout) — tap for Odia with English letters',
-  phon: 'Typing Odia with English letters (pabana → ପବନ) — tap for English',
+  phon: 'Typing Odia with English letters: write pabana, press Space, get ପବନ — tap for English',
 }
 const readMode = () => { try { const v = localStorage.getItem(STORE); return v === 'p' ? 'phon' : v === '1' ? 'key' : 'en' } catch { return 'en' } }
 
@@ -45,7 +45,11 @@ export default function OdiaKeyToggle() {
     }
     if (mode === 'phon') {
       document.addEventListener('beforeinput', phoneticBeforeInput, true)
-      return () => document.removeEventListener('beforeinput', phoneticBeforeInput, true)
+      document.addEventListener('keydown', phoneticKeyDown, true)
+      return () => {
+        document.removeEventListener('beforeinput', phoneticBeforeInput, true)
+        document.removeEventListener('keydown', phoneticKeyDown, true)
+      }
     }
     return undefined
   }, [mode])
@@ -71,8 +75,8 @@ export default function OdiaKeyToggle() {
       {on && <button type="button" className="odia-toggle-keys" title={mode === 'phon' ? 'Show how to type' : 'Show the Odia keyboard'} onClick={() => setShow(!show)}>⌨</button>}
       {mode === 'phon' && show && (
         <div className="odia-keyboard odia-phonetic-help" role="note" aria-label="Typing Odia with English letters">
-          <p><b>Type the sound in English letters</b> — the word turns into Odia as you type.</p>
-          <input type="text" className="odia-try" value={tryText} placeholder="try here: pabana" onChange={(e) => setTryText(e.target.value)} aria-label="Try typing here" />
+          <p><b>Type the word in English letters, then press Space</b> — it turns into Odia.</p>
+          <input type="text" className="odia-try" value={tryText} placeholder="try here: pabana + Space" onChange={(e) => setTryText(e.target.value)} aria-label="Try typing here" />
           <table>
             <tbody>
               {PHONETIC_HELP.map(([typed, gets, example]) => (
@@ -80,7 +84,7 @@ export default function OdiaKeyToggle() {
               ))}
             </tbody>
           </table>
-          <p>Space ends a word. <b>Ctrl+Space</b> switches to English (for CHARACTER names and scene headings) and back. Capital letters are for the thick sounds (T D N L).</p>
+          <p>Space (or a full stop, comma or Enter) turns the word into Odia. <b>Ctrl+Space</b> switches to English (for CHARACTER names and scene headings) and back. Capital letters are for the thick sounds (T D N L).</p>
         </div>
       )}
       {mode === 'key' && show && (

@@ -1,4 +1,4 @@
-// Odia typing with English letters ("phonetic"): write pabana and get ପବନ. Pure functions, no screen — so the rules can be tested and, when a word comes out
+// Odia typing with English letters ("phonetic"): write pabana, press Space and get ପବନ. Pure functions, no screen — so the rules can be tested and, when a word comes out
 // wrong, fixed here in one place (the tables below) without touching anything else.
 //
 // The rules (ITRANS-like, the way Odia is usually typed in Roman letters):

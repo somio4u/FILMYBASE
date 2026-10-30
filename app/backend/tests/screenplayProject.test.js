@@ -121,8 +121,9 @@ test("a numbered one-liner list becomes a project whose scenes are all 'not writ
   assert.equal(buildScreenplayProject(parseEpisodesFromText(numberedHeadingsToPlain(list)), { targetScenes: "abc" }).sceneList.targetScenes, undefined);
 });
 
-test("writers may analyse a draft and read a non-PDF file's text", async () => {
+test("writers may analyse a draft and read a non-PDF file's text, but not use the AI Movie import", async () => {
   const { matchWriterRoute } = await import("../writerAccess.js");
   assert.ok(matchWriterRoute("POST", "/api/draft/analyze"));
-  assert.ok(matchWriterRoute("POST", "/api/ai-movie/import-screenplay-file"));
+  assert.ok(matchWriterRoute("POST", "/api/draft/read-file"));
+  assert.equal(matchWriterRoute("POST", "/api/ai-movie/import-screenplay-file"), null); // the AI Movie import stays admin's
 });

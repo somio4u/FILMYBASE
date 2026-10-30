@@ -7500,7 +7500,7 @@ function DraftUpload({ backendUrl, onBack, onImportScreenplay, onStartStage, onU
         const got = await waitForPdfJob(backendUrl, started.jobId, setProgress)
         ;({ text, title, analysis, report } = got)
       } else {
-        const response = await fetch(`${backendUrl}/api/ai-movie/import-screenplay-file`, { method: 'POST', body })
+        const response = await fetch(`${backendUrl}/api/draft/read-file`, { method: 'POST', body })
         const { data, problem } = await readServerAnswer(response)
         if (!response.ok || !data) throw new Error(data?.error || problem || 'I could not read this file type. Try PDF, Word, text, Final Draft or Fountain.')
         text = data.text; title = data.title || ''

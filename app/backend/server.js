@@ -19452,6 +19452,19 @@ app.post("/api/ai-movie/import-screenplay-file", requireRole("admin"), pdfUpload
   }
 });
 
+// "Upload your draft", a file that is not a PDF (Word, text, Final Draft, Fountain, …): only its text is read out and sent back (no AI, nothing saved).
+// A PDF goes through the page-by-page reader instead (/api/story-from-pdf).
+app.post("/api/draft/read-file", requireRole("admin"), pdfUpload.single("file"), async (req, res) => {
+  if (!req.file) { res.status(400).json({ error: "Choose a file first." }); return; }
+  try {
+    const text = (await extractTextFromUploadedScreenplay(req.file)).trim();
+    if (!text) { res.status(400).json({ error: "I couldn't find any readable text in that file." }); return; }
+    res.json({ text, title: path.basename(req.file.originalname, path.extname(req.file.originalname)) });
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
 app.get("/api/story-from-pdf/:jobId", requireRole("admin"), (req, res) => {
   const job = pdfReadJobs.get(req.params.jobId);
   if (!job) {

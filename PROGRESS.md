@@ -2428,3 +2428,7 @@ Plain version: every project is now a set of **drafts**. Opening a project shows
 
 ## 2026-10-30 — Key test now says which model + location a Vertex project really answers with
 - The Vertex test still failed at "Vertex AI answers" (404). When that step fails, the test now tries 7 model/location pairs and lists the result of each in the Technical details; if one works, the red message names it ("try that Location"). Diagnosis only — nothing else changes. Not verified with a real project (sandbox blocks Google).
+
+## 2026-10-30 — Vertex "global" location now works
+- The test showed the owner's project answers with `gemini-3.5-flash-lite` only at location **global**. The Gemini library (0.3) built a non-existent address (`global-aiplatform…`) for "global", so it could not be used. Now `global` gets the real host (`aiplatform.googleapis.com`). Owner: type `global` as the Location in Settings, then Test.
+- Not verified with a real project (sandbox blocks Google). The Pro/Story-Brain step already handled global itself.

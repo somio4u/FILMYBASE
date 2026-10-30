@@ -139,6 +139,10 @@ export function providerEnv(env, credentials) {
   return env;
 }
 
+// The Gemini library (0.3) builds "https://<location>-aiplatform.googleapis.com", which does not exist for the "global" location (where the newest Gemini
+// models live). For "global" the plain host is given explicitly.
+export const vertexHttpOptions = (location) => (location === "global" ? { baseUrl: "https://aiplatform.googleapis.com/" } : undefined);
+
 export const cleanLocation = (value) => (/^[a-z]+(?:-[a-z]+\d+)?$/.test(String(value ?? "").trim()) ? String(value).trim() : "us-central1");
 
 // Google's raw error -> a plain sentence that says what to do

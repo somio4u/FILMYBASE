@@ -106,3 +106,23 @@ test("saving writes the project in one transaction, in order, and rolls back whe
   assert.ok(!calls.includes("COMMIT"));
   assert.equal(calls.at(-1), "RELEASE");
 });
+
+test("a numbered one-liner list becomes a project whose scenes are all 'not written yet'; the wanted scene total is kept for a film", async () => {
+  const { numberedHeadingsToPlain } = await import("../importAnalysis.js");
+  const list = `1. INT. TEMPLE OFFICE - NIGHT — Balaram pressures the priest.
+2. EXT. OLD KALI TEMPLE - NIGHT — The eyes are stolen.
+3. EXT. VILLAGE ROAD - NIGHT — Deba is terrorized.`;
+  const built = buildScreenplayProject(parseEpisodesFromText(numberedHeadingsToPlain(list)), { title: "LIST", targetScenes: 45 });
+  assert.deepEqual(built.summary, { scenes: 3, written: 0, notWritten: 3, episodes: 1, cast: 0 });
+  assert.equal(built.rows.length, 0);
+  assert.equal(built.sceneList.scenes[1].oneLiner.en, "The eyes are stolen.");
+  assert.equal(built.sceneList.scenes[1].location.en, "OLD KALI TEMPLE");
+  assert.equal(built.sceneList.targetScenes, 45);
+  assert.equal(buildScreenplayProject(parseEpisodesFromText(numberedHeadingsToPlain(list)), { targetScenes: "abc" }).sceneList.targetScenes, undefined);
+});
+
+test("writers may analyse a draft and read a non-PDF file's text", async () => {
+  const { matchWriterRoute } = await import("../writerAccess.js");
+  assert.ok(matchWriterRoute("POST", "/api/draft/analyze"));
+  assert.ok(matchWriterRoute("POST", "/api/ai-movie/import-screenplay-file"));
+});

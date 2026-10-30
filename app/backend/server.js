@@ -38,7 +38,7 @@ import { setupProductionMedia } from "./productionMedia.js";
 import { registerDesignTaskRoutes } from "./designTasks.js";
 import { registerSubmissionRoutes, designerGatekeeper, DESIGNER_ROLE } from "./designSubmissions.js";
 import { sessionTokenOf } from "./sessionToken.js";
-import { analyzeImportedText, reportLines } from "./importAnalysis.js";
+import { analyzeImportedText, numberedHeadingsToPlain, reportLines } from "./importAnalysis.js";
 import { languageOf, parseEpisodesFromText, sceneContent } from "./screenplayImport.js";
 import { planFill } from "./pdfFill.js";
 import { sceneState } from "./importAnalysis.js";
@@ -8003,8 +8003,8 @@ async function runSkipStart(stage, input, tools) {
   if (stage === "screenplay") {
     // a PDF that is already a written screenplay: no AI — every scene is kept as written (screenplayProject.js)
     tools.progress("Reading the scenes of your screenplay…");
-    const parsed = parseEpisodesFromText(body.pastedText);
-    const built = buildScreenplayProject(parsed, { title: body.title, format: body.format });
+    const parsed = parseEpisodesFromText(numberedHeadingsToPlain(body.pastedText));
+    const built = buildScreenplayProject(parsed, { title: body.title, format: body.format, targetScenes: body.targetScenes });
     tools.markSaving();
     tools.progress(`Saving your project — ${built.summary.scenes} scenes (${built.summary.written} written out)…`);
     const conceptId = await saveScreenplayProject(db, built, { setTitle: setConceptTitleIfMissing, ownerUserId });
@@ -8046,14 +8046,23 @@ for (const stage of Object.keys(SKIP_START)) {
   });
 }
 
+// "Upload your draft": the text of any draft file (Word, text, Final Draft, Fountain, a PDF already read) is looked at — which stage is it at, how many
+// scenes are written and how many are only one-liners — before anything is made from it (importAnalysis.js; no AI, nothing is saved).
+app.post("/api/draft/analyze", requireRole("admin"), (req, res) => {
+  const text = String(req.body?.text ?? "");
+  if (!text.trim()) { res.status(400).json({ error: "There is no text to look at. Upload the file again." }); return; }
+  const analysis = analyzeImportedText(text);
+  res.json({ analysis, report: reportLines(analysis) });
+});
+
 // "Make my project from this PDF screenplay": the text of a PDF that was found to be a written screenplay (see importAnalysis.js)
 app.post("/api/import-pdf-screenplay", requireRole("admin"), async (req, res) => {
-  const { pastedText, title, format } = req.body ?? {};
-  if (!pastedText || !String(pastedText).trim()) { res.status(400).json({ error: "There is no screenplay text to import. Upload the PDF again." }); return; }
-  const parsed = parseEpisodesFromText(String(pastedText));
+  const { pastedText, title, format, targetScenes } = req.body ?? {};
+  if (!pastedText || !String(pastedText).trim()) { res.status(400).json({ error: "There is no screenplay text to import. Upload the file again." }); return; }
+  const parsed = parseEpisodesFromText(numberedHeadingsToPlain(String(pastedText)));
   if (!parsed.episodes.some((e) => e.scenes.length > 0)) { res.status(422).json({ error: "I could not find any scenes in this text (each scene needs a heading like “INT. PLACE - NIGHT”). Nothing was made." }); return; }
   try {
-    const { job, alreadyRunning } = await skipStartJobs.start({ userId: req.user.id, stage: "screenplay", input: { body: { pastedText: String(pastedText), title: String(title ?? "").slice(0, 200), format }, ownerUserId: newProjectOwner(req) } });
+    const { job, alreadyRunning } = await skipStartJobs.start({ userId: req.user.id, stage: "screenplay", input: { body: { pastedText: String(pastedText), title: String(title ?? "").slice(0, 200), format, targetScenes }, ownerUserId: newProjectOwner(req) } });
     res.json({ ...publicSkipJob(job), alreadyRunning });
   } catch (error) {
     console.error("Starting the PDF screenplay import failed:", error.message);
@@ -8076,7 +8085,7 @@ app.post("/api/scene-lists/:id/pdf-fill", requireRole("admin"), async (req, res)
     if (list.status !== "approved") { res.status(400).json({ error: "The scene list must be approved before screenplay text can be placed." }); return; }
     const running = await db.query("SELECT 1 FROM auto_pipeline_runs WHERE scene_list_id = $1 AND status = 'running' LIMIT 1", [sceneListId]);
     if (running.rows.length > 0) { res.status(409).json({ error: "The AI is still writing this script. Try again once it has finished." }); return; }
-    const parsed = parseEpisodesFromText(text);
+    const parsed = parseEpisodesFromText(numberedHeadingsToPlain(text));
     if (!parsed.episodes.some((e) => e.scenes.length > 0)) { res.status(422).json({ error: "I could not find any scenes in this PDF text (each scene needs a heading like “INT. PLACE - NIGHT”). Nothing was changed." }); return; }
 
     const series = Array.isArray(list.content?.episodeScenes);

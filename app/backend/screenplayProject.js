@@ -19,7 +19,7 @@ function summaryOf(scene) {
   return joined.length > 400 ? `${joined.slice(0, 397).trim()}...` : joined;
 }
 
-export function buildScreenplayProject(parsed, { title = "", format = null, minutesFallback = 90 } = {}) {
+export function buildScreenplayProject(parsed, { title = "", format = null, minutesFallback = 90, targetScenes = null } = {}) {
   const episodes = parsed.episodes.filter((e) => e.scenes.length > 0);
   if (episodes.length === 0) throw Object.assign(new Error("No scenes were found in this screenplay, so no project was made."), { status: 422 });
   const allText = episodes.flatMap((e) => e.scenes.flatMap((s) => s.elements.map((x) => x.text))).join("\n");
@@ -69,6 +69,9 @@ export function buildScreenplayProject(parsed, { title = "", format = null, minu
     ? { episodeScenes: episodeScenes.map((scenes) => ({ scenes, totalEstimatedMinutes: sumMinutes(scenes), targetMinutes: deckFormat.episodeMinutes })), controllingIdea: idea }
     : { scenes: episodeScenes[0], totalEstimatedMinutes: sumMinutes(episodeScenes[0]), targetMinutes: deckFormat.runtimeMinutes, controllingIdea: idea };
 
+  // how many scenes the writer wants in all (asked after the draft was looked at); kept with the scene list so the app can show what is still to plan
+  const wanted = Math.floor(Number(targetScenes));
+  if (!isSeries && wanted > 0 && wanted < 2000) sceneList.targetScenes = wanted;
   const writtenCount = rows.length;
   const total = episodeScenes.flat().length;
   return {

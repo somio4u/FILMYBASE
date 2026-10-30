@@ -98,7 +98,7 @@ export function analyzeImportedText(rawText) {
 }
 
 // "1. INT. TEMPLE - NIGHT — one line" (a numbered list) -> the "SCENE 1 / INT. TEMPLE - NIGHT / one line" shape the parser reads.
-function numberedHeadingsToPlain(text) {
+export function numberedHeadingsToPlain(text) {
   if (!NUMBERED_HEADING.test(text)) return text;
   return text.split("\n").map((line) => {
     const m = /^\s*(?:scene\s*)?(\d{1,4})\s*[.):\-–—]\s*((?:INT\.?\s*\/\s*EXT|EXT\.?\s*\/\s*INT|INT|EXT)[. ]\s*\S.*)$/i.exec(line);
@@ -118,12 +118,12 @@ export const STAGE_LABEL = {
 export function reportLines(a) {
   const t = a.totals;
   const out = [];
-  out.push(`This PDF is at the ${STAGE_LABEL[a.stage]}. It is in ${a.language}, about ${a.words} words.`);
+  out.push(`This draft is at the ${STAGE_LABEL[a.stage]}. It is in ${a.language}, about ${a.words} words.`);
   if (a.stage === "screenplay") {
     out.push(`It has ${t.scenes} scene${t.scenes === 1 ? "" : "s"}${t.episodes > 1 ? ` in ${t.episodes} episodes` : ""}. ${t.written} ${t.written === 1 ? "is" : "are"} written out (with ${t.dialogueLines} dialogue lines in all)${t.oneLiner + t.empty ? `, and ${t.oneLiner + t.empty} ${t.oneLiner + t.empty === 1 ? "has" : "have"} only a one-line summary and still need${t.oneLiner + t.empty === 1 ? "s" : ""} to be written` : ", nothing is missing"}.`);
     if (a.characters.length) out.push(`Speaking characters: ${a.characters.slice(0, 12).map((c) => `${c.name} (${c.lines})`).join(", ")}${a.characters.length > 12 ? " …" : ""}.`);
     const rest = t.oneLiner + t.empty;
-    out.push(`If you make your project from this PDF: the ${t.written} written scene${t.written === 1 ? "" : "s"} go in exactly as they are, word for word, and stay editable${rest ? `; the ${rest} one-liner scene${rest === 1 ? "" : "s"} go in as “not written yet”, ready for you to write` : ""}. Nothing is skipped.`);
+    out.push(`If you make your project from this draft: the ${t.written} written scene${t.written === 1 ? "" : "s"} go in exactly as they are, word for word, and stay editable${rest ? `; the ${rest} one-liner scene${rest === 1 ? "" : "s"} go in as “not written yet”, ready for you to write` : ""}. Nothing is skipped.`);
   } else if (a.stage === "scene_list") {
     out.push(`It has ${t.scenes} scene${t.scenes === 1 ? "" : "s"}, each with only a one-line summary. No dialogue is written yet, so none is lost by starting from the scene one-liners.`);
   } else if (a.stage === "bit_sheet") {

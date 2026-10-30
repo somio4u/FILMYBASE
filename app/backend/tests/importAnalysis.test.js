@@ -39,7 +39,7 @@ test("a screenplay with some scenes written and some only one-liners: both group
   assert.match(text, /3 scenes/);
   assert.match(text, /2 are written out/);
   assert.match(text, /1 has only a one-line summary/);
-  assert.match(text, /If you make your project from this PDF[^]*word for word/);
+  assert.match(text, /If you make your project from this draft[^]*word for word/);
   assert.match(text, /the 1 one-liner scene go in as “not written yet”/);
 });
 

@@ -7437,6 +7437,157 @@ function PdfFillPanel({ backendUrl, sceneListId, onDone }) {
   )
 }
 
+// The first screen after login (no project open): two choices. "Create a film from your idea" opens the usual idea screen; "Upload your draft"
+// opens DraftUpload below.
+function HomeChoice({ onIdea, onDraft }) {
+  return (
+    <div className="home-choice">
+      <h1 className="empty-state-greeting">What do you want to do?</h1>
+      <div className="home-choice-cards">
+        <button type="button" className="home-choice-card" onClick={onIdea}>
+          <span className="home-choice-icon" aria-hidden="true">💡</span>
+          <strong>Create a film from your idea</strong>
+          <small>Start with an idea and build it step by step.</small>
+        </button>
+        <button type="button" className="home-choice-card" onClick={onDraft}>
+          <span className="home-choice-icon" aria-hidden="true">📄</span>
+          <strong>Upload your draft</strong>
+          <small>Already have something written? Upload it — I will tell you which stage it is at and carry on from there.</small>
+        </button>
+      </div>
+    </div>
+  )
+}
+
+const DRAFT_STAGES = [['idea', 'Idea'], ['synopsis', 'Story synopsis'], ['bitsheet', 'Three-act / Bit Sheet'], ['scenelist', 'Scene one-liners'], ['screenplay', 'Screenplay with dialogue']]
+const DRAFT_STAGE_OF = { idea: 'idea', characters: 'idea', synopsis: 'synopsis', bit_sheet: 'bitsheet', scene_list: 'scenelist', screenplay: 'screenplay' }
+
+// "Upload your draft": any file → it is read → the app says which stage it is at (and, for a screenplay, how many scenes are written and how many are
+// only one-liners) → one short question at most → the draft is taken to that stage. Nothing is made until the writer presses the proceed button.
+function DraftUpload({ backendUrl, onBack, onImportScreenplay, onStartStage, onUseAsIdea }) {
+  const inputRef = useRef(null)
+  const [phase, setPhase] = useState('idle') // idle | reading | ready | going
+  const [progress, setProgress] = useState('')
+  const [startedAt, setStartedAt] = useState(0)
+  const [seconds, setSeconds] = useState(0)
+  const [draft, setDraft] = useState(null) // { text, title, analysis, report, fileName }
+  const [stage, setStage] = useState('idea')
+  const [total, setTotal] = useState('')
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    if (phase !== 'reading' && phase !== 'going') return undefined
+    const id = setInterval(() => setSeconds(Math.round((Date.now() - startedAt) / 1000)), 500)
+    return () => clearInterval(id)
+  }, [phase, startedAt])
+
+  async function handleFile(event) {
+    const file = event.target.files?.[0]
+    event.target.value = ''
+    if (!file) return
+    setError(''); setDraft(null)
+    setStartedAt(Date.now()); setSeconds(0)
+    setPhase('reading'); setProgress('Uploading your file…')
+    try {
+      const body = new FormData()
+      body.append('file', file)
+      let text; let title = ''; let analysis; let report
+      if (/\.pdf$/i.test(file.name)) {
+        body.append('mode', 'auto')
+        const start = await fetch(`${backendUrl}/api/story-from-pdf`, { method: 'POST', body })
+        const started = await start.json().catch(() => ({}))
+        if (!start.ok) throw new Error(started.error || 'Could not upload the file.')
+        const got = await waitForPdfJob(backendUrl, started.jobId, setProgress)
+        ;({ text, title, analysis, report } = got)
+      } else {
+        const response = await fetch(`${backendUrl}/api/ai-movie/import-screenplay-file`, { method: 'POST', body })
+        const { data, problem } = await readServerAnswer(response)
+        if (!response.ok || !data) throw new Error(data?.error || problem || 'I could not read this file type. Try PDF, Word, text, Final Draft or Fountain.')
+        text = data.text; title = data.title || ''
+      }
+      if (!analysis) {
+        setProgress('Looking at what your draft contains…')
+        const response = await fetch(`${backendUrl}/api/draft/analyze`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text }) })
+        const { data, problem } = await readServerAnswer(response)
+        if (!response.ok || !data) throw new Error(data?.error || problem || 'Something went wrong. Please try again.')
+        ;({ analysis, report } = data)
+      }
+      if (analysis.stage === 'empty') throw new Error('I could not find any readable text in this file.')
+      setDraft({ text, title, analysis, report, fileName: file.name })
+      setStage(DRAFT_STAGE_OF[analysis.stage] ?? 'idea')
+      setTotal(String(Math.max(analysis.totals?.scenes ?? 0, 1)))
+      setPhase('ready')
+    } catch (e) {
+      setError(e.message); setPhase('idle')
+    }
+  }
+
+  async function proceed() {
+    setPhase('going'); setStartedAt(Date.now()); setSeconds(0); setProgress('Starting…'); setError('')
+    try {
+      if (stage === 'idea') await onUseAsIdea(draft.text)
+      else if (stage === 'screenplay' || stage === 'scenelist') await onImportScreenplay({ text: draft.text, title: draft.title, targetScenes: Number(total) > (draft.analysis.totals?.scenes ?? 0) ? Number(total) : undefined })
+      else await onStartStage(stage, draft.text)
+    } catch (e) {
+      setError(e.message || 'Something went wrong.')
+    }
+    setPhase('ready')
+  }
+
+  const a = draft?.analysis
+  const t = a?.totals
+  const unwritten = t ? t.oneLiner + t.empty : 0
+  const detected = a ? (DRAFT_STAGES.find(([k]) => k === DRAFT_STAGE_OF[a.stage])?.[1] ?? 'Idea') : ''
+  const sceneStage = stage === 'screenplay' || stage === 'scenelist'
+  return (
+    <div className="draft-upload">
+      <button type="button" className="cancel-button" onClick={onBack}>← Back</button>
+      <h2>Upload your draft</h2>
+      <input ref={inputRef} type="file" onChange={handleFile} style={{ display: 'none' }} />
+      {(phase === 'idle' || phase === 'reading') && (
+        <>
+          <p>Choose your file — a <b>PDF</b>, <b>text</b> file, <b>Word</b> file, <b>Final Draft</b> (.fdx), a script / <b>Fountain</b> file, or any other relevant file. I will read it and tell you which stage your draft is at.</p>
+          <button type="button" className="choose-button" onClick={() => inputRef.current?.click()} disabled={phase === 'reading'}>
+            {phase === 'reading' ? 'Reading your draft…' : '📎 Choose a file'}
+          </button>
+        </>
+      )}
+      {(phase === 'reading' || phase === 'going') && <p className="floating-agent-stage-line"><span className="floating-agent-spinner" aria-hidden="true" /><span>{progress} <b>{Math.floor(seconds / 60)}m {String(seconds % 60).padStart(2, '0')}s</b> — you can wait here.</span></p>}
+      {error && <p className="feedback-note">{error}</p>}
+      {(phase === 'ready' || phase === 'going') && a && (
+        <div className="pdf-findings">
+          <strong>🔎 {draft.fileName}</strong>
+          {a.stage === 'screenplay' ? (
+            <p>This draft is in the <b>Screenplay stage</b>. It has <b>{t.scenes} scene{t.scenes === 1 ? '' : 's'}</b>: <b>{t.written}</b> written with dialogue{unwritten ? <> and <b>{unwritten}</b> with only a one-liner (still to be written)</> : ' — nothing is missing'}.</p>
+          ) : (
+            <>{draft.report.slice(0, 2).map((line, i) => <p key={i}>{line}</p>)}</>
+          )}
+          {a.warnings?.length > 0 && <p className="pdf-findings-warn">⚠ {a.warnings.slice(0, 2).join(' ')}</p>}
+          {sceneStage && (
+            <label className="draft-total">
+              How many scenes should the film have in all? (you can raise it; I will keep the number)
+              <input type="number" min={t.scenes || 1} value={total} onChange={(e) => setTotal(e.target.value)} />
+            </label>
+          )}
+          <label className="draft-stage-pick">
+            Take it to:
+            <select value={stage} onChange={(e) => setStage(e.target.value)}>
+              {DRAFT_STAGES.map(([key, label]) => <option key={key} value={key}>{label}{DRAFT_STAGE_OF[a.stage] === key ? ' (what I found)' : ''}</option>)}
+            </select>
+          </label>
+          {stage !== (DRAFT_STAGE_OF[a.stage] ?? 'idea') && <p className="pdf-findings-warn">I found “{detected}”. If you choose another stage, anything written beyond that stage is not carried over.</p>}
+          <div className="script-scene-form-actions">
+            <button type="button" className="choose-button pdf-findings-import" onClick={proceed} disabled={phase === 'going'}>
+              {phase === 'going' ? 'Starting…' : `✓ Proceed with this draft${a.stage === 'screenplay' && stage === 'screenplay' ? ` (${t.written} scene${t.written === 1 ? '' : 's'} kept as written)` : ''}`}
+            </button>
+            <button type="button" className="cancel-button" onClick={() => { setDraft(null); setPhase('idle') }}>Choose another file</button>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 // "What I found in your PDF": the result of looking at the PDF before anything is made from it — which stage it is at, how many scenes are
 // really written (with their dialogue) and which have only a one-line summary. Nothing is changed by this card.
 function PdfFindings({ analysis, report, onImport }) {
@@ -8609,6 +8760,7 @@ function App() {
   const [projectTitle, setProjectTitle] = useState(null)
   const [projectHistory, setProjectHistory] = useState([])
   const [startStage, setStartStage] = useState('idea')
+  const [homeChoice, setHomeChoice] = useState(null) // null = the first screen with two choices | 'idea' | 'draft'
   const [skipPastedText, setSkipPastedText] = useState('')
   const [skipRuntimeMinutes, setSkipRuntimeMinutes] = useState(120)
   const [isSkippingAhead, setIsSkippingAhead] = useState(false)
@@ -10969,6 +11121,7 @@ function App() {
   }
 
   function handleNewIdeaClick(forAgent = activeAgent) {
+    setHomeChoice(null)
     localStorage.removeItem(CURRENT_CONCEPT_STORAGE_KEY)
     setConcept('')
     setConceptId(null)
@@ -11160,14 +11313,36 @@ function App() {
     loadProjectList()
   }
 
+  // "Upload your draft" → proceed: an AI start from a synopsis / Bit Sheet text (same background job as "Let's go")
+  async function startFromDraft(stage, text) {
+    setErrorMessage(null)
+    const endpoint = stage === 'synopsis' ? '/api/skip-to-synopsis' : '/api/skip-to-bitsheet'
+    let response
+    try {
+      response = await fetch(`${BACKEND_URL}${endpoint}`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pastedText: text, runtimeMinutes: buildFormatObject().runtimeMinutes ?? skipRuntimeMinutes, format: buildFormatObject() }),
+      })
+    } catch { setErrorMessage(t.longRequestConnectionLost); loadProjectList(); return }
+    const { data, problem } = await readServerAnswer(response)
+    if (!response.ok || !data) { setErrorMessage(data?.error || problem || t.genericError); return }
+    if (data.jobId) { setSkipRunning(true); setSkipJobId(data.jobId); window.scrollTo({ top: 0, behavior: 'smooth' }) }
+  }
+
+  function useDraftAsIdea(text) {
+    setConcept(text)
+    setStartStage('idea')
+    setHomeChoice('idea')
+  }
+
   // a PDF that is already a written screenplay: the server makes the project from it, every scene as written (a background job, followed by the progress card)
-  async function importPdfScreenplay({ text, title }) {
+  async function importPdfScreenplay({ text, title, targetScenes }) {
     setErrorMessage(null)
     let response
     try {
       response = await fetch(`${BACKEND_URL}/api/import-pdf-screenplay`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ pastedText: text, title, format: buildFormatObject() }),
+        body: JSON.stringify({ pastedText: text, title, targetScenes, format: buildFormatObject() }),
       })
     } catch {
       setErrorMessage(t.longRequestConnectionLost)
@@ -15585,7 +15760,15 @@ function App() {
 
       {activeAgent === 'story' && (
       <>
-      {movieShows('idea') && !storylines && !(conceptId && projectType === 'story') && (
+      {movieShows('idea') && !storylines && !(conceptId && projectType === 'story') && homeChoice === null && (
+        <div className="empty-state"><HomeChoice onIdea={() => setHomeChoice('idea')} onDraft={() => setHomeChoice('draft')} /></div>
+      )}
+      {movieShows('idea') && !storylines && !(conceptId && projectType === 'story') && homeChoice === 'draft' && (
+        <div className="empty-state">
+          <DraftUpload backendUrl={BACKEND_URL} onBack={() => setHomeChoice(null)} onImportScreenplay={importPdfScreenplay} onStartStage={startFromDraft} onUseAsIdea={useDraftAsIdea} />
+        </div>
+      )}
+      {movieShows('idea') && !storylines && !(conceptId && projectType === 'story') && homeChoice === 'idea' && (
         <div className="empty-state">
           {(
             <div className="format-picker">

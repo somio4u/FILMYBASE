@@ -1,6 +1,6 @@
 name: Build Android APK
 
-# Builds a debug APK that wraps the deployed web app (filmybase.vercel.app)
+# Builds the debug APKs (FilmyBase, and FilmyBase Writers for the Independent Writers) that wrap the deployed web app (filmybase.vercel.app)
 # in a native Android shell via Capacitor. No local Android Studio/SDK is
 # needed to trigger this — it runs entirely on GitHub's runners. Trigger it
 # manually from the Actions tab (workflow_dispatch), or it runs automatically
@@ -55,13 +55,22 @@ jobs:
         working-directory: app/frontend/android
         run: chmod +x ./gradlew
 
-      - name: Build debug APK
+      # Two builds of the same app (see app/frontend/android/app/build.gradle): "standard" = FilmyBase, "writer" = FilmyBase Writers (its own
+      # application id, so both can be installed on one phone). assembleDebug builds both; each is uploaded under its own name.
+      - name: Build debug APKs
         working-directory: app/frontend/android
         run: ./gradlew assembleDebug --no-daemon
 
-      - name: Upload APK
+      - name: Upload the Writers APK (independent.apk)
+        uses: actions/upload-artifact@v4
+        with:
+          name: filmybase-writers-apk
+          path: app/frontend/android/app/build/outputs/apk/writer/debug/app-writer-debug.apk
+          if-no-files-found: error
+
+      - name: Upload the standard APK
         uses: actions/upload-artifact@v4
         with:
           name: filmybase-debug-apk
-          path: app/frontend/android/app/build/outputs/apk/debug/app-debug.apk
+          path: app/frontend/android/app/build/outputs/apk/standard/debug/app-standard-debug.apk
           if-no-files-found: error

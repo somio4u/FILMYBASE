@@ -7589,7 +7589,7 @@ function DraftUpload({ backendUrl, onBack, onImportScreenplay, onStartStage, onU
     try {
       if (stage === 'idea') await onUseAsIdea(draft.text)
       else if (stage === 'screenplay' || stage === 'scenelist') await onImportScreenplay({ text: draft.text, title: draft.title, targetScenes: Number(total) > (draft.analysis.totals?.scenes ?? 0) ? Number(total) : undefined })
-      else await onStartStage(stage, draft.text)
+      else await onStartStage(stage, draft.text, draft.analysis)
     } catch (e) {
       setError(e.message || 'Something went wrong.')
     }
@@ -7625,6 +7625,8 @@ function DraftUpload({ backendUrl, onBack, onImportScreenplay, onStartStage, onU
             <>{draft.report.slice(0, 2).map((line, i) => <p key={i}>{line}</p>)}</>
           )}
           {a.warnings?.length > 0 && <p className="pdf-findings-warn">⚠ {a.warnings.slice(0, 2).join(' ')}</p>}
+          {a.stage === 'characters' && stage === 'idea' && <p>This looks like a list of characters. It will be kept as your idea text, so the story can be built around these people — add the story line in the idea box before you go on.</p>}
+          {(stage === 'synopsis' || stage === 'bitsheet') && a.episodeHeadings >= 2 && <p>It has {a.episodeHeadings} episodes, so it will be made as a <b>series</b> of {a.episodeHeadings} episodes.</p>}
           {sceneStage && (
             <label className="draft-total">
               How many scenes should the film have in all? (you can raise it; I will keep the number)
@@ -11376,14 +11378,18 @@ function App() {
   }
 
   // "Upload your draft" → proceed: an AI start from a synopsis / Bit Sheet text (same background job as "Let's go")
-  async function startFromDraft(stage, text) {
+  async function startFromDraft(stage, text, analysis) {
     setErrorMessage(null)
     const endpoint = stage === 'synopsis' ? '/api/skip-to-synopsis' : '/api/skip-to-bitsheet'
+    // a draft split into episodes ("Episode 1", "Episode 2" …) is a SERIES, even when the idea screen's own switch was left on Film: sent as a film its
+    // episodes would be squeezed into one story. The number of episodes is what the draft has.
+    const headings = Number(analysis?.episodeHeadings) || 0
+    const format = formatType === 'film' && headings >= 2 ? { type: 'series', episodeCount: headings, episodeMinutes: Number(episodeMinutes) || 10 } : buildFormatObject()
     let response
     try {
       response = await fetch(`${BACKEND_URL}${endpoint}`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ pastedText: text, runtimeMinutes: buildFormatObject().runtimeMinutes ?? skipRuntimeMinutes, format: buildFormatObject() }),
+        body: JSON.stringify({ pastedText: text, runtimeMinutes: format.runtimeMinutes ?? skipRuntimeMinutes, format }),
       })
     } catch { setErrorMessage(t.longRequestConnectionLost); loadProjectList(); return }
     const { data, problem } = await readServerAnswer(response)

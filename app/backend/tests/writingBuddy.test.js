@@ -84,7 +84,7 @@ test("a reply that ends with [[EDIT: …]] becomes a proposal; the tag never rea
   assert.equal(a.instruction, "Shorten PUJARI's line 2 to one sentence.");
   assert.equal(a.text, "I will cut the priest's speech in half. Press Apply if you like it.");
   const b = extractProposal("Just an answer, no change.");
-  assert.deepEqual(b, { text: "Just an answer, no change.", instruction: null });
+  assert.deepEqual(b, { text: "Just an answer, no change.", instruction: null, write: null });
   const c = extractProposal("Okay.\n[[EDIT: half written");
   assert.equal(c.instruction, null);
   assert.equal(c.text, "Okay.");
@@ -117,4 +117,45 @@ test("the Buddy is told to talk in casual Odia whatever language the person writ
   assert.match(prompt, /ALWAYS talk in ODIA, in Odia script, whatever language the person writes/);
   assert.match(prompt, /button names exactly as in the guide/);
   assert.doesNotMatch(prompt, /Reply in the language and script the person used/);
+});
+
+test("[[WRITE: …]] at the end of a reply becomes a write proposal; EDIT still works; a broken tag is dropped", async () => {
+  const { parseWriteSpec, unwrittenContextText } = await import("../writingBuddy.js");
+  const a = extractProposal("I will write the next three scenes — about a minute each. Press Apply if you agree.\n[[WRITE: next 3]]");
+  assert.equal(a.write, "next 3");
+  assert.equal(a.instruction, null);
+  assert.equal(a.text, "I will write the next three scenes — about a minute each. Press Apply if you agree.");
+  assert.equal(extractProposal("Ok.\n[[EDIT: shorten line 2]]").instruction, "shorten line 2");
+  assert.equal(extractProposal("Ok.\n[[EDIT: shorten line 2]]").write, null);
+  const broken = extractProposal("Sure.\n[[WRITE: all");
+  assert.equal(broken.write, null);
+  assert.equal(broken.text, "Sure.");
+  assert.equal(extractProposal("Hi [[WRITE: ]]").write, null);
+  const unwritten = [{ label: "2", sceneIndex: 1 }, { label: "4", sceneIndex: 3 }, { label: "5", sceneIndex: 4 }, { label: "9", sceneIndex: 8 }];
+  assert.deepEqual(parseWriteSpec("all", unwritten).map((u) => u.label), ["2", "4", "5", "9"]);
+  assert.deepEqual(parseWriteSpec("next 2", unwritten).map((u) => u.label), ["2", "4"]);
+  assert.deepEqual(parseWriteSpec("scenes 4, 9", unwritten).map((u) => u.label), ["4", "9"]);
+  assert.deepEqual(parseWriteSpec("scene 5 and 9", unwritten).map((u) => u.label), ["5", "9"]);
+  assert.deepEqual(parseWriteSpec("scenes 1, 3", unwritten), []); // those are written already (not in the list): never proposed
+  assert.deepEqual(parseWriteSpec("next 50", unwritten).length, 4);
+  assert.deepEqual(parseWriteSpec("something odd", unwritten), []);
+  assert.deepEqual(parseWriteSpec("all", []), []);
+  const text = unwrittenContextText([{ label: "2", heading: "INT. TEMPLE - NIGHT", oneLiner: "The eyes are stolen." }], 10);
+  assert.match(text, /SCENES NOT WRITTEN YET: 1 of 10/);
+  assert.match(text, /2\. INT\. TEMPLE - NIGHT — The eyes are stolen\./);
+  assert.match(unwrittenContextText([], 10), /none — all 10 scenes are written/);
+});
+
+test("the Buddy is told how and when to offer writing the scenes that are not written yet", () => {
+  const prompt = buddySystemPrompt({ user: { name: "A", role: "admin" }, scenePack: "x", canEdit: true });
+  assert.match(prompt, /\[\[WRITE: all\]\] or \[\[WRITE: next 5\]\] or \[\[WRITE: scenes 7, 9\]\]/);
+  assert.match(prompt, /ONLY if they press it, and they can stop it any time/);
+  assert.doesNotMatch(buddySystemPrompt({ user: { name: "A", role: "director" }, scenePack: "x" }), /\[\[WRITE:/);
+});
+
+test("writers may use the write-scenes job routes of their own project", async () => {
+  const { matchWriterRoute } = await import("../writerAccess.js");
+  assert.equal(matchWriterRoute("GET", "/api/scene-lists/12/write-jobs/current")?.kind, "sceneList");
+  assert.equal(matchWriterRoute("POST", "/api/scene-lists/12/write-jobs")?.kind, "sceneList");
+  assert.equal(matchWriterRoute("POST", "/api/scene-lists/12/write-jobs/9e4a6f9a-c1a4-4639-9210-54fe3aebcb39/stop")?.kind, "sceneList");
 });

@@ -3998,7 +3998,7 @@ const VOICE_ORB_SIZE_PHONE = 60
 // the pen buddy). Not editing: what you say is written into the selected
 // scene and saved as a new version. Editing on the page (`editDraft` given):
 // the lines go into your unsaved edit where your cursor is, and you save.
-function VoiceWriterButton({ t, sceneListId, episodeIndex, sceneIndex, sceneNumber, blockedNote, editDraft, onAdded, onDraftLines, onSceneActions }) {
+function VoiceWriterButton({ t, sceneListId, episodeIndex, sceneIndex, sceneNumber, blockedNote, editDraft, onAdded, onDraftLines, onSceneActions, onScenesChanged }) {
   const [phase, setPhase] = useState('idle') // idle | listening | understanding | confirm | working
   const [liveText, setLiveText] = useState('')
   const [message, setMessage] = useState(null) // { kind: 'done' | 'error', text }
@@ -4006,6 +4006,48 @@ function VoiceWriterButton({ t, sceneListId, episodeIndex, sceneIndex, sceneNumb
   const [log, setLog] = useState([]) // what the agent is doing / did: [{ id, kind: 'work' | 'ok' | 'error', text }]
   const logId = useRef(0)
   const [buddyOpen, setBuddyOpen] = useState(false) // the Buddy chat (BuddyChat.jsx), opened from the 💬 badge on the orb
+  // "Write the scenes that are not written yet" (a background job on the server): followed here, so its progress shows on the badge and in the Buddy
+  // even after a reload, and the scenes on screen are reloaded when it finishes
+  const [writeJob, setWriteJob] = useState(null)
+  const writeJobStatusRef = useRef(null)
+  const scenesChangedRef = useRef(onScenesChanged)
+  scenesChangedRef.current = onScenesChanged // a ref, so a new function on every render never restarts the polling
+  const loadWriteJob = useCallback(async () => {
+    try {
+      const response = await fetch(`${BACKEND_URL}/api/scene-lists/${sceneListId}/write-jobs/current`)
+      if (!response.ok) return null
+      const data = await response.json()
+      const job = data?.jobId ? data : null
+      if (writeJobStatusRef.current === 'running' && job && job.status !== 'running') scenesChangedRef.current?.()
+      writeJobStatusRef.current = job?.status ?? null
+      setWriteJob(job)
+      return job
+    } catch { return null }
+  }, [sceneListId])
+  useEffect(() => { loadWriteJob() }, [loadWriteJob])
+  useEffect(() => {
+    if (writeJob?.status !== 'running') return undefined
+    const id = setInterval(loadWriteJob, 4000)
+    return () => clearInterval(id)
+  }, [writeJob?.status, loadWriteJob])
+  async function startWriteJob(scenes) {
+    try {
+      const response = await fetch(`${BACKEND_URL}/api/scene-lists/${sceneListId}/write-jobs`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ scope: 'scenes', scenes: scenes.map((x) => ({ episodeIndex: x.episodeIndex, sceneIndex: x.sceneIndex })) }),
+      })
+      const { data, problem } = await readServerAnswer(response)
+      if (!response.ok || !data) return { ok: false, text: data?.error || problem || t.genericError }
+      writeJobStatusRef.current = data.status
+      setWriteJob(data)
+      return { ok: true, text: data.alreadyRunning ? 'The writing was already running — it carries on.' : '' }
+    } catch { return { ok: false, text: t.genericError } }
+  }
+  async function stopWriteJob() {
+    if (!writeJob?.jobId) return
+    try { await fetch(`${BACKEND_URL}/api/scene-lists/${sceneListId}/write-jobs/${writeJob.jobId}/stop`, { method: 'POST' }) } catch { /* the next refresh shows how it went */ }
+    loadWriteJob()
+  }
   const lang = t.scriptToolbarLang === 'or' ? 'or' : 'en'
   const V = (en, or) => (lang === 'or' ? or : en)
   const [seconds, setSeconds] = useState(0)
@@ -4334,11 +4376,11 @@ function VoiceWriterButton({ t, sceneListId, episodeIndex, sceneIndex, sceneNumb
       </button>
       {/* the Buddy: a chat friend that remembers the conversation and knows the app and this scene */}
       <button type="button" className="buddy-badge" style={{ left: left + orbSize - 16, top: Math.max(4, top - 12) }} onClick={() => setBuddyOpen((open) => !open)}
-        aria-label={V('Chat with the Buddy', 'ବଡ଼ି ସହ କଥା ହୁଅ')} title={V('Chat with the Buddy', 'ବଡ଼ି ସହ କଥା ହୁଅ')}>💬</button>
+        aria-label={V('Chat with the Buddy', 'ବଡ଼ି ସହ କଥା ହୁଅ')} title={writeJob?.status === 'running' ? `${writeJob.step} (${writeJob.done}/${writeJob.total})` : V('Chat with the Buddy', 'ବଡ଼ି ସହ କଥା ହୁଅ')}>{writeJob?.status === 'running' ? `✍ ${writeJob.done}/${writeJob.total}` : '💬'}</button>
       {buddyOpen && (
         <BuddyChat
           backendUrl={BACKEND_URL} sceneListId={sceneListId} episodeIndex={episodeIndex} sceneIndex={sceneIndex} sceneNumber={sceneNumber}
-          lang={lang} onClose={() => setBuddyOpen(false)} onApplyEdit={runInstruction} busy={phase !== 'idle'}
+          lang={lang} onClose={() => setBuddyOpen(false)} onApplyEdit={runInstruction} busy={phase !== 'idle'} writeJob={writeJob} onStartWrite={startWriteJob} onStopWrite={stopWriteJob} onRefreshWrite={loadWriteJob}
           renderMic={(onResult) => <MicButton t={t} onResult={onResult} className="buddy-mic" title={V('Speak', 'କୁହ')} listeningTitle={V('Stop', 'ବନ୍ଦ କର')} />}
         />
       )}
@@ -5982,6 +6024,7 @@ function MovieScreenplayWorkspace({
           }) : null}
           onDraftLines={insertVoiceLines}
           onSceneActions={runAgentSceneActions}
+          onScenesChanged={() => onReloadScenes?.()}
           onAdded={(data) => {
             setEditFixes(null)
             onSceneSaved?.(keyOf(sceneIndex), data)

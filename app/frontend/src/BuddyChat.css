@@ -61,3 +61,10 @@
 .buddy-listen { margin-top: 6px; min-height: 36px; padding: 0 12px; border-radius: 999px; border: 1px solid rgba(120,140,200,0.5); background: transparent; color: inherit; font: inherit; font-size: 0.85em; cursor: pointer; }
 .buddy-voice-note { margin: 4px 12px; font-size: 0.85em; }
 .buddy-input-row { flex-wrap: wrap; row-gap: 6px; }
+
+.buddy-write-progress { margin: 6px 12px; padding: 8px 10px; border-radius: 10px; background: #eef4ff; border: 1px solid #9bb8e8; color: #14284d; }
+.buddy-write-progress p { margin: 0 0 4px; }
+.buddy-write-progress small { display: block; margin: 2px 0 6px; }
+.buddy-write-progress progress { width: 100%; height: 10px; }
+.buddy-write-progress.is-done { background: #eaf7ee; border-color: #9fd3ac; color: #12351c; }
+.buddy-write-progress.is-error { background: #fff0ee; border-color: #e3a49b; color: #5a1a12; }

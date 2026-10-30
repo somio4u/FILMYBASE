@@ -39,11 +39,12 @@ import { registerDesignTaskRoutes } from "./designTasks.js";
 import { registerSubmissionRoutes, designerGatekeeper, DESIGNER_ROLE } from "./designSubmissions.js";
 import { sessionTokenOf } from "./sessionToken.js";
 import { analyzeImportedText, numberedHeadingsToPlain, reportLines } from "./importAnalysis.js";
+import { createWriteScenesJobs, publicView as publicWriteJob } from "./writeScenesJobs.js";
 import { languageOf, parseEpisodesFromText, sceneContent } from "./screenplayImport.js";
 import { planFill } from "./pdfFill.js";
 import { sceneState } from "./importAnalysis.js";
 import { buildScreenplayProject, saveScreenplayProject } from "./screenplayProject.js";
-import { buddySystemPrompt, sceneContextText, historyToContents, extractProposal } from "./writingBuddy.js";
+import { buddySystemPrompt, sceneContextText, historyToContents, extractProposal, parseWriteSpec, unwrittenContextText } from "./writingBuddy.js";
 import { createSkipStartJobs, publicView as publicSkipJob } from "./skipStartJobs.js";
 import { WRITER_ROLE, INDEPENDENT_WRITER_ROLE, isWriterRole, userHasConcept, writerGatekeeper, ensureWriterSchema, registerWriterRoutes } from "./writerAccess.js";
 import { usageContext, installGeminiMetering, ensureUsageSchema, registerUsageRoutes, setSceneListResolver } from "./usageLedger.js";
@@ -20255,6 +20256,99 @@ app.get("/api/scene-lists/:id/director-screenplay", requireRole("admin"), async 
   }
 });
 
+// ---- "Write the scenes that are not written yet": a background job the Buddy offers (writeScenesJobs.js) ----
+// A scene counts as written when it has a saved screenplay row with lines in it; scenes that only exist in the scene list (one-liners) are the ones left.
+async function listUnwrittenScenes(sceneListId) {
+  const list = (await db.query("SELECT content FROM scene_lists WHERE id = $1", [sceneListId])).rows[0]?.content;
+  if (!list) return [];
+  const rows = (await db.query(
+    `SELECT DISTINCT ON (episode_index, scene_index) episode_index, scene_index, content FROM screenplay_scenes
+     WHERE scene_list_id = $1 ORDER BY episode_index, scene_index, created_at DESC, id DESC`, [sceneListId])).rows;
+  const written = new Set(rows.filter((r) => Array.isArray(r.content?.elements) && r.content.elements.length > 0).map((r) => `${r.episode_index ?? "film"}:${r.scene_index}`));
+  const series = Array.isArray(list.episodeScenes);
+  const groups = series ? list.episodeScenes.map((e, i) => ({ episodeIndex: i, scenes: e.scenes ?? [] })) : [{ episodeIndex: null, scenes: list.scenes ?? [] }];
+  const out = [];
+  for (const group of groups) {
+    group.scenes.forEach((scene, i) => {
+      if (written.has(`${group.episodeIndex ?? "film"}:${i}`)) return;
+      const place = scene.location?.en || scene.location?.or || scene.location?.hi || "";
+      out.push({
+        episodeIndex: group.episodeIndex, sceneIndex: i,
+        label: series ? `${group.episodeIndex + 1}.${i + 1}` : String(scene.sceneNumber ?? i + 1),
+        heading: `${scene.intExt ?? "INT"}. ${place} - ${scene.timeOfDay ?? "DAY"}`,
+        oneLiner: scene.oneLiner?.en || scene.oneLiner?.or || scene.oneLiner?.hi || "",
+      });
+    });
+  }
+  return out;
+}
+
+// writes ONE scene exactly like the "Write this scene" button (/api/screenplay/scene) does, and saves it
+async function writeOneSceneNow(sceneListId, item, dialogueLanguage) {
+  const context = await fetchSceneListContext(sceneListId);
+  if (!context || context.scene_list_status !== "approved") throw new Error("The scene list must be approved before writing the screenplay.");
+  const hasEpisode = item.episodeIndex !== null && item.episodeIndex !== undefined;
+  const allScenes = hasEpisode ? context.scene_list_content.episodeScenes[item.episodeIndex].scenes : context.scene_list_content.scenes;
+  const previousRow = item.sceneIndex > 0 ? await fetchLatestScreenplayScene(sceneListId, hasEpisode ? item.episodeIndex : null, item.sceneIndex - 1) : null;
+  const content = await generateScreenplaySceneContent(context.pitch_deck_content, allScenes, item.sceneIndex, previousRow ? previousRow.content.elements : null, context.scene_list_content.controllingIdea, undefined, dialogueLanguage);
+  await db.query("INSERT INTO screenplay_scenes (scene_list_id, episode_index, scene_index, content) VALUES ($1, $2, $3, $4)", [sceneListId, hasEpisode ? item.episodeIndex : null, item.sceneIndex, JSON.stringify(content)]);
+}
+
+// the language the project's scenes are already written in (the latest written scene decides), Odia when nothing is written yet
+async function projectDialogueLanguage(sceneListId) {
+  const row = (await db.query("SELECT content FROM screenplay_scenes WHERE scene_list_id = $1 ORDER BY created_at DESC, id DESC LIMIT 1", [sceneListId])).rows[0];
+  const language = row?.content?.dialogueLanguage;
+  return ["en", "hi", "or"].includes(language) ? language : "or";
+}
+
+const writeScenesJobs = createWriteScenesJobs({
+  jobStore,
+  isWritten: async (item) => {
+    const row = await fetchLatestScreenplayScene(item.sceneListId, item.episodeIndex ?? null, item.sceneIndex);
+    return Array.isArray(row?.content?.elements) && row.content.elements.length > 0;
+  },
+  writeOne: (item) => writeOneSceneNow(item.sceneListId, item, item.language),
+});
+
+app.get("/api/scene-lists/:id/write-jobs/current", requireRole("admin"), async (req, res) => {
+  const job = await writeScenesJobs.currentFor(Number(req.params.id));
+  res.json(publicWriteJob(job) ?? { jobId: null });
+});
+
+// body: { scope: "all" | "next" (with count) | "scenes" (with scenes: [{ episodeIndex, sceneIndex }]) }
+app.post("/api/scene-lists/:id/write-jobs", requireRole("admin"), async (req, res) => {
+  const sceneListId = Number(req.params.id);
+  try {
+    const list = (await db.query("SELECT status FROM scene_lists WHERE id = $1", [sceneListId])).rows[0];
+    if (!list) { res.status(404).json({ error: "Project not found." }); return; }
+    if (list.status !== "approved") { res.status(400).json({ error: "The scene list must be approved before writing the screenplay." }); return; }
+    const running = await db.query("SELECT 1 FROM auto_pipeline_runs WHERE scene_list_id = $1 AND status = 'running' LIMIT 1", [sceneListId]);
+    if (running.rows.length > 0) { res.status(409).json({ error: "The AI is still writing this script. Try again once it has finished." }); return; }
+    const unwritten = await listUnwrittenScenes(sceneListId);
+    let chosen;
+    if (req.body?.scope === "all") chosen = unwritten;
+    else if (req.body?.scope === "next") chosen = unwritten.slice(0, Math.max(1, Math.min(200, Math.floor(Number(req.body.count)) || 1)));
+    else if (req.body?.scope === "scenes" && Array.isArray(req.body.scenes)) {
+      const wanted = new Set(req.body.scenes.map((s) => `${s?.episodeIndex ?? "film"}:${s?.sceneIndex}`));
+      chosen = unwritten.filter((s) => wanted.has(`${s.episodeIndex ?? "film"}:${s.sceneIndex}`));
+    } else { res.status(400).json({ error: "Which scenes? (all, the next few, or named ones)" }); return; }
+    if (chosen.length === 0) { res.status(400).json({ error: "There is nothing left to write there — every one of those scenes is already written." }); return; }
+    const language = ["en", "hi", "or"].includes(req.body?.language) ? req.body.language : await projectDialogueLanguage(sceneListId);
+    const items = chosen.map((s) => ({ ...s, sceneListId, language }));
+    const { job, alreadyRunning } = await writeScenesJobs.start({ sceneListId, userId: req.user.id, items, language });
+    res.json({ ...publicWriteJob(job), alreadyRunning });
+  } catch (error) {
+    console.error("Starting the write-scenes job failed:", error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post("/api/scene-lists/:id/write-jobs/:jobId/stop", requireRole("admin"), async (req, res) => {
+  const job = await writeScenesJobs.get(req.params.jobId);
+  if (!job || job.sceneListId !== Number(req.params.id)) { res.status(404).json({ error: "This job was not found." }); return; }
+  res.json({ stopped: await writeScenesJobs.stop(req.params.jobId) });
+});
+
 // ---- The Buddy: a chat friend in the screenplay screen (writingBuddy.js). One conversation per person and project, remembered in agent_chat_messages
 // (stage_key "buddy:<user id>"); every message also carries a fresh look at the scene the person is on. Step 1: it only talks (no changes to the screenplay).
 const BUDDY_MAX_TEXT = 4000;
@@ -20309,10 +20403,13 @@ app.post("/api/assistant/:sceneListId/message", requireLogin, async (req, res) =
       elements = row?.content?.elements ?? null;
       dialogueLanguage = row?.content?.dialogueLanguage ?? null;
     }
-    const scenePack = sceneContextText({ title: title?.title || title?.concept_text?.slice(0, 80), sceneList: sl, episodeIndex, sceneIndex: sceneIndex ?? -1, elements, dialogueLanguage, estimateSeconds: estimateScreenSeconds });
-    // who may let the Buddy change the scene on screen: the same people who can use the voice edit (admin and the two writer roles)
-    const canEdit = sceneIndex !== null && (req.user.role === "admin" || isWriterRole(req.user.role));
-    const system = buddySystemPrompt({ user: req.user, scenePack, canEdit });
+    // who may let the Buddy change the screenplay from the chat: the same people who can use the voice edit (admin and the two writer roles)
+    const canAct = req.user.role === "admin" || isWriterRole(req.user.role);
+    const unwritten = canAct ? await listUnwrittenScenes(ctx.sceneListId) : null;
+    const totalScenes = Array.isArray(sl.episodeScenes) ? sl.episodeScenes.reduce((n, e) => n + (e.scenes?.length ?? 0), 0) : (sl.scenes?.length ?? 0);
+    const sceneFacts = sceneContextText({ title: title?.title || title?.concept_text?.slice(0, 80), sceneList: sl, episodeIndex, sceneIndex: sceneIndex ?? -1, elements, dialogueLanguage, estimateSeconds: estimateScreenSeconds });
+    const scenePack = canAct ? `${sceneFacts}\n\n${unwrittenContextText(unwritten, totalScenes)}` : sceneFacts
+    const system = buddySystemPrompt({ user: req.user, scenePack, canEdit: canAct });
 
     const past = (await db.query(
       "SELECT role, content FROM agent_chat_messages WHERE concept_id = $1 AND stage_key = $2 ORDER BY created_at DESC, id DESC LIMIT $3", [ctx.conceptId, stageKey, BUDDY_MEMORY])).rows.reverse();
@@ -20326,10 +20423,16 @@ app.post("/api/assistant/:sceneListId/message", requireLogin, async (req, res) =
     const reply = String(response.text ?? "").trim();
     if (!reply) throw new Error("The Buddy had nothing to say this time. Please ask again.");
     const proposal = extractProposal(reply);
-    if (!proposal.text && !proposal.instruction) throw new Error("The Buddy had nothing to say this time. Please ask again.");
-    const proposed = canEdit && proposal.instruction ? { type: "scene_edit", instruction: proposal.instruction, episodeIndex, sceneIndex } : null;
+    if (!proposal.text && !proposal.instruction && !proposal.write) throw new Error("The Buddy had nothing to say this time. Please ask again.");
+    let proposed = null;
+    if (canAct && proposal.instruction && sceneIndex !== null) proposed = { type: "scene_edit", instruction: proposal.instruction, episodeIndex, sceneIndex };
+    else if (canAct && proposal.write) {
+      // the scenes the Buddy named, checked against the scenes that really are not written yet (it can never "write" a written scene)
+      const chosen = parseWriteSpec(proposal.write, await listUnwrittenScenes(ctx.sceneListId));
+      if (chosen.length > 0) proposed = { type: "write_scenes", scenes: chosen.map(({ episodeIndex: e, sceneIndex: i, label, heading }) => ({ episodeIndex: e, sceneIndex: i, label, heading })), count: chosen.length };
+    }
     const assistantRow = (await db.query("INSERT INTO agent_chat_messages (concept_id, stage_key, role, content, proposed_action) VALUES ($1, $2, 'assistant', $3, $4) RETURNING id, role, content, proposed_action, resolved, created_at",
-      [ctx.conceptId, stageKey, proposal.text || proposal.instruction, proposed ? JSON.stringify(proposed) : null])).rows[0];
+      [ctx.conceptId, stageKey, proposal.text || proposal.instruction || proposal.write, proposed ? JSON.stringify(proposed) : null])).rows[0];
     res.json({ userMessage: userRow, assistantMessage: assistantRow });
   } catch (error) {
     console.error("Buddy chat failed:", error.message);
@@ -20990,7 +21093,7 @@ ensureAiMovieSchema()
   .then(async () => { try { await aiCredentials.load(); aiCredentials.startRefresh(); const c = aiCredentials.current(); console.log(`AI connection: ${c.source}${c.serviceAccount ? ` — project ${c.serviceAccount.project_id}, ${c.location}` : ""}${c.problem ? ` — PROBLEM: ${c.problem}` : ""}`); } catch (error) { console.error("Reading the saved AI key failed:", error.message); } })
   .then(async () => { try { const fixed = await repairStoredLabels(db); if (fixed) console.log(`Screenplay: ${fixed} scene(s) had "ACTION:" written at the start of lines — corrected.`); } catch (error) { console.error("Label repair failed:", error.message); } })
   .then(async () => { try { const fixed = await repairStoredTransitions(db); if (fixed) console.log(`Screenplay: ${fixed} scene(s) had a transition (FREEZE. BREAK- …) written as a character — corrected.`); } catch (error) { console.error("Transition repair failed:", error.message); } })
-  .then(async () => { try { await productionSync.resume(); await resumeAdSheetJobs(); await skipStartJobs.resume(); } catch (error) { console.error("Resuming interrupted background jobs failed:", error.message); } })
+  .then(async () => { try { await productionSync.resume(); await resumeAdSheetJobs(); await skipStartJobs.resume(); await writeScenesJobs.resume(); } catch (error) { console.error("Resuming interrupted background jobs failed:", error.message); } })
   .then(() => ensureAllProductionSchemas(db))
   .then(async (failures) => { try { const made = await backfillDrafts(db); await failInterruptedRequests(db); if (made) console.log(`Draft Management: ${made} existing project(s) are now Draft 1 of their project.`); } catch (error) { console.error("Draft backfill failed:", error.message); } return failures; })
   .catch((error) => console.error("Schema setup failed:", error.message))

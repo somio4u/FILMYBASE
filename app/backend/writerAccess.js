@@ -34,6 +34,9 @@ export const WRITER_ROUTES = [
   // the Buddy chat in the screenplay screen (the project is checked through its scene list)
   ["^(GET|DELETE)$", /^\/api\/assistant\/(\d+)\/history$/, "sceneList"],
   ["^(POST)$", /^\/api\/scene-lists\/(\d+)\/pdf-fill$/, "sceneList"],
+  ["^(GET)$", /^\/api\/scene-lists\/(\d+)\/write-jobs\/current$/, "sceneList"],
+  ["^(POST)$", /^\/api\/scene-lists\/(\d+)\/write-jobs$/, "sceneList"],
+  ["^(POST)$", /^\/api\/scene-lists\/(\d+)\/write-jobs\/[A-Za-z0-9-]+\/stop$/, "sceneList"],
   ["^(POST)$", /^\/api\/assistant\/(\d+)\/(message|resolve)$/, "sceneList"],
   // following the "Let's go" job (its own jobs only — the route checks whose it is)
   ["^(GET)$", /^\/api\/skip-jobs\/(current|[A-Za-z0-9-]+)$/, null],

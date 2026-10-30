@@ -87,8 +87,13 @@ export const EDIT_TAG = /\[\[\s*EDIT\s*:([\s\S]*?)\]\]\s*$/i;
 export const BUDDY_EDIT_RULES = `PROPOSING CHANGES TO THE SCENE (you can do this)
 - When the person asks you to change, shorten, lengthen, rewrite, translate or fix the scene they are on (or specific lines of it), do NOT paste the whole new scene. Say in one or two sentences what you will change, then end your reply with ONE final line exactly like: [[EDIT: a clear, complete instruction in English for the scene editor, naming the lines/characters involved and what to do; any new screenplay words you want written go inside it in Odia script]]
 - The app shows them a card with the Apply button; the scene changes ONLY if they press it. So write "Shall I apply this?" or "Press Apply if you like it" — never say it is already done.
-- Only for the scene on screen. Never put the tag in a reply that only answers a question or gives ideas. At most one tag per reply, and it must be the very last thing.
-- Not for changes to other scenes, the story, or the app itself: for those tell them which button to use.`;
+- Only for the scene on screen, and only when a scene is selected. Never put the tag in a reply that only answers a question or gives ideas. At most one tag per reply, and it must be the very last thing.
+- Not for changes to other scenes, the story, or the app itself: for those tell them which button to use.
+
+HELPING TO WRITE THE SCENES THAT ARE NOT WRITTEN YET (you can do this)
+- The information below lists the scenes that exist only as a one-line plan ("NOT WRITTEN YET"). When the person wants help with them ("write the rest", "write the next 5", "write scene 7 and 9"), say in one or two sentences which scenes you would write (their numbers) and that each takes about a minute, then end your reply with ONE final line: [[WRITE: all]] or [[WRITE: next 5]] or [[WRITE: scenes 7, 9]] (use the scene numbers exactly as listed). The app shows a card with an Apply button; the scenes are written ONLY if they press it, and they can stop it any time. Never say they are already written.
+- If they ask how many scenes are left or what to do next, answer from the list and offer to write them (e.g. the next 5 first, so they can check the style). When the list says nothing is left, say that every scene is written.
+- This writes scenes in the project's own language, using the one-liner of each scene and the story so far. For a change to a scene that is already written use the [[EDIT: …]] tag instead. Use only one tag per reply, and only as the very last thing.`;
 
 export const BUDDY_NO_EDIT_RULES = `CHANGING THE SCREENPLAY
 - You cannot change the screenplay from this chat for this person or in this view. If they ask, offer a draft in the chat and tell them which button to use.`;
@@ -162,11 +167,44 @@ export const BUDDY_STARTERS = {
   or: ["ଏହି ସିନ୍ କେତେ ମିନିଟ୍‌ର?", "ତୁମେ କେଉଁ କାମରେ ସାହାଯ୍ୟ କରିପାରିବ?", "ଏହି ସିନ୍‌କୁ କେମିତି ଲମ୍ବା କରିବି?"],
 };
 
-// Splits a reply into what the person reads and the proposed instruction (or null).
+export const WRITE_TAG = /\[\[\s*WRITE\s*:([\s\S]*?)\]\]\s*$/i;
+
+// Splits a reply into what the person reads, and the proposal at its end, if any: instruction (an EDIT of the scene on screen) or write (the spec of
+// a WRITE of scenes that are not written yet, like "all", "next 5" or "scenes 7, 9").
 export function extractProposal(reply) {
   const text = String(reply ?? "");
+  const w = text.match(WRITE_TAG);
+  if (w) {
+    const write = w[1].trim().slice(0, 200);
+    return { text: text.slice(0, w.index).trim(), instruction: null, write: write || null };
+  }
   const m = text.match(EDIT_TAG);
-  if (!m) return { text: text.replace(/\[\[\s*EDIT\s*:[\s\S]*$/i, "").trim(), instruction: null }; // a broken tag is never shown
+  // a broken tag (no closing brackets) is never shown to the person
+  const stripBroken = (t) => t.replace(/\[\[\s*(?:EDIT|WRITE)\s*:[\s\S]*$/i, "").trim();
+  if (!m) return { text: stripBroken(text), instruction: null, write: null };
   const instruction = m[1].trim().slice(0, 1500);
-  return { text: text.slice(0, m.index).trim(), instruction: instruction || null };
+  return { text: text.slice(0, m.index).trim(), instruction: instruction || null, write: null };
+}
+
+// "all" | "next 5" | "scenes 7, 9" (labels as listed) -> the scenes of `unwritten` it means; only scenes that really are not written yet can be chosen
+export function parseWriteSpec(spec, unwritten) {
+  const t = String(spec ?? "").trim().toLowerCase();
+  if (!t || !Array.isArray(unwritten) || unwritten.length === 0) return [];
+  if (/^all\b/.test(t)) return unwritten.slice(0, 200);
+  const next = /^next\s+(\d{1,3})\b/.exec(t);
+  if (next) return unwritten.slice(0, Math.max(1, Number(next[1])));
+  const named = /^scenes?\s+(.+)$/.exec(t);
+  if (named) {
+    const labels = new Set(named[1].split(/[\s,;&]+|\band\b/).map((x) => x.trim()).filter(Boolean));
+    return unwritten.filter((u) => labels.has(String(u.label).toLowerCase()));
+  }
+  return [];
+}
+
+// the part of the Buddy's information about which scenes are still only a one-line plan
+export function unwrittenContextText(unwritten, totalScenes) {
+  if (!Array.isArray(unwritten)) return "";
+  if (unwritten.length === 0) return `SCENES NOT WRITTEN YET: none — all ${totalScenes} scenes are written.`;
+  const shown = unwritten.slice(0, 60).map((u) => `${u.label}. ${u.heading}${u.oneLiner ? ` — ${u.oneLiner.slice(0, 140)}` : ""}`);
+  return [`SCENES NOT WRITTEN YET: ${unwritten.length} of ${totalScenes} (only the one-line plan exists; "next N" means the first N of this list):`, ...shown, ...(unwritten.length > 60 ? [`… and ${unwritten.length - 60} more`] : [])].join("\n");
 }

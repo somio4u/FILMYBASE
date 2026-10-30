@@ -15,6 +15,7 @@ const TEXT = {
     listen: 'Listen', stopListen: 'Stop', readAloud: 'Read replies aloud', noVoice: 'This device has no Odia voice, so it cannot read Odia aloud. (Phones with Google text-to-speech and the Odia language pack installed usually can.) You can still read the replies.', speakFail: 'Could not read this aloud.',
     loadFail: 'Could not load the earlier conversation.', failed: 'The Buddy could not answer.', retryNote: 'Your message is back in the box — press Send to try again.',
     notYet: 'I can also change the scene for you: tell me what you want, and I will show it first — nothing changes until you press Apply.',
+    writeProposes: (n) => `Write ${n} scene${n === 1 ? '' : 's'}`, writeAbout: (n) => `about ${n} minute${n === 1 ? '' : 's'} (a minute or so per scene) — you can stop it any time`, writing: 'Writing', stop: '■ Stop', stopping: 'Stopping after this scene…', writeDone: (n) => `✓ ${n} scene${n === 1 ? '' : 's'} written`, writeFailedSome: (n) => `${n} could not be written`, writeStopped: (n) => `Stopped — ${n} scene${n === 1 ? '' : 's'} written`, writeError: 'Stopped with a problem', ok: 'OK', jobRunning: 'Another writing is running — wait for it or stop it.',
     proposes: 'Proposed change', older: 'An older suggestion — ask again if you still want it.', apply: '✓ Apply', dismiss: 'No thanks', applying: 'Applying…', applied: 'Applied', dismissed: 'Skipped', otherScene: (n) => `This was for scene ${n}. Open that scene to apply it.`, busyNote: 'Another change is running — wait for it.',
     starters: ['How long is this scene?', 'What can you help me with?', 'How do I make this scene longer?'],
   },
@@ -27,6 +28,7 @@ const TEXT = {
     listen: 'ଶୁଣ', stopListen: 'ବନ୍ଦ', readAloud: 'ଉତ୍ତର ପଢ଼ି ଶୁଣାଅ', noVoice: 'ଏହି ଡିଭାଇସ୍‌ରେ ଓଡ଼ିଆ ଅଵାଜ୍ ନାହିଁ, ତେଣୁ ଓଡ଼ିଆ ପଢ଼ି ଶୁଣାଇପାରିବ ନାହିଁ। (ଯେଉଁ ଫୋନ୍‌ରେ Google text-to-speech ଓ ଓଡ଼ିଆ ଭାଷା ପ୍ୟାକ୍ ଅଛି ସେଥିରେ ସାଧାରଣତଃ ହୁଏ।) ଉତ୍ତର ତ ପଢ଼ିପାରିବ।', speakFail: 'ଏହାକୁ ପଢ଼ି ଶୁଣାଇ ହେଲା ନାହିଁ।',
     loadFail: 'ଆଗର କଥାବାର୍ତ୍ତା ଆଣିହେଲା ନାହିଁ।', failed: 'ବଡ଼ି ଉତ୍ତର ଦେଇପାରିଲା ନାହିଁ।', retryNote: 'ତୁମ ମେସେଜ୍ ବକ୍ସରେ ଫେରିଆସିଲା — ପୁଣି ପଠାଅ।',
     notYet: 'ମୁଁ ସିନ୍ ବଦଳେଇ ବି ପାରିବି: କୁହ କଣ ଚାହୁଁ, ମୁଁ ପ୍ରଥମେ ଦେଖେଇବି — Apply ଦବେଇଲେ ହିଁ ବଦଳିବ।',
+    writeProposes: (n) => `${n}ଟି ସିନ୍ ଲେଖିବି`, writeAbout: (n) => `ପ୍ରାୟ ${n} ମିନିଟ୍ (ପ୍ରତି ସିନ୍‌ ପାଇଁ ପ୍ରାୟ ଏକ ମିନିଟ୍) — ଯେକୌଣସି ବେଳେ ବନ୍ଦ କରିପାରିବୁ`, writing: 'ଲେଖୁଛି', stop: '■ ବନ୍ଦ', stopping: 'ଏହି ସିନ୍ ପରେ ବନ୍ଦ ହେବ…', writeDone: (n) => `✓ ${n}ଟି ସିନ୍ ଲେଖା ହେଲା`, writeFailedSome: (n) => `${n}ଟି ଲେଖାଗଲା ନାହିଁ`, writeStopped: (n) => `ବନ୍ଦ ହେଲା — ${n}ଟି ସିନ୍ ଲେଖା ହୋଇଛି`, writeError: 'ସମସ୍ୟା ହୋଇ ବନ୍ଦ ହେଲା', ok: 'ଠିକ୍ ଅଛି', jobRunning: 'ଆଉ ଗୋଟେ ଲେଖା ଚାଲିଛି — ଅପେକ୍ଷା କର କିମ୍ବା ବନ୍ଦ କର।',
     proposes: 'ପ୍ରସ୍ତାବିତ ବଦଳ', older: 'ପୁରୁଣା ପ୍ରସ୍ତାବ — ଦରକାର ହେଲେ ପୁଣି କୁହ।', apply: '✓ Apply', dismiss: 'ଦରକାର ନାହିଁ', applying: 'ଲାଗୁଛି…', applied: 'ଲାଗିଗଲା', dismissed: 'ଛାଡ଼ିଦେଲା', otherScene: (n) => `ଏହା ସିନ୍ ${n} ପାଇଁ ଥିଲା। ସେହି ସିନ୍ ଖୋଲି Apply କର।`, busyNote: 'ଆଉ ଗୋଟେ ବଦଳ ଚାଲିଛି — ଅପେକ୍ଷା କର।',
     starters: ['ଏହି ସିନ୍ କେତେ ମିନିଟ୍‌ର?', 'ତୁମେ କେଉଁ କାମରେ ସାହାଯ୍ୟ କରିପାରିବ?', 'ଏହି ସିନ୍‌କୁ କେମିତି ଲମ୍ବା କରିବି?'],
   },
@@ -42,7 +44,45 @@ function findOdiaVoice() {
   return api.getVoices().find((v) => /^or([-_]|$)/i.test(v.lang)) ?? null
 }
 
-export default function BuddyChat({ backendUrl, sceneListId, episodeIndex, sceneIndex, sceneNumber, lang = 'en', onClose, renderMic, onApplyEdit, busy = false }) {
+// the progress of "write the scenes that are not written yet" (a job on the server): which scene now, how many are done, how long it has run
+function WriteProgress({ job, L, onStop }) {
+  const [tick, setTick] = useState(0)
+  const [hiddenId, setHiddenId] = useState(() => { try { return localStorage.getItem('filmybase:writeJobSeen') } catch { return null } })
+  const offset = useRef(0) // the server's clock minus this device's clock
+  useEffect(() => { if (job?.now) offset.current = job.now - Date.now() }, [job?.now])
+  useEffect(() => {
+    if (job?.status !== 'running') return undefined
+    const id = setInterval(() => setTick((n) => n + 1), 1000)
+    return () => clearInterval(id)
+  }, [job?.status])
+  if (!job) return null
+  const running = job.status === 'running'
+  if (!running && hiddenId === job.jobId) return null
+  const elapsed = Math.max(0, Math.floor(((running ? Date.now() + offset.current : (job.finishedAt ?? job.now)) - job.startedAt) / 1000))
+  const clock = `${Math.floor(elapsed / 60)}m ${String(elapsed % 60).padStart(2, '0')}s`
+  const dismiss = () => { try { localStorage.setItem('filmybase:writeJobSeen', job.jobId) } catch { /* shown once more */ } setHiddenId(job.jobId) }
+  return (
+    <div className={`buddy-write-progress is-${job.status}`} role="status" aria-live="polite">
+      {running ? (
+        <>
+          <p>✍ {job.stopRequested ? L.stopping : job.step} <b>{job.done}/{job.total}</b> · {clock}</p>
+          <progress max={job.total} value={job.done} />
+          {job.notice && <small>{job.notice}</small>}
+          {!job.stopRequested && <button type="button" className="buddy-dismiss" onClick={onStop}>{L.stop}</button>}
+        </>
+      ) : (
+        <>
+          <p>{job.status === 'done' ? L.writeDone(job.done) : job.status === 'stopped' ? L.writeStopped(job.done) : L.writeError} · {clock}</p>
+          {job.failed?.length > 0 && <small>{L.writeFailedSome(job.failed.length)}: {job.failed.map((f) => f.label).join(', ')} — {job.failed[0].error}</small>}
+          {job.error && <small>{job.error}</small>}
+          <button type="button" className="buddy-dismiss" onClick={dismiss}>{L.ok}</button>
+        </>
+      )}
+    </div>
+  )
+}
+
+export default function BuddyChat({ backendUrl, sceneListId, episodeIndex, sceneIndex, sceneNumber, lang = 'en', onClose, renderMic, onApplyEdit, busy = false, writeJob = null, onStartWrite, onStopWrite, onRefreshWrite }) {
   const L = TEXT[lang] ?? TEXT.en
   const [messages, setMessages] = useState([]) // [{ id, role: 'user' | 'assistant', content, local? }]
   const [loading, setLoading] = useState(true)
@@ -138,13 +178,17 @@ export default function BuddyChat({ backendUrl, sceneListId, episodeIndex, scene
     let note = null
     if (apply) {
       setWorking(message.id)
-      try { note = await onApplyEdit?.(message.proposed_action.instruction) } catch { note = null }
+      try {
+        note = message.proposed_action.type === 'write_scenes'
+          ? await onStartWrite?.(message.proposed_action.scenes)
+          : await onApplyEdit?.(message.proposed_action.instruction)
+      } catch { note = null }
       if (!alive.current) return
       setWorking(null)
       if (!note?.ok) { setError(note?.text || L.failed); return } // not applied: the card stays, so they can try again
     }
     setMessages((m) => [...m.map((x) => (x.id === message.id ? { ...x, resolved: true, outcome: apply ? 'applied' : 'dismissed' } : x)),
-      ...(note ? [{ id: `note-${Date.now()}`, role: 'assistant', content: note.text, local: true, system: true }] : [])])
+      ...(note?.text ? [{ id: `note-${Date.now()}`, role: 'assistant', content: note.text, local: true, system: true }] : [])])
     try { await fetch(`${base}/resolve`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ messageId: message.id }) }) } catch { /* it only stops the card from coming back after a reload */ }
   }
 
@@ -155,7 +199,7 @@ export default function BuddyChat({ backendUrl, sceneListId, episodeIndex, scene
   }
 
   // only the newest open proposal can be applied; older ones are superseded
-  const lastOpenId = [...messages].reverse().find((x) => x.proposed_action?.type === 'scene_edit' && !x.resolved)?.id
+  const lastOpenId = [...messages].reverse().find((x) => (x.proposed_action?.type === 'scene_edit' || x.proposed_action?.type === 'write_scenes') && !x.resolved)?.id
   readAloudRef.current = readAloud
   speakRef.current = speak
   const spoken = (words) => { if (autoSend) send(words); else setText((t) => (t.trim() ? `${t.trim()} ${words}` : words)) }
@@ -189,30 +233,39 @@ export default function BuddyChat({ backendUrl, sceneListId, episodeIndex, scene
                 {speakingId === m.id ? `■ ${L.stopListen}` : `🔊 ${L.listen}`}
               </button>
             )}
-            {m.proposed_action?.type === 'scene_edit' && (
-              <div className="buddy-proposal">
-                <small>{L.proposes}</small>
-                <blockquote>{m.proposed_action.instruction}</blockquote>
-                {m.resolved ? (
-                  m.outcome ? <small className="buddy-proposal-done">{m.outcome === 'applied' ? `✓ ${L.applied}` : L.dismissed}</small> : null
-                ) : m.id !== lastOpenId ? (
-                  <small>{L.older}</small>
-                ) : m.proposed_action.sceneIndex !== sceneIndex || (m.proposed_action.episodeIndex ?? null) !== (episodeIndex ?? null) ? (
-                  <small>{L.otherScene((m.proposed_action.sceneIndex ?? 0) + 1)}</small>
-                ) : (
-                  <div className="buddy-proposal-actions">
-                    <button type="button" className="buddy-apply" onClick={() => resolve(m, true)} disabled={working !== null || busy}>{working === m.id ? L.applying : L.apply}</button>
-                    <button type="button" className="buddy-dismiss" onClick={() => resolve(m, false)} disabled={working !== null}>{L.dismiss}</button>
-                    {busy && working === null && <small>{L.busyNote}</small>}
-                  </div>
-                )}
-              </div>
-            )}
+            {(m.proposed_action?.type === 'scene_edit' || m.proposed_action?.type === 'write_scenes') && (() => {
+              const action = m.proposed_action
+              const isWrite = action.type === 'write_scenes'
+              const here = isWrite || (action.sceneIndex === sceneIndex && (action.episodeIndex ?? null) === (episodeIndex ?? null))
+              return (
+                <div className="buddy-proposal">
+                  <small>{isWrite ? L.writeProposes(action.count) : L.proposes}</small>
+                  {isWrite
+                    ? <blockquote>{action.scenes.map((x) => x.label).join(', ')}<br /><small>{L.writeAbout(Math.max(1, action.count))}</small></blockquote>
+                    : <blockquote>{action.instruction}</blockquote>}
+                  {m.resolved ? (
+                    m.outcome ? <small className="buddy-proposal-done">{m.outcome === 'applied' ? `✓ ${L.applied}` : L.dismissed}</small> : null
+                  ) : m.id !== lastOpenId ? (
+                    <small>{L.older}</small>
+                  ) : !here ? (
+                    <small>{L.otherScene((action.sceneIndex ?? 0) + 1)}</small>
+                  ) : (
+                    <div className="buddy-proposal-actions">
+                      <button type="button" className="buddy-apply" onClick={() => resolve(m, true)} disabled={working !== null || busy || (isWrite && writeJob?.status === 'running')}>{working === m.id ? L.applying : isWrite ? `✓ ${L.writeProposes(action.count)}` : L.apply}</button>
+                      <button type="button" className="buddy-dismiss" onClick={() => resolve(m, false)} disabled={working !== null}>{L.dismiss}</button>
+                      {isWrite && writeJob?.status === 'running' && <small>{L.jobRunning}</small>}
+                      {!isWrite && busy && working === null && <small>{L.busyNote}</small>}
+                    </div>
+                  )}
+                </div>
+              )
+            })()}
           </div>
         ))}
         {sending && <div className="buddy-msg is-assistant is-thinking"><p>⏳ {L.thinking}… <b>{seconds}s</b></p></div>}
       </div>
 
+      {writeJob && <WriteProgress job={writeJob} L={L} onStop={onStopWrite} onRefresh={onRefreshWrite} />}
       {voiceNote && <p className="buddy-note buddy-voice-note" role="status">{voiceNote}</p>}
       {error && <p className="buddy-error" role="alert">{error}</p>}
 

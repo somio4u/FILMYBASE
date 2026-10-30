@@ -124,13 +124,12 @@ export async function detectStage(db, module, ref) {
   const deck = (await db.query("SELECT id, status FROM pitch_decks WHERE concept_id = $1 ORDER BY created_at DESC, id DESC LIMIT 1", [ref])).rows[0];
   if (!deck) return { stage: "idea", approved: false };
   if (deck.status !== "approved") return { stage: "synopsis", approved: false };
-  const sheet = (await db.query("SELECT status FROM character_sheets WHERE pitch_deck_id = $1 ORDER BY created_at DESC, id DESC LIMIT 1", [deck.id])).rows[0];
-  if (sheet?.status !== "approved") return { stage: "characters", approved: false };
-  const act = (await db.query("SELECT id FROM three_act_structures WHERE pitch_deck_id = $1 ORDER BY created_at DESC, id DESC LIMIT 1", [deck.id])).rows[0];
-  const bits = act ? (await db.query("SELECT status FROM bit_sheets WHERE three_act_structure_id = $1 ORDER BY created_at DESC, id DESC LIMIT 1", [act.id])).rows[0] : null;
-  if (bits?.status !== "approved") return { stage: "bitsheet", approved: false };
+  // The main stages are Idea, Story Synopsis, Three-act, Scene One-liners, Screenplay (Characters and the Bit Sheet are optional and never decide where a project is).
+  const act = (await db.query("SELECT id, status FROM three_act_structures WHERE pitch_deck_id = $1 ORDER BY created_at DESC, id DESC LIMIT 1", [deck.id])).rows[0];
+  if (act?.status !== "locked") return { stage: "threeact", approved: false };
   const list = (await db.query("SELECT status FROM scene_lists WHERE bit_sheet_id IN (SELECT id FROM bit_sheets WHERE three_act_structure_id = $1) ORDER BY created_at DESC, id DESC LIMIT 1", [act.id])).rows[0];
-  return { stage: "screenplay", approved: list?.status === "approved" };
+  if (list?.status !== "approved") return { stage: "scenelist", approved: false };
+  return { stage: "screenplay", approved: true };
 }
 
 // ---------------------------------------------------------------------------

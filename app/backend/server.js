@@ -10133,10 +10133,10 @@ async function generateThreeActContent(deck, characterSheet, revision) {
 }
 
 app.post("/api/three-act-structure", requireRole("admin"), async (req, res) => {
-  const { pitchDeckId } = req.body;
+  const { pitchDeckId, skipCharacters } = req.body;
 
   try {
-    const pitchDeckResult = await db.query("SELECT content FROM pitch_decks WHERE id = $1", [
+    const pitchDeckResult = await db.query("SELECT content, status FROM pitch_decks WHERE id = $1", [
       pitchDeckId,
     ]);
 
@@ -10150,12 +10150,18 @@ app.post("/api/three-act-structure", requireRole("admin"), async (req, res) => {
       [pitchDeckId]
     );
 
-    if (characterSheetResult.rows.length === 0 || characterSheetResult.rows[0].status !== "approved") {
+    // Characters are optional: with skipCharacters the structure is made from the story alone (an approved character sheet, when there is one, is still used)
+    const hasApprovedCharacters = characterSheetResult.rows.length > 0 && characterSheetResult.rows[0].status === "approved";
+    if (!hasApprovedCharacters && skipCharacters !== true) {
       res.status(400).json({ error: "Characters must be created and approved before generating the three-act structure." });
       return;
     }
+    if (!hasApprovedCharacters && pitchDeckResult.rows[0].status !== "approved") {
+      res.status(400).json({ error: "The synopsis must be approved before generating the three-act structure." });
+      return;
+    }
 
-    const content = await generateThreeActContent(pitchDeckResult.rows[0].content, characterSheetResult.rows[0].content);
+    const content = await generateThreeActContent(pitchDeckResult.rows[0].content, hasApprovedCharacters ? characterSheetResult.rows[0].content : null);
 
     const insertResult = await db.query(
       "INSERT INTO three_act_structures (pitch_deck_id, content) VALUES ($1, $2) RETURNING id, status, feedback",
@@ -11025,9 +11031,28 @@ async function generateSceneListContent(bitSheet, deck, revision) {
 }
 
 app.post("/api/scene-list", requireRole("admin"), async (req, res) => {
-  const { bitSheetId } = req.body;
+  const { bitSheetId: givenBitSheetId, threeActStructureId: givenThreeActId, skipBitSheet } = req.body;
 
   try {
+    // The Bit Sheet is optional: with skipBitSheet the story beats are made quietly from the locked three-act structure (and approved), so the
+    // scene list still has something to be built from and the rest of the chain stays whole. A Bit Sheet that already exists is reused.
+    let bitSheetId = givenBitSheetId;
+    let autoBitSheet = null;
+    if (!bitSheetId) {
+      if (skipBitSheet !== true || !givenThreeActId) { res.status(400).json({ error: "Which bit sheet? (or skip it from the locked three-act structure)" }); return; }
+      const act = (await db.query("SELECT pitch_deck_id, content, status FROM three_act_structures WHERE id = $1", [givenThreeActId])).rows[0];
+      if (!act) { res.status(404).json({ error: "Three-act structure not found" }); return; }
+      if (act.status !== "locked") { res.status(400).json({ error: "The three-act structure must be locked before generating scenes." }); return; }
+      const existing = (await db.query("SELECT id FROM bit_sheets WHERE three_act_structure_id = $1 AND status = 'approved' ORDER BY id DESC LIMIT 1", [givenThreeActId])).rows[0];
+      if (existing) bitSheetId = existing.id;
+      else {
+        const deckForBeats = (await db.query("SELECT content FROM pitch_decks WHERE id = $1", [act.pitch_deck_id])).rows[0].content;
+        const beats = await generateBitSheetContent(act.content, deckForBeats);
+        const inserted = await db.query("INSERT INTO bit_sheets (three_act_structure_id, content, status) VALUES ($1, $2, 'approved') RETURNING id, status, feedback", [givenThreeActId, JSON.stringify(beats)]);
+        bitSheetId = inserted.rows[0].id;
+        autoBitSheet = { ...inserted.rows[0], threeActStructureId: givenThreeActId, ...beats };
+      }
+    }
     const bitSheetResult = await db.query(
       "SELECT three_act_structure_id, content, status FROM bit_sheets WHERE id = $1",
       [bitSheetId]
@@ -11060,7 +11085,7 @@ app.post("/api/scene-list", requireRole("admin"), async (req, res) => {
       [bitSheetId, JSON.stringify(content)]
     );
 
-    res.json({ ...insertResult.rows[0], bitSheetId, ...content });
+    res.json({ ...insertResult.rows[0], bitSheetId, ...content, ...(autoBitSheet ? { autoBitSheet } : {}) });
   } catch (error) {
     console.error("Gemini API call failed:", error.message);
     res.status(502).json({ error: error.message });

@@ -230,7 +230,10 @@ const LABELS = {
     reimportRemovedLocationsLabel: "Locations we can't find anymore (kept — remove them yourself if that's on purpose)",
     reimportShootScheduleWarning: "Heads up: you already have a shoot schedule for this project. Scene numbers or order may have changed, so regenerate it to make sure the shoot days still match the right scenes.",
     stageIdeaLabel: 'Idea',
-    stageSynopsisLabel: 'Synopsis',
+    stageSynopsisLabel: 'Story Synopsis',
+    stageThreeActLabel: 'Three-act',
+    stageSceneListLabel: 'Scene One-liners',
+    stageOptionalLabel: 'Optional',
     stageCharactersLabel: 'Characters',
     stageBitSheetLabel: 'Bit Sheet',
     stageScreenplayLabel: 'Screenplay',
@@ -1182,7 +1185,10 @@ const LABELS = {
     reimportRemovedLocationsLabel: 'ଆଉ ମିଳୁନଥିବା ଲୋକେସନ୍ (ରହିଛି — ଜାଣିଶୁଣି କାଟିଥିଲେ ନିଜେ ହଟେଇଦେ)',
     reimportShootScheduleWarning: 'ଧ୍ୟାନ ଦେ: ଏ ପ୍ରୋଜେକ୍ଟର ସୁଟିଂ ସିଡ୍ୟୁଲ୍ ଆଗରୁ ଅଛି। ସିନ୍ ନମ୍ବର ବା ଅର୍ଡର ବଦଳିଥାଇପାରେ, ତେଣୁ ସିଡ୍ୟୁଲ୍ ପୁଣି ବନେଇଦେ — ନହେଲେ ସୁଟିଂ ଦିନ ସହ ଠିକ୍ ସିନ୍ ମେଳ ନ ଖାଇପାରେ।',
     stageIdeaLabel: 'ଆଇଡିଆ',
-    stageSynopsisLabel: 'ସିନୋପସିସ୍',
+    stageSynopsisLabel: 'ଗଳ୍ପ ସିନୋପସିସ୍',
+    stageThreeActLabel: 'ତିନି ଅଙ୍କ',
+    stageSceneListLabel: 'ସିନ୍ ଲିଷ୍ଟ',
+    stageOptionalLabel: 'ଇଚ୍ଛାଧୀନ',
     stageCharactersLabel: 'ଚରିତ୍ର',
     stageBitSheetLabel: 'ବିଟ୍ ସିଟ୍',
     stageScreenplayLabel: 'ସ୍କ୍ରିନପ୍ଲେ',
@@ -11664,7 +11670,7 @@ function App() {
       const response = await fetch(`${BACKEND_URL}/api/three-act-structure`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ pitchDeckId: pitchDeck.id }),
+        body: JSON.stringify({ pitchDeckId: pitchDeck.id, skipCharacters: characterSheet?.status !== 'approved' }),
       })
       const data = await response.json()
 
@@ -11846,7 +11852,7 @@ function App() {
       const response = await fetch(`${BACKEND_URL}/api/scene-list`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ bitSheetId: bitSheet.id }),
+        body: JSON.stringify(bitSheet?.status === 'approved' ? { bitSheetId: bitSheet.id } : { threeActStructureId: threeActStructure.id, skipBitSheet: true }),
       })
       const data = await response.json()
 
@@ -11856,6 +11862,7 @@ function App() {
         return
       }
 
+      if (data.autoBitSheet) setBitSheet(data.autoBitSheet) // made quietly because the Bit Sheet was skipped
       setSceneList(data)
     } catch {
       setErrorMessage(t.genericError)
@@ -13647,7 +13654,7 @@ function App() {
   // the stage being worked on right now. Production keeps its own
   // scroll-to menu, unchanged.
   const [movieFocusedStage, setMovieFocusedStage] = useState(null)
-  const MOVIE_STAGE_BY_ANCHOR = { 'stage-idea': 'idea', 'stage-synopsis': 'synopsis', 'stage-characters': 'characters', 'stage-bitsheet': 'bitsheet', 'stage-screenplay': 'screenplay' }
+  const MOVIE_STAGE_BY_ANCHOR = { 'stage-idea': 'idea', 'stage-synopsis': 'synopsis', 'stage-threeact': 'threeact', 'stage-scenelist': 'scenelist', 'stage-characters': 'characters', 'stage-bitsheet': 'bitsheet', 'stage-screenplay': 'screenplay' }
 
   function handleStageClick(anchorId) {
     setIsSidebarOpen(false)
@@ -13669,14 +13676,13 @@ function App() {
 
   const stageIdea = pitchDeck ? 'done' : 'current'
   const stageSynopsis = pitchDeck?.status === 'approved' ? 'done' : pitchDeck ? 'current' : 'upcoming'
-  const stageCharacters = characterSheet?.status === 'approved' ? 'done' : pitchDeck?.status === 'approved' ? 'current' : 'upcoming'
-  const stageBitSheet =
-    bitSheet?.status === 'approved'
-      ? 'done'
-      : threeActStructure?.status === 'locked' || characterSheet?.status === 'approved'
-        ? 'current'
-        : 'upcoming'
-  const stageScreenplay = bitSheet?.status === 'approved' ? 'current' : 'upcoming'
+  // The five main stages: Idea, Story Synopsis, Three-act, Scene One-liners, Screenplay. Characters and Bit Sheet are OPTIONAL: they never block the way on
+  // (the server makes the three-act without characters, and the beats for the scene list quietly when there is no Bit Sheet).
+  const stageCharacters = characterSheet?.status === 'approved' ? 'done' : 'upcoming'
+  const stageThreeAct = threeActStructure?.status === 'locked' ? 'done' : pitchDeck?.status === 'approved' ? 'current' : 'upcoming'
+  const stageBitSheet = bitSheet?.status === 'approved' ? 'done' : 'upcoming'
+  const stageSceneList = sceneList?.status === 'approved' ? 'done' : threeActStructure?.status === 'locked' ? 'current' : 'upcoming'
+  const stageScreenplay = sceneList?.status === 'approved' ? 'current' : 'upcoming'
   // The Movie stage being worked on now -- where the screen opens, and
   // where it moves on to after each approval.
   const movieCurrentStage =
@@ -13684,10 +13690,10 @@ function App() {
       ? 'idea'
       : pitchDeck?.status !== 'approved'
         ? 'synopsis'
-        : characterSheet?.status !== 'approved'
-          ? 'characters'
-          : bitSheet?.status !== 'approved'
-            ? 'bitsheet'
+        : threeActStructure?.status !== 'locked'
+          ? 'threeact'
+          : sceneList?.status !== 'approved'
+            ? 'scenelist'
             : 'screenplay'
   const shownMovieStage = movieFocusedStage ?? movieCurrentStage
   // Projects that aren't the step-by-step "story" kind keep showing every
@@ -15508,17 +15514,26 @@ function App() {
                   <span className="stage-progress-dot" />
                   {t.stageSynopsisLabel}
                 </button>
-                <button className={`stage-progress-item stage-${stageCharacters}${shownMovieStage === 'characters' ? ' is-shown' : ''}`} onClick={() => handleStageClick('stage-characters')}>
+                <button className={`stage-progress-item stage-${stageThreeAct}${shownMovieStage === 'threeact' ? ' is-shown' : ''}`} onClick={() => handleStageClick('stage-threeact')}>
                   <span className="stage-progress-dot" />
-                  {t.stageCharactersLabel}
+                  {t.stageThreeActLabel}
                 </button>
-                <button className={`stage-progress-item stage-${stageBitSheet}${shownMovieStage === 'bitsheet' ? ' is-shown' : ''}`} onClick={() => handleStageClick('stage-bitsheet')}>
+                <button className={`stage-progress-item stage-${stageSceneList}${shownMovieStage === 'scenelist' ? ' is-shown' : ''}`} onClick={() => handleStageClick('stage-scenelist')}>
                   <span className="stage-progress-dot" />
-                  {t.stageBitSheetLabel}
+                  {t.stageSceneListLabel}
                 </button>
                 <button className={`stage-progress-item stage-${stageScreenplay}${shownMovieStage === 'screenplay' ? ' is-shown' : ''}`} onClick={() => handleStageClick('stage-screenplay')}>
                   <span className="stage-progress-dot" />
                   {t.stageScreenplayLabel}
+                </button>
+                <p className="stage-optional-label">{t.stageOptionalLabel}</p>
+                <button className={`stage-progress-item is-optional stage-${stageCharacters}${shownMovieStage === 'characters' ? ' is-shown' : ''}`} onClick={() => handleStageClick('stage-characters')}>
+                  <span className="stage-progress-dot" />
+                  {t.stageCharactersLabel}
+                </button>
+                <button className={`stage-progress-item is-optional stage-${stageBitSheet}${shownMovieStage === 'bitsheet' ? ' is-shown' : ''}`} onClick={() => handleStageClick('stage-bitsheet')}>
+                  <span className="stage-progress-dot" />
+                  {t.stageBitSheetLabel}
                 </button>
               </div>
             )}
@@ -16236,7 +16251,7 @@ function App() {
         </div>
       )}
 
-      {movieShows('bitsheet') && characterSheet && characterSheet.status === 'approved' && !threeActStructure && (
+      {movieShows('threeact') && pitchDeck && pitchDeck.status === 'approved' && !threeActStructure && (
         <button
           className="choose-button generate-structure-button"
           onClick={handleGenerateStructureClick}
@@ -16247,7 +16262,7 @@ function App() {
       )}
       <AnalyzingProgressBar active={isGeneratingStructure} label={t.generatingThreeAct} estimatedSeconds={30} />
 
-      {movieShows('bitsheet') && threeActStructure && (
+      {movieShows('threeact') && threeActStructure && (
         <div className="three-act-structure">
           <h2>{t.threeActHeading}</h2>
 
@@ -16438,7 +16453,7 @@ function App() {
         </div>
       )}
 
-      {movieShows('screenplay') && bitSheet && bitSheet.status === 'approved' && !sceneList && (
+      {movieShows('scenelist') && threeActStructure && threeActStructure.status === 'locked' && !sceneList && (
         <button
           className="choose-button generate-structure-button"
           onClick={handleGenerateSceneListClick}
@@ -16447,9 +16462,9 @@ function App() {
           {isGeneratingSceneList ? t.generatingSceneList : t.generateSceneList}
         </button>
       )}
-      <AnalyzingProgressBar active={isGeneratingSceneList} label={t.generatingSceneList} estimatedSeconds={35} />
+      <AnalyzingProgressBar active={isGeneratingSceneList} label={t.generatingSceneList} estimatedSeconds={bitSheet?.status === 'approved' ? 35 : 75} />
 
-      {movieShows('screenplay') && sceneList && projectType === 'story' && (
+      {(movieShows('scenelist') || movieShows('screenplay')) && sceneList && projectType === 'story' && (
         <div className="three-act-structure" id="stage-screenplay">
           <h2>{sceneList.status === 'approved' ? t.screenplayStageHeading : t.sceneListHeading}</h2>
 

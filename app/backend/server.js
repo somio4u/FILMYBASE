@@ -132,7 +132,7 @@ let aiMeteringDb = null;
 function buildAiClient(credentials = aiCredentials.current(), onSwitch = (from, to) => console.log(`Google no longer serves ${from} to this API key — using ${to} instead.`)) {
   const sa = credentials.serviceAccount;
   return sa
-    ? new GoogleGenAI({ vertexai: true, project: sa.project_id, location: credentials.location, googleAuthOptions: { credentials: sa } })
+    ? withModelFallback(new GoogleGenAI({ vertexai: true, project: sa.project_id, location: credentials.location, googleAuthOptions: { credentials: sa } }), { onSwitch }) // a switched-off model is swapped for its newer one here too
     : withModelFallback(new GoogleGenAI({ apiKey: credentials.apiKey ?? process.env.GEMINI_API_KEY }), { onSwitch }); // plain API keys: a switched-off model is swapped for its newer one
 }
 // one short name for "which key is this": a changed key means a new client
@@ -21189,8 +21189,9 @@ registerAiSettingsRoutes(app, db, {
     } catch (error) { error.step = "signin"; throw error; }
     // step 3 — does Vertex AI answer a question with it?
     try {
-      await ask(buildAiClient({ serviceAccount, location, source: "candidate", kind: "vertex" }));
-      report?.("vertex", `Vertex AI answered (model ${GEMINI_MODEL_NAME}, location ${location})`);
+      let usedModel = GEMINI_MODEL_NAME;
+      await ask(buildAiClient({ serviceAccount, location, source: "candidate", kind: "vertex" }, (from, to) => { usedModel = to; }));
+      report?.("vertex", usedModel === GEMINI_MODEL_NAME ? `Vertex AI answered (model ${usedModel}, location ${location})` : `Vertex AI answered — ${GEMINI_MODEL_NAME} is switched off for this project, so the app uses ${usedModel} instead (location ${location})`);
     } catch (error) { error.step = "vertex"; throw error; }
     // step 4 — the best-quality (Pro) model, used by the Smart analysis and the Story Brain. A warning only: the key still works for everything else.
     for (const target of STORY_BRAIN_MODELS) {

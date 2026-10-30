@@ -2420,3 +2420,8 @@ Plain version: every project is now a set of **drafts**. Opening a project shows
 - **Fixed:** the PDF reader now tries the light Flash models first (`gemini-3.5-flash`, `gemini-2.5-flash`) and Pro only as a last resort. A switched-off model (404/403) is skipped automatically. If every model fails, the message now lists the reason for EACH model.
 - Tests: `tests/pdfReaderModels.test.js` (4). Real PDF with a live key not verified here (sandbox blocks Google AI).
 - **Next:** full test suite, then deploy when the owner says "deploy".
+
+## 2026-10-30 — Vertex key test failed on a switched-off model
+- **What was wrong:** pasting a (valid) Vertex key in Settings failed at "Vertex AI answers" because the test and most of the app ask for `gemini-2.5-flash-lite`, which Google switched off; the "use the newer model" safety net only covered plain API keys.
+- **Fixed:** the safety net now also covers Vertex keys (and understands Vertex's wording of the error). The test says plainly which newer model it used. Not verified with a real Vertex project (sandbox blocks Google): if the newer model is not available in the chosen location (try `global`), the Technical details will say so.
+- **Also seen:** the AI Studio key's credits are depleted (HTTP 402) — owner must top up at ai.studio/projects.

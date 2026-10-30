@@ -27,3 +27,9 @@ test("a model that still works is left alone; other errors are not swallowed", a
   await assert.rejects(() => unknown.models.generateContent({ model: "some-other-model" }), /no longer available/); // no replacement known: error stays
   assert.equal(isModelRetiredError(new Error("429 quota")), false);
 });
+
+test("Vertex's own wording of a switched-off model is recognised too", () => {
+  const vertex = new Error('got status: 404 Not Found. {"error":{"code":404,"message":"Publisher model `projects/p/locations/us-central1/publishers/google/models/gemini-2.5-flash-lite` was not found or your project does not have access to it.","status":"NOT_FOUND"}}');
+  assert.equal(isModelRetiredError(vertex), true);
+  assert.equal(isModelRetiredError(new Error("429 quota exceeded")), false);
+});

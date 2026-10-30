@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { ODIA_KEYS, odiaKeyHandler } from './odiaKeys.js'
 import { PHONETIC_HELP } from './odiaPhonetic.js'
-import { myWords, phoneticBeforeInput, phoneticKeyDown, saveMyWords } from './odiaPhoneticTyping.js'
+import { chooseChoice, loadCorpus, myWords, onChoices, phoneticBeforeInput, phoneticBlur, phoneticInput, phoneticKeyDown, saveMyWords } from './odiaPhoneticTyping.js'
 import { parseWordLines, wordLines } from './odiaWords.js'
 
 const STORE = 'filmybase.odiaTyping'
@@ -23,6 +23,7 @@ const TITLE_OF = {
   key: 'Typing in Odia (Akruti key layout) — tap for Odia with English letters',
   phon: 'Typing Odia with English letters: write pabana, press Space, get ପବନ — tap for English',
 }
+const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:4000'
 const readMode = () => { try { const v = localStorage.getItem(STORE); return v === 'p' ? 'phon' : v === '1' ? 'key' : 'en' } catch { return 'en' } }
 
 export default function OdiaKeyToggle() {
@@ -32,6 +33,8 @@ export default function OdiaKeyToggle() {
   const [tryText, setTryText] = useState('')
   const [wordsText, setWordsText] = useState(() => wordLines(myWords()))
   const [wordsNote, setWordsNote] = useState('')
+  const [choices, setChoices] = useState(null) // { word, candidates }: the Odia an English word being typed can mean
+  const [corpusNote, setCorpusNote] = useState('')
 
   useEffect(() => {
     const turnOn = () => setMode((m) => (m === 'en' ? 'key' : m))
@@ -48,10 +51,20 @@ export default function OdiaKeyToggle() {
     }
     if (mode === 'phon') {
       document.addEventListener('beforeinput', phoneticBeforeInput, true)
+      document.addEventListener('input', phoneticInput, true)
       document.addEventListener('keydown', phoneticKeyDown, true)
+      document.addEventListener('focusout', phoneticBlur, true)
+      const stop = onChoices(setChoices)
+      let alive = true
+      loadCorpus(BACKEND_URL).then((n) => { if (alive) setCorpusNote(n ? `${n} words from your scripts are known` : '') })
       return () => {
+        alive = false
+        stop()
+        setChoices(null)
         document.removeEventListener('beforeinput', phoneticBeforeInput, true)
+        document.removeEventListener('input', phoneticInput, true)
         document.removeEventListener('keydown', phoneticKeyDown, true)
+        document.removeEventListener('focusout', phoneticBlur, true)
       }
     }
     return undefined
@@ -70,6 +83,17 @@ export default function OdiaKeyToggle() {
   const on = mode !== 'en'
   return (
     <div className="odia-toggle">
+      {mode === 'phon' && choices && choices.candidates.length > 0 && (
+        <div className="odia-choices" role="listbox" aria-label="Odia choices" onMouseDown={(e) => e.preventDefault()}>
+          <span className="odia-choices-word">{choices.word}</span>
+          {choices.candidates.map((c, i) => (
+            <button key={c} type="button" role="option" className={`odia-choice${i === 0 ? ' first' : ''}`} onMouseDown={(e) => e.preventDefault()} onClick={() => chooseChoice(i + 1)}>
+              <i>{i + 1}</i> {c}
+            </button>
+          ))}
+          <span className="odia-choices-hint">Space = 1 · number = pick · Esc = keep English</span>
+        </div>
+      )}
       <button type="button" className={`odia-toggle-btn${on ? ' on' : ''}`} aria-pressed={on}
         title={`${TITLE_OF[mode]}. Ctrl+Space switches between English and Odia.`}
         onClick={() => setMode(MODES[(MODES.indexOf(mode) + 1) % MODES.length])}>
@@ -80,6 +104,7 @@ export default function OdiaKeyToggle() {
         <div className="odia-keyboard odia-phonetic-help" role="note" aria-label="Typing Odia with English letters">
           <p><b>Type the word in English letters, then press Space</b> — it turns into Odia.</p>
           <input type="text" className="odia-try" value={tryText} placeholder="try here: pabana + Space" onChange={(e) => setTryText(e.target.value)} aria-label="Try typing here" />
+          {corpusNote && <p className="odia-corpus-note">{corpusNote}</p>}
           <details className="odia-mywords">
             <summary>My words — spellings that always come out my way</summary>
             <p>One word per line, like <code>mun = ମୁଁ</code>. English letters cannot tell ନ from ଣ or ଲ from ଳ, so a word that keeps coming out wrong can be fixed here once. Kept on this device.</p>

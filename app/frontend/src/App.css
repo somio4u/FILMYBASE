@@ -8060,3 +8060,11 @@ body.is-script-edit-mode { overflow: hidden; }
 .odia-mywords { margin: 6px 0; }
 .odia-mywords textarea { width: 100%; font: inherit; }
 .odia-mywords summary { cursor: pointer; font-weight: 600; }
+
+.odia-choices { position: fixed; top: 54px; left: 50%; transform: translateX(-50%); z-index: 100002; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; max-width: min(94vw, 760px); padding: 6px 10px; border-radius: 14px; background: #0f1b3a; color: #fff; border: 1px solid #8ab4f8; box-shadow: 0 6px 24px rgba(0,0,0,0.45); }
+.odia-choices-word { opacity: 0.7; font-family: monospace; }
+.odia-choice { min-height: 36px; padding: 0 12px; border-radius: 10px; border: 1px solid #5d7fcf; background: #1d2f63; color: #fff; font: inherit; font-size: 1.05rem; cursor: pointer; }
+.odia-choice.first { background: #1d5fd6; border-color: #8ab4f8; font-weight: 700; }
+.odia-choice i { font-style: normal; opacity: 0.7; font-size: 0.8em; margin-right: 4px; }
+.odia-choices-hint { flex-basis: 100%; font-size: 0.72rem; opacity: 0.7; }
+.odia-corpus-note { margin: 4px 0; font-size: 0.8rem; opacity: 0.8; }

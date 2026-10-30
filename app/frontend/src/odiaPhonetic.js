@@ -58,10 +58,10 @@ const startsWithAt = (text, i, keys) => keys.find((k) => text.startsWith(k, i));
 const isSentenceCapital = (word) => /^[A-Z][a-z]+$/.test(word);
 
 // one word (letters typed since the last space) -> Odia. `words`: the writer's own spellings, which win over the built-in list
-export function transliterate(roman, { words = {} } = {}) {
+export function transliterate(roman, { words = {}, rulesOnly = false } = {}) {
   const typed = String(roman ?? "");
   const plain = typed === typed.toLowerCase() || isSentenceCapital(typed) ? typed.toLowerCase() : null;
-  if (plain !== null) {
+  if (plain !== null && !rulesOnly) {
     const known = words[plain] ?? DEFAULT_WORDS[plain];
     if (known) return known;
   }

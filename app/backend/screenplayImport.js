@@ -51,11 +51,15 @@ export function headingParts(heading) {
   const m = /^(INT\.?\s*\/\s*EXT|EXT\.?\s*\/\s*INT|INT|EXT)[. ]\s*(.*)$/i.exec(text);
   const tag = (m?.[1] ?? "INT").toUpperCase().replace(/[.\s]/g, "");
   const intExt = tag.startsWith("EXT") ? "EXT" : "INT";
-  const rest = (m?.[2] ?? text).trim();
+  const rest = (m?.[2] ?? text).trim().replace(/^[-–—:]\s*/, ""); // "INT - DAY - HOUSE": the dash after the tag is only a separator
   const parts = rest.split(/\s+[-–—]\s+/);
   let timeOfDay = "DAY";
   let locationParts = parts;
-  if (parts.length > 1) {
+  if (parts.length > 1 && new RegExp(`^${TIME_WORD.source}$`, "i").test(parts[0].trim())) {
+    // time first, place after: "INT - DAY - ADITYA HOUSE DINING"
+    timeOfDay = parts[0].trim().toUpperCase();
+    locationParts = parts.slice(1);
+  } else if (parts.length > 1) {
     const last = parts[parts.length - 1];
     const word = TIME_WORD.exec(last);
     if (word) { timeOfDay = word[1].toUpperCase(); locationParts = parts.slice(0, -1); }
@@ -91,6 +95,8 @@ export function parseEpisodesFromText(rawText) {
   const episodes = [];
   let episode = null;
   let scene = null;
+  // A draft without "SCENE 1" lines (headings only): every heading starts a new scene. With "SCENE n" lines, a second heading inside a scene is a change of place.
+  const hasSceneMarkers = lines.some((l) => SCENE_LINE.test(l));
 
   const startEpisode = (number, title) => {
     episode = { number, title: title.replace(/\s*\([^)]*\)\s*$/, "").trim(), declaredMinutes: null, scenes: [] };
@@ -129,6 +135,9 @@ export function parseEpisodesFromText(rawText) {
         episode.scenes.push(scene);
       } else if (!scene.heading) {
         scene.heading = line;
+      } else if (!hasSceneMarkers) {
+        scene = { number: String(episode.scenes.length + 1), minutes: null, heading: line, characters: [], elements: [] };
+        episode.scenes.push(scene);
       } else {
         push({ type: "action", character: "", text: line }); // a change of place inside one scene stays in the scene
       }

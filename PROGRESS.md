@@ -2440,3 +2440,7 @@ Plain version: every project is now a set of **drafts**. Opening a project shows
 ## 2026-10-31 — "Upload your draft": "Failed to fetch" on a PDF
 - "Failed to fetch" means the phone's request never reached the server (server asleep/restarting, or the picked file stopped being readable). The upload now copies the file into memory first, retries up to 3 times (15 s apart, showing "Could not reach the server — it may be waking up. Trying again (2 of 3)…"), and ends with a plain explanation instead of the bare browser message.
 - The PDF itself (TWO_SISTERS_1.pdf, 13 pages, a scene table) is fine. Not verified against the live server (sandbox cannot reach it).
+
+## 2026-10-31 — Draft with headings only: 66 scenes were read as 1
+- The TWO SISTERS PDF now reads fine, but its text has no "SCENE 1" lines — only headings like `Int - Day - Aditya house Dinning` with a paragraph below. The reader took the first heading as the only scene and the other 65 as "change of place" lines inside it. Now: a draft with no "SCENE n" lines makes every heading its own scene. Also `Int - Day - Place` (time first, dash after the tag) is read correctly (time DAY, place "Aditya house Dinning").
+- Tests added in `importAnalysis.test.js` (2). Real PDF text not run through the live AI reader here; the test uses text copied in the shape of the owner's screenshot.

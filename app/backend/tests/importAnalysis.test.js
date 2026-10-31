@@ -90,3 +90,36 @@ test("empty input and the scene-state rule", () => {
   assert.equal(sceneState({ elements: [{ type: "dialogue", character: "A", text: "Hi" }] }).state, "written");
   assert.equal(sceneState({ elements: [1, 2, 3].map((n) => ({ type: "action", text: `Line ${n}.` })) }).state, "written");
 });
+
+// the Two Sisters draft: headings like "Int - Day - Place" with a paragraph below each, and NO "SCENE n" lines
+const HEADINGS_ONLY = `Int - Day - Aditya house Dinning
+
+Aditya is having brakefast , and she says ghre bu mun hin kare siye kareni , meanwhilea anita comes and Anktia asks kiye kare
+
+Int - Night - Kitchen
+
+Anita is cooking , ankita comes and sees anita is cooking, Ankita lights her saree behind anita and shouts
+
+Ext - Night - Terrace
+
+Aditya is standing alone and having cigarate ankita sees him goes back hugs him
+
+Int - Day - Aditya house
+
+Aditya sees Anita takes a jar to ankita room`;
+
+test("a draft with only headings (no SCENE n lines): every heading is its own scene, time and place are read from 'Int - Day - Place'", () => {
+  const a = analyzeImportedText(HEADINGS_ONLY);
+  assert.equal(a.stage, "scene_list");
+  assert.equal(a.totals.scenes, 4);
+  assert.equal(a.totals.oneLiner, 4);
+  assert.match(a.scenes[1].heading, /Night - Kitchen/);
+  assert.match(a.scenes[0].oneLiner, /Aditya is having brakefast/);
+});
+
+test("'Int - Day - Place' headings: time first, then the place", async () => {
+  const { headingParts } = await import("../screenplayImport.js");
+  assert.deepEqual(headingParts("Int - Day - Aditya house Dinning"), { intExt: "INT", location: "Aditya house Dinning", timeOfDay: "DAY" });
+  assert.deepEqual(headingParts("Ext - Night - Terrace"), { intExt: "EXT", location: "Terrace", timeOfDay: "NIGHT" });
+  assert.deepEqual(headingParts("INT. TEMPLE OFFICE - NIGHT"), { intExt: "INT", location: "TEMPLE OFFICE", timeOfDay: "NIGHT" }); // the usual form is unchanged
+});

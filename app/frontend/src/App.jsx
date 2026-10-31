@@ -7526,6 +7526,30 @@ const DRAFT_STAGE_OF = { idea: 'idea', characters: 'idea', synopsis: 'synopsis',
 
 // "Upload your draft": any file → it is read → the app says which stage it is at (and, for a screenplay, how many scenes are written and how many are
 // only one-liners) → one short question at most → the draft is taken to that stage. Nothing is made until the writer presses the proceed button.
+// Sending a file to the server from a phone: the file is first copied into memory (a file picked from Drive / WhatsApp / Downloads can stop being
+// readable halfway through the upload, which the browser reports only as "Failed to fetch"), and when the server cannot be reached (it may be waking
+// up after sleeping, which takes about a minute) the upload is tried again a few times before giving up with a plain message.
+async function uploadFileWithRetries(url, file, fields, onProgress) {
+  let copy = file
+  try { copy = new File([await file.arrayBuffer()], file.name, { type: file.type }) } catch { /* the original file is used */ }
+  let lastError
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    const body = new FormData()
+    body.append('file', copy)
+    for (const [key, value] of Object.entries(fields ?? {})) body.append(key, value)
+    try {
+      return await fetch(url, { method: 'POST', body })
+    } catch (error) {
+      lastError = error
+      if (attempt < 3) {
+        onProgress?.(`Could not reach the server — it may be waking up. Trying again (${attempt + 1} of 3)…`)
+        await new Promise((resolve) => setTimeout(resolve, 15000))
+      }
+    }
+  }
+  throw new Error(`Could not reach the server (${lastError?.message ?? 'no answer'}). It may still be waking up after a rest or restarting after an update — wait a minute and choose the file again. Check your internet connection too.`)
+}
+
 function DraftUpload({ backendUrl, onBack, onImportScreenplay, onStartStage, onUseAsIdea }) {
   const inputRef = useRef(null)
   const [phase, setPhase] = useState('idle') // idle | reading | ready | going
@@ -7551,18 +7575,15 @@ function DraftUpload({ backendUrl, onBack, onImportScreenplay, onStartStage, onU
     setStartedAt(Date.now()); setSeconds(0)
     setPhase('reading'); setProgress('Uploading your file…')
     try {
-      const body = new FormData()
-      body.append('file', file)
       let text; let title = ''; let analysis; let report
       if (/\.pdf$/i.test(file.name)) {
-        body.append('mode', 'auto')
-        const start = await fetch(`${backendUrl}/api/story-from-pdf`, { method: 'POST', body })
+        const start = await uploadFileWithRetries(`${backendUrl}/api/story-from-pdf`, file, { mode: 'auto' }, setProgress)
         const started = await start.json().catch(() => ({}))
         if (!start.ok) throw new Error(started.error || 'Could not upload the file.')
         const got = await waitForPdfJob(backendUrl, started.jobId, setProgress)
         ;({ text, title, analysis, report } = got)
       } else {
-        const response = await fetch(`${backendUrl}/api/draft/read-file`, { method: 'POST', body })
+        const response = await uploadFileWithRetries(`${backendUrl}/api/draft/read-file`, file, {}, setProgress)
         const { data, problem } = await readServerAnswer(response)
         if (!response.ok || !data) throw new Error(data?.error || problem || 'I could not read this file type. Try PDF, Word, text, Final Draft or Fountain.')
         text = data.text; title = data.title || ''

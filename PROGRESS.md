@@ -2436,3 +2436,7 @@ Plain version: every project is now a set of **drafts**. Opening a project shows
 ## 2026-10-30 — Vertex: any 404 now switches to the newer model
 - With Location `global`, Google answered the old `gemini-2.5-flash-lite` with "404 exception parsing response" — a wording the safety net did not recognise, so it never switched to `gemini-3.5-flash-lite` (which the diagnosis showed WORKS at global). On Vertex every 404 on a generate call now counts as "model not served here".
 - Not verified with a real project (sandbox blocks Google).
+
+## 2026-10-31 — "Upload your draft": "Failed to fetch" on a PDF
+- "Failed to fetch" means the phone's request never reached the server (server asleep/restarting, or the picked file stopped being readable). The upload now copies the file into memory first, retries up to 3 times (15 s apart, showing "Could not reach the server — it may be waking up. Trying again (2 of 3)…"), and ends with a plain explanation instead of the bare browser message.
+- The PDF itself (TWO_SISTERS_1.pdf, 13 pages, a scene table) is fine. Not verified against the live server (sandbox cannot reach it).

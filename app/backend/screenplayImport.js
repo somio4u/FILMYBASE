@@ -53,6 +53,11 @@ export function headingParts(heading) {
   const intExt = tag.startsWith("EXT") ? "EXT" : "INT";
   const rest = (m?.[2] ?? text).trim().replace(/^[-–—:]\s*/, ""); // "INT - DAY - HOUSE": the dash after the tag is only a separator
   const parts = rest.split(/\s+[-–—]\s+/);
+  // "INT DAY ADITYA HOUSE" (no dashes at all): a time word first, then the place
+  if (parts.length === 1) {
+    const leading = /^(MORNING|AFTERNOON|EVENING|NIGHT|DAY|DAWN|DUSK|MIDNIGHT|NOON|SUNSET|SUNRISE)\s+(\S.*)$/i.exec(parts[0]);
+    if (leading) parts.splice(0, 1, leading[1], leading[2]);
+  }
   let timeOfDay = "DAY";
   let locationParts = parts;
   if (parts.length > 1 && new RegExp(`^${TIME_WORD.source}$`, "i").test(parts[0].trim())) {

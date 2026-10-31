@@ -123,3 +123,16 @@ test("'Int - Day - Place' headings: time first, then the place", async () => {
   assert.deepEqual(headingParts("Ext - Night - Terrace"), { intExt: "EXT", location: "Terrace", timeOfDay: "NIGHT" });
   assert.deepEqual(headingParts("INT. TEMPLE OFFICE - NIGHT"), { intExt: "INT", location: "TEMPLE OFFICE", timeOfDay: "NIGHT" }); // the usual form is unchanged
 });
+
+test("a table of 30 one-liners with one stray 'written' scene is the scene one-liners stage, not the screenplay stage", () => {
+  const rows = Array.from({ length: 30 }, (_, i) => `SCENE ${i + 1}\nINT. HOUSE - DAY\nSomething small happens in scene ${i + 1}.${i === 3 ? "\nANITA\nWho is this?" : ""}`).join("\n");
+  const a = analyzeImportedText(rows);
+  assert.equal(a.totals.scenes, 30);
+  assert.equal(a.stage, "scene_list");
+});
+
+test("headings with the time first and no dashes: 'Int Day Aditya house'", async () => {
+  const { headingParts } = await import("../screenplayImport.js");
+  assert.deepEqual(headingParts("Int Day Aditya house"), { intExt: "INT", location: "Aditya house", timeOfDay: "DAY" });
+  assert.deepEqual(headingParts("Int Night Kitchen"), { intExt: "INT", location: "Kitchen", timeOfDay: "NIGHT" });
+});

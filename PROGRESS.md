@@ -2444,3 +2444,15 @@ Plain version: every project is now a set of **drafts**. Opening a project shows
 ## 2026-10-31 — Draft with headings only: 66 scenes were read as 1
 - The TWO SISTERS PDF now reads fine, but its text has no "SCENE 1" lines — only headings like `Int - Day - Aditya house Dinning` with a paragraph below. The reader took the first heading as the only scene and the other 65 as "change of place" lines inside it. Now: a draft with no "SCENE n" lines makes every heading its own scene. Also `Int - Day - Place` (time first, dash after the tag) is read correctly (time DAY, place "Aditya house Dinning").
 - Tests added in `importAnalysis.test.js` (2). Real PDF text not run through the live AI reader here; the test uses text copied in the shape of the owner's screenshot.
+
+## 2026-10-31 — Excel (.xlsx) in "Upload your draft"
+- An Excel scene table (SL NO | INT/EXT | DAY/NIGHT | LOCATION | DESCRIPTION, found by its header row; title rows above it and empty rows are skipped) now becomes one scene per row, so it lands at the Scene one-liners stage with every scene. Any other sheet is kept as one line per row. Several sheets continue the scene numbers. Built on the `exceljs` already in the app (no new library). New file `spreadsheetText.js`, 3 tests.
+- Old `.xls` files are refused with a plain message (Save As → Excel Workbook .xlsx). Supporting `.xls` itself needs a new library (the common one has known security weaknesses) — only with the owner's OK.
+- Not verified with the owner's real Excel file or on the live app.
+
+## 2026-10-31 — Scene table PDF: scenes 1–49 missing, wrong headings, "screenplay" label
+- Owner's TWO SISTERS PDF (a scene table, 67 rows): only scenes 50–67 came in (as 1–18), headings showed as `INT. DAY ADITYA HOUSE - DAY`, and the draft was called "Screenplay stage" because one scene had a colon line.
+- **Reader:** a screenplay / scene table is now copied 4 pages at a time (was 8), with an explicit table rule (every row → `SCENE <SL NO>` / `INT. PLACE - DAY` / description; column titles ignored). An almost-empty answer for a batch is asked once more. The first look pass also reports how many scenes the PDF has; if far fewer were read, the draft report says "about 67 scenes, but only N were read".
+- **Headings:** `Int Day Aditya house` / `Int Night Kitchen` (time first, no dashes) are read correctly.
+- **Stage:** one stray written scene among many one-liners no longer makes it a "Screenplay stage" (needs at least 10% written).
+- Not verified with the live AI: why the AI skipped the first pages is unknown; the smaller bites, the retry and the warning are the guard. If it still happens, the warning will say so.

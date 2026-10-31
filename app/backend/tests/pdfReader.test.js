@@ -68,3 +68,31 @@ test("screenplay kind: asks for the screenplay layout and keeps repeated charact
   assert.match(calls[1].contents[1].text, /This is a SCREENPLAY/);
   assert.equal(out.text, script); // nothing removed or re-flowed
 });
+
+// a scene TABLE (the "Two Sisters" plan): copied in bites of 4 pages, every row, none skipped, and the reader says when scenes are missing
+const rows = (from, to) => Array.from({ length: to - from + 1 }, (_, i) => `SCENE ${from + i}\nINT. BISWAS HOUSE - DAY\nBiswa babu is in the house and something happens in scene ${from + i}.`).join("\n");
+
+test("a scene table: pages are read 4 at a time, with the table rule; an empty answer is asked again once", async () => {
+  const calls = [];
+  const answers = ["", rows(1, 30), rows(31, 67)]; // the first bite comes back empty
+  const ask = async (label, contents) => {
+    calls.push({ label, text: contents[1].text });
+    if (/^Looking/.test(label)) return { title: "TWO SISTERS", pageCount: 13, language: "English", sceneCount: 67, episodes: [], notStory: ["column titles"] };
+    return { text: answers.shift(), unreadable: [] };
+  };
+  // pages 1-4 (empty, retried -> scenes 1-30), 5-8 (31-67)... the script above gives the retry the 30 scenes
+  answers.splice(0, answers.length, "", rows(1, 30), rows(31, 49), rows(50, 62), rows(63, 67));
+  const out = await readStoryFromPdf(PDF, { ask, kind: "screenplay" });
+  assert.match(calls[1].label, /1-4 of 13/);
+  assert.match(calls[1].text, /TABLE of scenes[^]*SCENE <the SL NO>/);
+  assert.match(calls[2].label, /1-4 of 13/); // the empty answer was asked again
+  assert.match(calls[2].text, /too short/);
+  assert.equal(out.scenesFound, 67);
+  assert.equal(out.warnings.length, 0);
+});
+
+test("when far fewer scenes were read than the PDF has, a plain warning says so", async () => {
+  const ask = async (label) => (/^Looking/.test(label) ? { title: "T", pageCount: 4, language: "English", sceneCount: 67, episodes: [], notStory: [] } : { text: rows(50, 67), unreadable: [] });
+  const out = await readStoryFromPdf(PDF, { ask, kind: "screenplay" });
+  assert.match(out.warnings.join(" "), /about 67 scenes, but only 18 were read/);
+});

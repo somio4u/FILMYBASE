@@ -83,7 +83,8 @@ export function analyzeImportedText(rawText) {
   const warnings = [...parsed.warnings.filter((w) => !/has no content/.test(w))];
 
   let stage;
-  if (totals.scenes >= 1 && totals.written >= 1) stage = "screenplay";
+  // one stray "written" scene among dozens of one-liners (a line with a colon in a scene plan) does not make a table of scenes a screenplay
+  if (totals.scenes >= 1 && totals.written >= Math.max(1, Math.ceil(totals.scenes * 0.1))) stage = "screenplay";
   else if (totals.scenes >= 1) stage = "scene_list";
   else if (beatLines >= 5 && beatLines >= lines.length * 0.4) stage = "bit_sheet";
   else if (personLines >= 4 && personLines >= lines.length * 0.4) stage = "characters";

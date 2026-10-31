@@ -7629,7 +7629,7 @@ function DraftUpload({ backendUrl, onBack, onImportScreenplay, onStartStage, onU
       <input ref={inputRef} type="file" onChange={handleFile} style={{ display: 'none' }} />
       {(phase === 'idle' || phase === 'reading') && (
         <>
-          <p>Choose your file — a <b>PDF</b>, <b>text</b> file, <b>Word</b> file, <b>Final Draft</b> (.fdx), a script / <b>Fountain</b> file, or any other relevant file. I will read it and tell you which stage your draft is at.</p>
+          <p>Choose your file — a <b>PDF</b>, <b>text</b> file, <b>Word</b> file, an <b>Excel</b> scene table (.xlsx), <b>Final Draft</b> (.fdx), a script / <b>Fountain</b> file, or any other relevant file. I will read it and tell you which stage your draft is at.</p>
           <button type="button" className="choose-button" onClick={() => inputRef.current?.click()} disabled={phase === 'reading'}>
             {phase === 'reading' ? 'Reading your draft…' : '📎 Choose a file'}
           </button>

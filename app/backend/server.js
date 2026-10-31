@@ -10,6 +10,7 @@ import { GoogleGenAI, Type } from "@google/genai";
 import { Pool } from "pg";
 import ScriptAwarePDF from "./mixedScriptPdf.js";
 import ExcelJS from "exceljs";
+import { extractTextFromSpreadsheet } from "./spreadsheetText.js";
 import PptxGenJS from "pptxgenjs";
 import { buildCastingPpt } from "./castingPpt.js";
 import { lengthRule } from "./aiMovieLength.js";
@@ -8479,6 +8480,12 @@ async function extractTextFromUploadedScreenplay(file) {
     const doc = await extractor.extract(file.buffer);
     return doc.getBody();
   }
+  if (ext === ".xlsx") {
+    return extractTextFromSpreadsheet(file.buffer);
+  }
+  if (ext === ".xls") {
+    throw new Error("This is an old-style Excel file (.xls). Open it in Excel, choose Save As → Excel Workbook (.xlsx), and upload that file.");
+  }
   if (ext === ".fdx") {
     return extractTextFromFdx(file.buffer.toString("utf-8"));
   }
@@ -8486,7 +8493,7 @@ async function extractTextFromUploadedScreenplay(file) {
     return extractTextFromScrite(file.buffer.toString("utf-8"));
   }
 
-  throw new Error(`Unsupported file type "${ext}". Try .txt, .md, .pdf, .docx, .doc, .fdx, or .scrite.`);
+  throw new Error(`Unsupported file type "${ext}". Try .txt, .md, .pdf, .docx, .doc, .xlsx, .fdx, or .scrite.`);
 }
 
 app.post("/api/import-screenplay-for-production/file", requireRole("admin"), screenplayUpload.single("file"), async (req, res) => {
@@ -19396,7 +19403,7 @@ function startPdfReadJob(buffer, kind) {
         job.progress = "Looking at what the PDF contains";
         const analysis = analyzeImportedText(result.text);
         if (!["screenplay", "scene_list"].includes(analysis.stage)) result = { ...result, text: cleanPastedStory(result.text).text.trim() };
-        result = { ...result, analysis, report: reportLines(analysis) };
+        result = { ...result, analysis, report: [...reportLines(analysis), ...(result.warnings ?? []).filter((w) => /scenes, but only/.test(w))] };
       }
       Object.assign(job, { status: "done", progress: "Done", result });
     })

@@ -19,12 +19,29 @@ function summaryOf(scene) {
   return joined.length > 400 ? `${joined.slice(0, 397).trim()}...` : joined;
 }
 
+// the writer's answer, cleaned: only sensible numbers are kept
+export function askedFormat(format) {
+  const positive = (v, max) => { const n = Number(v); return Number.isFinite(n) && n > 0 && n <= max ? n : 0; };
+  const type = ["film", "series", "vertical"].includes(format?.type) ? format.type : "";
+  const episodeCount = Math.floor(positive(format?.episodeCount, 500));
+  const thisEpisode = Math.floor(positive(format?.thisEpisode, 500));
+  return { type, runtimeMinutes: Math.round(positive(format?.runtimeMinutes, 600)), episodeMinutes: positive(format?.episodeMinutes, 240), episodeCount, thisEpisode: thisEpisode <= episodeCount ? thisEpisode : 0 };
+}
+
 export function buildScreenplayProject(parsed, { title = "", format = null, minutesFallback = 90, targetScenes = null } = {}) {
-  const episodes = parsed.episodes.filter((e) => e.scenes.length > 0);
-  if (episodes.length === 0) throw Object.assign(new Error("No scenes were found in this screenplay, so no project was made."), { status: 422 });
+  const realEpisodes = parsed.episodes.filter((e) => e.scenes.length > 0);
+  if (realEpisodes.length === 0) throw Object.assign(new Error("No scenes were found in this screenplay, so no project was made."), { status: 422 });
+  // what the writer said about the work (asked after the draft was looked at): a film of N minutes, a series of N-minute episodes, or ONE episode of a longer series
+  const asked = askedFormat(format);
+  const wholeSeries = asked.type === "series" || asked.type === "vertical";
+  // ONE episode of a series: the draft is episode `thisEpisode` of `episodeCount`; the other episodes start empty, ready to be planned
+  const onlyOneEpisode = wholeSeries && asked.thisEpisode > 0 && asked.episodeCount > 1 && realEpisodes.length === 1;
+  const episodes = onlyOneEpisode
+    ? Array.from({ length: asked.episodeCount }, (_, i) => (i === asked.thisEpisode - 1 ? realEpisodes[0] : { number: i + 1, title: "", declaredMinutes: null, scenes: [] }))
+    : realEpisodes;
   const allText = episodes.flatMap((e) => e.scenes.flatMap((s) => s.elements.map((x) => x.text))).join("\n");
   const language = languageOf(allText);
-  const isSeries = format?.type === "series" || format?.type === "vertical" || episodes.length > 1;
+  const isSeries = wholeSeries || episodes.length > 1;
 
   const rows = []; // screenplay_scenes to write: { episodeIndex (null for a film), sceneIndex, content }
   const episodeScenes = episodes.map((episode, ei) => episode.scenes.map((scene, si) => {
@@ -37,7 +54,7 @@ export function buildScreenplayProject(parsed, { title = "", format = null, minu
   const speakers = new Map();
   for (const episode of episodes) for (const scene of episode.scenes) for (const e of scene.elements) if (e.type === "dialogue" && e.character) speakers.set(e.character, (speakers.get(e.character) ?? 0) + 1);
   const cast = [...speakers.entries()].sort((a, b) => b[1] - a[1]).map(([name]) => name);
-  const projectTitle = String(title ?? "").trim() || episodes[0].title || `Imported screenplay (${episodes[0].scenes[0].location})`;
+  const projectTitle = String(title ?? "").trim() || realEpisodes[0].title || `Imported screenplay (${realEpisodes[0].scenes[0].location})`;
   const sumMinutes = (scenes) => round1(scenes.reduce((n, s) => n + (Number(s.estimatedMinutes) || 0), 0));
   const oneLiners = episodes.flatMap((e, ei) => e.scenes.map((s, si) => episodeScenes[ei][si].oneLiner.en)).filter(Boolean);
   const concept = `${projectTitle} — imported screenplay with ${episodeScenes.flat().length} scenes. ${oneLiners.slice(0, 3).join(" ")}`.trim();
@@ -49,9 +66,10 @@ export function buildScreenplayProject(parsed, { title = "", format = null, minu
   });
 
   const totalMinutes = round1(episodeScenes.flat().reduce((n, s) => n + (Number(s.estimatedMinutes) || 0), 0)) || minutesFallback;
+  // the minutes the writer gave win over the minutes estimated from the scenes
   const deckFormat = isSeries
-    ? { type: format?.type === "vertical" ? "vertical" : "series", episodeCount: episodes.length, episodeMinutes: round1(totalMinutes / episodes.length) || 10 }
-    : { type: "film", runtimeMinutes: Math.round(totalMinutes) || minutesFallback };
+    ? { type: asked.type === "vertical" ? "vertical" : "series", episodeCount: Math.max(episodes.length, asked.episodeCount || 0), episodeMinutes: asked.episodeMinutes || round1(totalMinutes / realEpisodes.length) || 10 }
+    : { type: "film", runtimeMinutes: asked.runtimeMinutes || Math.round(totalMinutes) || minutesFallback };
   const deck = {
     title: text(projectTitle), logline: text(""), premise: text(""), toneGenre: text(""), targetAudience: text(""),
     majorCharacters: cast.slice(0, 6).map(emptyChar), format: deckFormat,

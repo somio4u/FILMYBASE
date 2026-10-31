@@ -127,3 +127,28 @@ test("writers may analyse a draft and read a non-PDF file's text, but not use th
   assert.ok(matchWriterRoute("POST", "/api/draft/read-file"));
   assert.equal(matchWriterRoute("POST", "/api/ai-movie/import-screenplay-file"), null); // the AI Movie import stays admin's
 });
+
+test("what the writer says about the work (film minutes, series, one episode of a series) is kept in the project", () => {
+  const film = buildScreenplayProject(parseEpisodesFromText(FILM), { title: "F", format: { type: "film", runtimeMinutes: 100 } });
+  assert.deepEqual(film.deck.format, { type: "film", runtimeMinutes: 100 });
+  assert.equal(film.sceneList.targetMinutes, 100);
+  // nonsense numbers are ignored: the minutes come from the scenes as before
+  const odd = buildScreenplayProject(parseEpisodesFromText(FILM), { title: "F", format: { type: "film", runtimeMinutes: -5 } });
+  assert.ok(odd.deck.format.runtimeMinutes > 0);
+
+  // the draft is ONE episode (the 2nd) of a series of 8, 20 minutes each: the other 7 episodes start empty
+  const one = buildScreenplayProject(parseEpisodesFromText(FILM), { title: "S", format: { type: "series", episodeCount: 8, episodeMinutes: 20, thisEpisode: 2 } });
+  assert.equal(one.isSeries, true);
+  assert.deepEqual(one.deck.format, { type: "series", episodeCount: 8, episodeMinutes: 20 });
+  assert.equal(one.sceneList.episodeScenes.length, 8);
+  assert.deepEqual(one.sceneList.episodeScenes.map((e) => e.scenes.length), [0, 3, 0, 0, 0, 0, 0, 0]);
+  assert.deepEqual(one.rows.map((r) => r.episodeIndex), [1, 1]); // the written scenes sit under episode 2
+  assert.equal(one.deck.episodes.length, 8);
+  assert.equal(one.sceneList.episodeScenes[3].targetMinutes, 20);
+  assert.equal(one.title, "S");
+  assert.equal(one.bitSheet.episodeBits.length, 8);
+
+  // a series whose episodes are all in the draft: the minutes asked for are used
+  const series = buildScreenplayProject(parseEpisodesFromText(SERIES), { format: { type: "series", episodeCount: 2, episodeMinutes: 12 } });
+  assert.deepEqual(series.deck.format, { type: "series", episodeCount: 2, episodeMinutes: 12 });
+});

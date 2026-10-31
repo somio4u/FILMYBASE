@@ -8068,3 +8068,7 @@ body.is-script-edit-mode { overflow: hidden; }
 .odia-choice i { font-style: normal; opacity: 0.7; font-size: 0.8em; margin-right: 4px; }
 .odia-choices-hint { flex-basis: 100%; font-size: 0.72rem; opacity: 0.7; }
 .odia-corpus-note { margin: 4px 0; font-size: 0.8rem; opacity: 0.8; }
+
+/* "Upload your draft": what is this (film / series / one episode) and how long */
+.draft-format { display: grid; gap: 0.6rem; margin: 0.6rem 0; }
+.draft-format-note { margin: 0; font-size: 0.85rem; opacity: 0.75; }

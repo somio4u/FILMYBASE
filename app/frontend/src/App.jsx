@@ -7559,6 +7559,11 @@ function DraftUpload({ backendUrl, onBack, onImportScreenplay, onStartStage, onU
   const [draft, setDraft] = useState(null) // { text, title, analysis, report, fileName }
   const [stage, setStage] = useState('idea')
   const [total, setTotal] = useState('')
+  // what the draft is: a film, a series, or one episode of a series — and how long (asked once the draft has been looked at)
+  const [kind, setKind] = useState('film') // film | series | episode
+  const [minutes, setMinutes] = useState('120') // film: the whole film · series / episode: one episode
+  const [episodes, setEpisodes] = useState('8')
+  const [thisEpisode, setThisEpisode] = useState('1')
   const [error, setError] = useState('')
 
   useEffect(() => {
@@ -7599,6 +7604,8 @@ function DraftUpload({ backendUrl, onBack, onImportScreenplay, onStartStage, onU
       setDraft({ text, title, analysis, report, fileName: file.name })
       setStage(DRAFT_STAGE_OF[analysis.stage] ?? 'idea')
       setTotal(String(Math.max(analysis.totals?.scenes ?? 0, 1)))
+      const found = Number(analysis.totals?.episodes) || Number(analysis.episodeHeadings) || 0
+      if (found >= 2) { setKind('series'); setEpisodes(String(found)); setMinutes('20') } else { setKind('film'); setMinutes('120') }
       setPhase('ready')
     } catch (e) {
       setError(e.message); setPhase('idle')
@@ -7608,9 +7615,9 @@ function DraftUpload({ backendUrl, onBack, onImportScreenplay, onStartStage, onU
   async function proceed() {
     setPhase('going'); setStartedAt(Date.now()); setSeconds(0); setProgress('Starting…'); setError('')
     try {
-      if (stage === 'idea') await onUseAsIdea(draft.text)
-      else if (stage === 'screenplay' || stage === 'scenelist') await onImportScreenplay({ text: draft.text, title: draft.title, targetScenes: Number(total) > (draft.analysis.totals?.scenes ?? 0) ? Number(total) : undefined })
-      else await onStartStage(stage, draft.text, draft.analysis)
+      if (stage === 'idea') await onUseAsIdea(draft.text, format)
+      else if (stage === 'screenplay' || stage === 'scenelist') await onImportScreenplay({ text: draft.text, title: draft.title, format, targetScenes: kind === 'film' && Number(total) > (draft.analysis.totals?.scenes ?? 0) ? Number(total) : undefined })
+      else await onStartStage(stage, draft.text, draft.analysis, format)
     } catch (e) {
       setError(e.message || 'Something went wrong.')
     }
@@ -7622,6 +7629,12 @@ function DraftUpload({ backendUrl, onBack, onImportScreenplay, onStartStage, onU
   const unwritten = t ? t.oneLiner + t.empty : 0
   const detected = a ? (DRAFT_STAGES.find(([k]) => k === DRAFT_STAGE_OF[a.stage])?.[1] ?? 'Idea') : ''
   const sceneStage = stage === 'screenplay' || stage === 'scenelist'
+  const minutesNumber = Number(minutes) > 0 ? Number(minutes) : undefined
+  const episodesNumber = Math.max(1, Math.floor(Number(episodes)) || 1)
+  const asEpisode = kind === 'episode' && sceneStage // "one episode" only makes sense when the scenes themselves are brought in
+  const format = kind === 'film'
+    ? { type: 'film', runtimeMinutes: minutesNumber }
+    : { type: 'series', episodeCount: episodesNumber, episodeMinutes: minutesNumber, ...(asEpisode ? { thisEpisode: Math.min(episodesNumber, Math.max(1, Math.floor(Number(thisEpisode)) || 1)) } : {}) }
   return (
     <div className="draft-upload">
       <button type="button" className="cancel-button" onClick={onBack}>← Back</button>
@@ -7648,7 +7661,34 @@ function DraftUpload({ backendUrl, onBack, onImportScreenplay, onStartStage, onU
           {a.warnings?.length > 0 && <p className="pdf-findings-warn">⚠ {a.warnings.slice(0, 2).join(' ')}</p>}
           {a.stage === 'characters' && stage === 'idea' && <p>This looks like a list of characters. It will be kept as your idea text, so the story can be built around these people — add the story line in the idea box before you go on.</p>}
           {(stage === 'synopsis' || stage === 'bitsheet') && a.episodeHeadings >= 2 && <p>It has {a.episodeHeadings} episodes, so it will be made as a <b>series</b> of {a.episodeHeadings} episodes.</p>}
-          {sceneStage && (
+          <div className="draft-format">
+            <label className="draft-stage-pick">
+              What is this?
+              <select value={kind === 'episode' && !sceneStage ? 'series' : kind} onChange={(e) => { const next = e.target.value; setKind(next); setMinutes(next === 'film' ? '120' : '20') }}>
+                <option value="film">A film</option>
+                <option value="series">A web series (all its episodes are in this draft, or will be made)</option>
+                {sceneStage && <option value="episode">One episode of a series</option>}
+              </select>
+            </label>
+            {kind !== 'film' && (
+              <label className="draft-total">
+                {asEpisode ? 'How many episodes will the whole series have?' : 'How many episodes?'}
+                <input type="number" min="1" max="500" value={episodes} onChange={(e) => setEpisodes(e.target.value)} />
+              </label>
+            )}
+            {asEpisode && (
+              <label className="draft-total">
+                This draft is episode number
+                <input type="number" min="1" max={episodesNumber} value={thisEpisode} onChange={(e) => setThisEpisode(e.target.value)} />
+              </label>
+            )}
+            <label className="draft-total">
+              {kind === 'film' ? 'How long is the film (minutes)?' : 'How long is each episode (minutes)?'}
+              <input type="number" min="1" value={minutes} onChange={(e) => setMinutes(e.target.value)} />
+            </label>
+            <p className="draft-format-note">The writer AI uses this to size every scene it writes for you.</p>
+          </div>
+          {sceneStage && kind === 'film' && (
             <label className="draft-total">
               How many scenes should the film have in all? (you can raise it; I will keep the number)
               <input type="number" min={t.scenes || 1} value={total} onChange={(e) => setTotal(e.target.value)} />
@@ -11399,13 +11439,13 @@ function App() {
   }
 
   // "Upload your draft" → proceed: an AI start from a synopsis / Bit Sheet text (same background job as "Let's go")
-  async function startFromDraft(stage, text, analysis) {
+  async function startFromDraft(stage, text, analysis, chosenFormat) {
     setErrorMessage(null)
     const endpoint = stage === 'synopsis' ? '/api/skip-to-synopsis' : '/api/skip-to-bitsheet'
     // a draft split into episodes ("Episode 1", "Episode 2" …) is a SERIES, even when the idea screen's own switch was left on Film: sent as a film its
     // episodes would be squeezed into one story. The number of episodes is what the draft has.
     const headings = Number(analysis?.episodeHeadings) || 0
-    const format = formatType === 'film' && headings >= 2 ? { type: 'series', episodeCount: headings, episodeMinutes: Number(episodeMinutes) || 10 } : buildFormatObject()
+    const format = chosenFormat?.type ? { ...chosenFormat, thisEpisode: undefined } : formatType === 'film' && headings >= 2 ? { type: 'series', episodeCount: headings, episodeMinutes: Number(episodeMinutes) || 10 } : buildFormatObject()
     let response
     try {
       response = await fetch(`${BACKEND_URL}${endpoint}`, {
@@ -11418,20 +11458,22 @@ function App() {
     if (data.jobId) { setSkipRunning(true); setSkipJobId(data.jobId); window.scrollTo({ top: 0, behavior: 'smooth' }) }
   }
 
-  function useDraftAsIdea(text) {
+  function useDraftAsIdea(text, format) {
+    if (format?.type === 'series') { setFormatType('series'); if (format.episodeCount) setEpisodeCount(format.episodeCount); if (format.episodeMinutes) setEpisodeMinutes(format.episodeMinutes) }
+    else if (format?.type === 'film') { setFormatType('film'); if (format.runtimeMinutes) setRuntimeMinutes(format.runtimeMinutes) }
     setConcept(text)
     setStartStage('idea')
     setHomeChoice('idea')
   }
 
   // a PDF that is already a written screenplay: the server makes the project from it, every scene as written (a background job, followed by the progress card)
-  async function importPdfScreenplay({ text, title, targetScenes }) {
+  async function importPdfScreenplay({ text, title, targetScenes, format }) {
     setErrorMessage(null)
     let response
     try {
       response = await fetch(`${BACKEND_URL}/api/import-pdf-screenplay`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ pastedText: text, title, targetScenes, format: buildFormatObject() }),
+        body: JSON.stringify({ pastedText: text, title, targetScenes, format: format ?? { type: buildFormatObject().type } }), // without an answer from the writer only film / series is passed, never made-up minutes
       })
     } catch {
       setErrorMessage(t.longRequestConnectionLost)

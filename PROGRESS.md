@@ -2456,3 +2456,8 @@ Plain version: every project is now a set of **drafts**. Opening a project shows
 - **Headings:** `Int Day Aditya house` / `Int Night Kitchen` (time first, no dashes) are read correctly.
 - **Stage:** one stray written scene among many one-liners no longer makes it a "Screenplay stage" (needs at least 10% written).
 - Not verified with the live AI: why the AI skipped the first pages is unknown; the smaller bites, the retry and the warning are the guard. If it still happens, the warning will say so.
+
+## 2026-10-31 — "Upload your draft": film / series / one episode, and how long
+- After a draft is looked at, the card now asks **What is this?** — a film, a web series, or (when the scenes are brought in) one episode of a series — plus the length in minutes (whole film, or each episode), the number of episodes, and for "one episode" which episode number this is. A draft with 2+ episode headings starts as a series.
+- The project keeps it: the deck's format and the scene list's target minutes use the minutes given (before, they were only estimated from the scenes). "One episode of N": the draft's scenes sit under that episode, the other N−1 episodes start empty. For Synopsis / Bit Sheet / Idea the film-or-series choice (and minutes) is passed on to the AI start. Sensible-number checks on the server (`askedFormat`).
+- Test added in `screenplayProject.test.js`. Not verified on the phone / with live AI; "one episode" in the Synopsis/Bit Sheet stage is treated as a series.

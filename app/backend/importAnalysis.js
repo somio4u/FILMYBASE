@@ -18,7 +18,11 @@ const hasDevanagari = (t) => /[ऀ-ॿ]/.test(t);
 
 // scene lines of a plain list, with a leading number: "1. INT. TEMPLE - NIGHT — Balaram pressures…", "Scene 4: EXT. ROAD - DAY"
 const NUMBERED_HEADING = /^\s*(?:scene\s*)?\d{1,4}\s*[.):\-–—]\s*(?:INT\.?\s*\/\s*EXT|EXT\.?\s*\/\s*INT|INT|EXT)[. ]\s*\S/im;
+const TIME = "MORNING|AFTERNOON|EVENING|NIGHT|DAY|DAWN|DUSK|MIDNIGHT|NOON|SUNSET|SUNRISE";
+// one table row on a single line, the way a PDF table is often copied: "1 Ext Day Lonely Road Biswa babu is in car…"
+const ROW_LINE = new RegExp(`^\\s*(\\d{1,4})\\s+(INT|EXT)\\.?\\s+(${TIME})\\b[\\s,:\\-–—]*(.*)$`, "i");
 const HEADING_LINE = /^\s*(?:(?:scene\s*)?\d{1,4}\s*[.):\-–—]\s*)?(?:INT\.?\s*\/\s*EXT|EXT\.?\s*\/\s*INT|INT|EXT)[. ]\s*\S/i;
+const isHeadingLine = (line) => HEADING_LINE.test(line) || ROW_LINE.test(line);
 const BEAT_LINE = /^\s*(?:beat\s*)?\d{1,3}\s*[.):\-–—]\s+\S{3,}/i;
 const EPISODE_HEAD = /^\s*(?:episode|ep\.?|ଏପିସୋଡ୍?)\s*[0-9୦-୯]+/i;
 const PERSON_LINE = /^\s*[-•*]?\s*([A-Z][A-Za-z'’. ]{1,28}|[଀-୿ऀ-ॿ][^:–—\-]{1,28})\s*[:–—-]\s*\S.{25,}$/;
@@ -52,7 +56,7 @@ export function analyzeImportedText(rawText) {
   const base = { language, words: wordCount(text), lines: lines.length };
   if (!text) return { ...base, stage: "empty", episodes: [], scenes: [], totals: { episodes: 0, scenes: 0, written: 0, oneLiner: 0, empty: 0, dialogueLines: 0 }, characters: [], warnings: ["Nothing readable was found."] };
 
-  const headingCount = lines.filter((l) => HEADING_LINE.test(l)).length;
+  const headingCount = lines.filter(isHeadingLine).length;
   const parsed = headingCount > 0 ? parseEpisodesFromText(numberedHeadingsToPlain(text)) : { episodes: [], warnings: [] };
   const flat = parsed.episodes.flatMap((e) => e.scenes.map((s) => ({ episode: e, scene: s })));
 
@@ -100,8 +104,12 @@ export function analyzeImportedText(rawText) {
 
 // "1. INT. TEMPLE - NIGHT — one line" (a numbered list) -> the "SCENE 1 / INT. TEMPLE - NIGHT / one line" shape the parser reads.
 export function numberedHeadingsToPlain(text) {
-  if (!NUMBERED_HEADING.test(text)) return text;
+  const hasRows = text.split("\n").some((line) => ROW_LINE.test(line));
+  if (!NUMBERED_HEADING.test(text) && !hasRows) return text;
   return text.split("\n").map((line) => {
+    // a whole table row on one line: the place and the description cannot be told apart, so nothing is thrown away — the place is "unknown", all the words go to the description
+    const row = ROW_LINE.exec(line);
+    if (row) return `SCENE ${row[1]}\n${row[2].toUpperCase()}. UNKNOWN - ${row[3].toUpperCase()}${row[4].trim() ? `\n${row[4].trim()}` : ""}`;
     const m = /^\s*(?:scene\s*)?(\d{1,4})\s*[.):\-–—]\s*((?:INT\.?\s*\/\s*EXT|EXT\.?\s*\/\s*INT|INT|EXT)[. ]\s*\S.*)$/i.exec(line);
     if (!m) return line;
     // heading and summary on one line: "INT. PLACE - NIGHT — summary" -> split at the dash that follows the time word

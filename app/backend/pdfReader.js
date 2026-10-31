@@ -35,7 +35,8 @@ const TABLE_RULE = ` If the pages are a TABLE of scenes (columns like SL NO, INT
 // how many scenes the text has: "SCENE n" lines, or else scene headings (INT./EXT.)
 export function countScenes(text) {
   const marked = (String(text).match(/^\s*SCENE\s+\d+/gim) || []).length;
-  return marked || (String(text).match(/^\s*(?:INT|EXT)\b/gim) || []).length;
+  const rows = (String(text).match(/^\s*\d{1,4}\s+(?:INT|EXT)\b/gim) || []).length; // a whole table row on one line
+  return rows + (marked || (String(text).match(/^\s*(?:INT|EXT)\b/gim) || []).length);
 }
 
 // kind "screenplay": the pages are a screenplay, so scene headings, character names, dialogue and

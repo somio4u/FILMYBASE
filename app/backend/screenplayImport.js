@@ -101,6 +101,7 @@ export function parseEpisodesFromText(rawText) {
   let episode = null;
   let scene = null;
   // A draft without "SCENE 1" lines (headings only): every heading starts a new scene. With "SCENE n" lines, a second heading inside a scene is a change of place.
+  const skippedBeforeFirstScene = []; // lines that come before any scene heading: they belong to no scene, so they are reported, never dropped quietly
   const hasSceneMarkers = lines.some((l) => SCENE_LINE.test(l));
 
   const startEpisode = (number, title) => {
@@ -148,7 +149,7 @@ export function parseEpisodesFromText(rawText) {
       }
       continue;
     }
-    if (!scene) continue;
+    if (!scene) { skippedBeforeFirstScene.push(line); continue; }
 
     const chars = CHARACTERS_LINE.exec(line);
     if (chars) {
@@ -197,6 +198,7 @@ export function parseEpisodesFromText(rawText) {
   }
 
   const flat = episodes.flatMap((e) => e.scenes.map((s) => ({ e, s })));
+  if (skippedBeforeFirstScene.length > 0 && flat.length > 0) warnings.push(`${skippedBeforeFirstScene.length} line${skippedBeforeFirstScene.length === 1 ? "" : "s"} before the first scene heading were not used (first: “${skippedBeforeFirstScene[0].slice(0, 60)}”).`);
   if (flat.length === 0) warnings.push("No scenes were found. Each scene needs a line like \"SCENE 1\" and a heading like \"INT. PLACE - DAY\".");
   for (const { e, s } of flat) {
     if (!s.heading) warnings.push(`Episode ${e.number}, scene ${s.number} has no heading (INT./EXT. place - time), so it was read as "INT. UNKNOWN - DAY".`);

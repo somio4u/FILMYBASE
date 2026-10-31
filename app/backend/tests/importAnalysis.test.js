@@ -136,3 +136,29 @@ test("headings with the time first and no dashes: 'Int Day Aditya house'", async
   assert.deepEqual(headingParts("Int Day Aditya house"), { intExt: "INT", location: "Aditya house", timeOfDay: "DAY" });
   assert.deepEqual(headingParts("Int Night Kitchen"), { intExt: "INT", location: "Kitchen", timeOfDay: "NIGHT" });
 });
+
+test("table rows copied on ONE line ('1 Ext Day Lonely Road …') are scenes too, and mix with 'SCENE n' scenes: nothing before the later batch is dropped", () => {
+  const text = `1 Ext Day Lonely Road Biswa babu is in car, a girl suddenly comes across his road
+2 INT Day Hospital corrpidor Smita byasta hei asanti, doctor kuhe he is okay
+3 Int Night Biswas house Biswa babu is stable and asks se jhia kouthi achi
+SCENE 50
+INT. ADITYA HOUSE - DAY
+Aditya is about to go to office and Anita stops semiti jantini take alati
+SCENE 51
+INT. ADITYA HOUSE DINNING - DAY
+Aditya is having brakefast, and she says ghre bu mun hin kare`;
+  const a = analyzeImportedText(text);
+  assert.equal(a.totals.scenes, 5);
+  assert.deepEqual(a.scenes.map((s) => s.number), ["1", "2", "3", "50", "51"]);
+  assert.match(a.scenes[0].oneLiner, /Biswa babu is in car/);
+  assert.equal(a.stage, "scene_list");
+});
+
+test("lines before the first scene heading are reported, never dropped quietly", () => {
+  const a = analyzeImportedText(`Some title page text
+SCENE 1
+INT. HOUSE - DAY
+Someone walks in and sits down by the window for a long time.`);
+  assert.equal(a.totals.scenes, 1);
+  assert.match(a.warnings.join(" "), /1 line before the first scene heading were not used \(first: “Some title page text”\)/);
+});

@@ -96,3 +96,10 @@ test("when far fewer scenes were read than the PDF has, a plain warning says so"
   const out = await readStoryFromPdf(PDF, { ask, kind: "screenplay" });
   assert.match(out.warnings.join(" "), /about 67 scenes, but only 18 were read/);
 });
+
+test("scene counting sees 'SCENE n' lines, bare headings and whole table rows on one line", async () => {
+  const { countScenes } = await import("../pdfReader.js");
+  assert.equal(countScenes("SCENE 1\nINT. A - DAY\nx\nSCENE 2\nEXT. B - DAY\ny"), 2);
+  assert.equal(countScenes("Int - Day - A\nx\nExt - Night - B\ny\nInt - Day - C"), 3);
+  assert.equal(countScenes("1 Ext Day Road one\n2 Int Day Room two\nSCENE 50\nINT. X - DAY\nz"), 3);
+});

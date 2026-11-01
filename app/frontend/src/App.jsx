@@ -11178,8 +11178,18 @@ function App() {
       loadProject(currentUser.conceptId)
     } else {
       const savedConceptId = localStorage.getItem(CURRENT_CONCEPT_STORAGE_KEY)
-      if (savedConceptId) {
+      if (savedConceptId && currentUser.role === 'admin') {
         loadProject(savedConceptId)
+      } else if (savedConceptId) {
+        // The remembered project may belong to ANOTHER login that used this same phone / browser (the admin's, for example). A login that works on its own
+        // projects only reopens it when it is really on its own list — otherwise the screen would open a project it may not touch ("no access").
+        fetch(`${BACKEND_URL}/api/concepts`)
+          .then((res) => (res.ok ? res.json() : []))
+          .then((list) => {
+            if (Array.isArray(list) && list.some((project) => String(project.id) === String(savedConceptId))) loadProject(savedConceptId)
+            else localStorage.removeItem(CURRENT_CONCEPT_STORAGE_KEY)
+          })
+          .catch(() => {})
       }
     }
 

@@ -988,6 +988,11 @@ const LABELS = {
     scheduleSpecialInstructionsPlaceholder: 'e.g. "Shoot linearly by location. 5 days, 6am-11am each day, but the last day should be a full night shoot at the restaurant/pub."',
     waitingOnProductionManagerNotice: 'Waiting on the Production Manager to make the shoot schedule.',
     waitingOnProductionManagerImportNotice: 'Waiting for the script to be brought in and broken down.',
+    productionUploadTitle: 'Upload the screenplay',
+    productionUploadIntro: 'Bring the screenplay in from a file — PDF, Word, Excel, Final Draft, Scrite or text. Anything the file holds that is a scene is read; you can then break the script down. Uploading again later replaces it with the newer one (the cast you assigned is kept).',
+    productionUploadButton: 'Choose a screenplay file',
+    productionUploadWorking: 'Reading the screenplay…',
+    productionUploadFormats: 'Works with PDF, Word (.docx, .doc), Excel (.xlsx), Final Draft (.fdx), Scrite (.scrite), Fountain and text files.',
     availabilityFormIntro: "Before I build the shoot schedule, give me a rough idea of when your main characters (artists) and locations are free. Anything you don't know yet, just mark \"unknown\" — I'll estimate it.",
     characterAvailabilityHeading: 'When are the artists free?',
     locationAvailabilityHeading: 'When are the locations free?',
@@ -1943,6 +1948,11 @@ const LABELS = {
     scheduleSpecialInstructionsPlaceholder: 'ଯେମିତି: "ଲୋକେସନ୍ ହିସାବରେ ଗୋଟିକ ପରେ ଗୋଟେ ସୁଟ୍ କର। ୫ ଦିନ, ରୋଜ ସକାଳ ୬ ଟାରୁ ୧୧ ଟା, କିନ୍ତୁ ଶେଷ ଦିନ ରେଷ୍ଟୁରାଣ୍ଟ/ପବ୍‌ରେ ପୂରା ରାତି ସୁଟିଂ।"',
     waitingOnProductionManagerNotice: 'ପ୍ରଡକ୍ସନ୍ ମ୍ୟାନେଜର୍ ସୁଟିଂ ସିଡ୍ୟୁଲ୍ ବନେଇବା ଯାଏ ଟିକେ ରହ।',
     waitingOnProductionManagerImportNotice: 'ସ୍କ୍ରିପ୍ଟ ଇମ୍ପୋର୍ଟ ହେଇ ବ୍ରେକଡାଉନ୍ ହେବା ଯାଏ ଟିକେ ରହ।',
+    productionUploadTitle: 'ସ୍କ୍ରିନପ୍ଲେ ଅପଲୋଡ୍ କର',
+    productionUploadIntro: 'ଫାଇଲରୁ ସ୍କ୍ରିନପ୍ଲେ ଆଣ — PDF, Word, Excel, Final Draft, Scrite କିମ୍ବା ଟେକ୍ସଟ୍। ପରେ ଆଉଥରେ ଅପଲୋଡ୍ କଲେ ନୂଆଟି ପୁରୁଣାକୁ ବଦଳାଇଦେବ (ତୁମେ ଦେଇଥିବା କାଷ୍ଟ ରହିବ)।',
+    productionUploadButton: 'ସ୍କ୍ରିନପ୍ଲେ ଫାଇଲ୍ ବାଛ',
+    productionUploadWorking: 'ସ୍କ୍ରିନପ୍ଲେ ପଢ଼ା ଚାଲିଛି…',
+    productionUploadFormats: 'PDF, Word (.docx, .doc), Excel (.xlsx), Final Draft (.fdx), Scrite (.scrite), Fountain ଓ ଟେକ୍ସଟ୍ ଫାଇଲ୍ ଚଳେ।',
     availabilityFormIntro: 'ସୁଟିଂ ସିଡ୍ୟୁଲ୍ ବନେଇବା ଆଗରୁ, ତୋ ମେନ୍ ଚରିତ୍ର (ଆର୍ଟିଷ୍ଟ) ଆଉ ଲୋକେସନ୍ କେବେ ଖାଲି ଅଛନ୍ତି ମୋଟାମୋଟି କହ। ଯାହା ଜାଣିନୁ ସେଥିରେ "ଜଣାନାହିଁ" ଦେଇଦେ — ମୁଁ ଆନ୍ଦାଜ କରିନେବି।',
     characterAvailabilityHeading: 'ଆର୍ଟିଷ୍ଟ କେବେ ଖାଲି?',
     locationAvailabilityHeading: 'ଲୋକେସନ୍ କେବେ ମିଳିବ?',
@@ -9307,6 +9317,9 @@ function App() {
   const [importScreenplayText, setImportScreenplayText] = useState('')
   const [isImportingScreenplay, setIsImportingScreenplay] = useState(false)
   const [isImportingScreenplayFile, setIsImportingScreenplayFile] = useState(false)
+  const productionUploadRef = useRef(null)
+  const [isUploadingProductionScreenplay, setIsUploadingProductionScreenplay] = useState(false)
+  const [showNewProductionImport, setShowNewProductionImport] = useState(false) // a project that already has its screenplay: start ANOTHER production project from a file
   const [showReimportForm, setShowReimportForm] = useState(false)
   const [reimportScreenplayText, setReimportScreenplayText] = useState('')
   const [isReimportingScreenplay, setIsReimportingScreenplay] = useState(false)
@@ -13580,6 +13593,7 @@ function App() {
       }
 
       setImportScreenplayText('')
+      setShowNewProductionImport(false)
       await loadProject(data.conceptId)
       loadProjectList()
       setToastMessage(t.screenplayUploadedToast)
@@ -13658,6 +13672,38 @@ function App() {
     setIsReimportingScreenplay(false)
   }
 
+  // Production Management → the Production Manager (or admin) brings a screenplay file into THIS project (any format the server can read)
+  async function handleProductionScreenplayFile(event) {
+    const file = event.target.files[0]
+    event.target.value = ''
+    if (!file || !conceptId) return
+
+    setIsUploadingProductionScreenplay(true)
+    setErrorMessage(null)
+    setToastMessage(null)
+
+    try {
+      const formData = new FormData()
+      formData.append('file', file)
+      formData.append('format', JSON.stringify(buildFormatObject()))
+      const response = await fetch(`${BACKEND_URL}/api/concepts/${conceptId}/production-screenplay`, { method: 'POST', body: formData })
+      const { data, problem } = await readServerAnswer(response)
+      if (!response.ok || !data) {
+        setErrorMessage(data?.error || problem || t.genericError)
+      } else {
+        await loadProject(conceptId)
+        loadProjectList()
+        const added = data.changes?.addedScenes?.length ?? 0
+        const removed = data.changes?.removedScenes?.length ?? 0
+        setToastMessage(data.reimported ? `Screenplay replaced with the new file${added || removed ? ` — ${added} scene${added === 1 ? '' : 's'} added, ${removed} no longer there` : ''}.` : t.screenplayUploadedToast)
+      }
+    } catch {
+      setErrorMessage('Could not reach the server — it may be waking up. Wait a minute and choose the file again.')
+    }
+
+    setIsUploadingProductionScreenplay(false)
+  }
+
   async function handleImportScreenplayFileSelected(event) {
     const file = event.target.files[0]
     event.target.value = ''
@@ -13684,6 +13730,7 @@ function App() {
         return
       }
 
+      setShowNewProductionImport(false)
       await loadProject(data.conceptId)
       loadProjectList()
       setToastMessage(t.screenplayUploadedToast)
@@ -16731,8 +16778,53 @@ function App() {
             <p className="sidebar-section-note">{t.waitingOnProductionManagerImportNotice}</p>
           )}
 
-          {!(sceneList && sceneList.status === 'approved') && canAnalyzeScript && (
+          {(currentUser?.role === 'production_manager' || currentUser?.role === 'admin') && conceptId && (!(sceneList && sceneList.status === 'approved') || sceneList.sourceText != null) && (
+            <div className="skip-ahead-form production-upload-card">
+              <h3>{t.productionUploadTitle}</h3>
+              <p className="availability-form-intro">{t.productionUploadIntro}</p>
+              <div className="format-picker">
+                <h4 className="format-picker-title">{t.formatQuestion}</h4>
+                <div className="format-picker-row">
+                  <label className="format-radio">
+                    <input type="radio" name="production-upload-format" value="film" checked={formatType === 'film'} onChange={() => setFormatType('film')} />
+                    {t.filmOption}
+                  </label>
+                  <label className="format-radio">
+                    <input type="radio" name="production-upload-format" value="series" checked={formatType === 'series'} onChange={() => setFormatType('series')} />
+                    {t.seriesOption}
+                  </label>
+                </div>
+                {formatType === 'series' ? (
+                  <div className="episode-fields">
+                    <label>{t.episodeCountLabel}<input type="number" min="1" value={episodeCount} onChange={(e) => setEpisodeCount(e.target.value)} /></label>
+                    <label>{t.episodeMinutesLabel}<input type="number" min="1" value={episodeMinutes} onChange={(e) => setEpisodeMinutes(e.target.value)} /></label>
+                  </div>
+                ) : (
+                  <div className="episode-fields">
+                    <label>{t.runtimeMinutesLabel}<input type="number" min="1" value={runtimeMinutes} onChange={(e) => setRuntimeMinutes(e.target.value)} /></label>
+                  </div>
+                )}
+              </div>
+              <button className="import-export-button screenplay-file-button" onClick={() => productionUploadRef.current?.click()} disabled={isUploadingProductionScreenplay}>
+                <span className="import-export-icon">{ICONS.upload}</span>
+                {isUploadingProductionScreenplay ? t.productionUploadWorking : t.productionUploadButton}
+              </button>
+              <input type="file" accept=".txt,.md,.fountain,.pdf,.docx,.doc,.xlsx,.fdx,.scrite" ref={productionUploadRef} onChange={handleProductionScreenplayFile} style={{ display: 'none' }} />
+              <p className="screenplay-file-formats-note">{t.productionUploadFormats}</p>
+              <AnalyzingProgressBar active={isUploadingProductionScreenplay} label={t.productionUploadWorking} estimatedSeconds={60} />
+            </div>
+          )}
+
+          {canAnalyzeScript && sceneList && sceneList.status === 'approved' && !showNewProductionImport && (
+            <button className="import-export-button" onClick={() => setShowNewProductionImport(true)}>
+              <span className="import-export-icon">{ICONS.upload}</span>
+              Start a NEW production project from a screenplay file
+            </button>
+          )}
+
+          {canAnalyzeScript && (!(sceneList && sceneList.status === 'approved') || showNewProductionImport) && (
             <div className="skip-ahead-form">
+              {sceneList && sceneList.status === 'approved' && <p className="feedback-note">This makes a separate new project; the one you have open stays as it is.</p>}
               <p className="availability-form-intro">{t.importScreenplayIntro}</p>
 
               <div className="format-picker">
@@ -16806,7 +16898,7 @@ function App() {
               </button>
               <input
                 type="file"
-                accept=".txt,.fountain,.pdf,.docx,.doc,.fdx,.scrite"
+                accept=".txt,.fountain,.pdf,.docx,.doc,.xlsx,.fdx,.scrite"
                 ref={screenplayFileInputRef}
                 onChange={handleImportScreenplayFileSelected}
                 style={{ display: 'none' }}

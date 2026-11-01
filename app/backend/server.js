@@ -8693,6 +8693,53 @@ app.post(
   }
 );
 
+// Production Management → "Upload the screenplay" for a Production Manager (and the admin), into the project they are working on. Any file the app can read
+// (PDF, Word, Excel, Final Draft, Scrite, text) or pasted text.
+//   · the project has no screenplay for production yet  → the upload becomes its script, ready for "Break down the script"
+//   · the project's script was brought in by an upload before → it is replaced by the newer one, with the usual summary of what changed (cast and notes kept)
+//   · the screenplay was written inside the app (Story side) → refused with a plain note: Synchronize is how production follows that one
+app.post("/api/concepts/:id/production-screenplay", requireRole("admin", "production_manager"), screenplayUpload.single("file"), async (req, res) => {
+  if (!requireConceptAccess(req, req.params.id)) {
+    res.status(403).json({ error: "You don't have access to this project." });
+    return;
+  }
+  try {
+    const text = String(req.file ? await extractTextFromUploadedScreenplay(req.file) : req.body?.pastedText ?? "").trim();
+    if (!text) {
+      res.status(400).json({ error: req.file ? "Couldn't find any readable text in that file." : "Choose a screenplay file or paste the screenplay first." });
+      return;
+    }
+    let format = req.body?.format ?? null;
+    if (typeof format === "string") { try { format = JSON.parse(format); } catch { format = null; } }
+
+    const existing = (await db.query(
+      `SELECT sl.id, sl.content FROM scene_lists sl
+       LEFT JOIN bit_sheets bs ON bs.id = sl.bit_sheet_id
+       LEFT JOIN three_act_structures tas ON tas.id = bs.three_act_structure_id
+       LEFT JOIN pitch_decks pd ON pd.id = tas.pitch_deck_id
+       WHERE COALESCE(sl.concept_id, pd.concept_id) = $1 ORDER BY sl.id DESC LIMIT 1`,
+      [req.params.id]
+    )).rows[0];
+
+    if (!existing) {
+      const { sceneListContent } = await parseScreenplayIntoSceneListContent(text, format);
+      const inserted = await db.query("INSERT INTO scene_lists (concept_id, content, status) VALUES ($1, $2, 'approved') RETURNING id", [req.params.id, JSON.stringify(sceneListContent)]);
+      res.json({ created: true, sceneListId: inserted.rows[0].id });
+      return;
+    }
+    if (!existing.content?.sourceText) {
+      res.status(409).json({ error: "This project's screenplay was written inside the app, so there is nothing to replace. Press “Synchronize now” to bring production up to date with it. To work from a different screenplay file, start a new production project with it." });
+      return;
+    }
+    const result = await reimportScreenplayForSceneList(existing.id, text, format);
+    if (result.error) { res.status(result.status).json({ error: result.error }); return; }
+    res.json({ reimported: true, sceneListId: existing.id, ...result.body });
+  } catch (error) {
+    console.error("Production screenplay upload failed:", error.message);
+    res.status(/^Unsupported file type/.test(error.message ?? "") ? 400 : 502).json({ error: error.message });
+  }
+});
+
 // A 'story' type concept's own title stays NULL until the user manually
 // renames it — the pasted idea text (e.g. "i need a gen z drama in
 // bhubaneswar...") was showing up as the project name everywhere (All

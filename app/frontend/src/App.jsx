@@ -3,6 +3,7 @@ import SmartScheduler from './SmartScheduler.jsx'
 import AdPapers from './AdPapers.jsx'
 import AiSettings from './AiSettings.jsx'
 import SyncProduction from './SyncProduction.jsx'
+import PacketPrep from './PacketPrep.jsx'
 import NamesPlaces from './NamesPlaces.jsx'
 import { useState, useEffect, useRef, useMemo, useCallback, useContext, createContext, Fragment, lazy, Suspense } from 'react'
 import { createPortal } from 'react-dom'
@@ -17082,6 +17083,7 @@ function App() {
               }}
             />
           )}
+          {canEditProduction && !isScreenplayWriter && <PacketPrep backendUrl={BACKEND_URL} sceneListId={sceneList.id} />}
           <h2>{t.scriptBreakdownHeading}</h2>
 
           {scriptBreakdown?.autoBackfillStatus === 'in_progress' && (

@@ -11,7 +11,7 @@ import { Pool } from "pg";
 import ScriptAwarePDF from "./mixedScriptPdf.js";
 import ExcelJS from "exceljs";
 import { extractTextFromSpreadsheet } from "./spreadsheetText.js";
-import { buildCharacterPacket, scenesFromSourceText, scenesFromWrittenScreenplay, writeCharacterPacketPdf, writeCharacterPacketExcel } from "./characterPacket.js";
+import { buildCharacterPacket, createPacketStore, ensurePacketCacheSchema, packetKey, packetCharacters, scenesFromSourceText, scenesFromWrittenScreenplay, writeCharacterPacketPdf, writeCharacterPacketExcel } from "./characterPacket.js";
 import PptxGenJS from "pptxgenjs";
 import { buildCastingPpt } from "./castingPpt.js";
 import { lengthRule } from "./aiMovieLength.js";
@@ -41,7 +41,7 @@ import { registerDesignTaskRoutes } from "./designTasks.js";
 import { registerSubmissionRoutes, designerGatekeeper, DESIGNER_ROLE } from "./designSubmissions.js";
 import { sessionTokenOf } from "./sessionToken.js";
 import { analyzeImportedText, numberedHeadingsToPlain, reportLines } from "./importAnalysis.js";
-import { ADD_KIND, createWriteScenesJobs, publicView as publicWriteJob } from "./writeScenesJobs.js";
+import { ADD_KIND, PREPARE_PACKETS_KIND, createWriteScenesJobs, publicView as publicWriteJob } from "./writeScenesJobs.js";
 import { countOdiaWords, textsOfScene, textsOfSceneList } from "./odiaCorpus.js";
 import { languageOf, parseEpisodesFromText, sceneContent } from "./screenplayImport.js";
 import { planFill } from "./pdfFill.js";
@@ -1607,6 +1607,8 @@ const PRODUCTION_ONLY_ROUTES = [
   ["POST", /^\/api\/scene-lists\/(\d+)\/reimport-screenplay(\/file)?$/, "sceneList"],
   ["POST", /^\/api\/scene-lists\/(\d+)\/sync-production$/, "sceneList"],
   ["GET", /^\/api\/scene-lists\/(\d+)\/sync-production\/[\w-]+$/, "sceneList"],
+  ["GET", /^\/api\/scene-lists\/(\d+)\/packet-jobs\/current$/, "sceneList"],
+  ["POST", /^\/api\/scene-lists\/(\d+)\/packet-jobs(\/[\w-]+\/stop)?$/, "sceneList"],
   ["GET", /^\/api\/scene-lists\/(\d+)\/(breakdown-freshness|director-overview|character-script(\/export|\/export-excel|\/share-link)?)$/, "sceneList"],
   ["GET", /^\/api\/screenplay\/scenes$/, "querySceneList"],
   ["POST", /^\/api\/script-breakdown$/, "bodySceneList"],
@@ -15090,7 +15092,11 @@ async function generateCharacterScript(sourceText, characterLabel) {
 
 // The packet an artist is sent (characterPacket.js): the character's details, arc and emotional graph, then every scene they are in, in full.
 // Returns null when the script's scenes cannot be cut out by plain code (an unusual layout) or the name is not found in them — the older AI way below is used then.
-async function characterPacketFor(sceneListId, characterLabel, lang) {
+// what the AI made for a packet is kept in the database (character_packet_cache), under a key that changes the moment the scenes or the character sheet change
+const packetStore = createPacketStore(db);
+
+// the scenes (cut out whole) and the character sheet of a project, or null when its scenes cannot be cut out by plain code
+async function characterPacketSource(sceneListId) {
   const row = (await db.query("SELECT content FROM scene_lists WHERE id = $1", [sceneListId])).rows[0];
   if (!row) return null;
   const scenes = row.content?.sourceText ? scenesFromSourceText(row.content.sourceText) : await scenesFromWrittenScreenplay(db, sceneListId, row.content);
@@ -15103,12 +15109,94 @@ async function characterPacketFor(sceneListId, characterLabel, lang) {
      WHERE sl.id = $1 ORDER BY cs.created_at DESC LIMIT 1`,
     [sceneListId]
   )).rows[0]?.content ?? null;
-  const packet = await buildCharacterPacket({
-    scenes, label: characterLabel, lang, sheetContent,
-    askModel: (contents, schema) => generateJsonContent({ model: GEMINI_MODEL_NAME, contents, config: { responseMimeType: "application/json", maxOutputTokens: 8192, responseSchema: schema } }),
-  });
+  const artistNames = ((await db.query("SELECT content FROM script_breakdowns WHERE scene_list_id = $1 ORDER BY created_at DESC LIMIT 1", [sceneListId])).rows[0]?.content?.artistList ?? []).map((a) => a.label);
+  return { scenes, sheetContent, artistNames };
+}
+
+const askPacketModel = (contents, schema) => generateJsonContent({ model: GEMINI_MODEL_NAME, contents, config: { responseMimeType: "application/json", maxOutputTokens: 8192, responseSchema: schema } });
+
+// Returns null when the script's scenes cannot be cut out by plain code (an unusual layout) or the name is not found in them — the older AI way below is used then.
+async function characterPacketFor(sceneListId, characterLabel, lang) {
+  const source = await characterPacketSource(sceneListId);
+  if (!source) return null;
+  const packet = await buildCharacterPacket({ scenes: source.scenes, label: characterLabel, lang, sheetContent: source.sheetContent, askModel: askPacketModel, store: packetStore, meta: { sceneListId: Number(sceneListId) } });
   return packet.scenes.length > 0 ? packet : null;
 }
+
+// ---- "Prepare all artist scripts": every character x language is made BEFORE it is needed, as a background job with a progress card (kind "prepare-packets"),
+// so sending a link or opening a PDF finds the details, arc and emotional graph already there instead of waiting for the AI.
+const PACKET_LANGUAGES = ["en", "or", "hi"];
+const PACKET_LANGUAGE_NAME = { en: "English", or: "Odia", hi: "Hindi" };
+
+async function packetPlan(sceneListId, languages = PACKET_LANGUAGES) {
+  const source = await characterPacketSource(sceneListId);
+  if (!source) return { characters: [], items: [], ready: 0, total: 0 };
+  const characters = packetCharacters(source.scenes, source.artistNames);
+  const items = [];
+  let ready = 0;
+  for (const name of characters) {
+    for (const lang of languages) {
+      const { key } = packetKey({ scenes: source.scenes, label: name, lang, sheetContent: source.sheetContent });
+      const done = Boolean(await packetStore.get(key));
+      if (done) ready += 1;
+      else items.push({ episodeIndex: null, sceneIndex: items.length, label: `${name} (${PACKET_LANGUAGE_NAME[lang]})`, character: name, lang, sceneListId: Number(sceneListId) });
+    }
+  }
+  return { characters, items, ready, total: characters.length * languages.length };
+}
+
+const preparePacketJobs = createWriteScenesJobs({
+  jobStore,
+  kind: PREPARE_PACKETS_KIND,
+  isWritten: async (item) => {
+    const source = await characterPacketSource(item.sceneListId);
+    if (!source) return true; // nothing to prepare any more
+    return Boolean(await packetStore.get(packetKey({ scenes: source.scenes, label: item.character, lang: item.lang, sheetContent: source.sheetContent }).key));
+  },
+  describe: (item, number, total) => `Preparing the script of ${item.label} — details, arc and emotional graph (${number} of ${total})`,
+  writeOne: async (item) => {
+    const source = await characterPacketSource(item.sceneListId);
+    if (!source) return;
+    const packet = await buildCharacterPacket({ scenes: source.scenes, label: item.character, lang: item.lang, sheetContent: source.sheetContent, askModel: askPacketModel, store: packetStore, meta: { sceneListId: item.sceneListId } });
+    if (packet.scenes.length > 0 && !packet.insights) throw new Error("The AI could not make the details, arc and emotional graph this time.");
+  },
+});
+
+// starts the job for the characters / languages that are not ready yet (a second press while one runs just returns that one)
+async function startPacketJob(sceneListId, userId, languages) {
+  const chosen = PACKET_LANGUAGES.filter((l) => (languages ?? PACKET_LANGUAGES).includes(l));
+  const plan = await packetPlan(sceneListId, chosen.length ? chosen : PACKET_LANGUAGES);
+  if (plan.items.length === 0) return { job: null, plan };
+  const { job, alreadyRunning } = await preparePacketJobs.start({ sceneListId: Number(sceneListId), userId, items: plan.items, language: "en" });
+  return { job, plan, alreadyRunning };
+}
+
+const packetRoutes = (path) => `/api/scene-lists/:id/packet-jobs${path}`;
+app.get(packetRoutes("/current"), requireRole("admin", "production_manager"), async (req, res) => {
+  const sceneListId = Number(req.params.id);
+  if (!(await userOwnsSceneList(req.user, sceneListId))) { res.status(403).json({ error: "You don't have access to this project." }); return; }
+  const job = await preparePacketJobs.currentFor(sceneListId);
+  const plan = await packetPlan(sceneListId);
+  res.json({ job: publicWriteJob(job), ready: plan.ready, total: plan.total, characters: plan.characters.length });
+});
+app.post(packetRoutes(""), requireRole("admin", "production_manager"), async (req, res) => {
+  const sceneListId = Number(req.params.id);
+  if (!(await userOwnsSceneList(req.user, sceneListId))) { res.status(403).json({ error: "You don't have access to this project." }); return; }
+  try {
+    const { job, plan, alreadyRunning } = await startPacketJob(sceneListId, req.user.id, Array.isArray(req.body?.languages) ? req.body.languages : null);
+    res.json({ job: publicWriteJob(job), ready: plan.ready, total: plan.total, alreadyRunning: Boolean(alreadyRunning), nothingToDo: !job });
+  } catch (error) {
+    console.error("Starting the artist-script preparation failed:", error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+app.post(packetRoutes("/:jobId/stop"), requireRole("admin", "production_manager"), async (req, res) => {
+  const sceneListId = Number(req.params.id);
+  if (!(await userOwnsSceneList(req.user, sceneListId))) { res.status(403).json({ error: "You don't have access to this project." }); return; }
+  const job = await preparePacketJobs.get(req.params.jobId);
+  if (!job || job.sceneListId !== sceneListId) { res.status(404).json({ error: "This job was not found." }); return; }
+  res.json({ stopped: await preparePacketJobs.stop(req.params.jobId) });
+});
 
 function renderCharacterPacketPdf(res, packet) {
   const doc = new ScriptAwarePDF({ size: "A4", margin: 50, info: { Title: `Character script — ${packet.character}` } });
@@ -21325,6 +21413,8 @@ registerAiSettingsRoutes(app, db, {
 const productionSync = registerProductionSyncRoutes(app, db, {
   jobStore, requireRole, userOwnsSceneList, buildBreakdownSourceText, generateDeepScriptBreakdownContent,
   flattenScenesForAdSheet, generateAdSheetDetails, fetchCharacterNamesForSceneList, generateShootScheduleContent,
+  // once the screenplay has been synchronized, every artist's script is prepared in the background, so it is ready when it is sent
+  afterSync: (sceneListId, userId) => startPacketJob(sceneListId, userId ?? null, null).catch((error) => console.error("Preparing the artist scripts after Synchronize failed:", error.message)),
 });
 // "Approval format" Word file (narrated Hinglish retelling of the episodes; see approvalFormat.js) — the AI only retells each scene
 registerApprovalFormatRoutes(app, db, {
@@ -21366,11 +21456,12 @@ ensureAiMovieSchema()
   .then(() => ensureSmartSchedulerSchema(db))
   .then(() => ensureLocationRenameSchema(db))
   .then(() => ensureJobSchema(db))
+  .then(() => ensurePacketCacheSchema(db))
   .then(() => ensureAiCredentialsSchema(db))
   .then(async () => { try { await aiCredentials.load(); aiCredentials.startRefresh(); const c = aiCredentials.current(); console.log(`AI connection: ${c.source}${c.serviceAccount ? ` — project ${c.serviceAccount.project_id}, ${c.location}` : ""}${c.problem ? ` — PROBLEM: ${c.problem}` : ""}`); } catch (error) { console.error("Reading the saved AI key failed:", error.message); } })
   .then(async () => { try { const fixed = await repairStoredLabels(db); if (fixed) console.log(`Screenplay: ${fixed} scene(s) had "ACTION:" written at the start of lines — corrected.`); } catch (error) { console.error("Label repair failed:", error.message); } })
   .then(async () => { try { const fixed = await repairStoredTransitions(db); if (fixed) console.log(`Screenplay: ${fixed} scene(s) had a transition (FREEZE. BREAK- …) written as a character — corrected.`); } catch (error) { console.error("Transition repair failed:", error.message); } })
-  .then(async () => { try { await productionSync.resume(); await resumeAdSheetJobs(); await skipStartJobs.resume(); await writeScenesJobs.resume(); await addScenesJobs.resume(); } catch (error) { console.error("Resuming interrupted background jobs failed:", error.message); } })
+  .then(async () => { try { await productionSync.resume(); await resumeAdSheetJobs(); await skipStartJobs.resume(); await writeScenesJobs.resume(); await addScenesJobs.resume(); await preparePacketJobs.resume(); } catch (error) { console.error("Resuming interrupted background jobs failed:", error.message); } })
   .then(() => ensureAllProductionSchemas(db))
   .then(async (failures) => { try { const made = await backfillDrafts(db); await failInterruptedRequests(db); if (made) console.log(`Draft Management: ${made} existing project(s) are now Draft 1 of their project.`); } catch (error) { console.error("Draft backfill failed:", error.message); } return failures; })
   .catch((error) => console.error("Schema setup failed:", error.message))

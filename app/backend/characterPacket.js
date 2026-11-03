@@ -5,6 +5,7 @@
 //
 // The scenes are cut out of the script by plain code (nothing is reworded, nothing is invented). Only the arc, the emotions and the objective of each scene
 // come from the AI — one call per character — and if that call fails the packet is still sent, with the scenes in full and a note instead of the arc.
+import crypto from "node:crypto";
 import { Type } from "@google/genai";
 import { parseEpisodesFromText } from "./screenplayImport.js";
 import { numberedHeadingsToPlain } from "./importAnalysis.js";
@@ -173,22 +174,67 @@ export function cleanInsights(raw, scenes) {
   return { profile, arc, perScene };
 }
 
-const cache = new Map(); // short-lived: the same packet opened again (a WhatsApp link opened twice) does not ask the AI again
+// ---- the database copy of what the AI made ---
+export async function ensurePacketCacheSchema(db) {
+  await db.query(`CREATE TABLE IF NOT EXISTS character_packet_cache (
+    cache_key TEXT PRIMARY KEY, scene_list_id INTEGER, character_name TEXT NOT NULL DEFAULT '', lang TEXT NOT NULL DEFAULT '',
+    insights JSONB NOT NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT now())`);
+}
+
+export function createPacketStore(db) {
+  return {
+    async get(key) { return (await db.query("SELECT insights FROM character_packet_cache WHERE cache_key = $1", [key])).rows[0]?.insights ?? null; },
+    async set(key, insights, meta) {
+      await db.query(
+        `INSERT INTO character_packet_cache (cache_key, scene_list_id, character_name, lang, insights) VALUES ($1, $2, $3, $4, $5)
+         ON CONFLICT (cache_key) DO UPDATE SET insights = EXCLUDED.insights, created_at = now()`,
+        [key, meta?.sceneListId ?? null, String(meta?.character ?? ""), String(meta?.lang ?? ""), JSON.stringify(insights)]
+      );
+    },
+  };
+}
+
+// ---- keeping what the AI made ---------------------------------------------------------------------------------------------------------
+// The details, arc and emotions of a packet are kept: in memory for a short while, and (when a `store` is given) in the database for good, under a key made
+// from the character, the language, the sheet facts and the scenes themselves — so the moment the screenplay changes, the old answer simply stops matching.
+const cache = new Map();
 const CACHE_MINUTES = 30;
 
-// the whole packet. `askModel(contents, schema)` returns the AI's JSON; `sheetContent` is the project's character sheet (or null)
-export async function buildCharacterPacket({ scenes, label, lang = "en", sheetContent = null, askModel, now = Date.now() }) {
+export function packetKey({ scenes, label, lang = "en", sheetContent = null }) {
   const mine = scenesWithCharacter(scenes, label);
+  const digest = JSON.stringify([label.toLowerCase(), lang, sheetFacts(sheetContent, label), mine.map((s, i) => sceneDigest(s, label, sceneKey(s, i)))]);
+  return { key: crypto.createHash("sha1").update(digest).digest("hex"), mine };
+}
+
+// who gets a packet: the names given (the breakdown's artist list) that really are in the scenes, else the speakers of the scenes
+export function packetCharacters(scenes, names = []) {
+  const given = [];
+  for (const raw of names) {
+    const name = String(raw ?? "").trim();
+    if (name && !given.some((g) => g.toLowerCase() === name.toLowerCase())) given.push(name); // the first spelling is kept
+  }
+  const pick = given.length > 0 ? given : [...new Map(scenes.flatMap((s) => s.elements).filter((e) => e.type === "dialogue" && e.character).map((e) => [nameTokens(e.character).join(" "), String(e.character).trim()])).values()];
+  return pick.filter((name) => scenesWithCharacter(scenes, name).length > 0).slice(0, 60);
+}
+
+// the whole packet. `askModel(contents, schema)` returns the AI's JSON; `sheetContent` is the project's character sheet (or null);
+// `store` = { get(key), set(key, insights, meta) } keeps the AI part between visits (optional)
+export async function buildCharacterPacket({ scenes, label, lang = "en", sheetContent = null, askModel, store = null, now = Date.now(), meta = {} }) {
+  const { key, mine } = packetKey({ scenes, label, lang, sheetContent });
   const packet = { character: label, lang, scenes: mine, insights: null, note: "" };
   if (mine.length === 0) return packet;
-  const facts = sheetFacts(sheetContent, label);
-  const cacheKey = JSON.stringify([label, lang, facts, mine.map((s, i) => sceneDigest(s, label, sceneKey(s, i)))]);
-  const hit = cache.get(cacheKey);
+  const hit = cache.get(key);
   if (hit && now - hit.at < CACHE_MINUTES * 60 * 1000) return { ...packet, insights: hit.insights };
   try {
+    const kept = await store?.get(key);
+    if (kept) { cache.set(key, { at: now, insights: kept }); return { ...packet, insights: kept }; }
+  } catch (error) { console.error("Character packet: reading the kept answer failed:", error.message); }
+  try {
+    const facts = sheetFacts(sheetContent, label);
     const raw = await askModel(insightPrompt({ label, scenes: mine, facts, lang }), INSIGHT_SCHEMA);
     packet.insights = cleanInsights(raw, mine);
-    cache.set(cacheKey, { at: now, insights: packet.insights });
+    cache.set(key, { at: now, insights: packet.insights });
+    try { await store?.set(key, packet.insights, { character: label, lang, ...meta }); } catch (error) { console.error("Character packet: keeping the answer failed:", error.message); }
   } catch (error) {
     console.error("Character packet: the AI part (details, arc, emotions) failed:", error.message);
     packet.note = "The character details, arc and emotional graph could not be prepared this time. The scenes below are complete.";

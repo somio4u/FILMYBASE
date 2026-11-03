@@ -45,7 +45,7 @@ export function castCheck(artistLabels, crewRows) {
 
 export function registerProductionSyncRoutes(app, db, tools) {
   const { jobStore, requireRole, userOwnsSceneList, buildBreakdownSourceText, generateDeepScriptBreakdownContent,
-    flattenScenesForAdSheet, generateAdSheetDetails, fetchCharacterNamesForSceneList, generateShootScheduleContent } = tools;
+    flattenScenesForAdSheet, generateAdSheetDetails, fetchCharacterNamesForSceneList, generateShootScheduleContent, afterSync } = tools;
   const allowed = requireRole("admin", "production_manager");
 
   // every change of a job is also written to the database, so a restart of the server cannot make it vanish
@@ -116,6 +116,7 @@ export function registerProductionSyncRoutes(app, db, tools) {
       job.status = "done";
       job.finishedAt = Date.now();
       await persist(job);
+      try { await afterSync?.(sceneListId, job.userId); } catch (error) { console.error("After Synchronize:", error.message); }
     } catch (error) {
       console.error("Production sync failed:", error.message);
       const working = job.steps.find((s) => s.state === "working");

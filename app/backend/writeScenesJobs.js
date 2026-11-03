@@ -10,6 +10,7 @@ import { shouldResume } from "./jobStore.js";
 
 export const WRITE_KIND = "write-scenes";
 export const ADD_KIND = "add-scenes";
+export const PREPARE_PACKETS_KIND = "prepare-packets"; // "prepare all artist scripts" (characterPacket.js): the same machine, the items are characters x languages
 const GIVE_UP_AFTER_FAILURES_IN_A_ROW = 3; // three scenes in a row that could not be written means something is wrong (quota, key): stop and say so
 
 // what the screen may see

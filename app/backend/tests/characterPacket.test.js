@@ -181,3 +181,57 @@ test("the Excel file: the character, the emotional graph as a table, and the sce
   const buffer = await workbook.xlsx.writeBuffer(); // it really can be written
   assert.ok(buffer.byteLength > 1000);
 });
+
+// ---- kept for good (the database) ----
+import pg from "pg";
+import { ensurePacketCacheSchema, createPacketStore, packetKey, packetCharacters } from "../characterPacket.js";
+
+test("what the AI made is kept in the database: a second request (even after a restart) does not ask the AI again; a changed screenplay does; a failure is not kept", async () => {
+  const db = new pg.Pool({ database: process.env.TEST_DB || "filmmaking_app_test", user: process.env.PGUSER || "root", host: process.env.PGHOST || "/var/run/postgresql" });
+  try {
+    await ensurePacketCacheSchema(db);
+    await db.query("DELETE FROM character_packet_cache");
+    const store = createPacketStore(db);
+    const scenes = scenesFromSourceText(SCRIPT);
+    let asked = 0;
+    const answer = { profile: { summary: "Priest" }, arc: { start: "a", turningPoints: [], end: "b" }, scenes: [{ key: "1", emotion: "Fear", intensity: 6 }, { key: "2", emotion: "Calm", intensity: 2 }] };
+    const ask = async () => { asked += 1; return answer; };
+
+    const first = await buildCharacterPacket({ scenes, label: "Jagannath", store, askModel: ask, now: 2e12, meta: { sceneListId: 5 } });
+    assert.equal(asked, 1);
+    assert.equal(first.insights.perScene[0].emotion, "Fear");
+    const { key } = packetKey({ scenes, label: "Jagannath" });
+    assert.equal((await store.get(key)).profile.summary, "Priest");
+    assert.equal((await db.query("SELECT scene_list_id, character_name, lang FROM character_packet_cache WHERE cache_key = $1", [key])).rows[0].character_name, "Jagannath");
+
+    // "after a restart": the memory is gone (a much later clock), the database still has it
+    const again = await buildCharacterPacket({ scenes, label: "Jagannath", store, askModel: ask, now: 9e12 });
+    assert.equal(asked, 1);
+    assert.equal(again.insights.perScene[1].emotion, "Calm");
+
+    // the screenplay changed -> another key -> the AI is asked again
+    const changed = scenesFromSourceText(SCRIPT.replace("I will die before I sign.", "I will never sign."));
+    assert.notEqual(packetKey({ scenes: changed, label: "Jagannath" }).key, key);
+    await buildCharacterPacket({ scenes: changed, label: "Jagannath", store, askModel: ask, now: 9e12 });
+    assert.equal(asked, 2);
+
+    // another language is another packet
+    await buildCharacterPacket({ scenes, label: "Jagannath", lang: "or", store, askModel: ask, now: 9e12 });
+    assert.equal(asked, 3);
+
+    // a failure is never kept: the next try asks again
+    let calls = 0;
+    const failing = await buildCharacterPacket({ scenes, label: "Deba", store, askModel: async () => { calls += 1; throw new Error("quota"); }, now: 9e12 });
+    assert.equal(failing.insights, null);
+    await buildCharacterPacket({ scenes, label: "Deba", store, askModel: async () => { calls += 1; throw new Error("quota"); }, now: 9e12 });
+    assert.equal(calls, 2);
+    assert.equal(await store.get(packetKey({ scenes, label: "Deba" }).key), null);
+    await db.query("DELETE FROM character_packet_cache");
+  } finally { await db.end(); }
+});
+
+test("who gets a packet: the artist-list names that are really in the scenes, else the speakers", () => {
+  const scenes = scenesFromSourceText(SCRIPT);
+  assert.deepEqual(packetCharacters(scenes, ["Jagannath", "Balaram", "Ghost Who Is Nowhere", "jagannath"]), ["Jagannath", "Balaram"]);
+  assert.deepEqual(packetCharacters(scenes, []).sort(), ["BALARAM", "DEBA", "JAGANNATH"]);
+});

@@ -11,6 +11,7 @@ import { Pool } from "pg";
 import ScriptAwarePDF from "./mixedScriptPdf.js";
 import ExcelJS from "exceljs";
 import { extractTextFromSpreadsheet } from "./spreadsheetText.js";
+import { buildCharacterPacket, scenesFromSourceText, scenesFromWrittenScreenplay, writeCharacterPacketPdf, writeCharacterPacketExcel } from "./characterPacket.js";
 import PptxGenJS from "pptxgenjs";
 import { buildCastingPpt } from "./castingPpt.js";
 import { lengthRule } from "./aiMovieLength.js";
@@ -15087,6 +15088,46 @@ async function generateCharacterScript(sourceText, characterLabel) {
   return perChunkScenes.flat();
 }
 
+// The packet an artist is sent (characterPacket.js): the character's details, arc and emotional graph, then every scene they are in, in full.
+// Returns null when the script's scenes cannot be cut out by plain code (an unusual layout) or the name is not found in them — the older AI way below is used then.
+async function characterPacketFor(sceneListId, characterLabel, lang) {
+  const row = (await db.query("SELECT content FROM scene_lists WHERE id = $1", [sceneListId])).rows[0];
+  if (!row) return null;
+  const scenes = row.content?.sourceText ? scenesFromSourceText(row.content.sourceText) : await scenesFromWrittenScreenplay(db, sceneListId, row.content);
+  if (!scenes?.length) return null;
+  const sheetContent = (await db.query(
+    `SELECT cs.content FROM character_sheets cs
+     JOIN three_act_structures tas ON tas.pitch_deck_id = cs.pitch_deck_id
+     JOIN bit_sheets bs ON bs.three_act_structure_id = tas.id
+     JOIN scene_lists sl ON sl.bit_sheet_id = bs.id
+     WHERE sl.id = $1 ORDER BY cs.created_at DESC LIMIT 1`,
+    [sceneListId]
+  )).rows[0]?.content ?? null;
+  const packet = await buildCharacterPacket({
+    scenes, label: characterLabel, lang, sheetContent,
+    askModel: (contents, schema) => generateJsonContent({ model: GEMINI_MODEL_NAME, contents, config: { responseMimeType: "application/json", maxOutputTokens: 8192, responseSchema: schema } }),
+  });
+  return packet.scenes.length > 0 ? packet : null;
+}
+
+function renderCharacterPacketPdf(res, packet) {
+  const doc = new ScriptAwarePDF({ size: "A4", margin: 50, info: { Title: `Character script — ${packet.character}` } });
+  res.setHeader("Content-Type", "application/pdf");
+  res.setHeader("Content-Disposition", `attachment; filename="character-script-${packet.character.trim().replace(/\s+/g, "-")}-${formatExportTimestamp()}.pdf"`);
+  doc.pipe(res);
+  writeCharacterPacketPdf(doc, packet);
+  doc.end();
+}
+
+async function renderCharacterPacketExcel(res, packet) {
+  const workbook = new ExcelJS.Workbook();
+  writeCharacterPacketExcel(workbook, packet);
+  res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+  res.setHeader("Content-Disposition", `attachment; filename="character-script-${packet.character.trim().replace(/\s+/g, "-")}-${formatExportTimestamp()}.xlsx"`);
+  await workbook.xlsx.write(res);
+  res.end();
+}
+
 app.get("/api/scene-lists/:sceneListId/character-script", requireLogin, async (req, res) => {
   const { sceneListId } = req.params;
   const characterLabel = req.query.character;
@@ -15196,6 +15237,8 @@ app.get("/api/scene-lists/:sceneListId/character-script/export", requireLogin, a
       return;
     }
 
+    const packet = await characterPacketFor(sceneListId, characterLabel.trim(), lang);
+    if (packet) { renderCharacterPacketPdf(res, packet); return; }
     const sourceText = await buildBreakdownSourceText(sceneListResult.rows[0].content, sceneListId);
     const scenes = await generateCharacterScript(sourceText, characterLabel.trim());
     renderCharacterScriptPdf(res, characterLabel.trim(), lang, scenes);
@@ -15277,6 +15320,8 @@ app.get("/api/scene-lists/:sceneListId/character-script/export-excel", requireLo
       return;
     }
 
+    const packet = await characterPacketFor(sceneListId, characterLabel.trim(), lang);
+    if (packet) { await renderCharacterPacketExcel(res, packet); return; }
     const sourceText = await buildBreakdownSourceText(sceneListResult.rows[0].content, sceneListId);
     const scenes = await generateCharacterScript(sourceText, characterLabel.trim());
     await renderCharacterScriptExcel(res, characterLabel.trim(), lang, scenes);
@@ -15352,6 +15397,8 @@ app.get("/api/public/character-script", async (req, res) => {
       return;
     }
 
+    const packet = await characterPacketFor(sceneListId, character.trim(), lang);
+    if (packet) { renderCharacterPacketPdf(res, packet); return; }
     const sourceText = await buildBreakdownSourceText(sceneListResult.rows[0].content, sceneListId);
     const scenes = await generateCharacterScript(sourceText, character.trim());
     renderCharacterScriptPdf(res, character.trim(), lang, scenes);

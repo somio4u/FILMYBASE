@@ -2477,3 +2477,15 @@ Plain version: every project is now a set of **drafts**. Opening a project shows
 - Owner's intent: a person brings in a script written elsewhere and does ONLY the production management part. That is exactly what the **"Production only"** login is for (it uploads its own screenplays, breaks them down, schedules, and sees nothing of the Story side). A "Production Manager" login, by contrast, is attached by the admin to ONE existing project and cannot create projects.
 - **Fixed:** a non-admin login that works on its own projects used to reopen the project REMEMBERED by the phone's browser — which may be another login's (e.g. Maha Kali from the admin). That showed only "Synchronize" and "You don't have access to this project". It now reopens the remembered project only if it is on that login's own list; otherwise it is forgotten, and the upload form shows (and, with a project open, the button "Start a NEW production project from a screenplay file").
 - Not changed: giving the "Production Manager" role the same own-project powers (a bigger change; waiting for the owner's choice).
+
+## 2026-11-03 — Script packet for artists: character details, arc, emotional graph and the WHOLE scenes
+- **Asked:** when a script is sent to a character / artist it must carry the character's details, how the arc is made, how the emotional graph is made, and the entire scene (not only the dialogue) so the artist understands what is going on.
+- **Before:** only the scenes the character is in, and in a scene with dialogue only the dialogue lines (no action lines, no setting); no details, arc or emotion.
+- **Now (PDF, Excel and the WhatsApp link all use it):** 
+  1. **Character details** (who, age, look, relationships, wants, needs, flaw, voice) — from the project's character sheet where there is one, otherwise from the script. 
+  2. **Character arc** (starts as · 2–5 turning points · ends as). 
+  3. **Emotional graph** — a drawn line chart (intensity 1–10 per scene) plus the list "Scene n: emotion (x/10)". 
+  4. **Every scene the character is in, in full:** heading, action lines, every character's dialogue and acting notes exactly as written; the artist's own lines in bold; a red line under each heading: the emotion, the objective and an acting note; a scene where the character is only present (no lines) is marked. 
+  - The scenes are cut out of the script by plain code (nothing reworded or invented); only the arc, emotions and objectives come from the AI (one call per packet, kept 30 minutes so a link opened twice does not ask again). If the AI part fails, the packet is still sent with every scene and a note. Details/arc/notes are written in the language chosen for the packet (English / Odia / Hindi).
+  - If the script's layout cannot be cut into scenes, or the name is not found in it, the older AI way is used as before.
+- New file `characterPacket.js`; tests `characterPacket.test.js` (10). Looked at the PDF as a picture. Not verified with the live AI or on a real artist link; Odia dialogue prints in bold in the PDF (a font effect).

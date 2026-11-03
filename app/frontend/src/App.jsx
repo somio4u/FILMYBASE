@@ -8628,6 +8628,9 @@ function DirectorOverviewPanel({ sceneListId, t, BACKEND_URL }) {
 // Breakdown item — an actor's name/phone/photo against one character, or a
 // confirmed location name/photo against one location — rather than making
 // the user jump to the separate Crew & Cast tab and re-pick from a dropdown.
+// The script an artist is sent (the link, the PDF, the Excel file and the WhatsApp message) is written in Odia, whatever language the screen is shown in.
+const ARTIST_PACKET_LANGUAGE = 'or'
+
 function InlineCastAttachment({
   category,
   linkKey,
@@ -8669,7 +8672,7 @@ function InlineCastAttachment({
     setWhatsappSendingId(member.id)
     try {
       const res = await fetch(
-        `${BACKEND_URL}/api/scene-lists/${sceneListId}/character-script/share-link?character=${encodeURIComponent(linkKey)}&lang=${language}`
+        `${BACKEND_URL}/api/scene-lists/${sceneListId}/character-script/share-link?character=${encodeURIComponent(linkKey)}&lang=${ARTIST_PACKET_LANGUAGE}`
       )
       const data = await res.json()
       if (data.error || !data.url) {
@@ -8677,7 +8680,7 @@ function InlineCastAttachment({
         return
       }
       const message =
-        language === 'or'
+        ARTIST_PACKET_LANGUAGE === 'or'
           ? `ନମସ୍କାର ${member.name}! "${linkKey}"${projectTitle ? ` (${projectTitle})` : ''} ଚରିତ୍ର ପାଇଁ ଆପଣଙ୍କର ଦୃଶ୍ୟଗୁଡ଼ିକ ଏଠାରେ ଅଛି। ଦୟାକରି ଏହାକୁ ଦେଖନ୍ତୁ ଏବଂ ପ୍ରସ୍ତୁତ ହେଲେ ଏକ ସେଲ୍ଫ-ଟେପ୍ ଅଡିସନ୍ ପଠାନ୍ତୁ:\n${data.url}`
           : language === 'hi'
             ? `नमस्ते ${member.name}! "${linkKey}"${projectTitle ? ` (${projectTitle})` : ''} किरदार के लिए आपके दृश्य यहाँ हैं। कृपया इन्हें देखें और तैयार होने पर एक सेल्फ-टेप ऑडिशन भेजें:\n${data.url}`
@@ -8817,8 +8820,8 @@ function InlineCastAttachment({
           label={t.downloadAuditionSidesButton}
           className="breakdown-pdf-link audition-sides-link"
           title={t.auditionSidesHint}
-          pdfUrl={`${BACKEND_URL}/api/scene-lists/${sceneListId}/character-script/export?character=${encodeURIComponent(linkKey)}&lang=${language}`}
-          excelUrl={`${BACKEND_URL}/api/scene-lists/${sceneListId}/character-script/export-excel?character=${encodeURIComponent(linkKey)}&lang=${language}`}
+          pdfUrl={`${BACKEND_URL}/api/scene-lists/${sceneListId}/character-script/export?character=${encodeURIComponent(linkKey)}&lang=${ARTIST_PACKET_LANGUAGE}`}
+          excelUrl={`${BACKEND_URL}/api/scene-lists/${sceneListId}/character-script/export-excel?character=${encodeURIComponent(linkKey)}&lang=${ARTIST_PACKET_LANGUAGE}`}
         />
       )}
 
@@ -17083,7 +17086,7 @@ function App() {
               }}
             />
           )}
-          {canEditProduction && !isScreenplayWriter && <PacketPrep backendUrl={BACKEND_URL} sceneListId={sceneList.id} />}
+          {canEditProduction && !isScreenplayWriter && <PacketPrep backendUrl={BACKEND_URL} sceneListId={sceneList.id} language={language} />}
           <h2>{t.scriptBreakdownHeading}</h2>
 
           {scriptBreakdown?.autoBackfillStatus === 'in_progress' && (

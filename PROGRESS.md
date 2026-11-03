@@ -2497,3 +2497,10 @@ Plain version: every project is now a set of **drafts**. Opening a project shows
 - **Automatic:** when **Synchronize** finishes, the preparation starts by itself.
 - Routes: `GET/POST /api/scene-lists/:id/packet-jobs`, `POST …/:jobId/stop` (admin, Production Manager; also allowed for a "Production only" login on its own projects).
 - Tests: 2 new in `characterPacket.test.js` (12 in all; one runs against the test database). Server boot checked (table created, routes registered). Not verified with the live AI or on a phone.
+
+## 2026-11-03 — Artist scripts are written in Odia
+- **Asked:** it should be written in Odia, not English. (Understood as: the artist's script — the details, the arc, the emotional graph and their headings — and the card that prepares them.)
+- **Why it was English:** the packet language followed the language the screen was shown in ("EN" by default).
+- **Now:** the script an artist is sent (the WhatsApp link, the PDF, the Excel file and the WhatsApp message) is always **Odia**, whatever language the screen is in. The AI is told to write everything in Odia script (natural crew-style Odia; names stay as in the scenes). The title, headings, "Scene n" / "Episode n", emotion / objective / acting-note labels are Odia too. The scenes themselves stay exactly as they are written in the script.
+- "Prepare all artist scripts" now prepares **Odia only** by default (three times fewer AI calls); two small boxes add English and / or Hindi when wanted. The card's own words are Odia when the screen is switched to Odia (ଓଡ଼ିଆ).
+- Test added (13 in `characterPacket.test.js`). Looked at an Odia PDF as a picture: the letters sit properly. Not verified with the live AI's real Odia.

@@ -152,7 +152,7 @@ export function insightPrompt({ label, scenes, facts, lang }) {
 
 ${digests}
 
-Write, in ${LANGUAGE_NAME[lang] ?? "English"}:
+Write EVERYTHING below in ${LANGUAGE_NAME[lang] ?? "English"}${lang === "or" ? " — in Odia script (ଓଡ଼ିଆ ଅକ୍ଷର), natural spoken-style Odia a film crew would use; character names and place names stay as they are written in the scenes; no English sentences" : lang === "hi" ? " — in Devanagari script, simple everyday Hindi; names stay as written in the scenes" : ""}:
 - profile: who "${label}" is — a short summary, age (a number or range; "Unspecified" only if truly not inferable), look, relationships with the other characters, what the character WANTS (outer goal), NEEDS (inner truth), the FLAW, and how the character speaks (voice). Use only what the scenes and facts support; never invent backstory the material does not imply.
 - arc: how the character CHANGES across the story — the starting point, 2 to 5 turning points (each one sentence, name the scene it happens in), and the end point.
 - scenes: for EVERY key above exactly once — the emotion the character carries in that scene (one or two words), its intensity from 1 (calm) to 10 (the peak of the story), the character's objective in the scene (one sentence: what they are trying to get or do), and a one-sentence acting note on how it should feel.
@@ -244,12 +244,17 @@ export async function buildCharacterPacket({ scenes, label, lang = "en", sheetCo
 
 // ---- the words on the page --------------------------------------------------------------------------------------------------------------
 export const PACKET_LABELS = {
-  en: { title: "CHARACTER SCRIPT", details: "Character details", arc: "Character arc", graph: "Emotional graph", scenes: "The scenes", summary: "Who", age: "Age", look: "Look", relationships: "Relationships", want: "Wants", need: "Needs", flaw: "Flaw", voice: "Voice", start: "Starts as", turning: "Turning points", end: "Ends as", emotion: "Emotion", intensity: "Intensity", objective: "Objective", note: "Acting note", scene: "Scene", noScenes: "No scenes were found for this character.", silent: "(in the scene, no lines)", yourLines: "your lines in bold", intensityAxis: "Scenes in story order — higher means a stronger feeling (1–10)" },
-  or: { title: "CHARACTER SCRIPT", details: "ଚରିତ୍ର ବିବରଣୀ", arc: "ଚରିତ୍ରର ଆର୍କ", graph: "ଭାବନାର ଗ୍ରାଫ୍", scenes: "ଦୃଶ୍ୟଗୁଡ଼ିକ", summary: "କିଏ", age: "ବୟସ", look: "ରୂପ", relationships: "ସମ୍ପର୍କ", want: "ଚାହେଁ", need: "ଆବଶ୍ୟକ", flaw: "ଦୁର୍ବଳତା", voice: "କଥାବାର୍ତ୍ତା", start: "ଆରମ୍ଭରେ", turning: "ମୋଡ଼", end: "ଶେଷରେ", emotion: "ଭାବନା", intensity: "ତୀବ୍ରତା", objective: "ଲକ୍ଷ୍ୟ", note: "ଅଭିନୟ ଟିପ୍ପଣୀ", scene: "ଦୃଶ୍ୟ", noScenes: "ଏହି ଚରିତ୍ର ପାଇଁ କୌଣସି ଦୃଶ୍ୟ ମିଳିଲା ନାହିଁ।", silent: "(ଦୃଶ୍ୟରେ ଅଛି, ସଂଳାପ ନାହିଁ)", yourLines: "ତୁମ ସଂଳାପ ମୋଟା ଅକ୍ଷରରେ", intensityAxis: "ଦୃଶ୍ୟ କାହାଣୀ କ୍ରମରେ — ଉପରକୁ ମାନେ ଅଧିକ ତୀବ୍ର ଭାବନା (୧–୧୦)" },
-  hi: { title: "CHARACTER SCRIPT", details: "किरदार का विवरण", arc: "किरदार का आर्क", graph: "भावनाओं का ग्राफ़", scenes: "दृश्य", summary: "कौन", age: "उम्र", look: "रूप-रंग", relationships: "रिश्ते", want: "चाहता है", need: "ज़रूरत", flaw: "कमज़ोरी", voice: "बोलने का ढंग", start: "शुरुआत में", turning: "मोड़", end: "अंत में", emotion: "भावना", intensity: "तीव्रता", objective: "लक्ष्य", note: "अभिनय टिप्पणी", scene: "दृश्य", noScenes: "इस किरदार के लिए कोई दृश्य नहीं मिला।", silent: "(दृश्य में है, संवाद नहीं)", yourLines: "आपके संवाद मोटे अक्षरों में", intensityAxis: "दृश्य कहानी के क्रम में — ऊपर यानी ज़्यादा तीव्र भावना (1–10)" },
+  en: { title: "CHARACTER SCRIPT", episode: "Episode", details: "Character details", arc: "Character arc", graph: "Emotional graph", scenes: "The scenes", summary: "Who", age: "Age", look: "Look", relationships: "Relationships", want: "Wants", need: "Needs", flaw: "Flaw", voice: "Voice", start: "Starts as", turning: "Turning points", end: "Ends as", emotion: "Emotion", intensity: "Intensity", objective: "Objective", note: "Acting note", scene: "Scene", noScenes: "No scenes were found for this character.", silent: "(in the scene, no lines)", yourLines: "your lines in bold", intensityAxis: "Scenes in story order — higher means a stronger feeling (1–10)" },
+  or: { title: "ଚରିତ୍ର ସ୍କ୍ରିପ୍ଟ", episode: "ଏପିସୋଡ୍", details: "ଚରିତ୍ର ବିବରଣୀ", arc: "ଚରିତ୍ରର ଆର୍କ", graph: "ଭାବନାର ଗ୍ରାଫ୍", scenes: "ଦୃଶ୍ୟଗୁଡ଼ିକ", summary: "କିଏ", age: "ବୟସ", look: "ରୂପ", relationships: "ସମ୍ପର୍କ", want: "ଚାହେଁ", need: "ଆବଶ୍ୟକ", flaw: "ଦୁର୍ବଳତା", voice: "କଥାବାର୍ତ୍ତା", start: "ଆରମ୍ଭରେ", turning: "ମୋଡ଼", end: "ଶେଷରେ", emotion: "ଭାବନା", intensity: "ତୀବ୍ରତା", objective: "ଲକ୍ଷ୍ୟ", note: "ଅଭିନୟ ଟିପ୍ପଣୀ", scene: "ଦୃଶ୍ୟ", noScenes: "ଏହି ଚରିତ୍ର ପାଇଁ କୌଣସି ଦୃଶ୍ୟ ମିଳିଲା ନାହିଁ।", silent: "(ଦୃଶ୍ୟରେ ଅଛି, ସଂଳାପ ନାହିଁ)", yourLines: "ତୁମ ସଂଳାପ ମୋଟା ଅକ୍ଷରରେ", intensityAxis: "ଦୃଶ୍ୟ କାହାଣୀ କ୍ରମରେ — ଉପରକୁ ମାନେ ଅଧିକ ତୀବ୍ର ଭାବନା (୧–୧୦)" },
+  hi: { title: "किरदार स्क्रिप्ट", episode: "एपिसोड", details: "किरदार का विवरण", arc: "किरदार का आर्क", graph: "भावनाओं का ग्राफ़", scenes: "दृश्य", summary: "कौन", age: "उम्र", look: "रूप-रंग", relationships: "रिश्ते", want: "चाहता है", need: "ज़रूरत", flaw: "कमज़ोरी", voice: "बोलने का ढंग", start: "शुरुआत में", turning: "मोड़", end: "अंत में", emotion: "भावना", intensity: "तीव्रता", objective: "लक्ष्य", note: "अभिनय टिप्पणी", scene: "दृश्य", noScenes: "इस किरदार के लिए कोई दृश्य नहीं मिला।", silent: "(दृश्य में है, संवाद नहीं)", yourLines: "आपके संवाद मोटे अक्षरों में", intensityAxis: "दृश्य कहानी के क्रम में — ऊपर यानी ज़्यादा तीव्र भावना (1–10)" },
 };
 
-const sceneTitle = (scene) => `${scene.episodeLabel ? `${scene.episodeLabel}, ` : ""}${scene.sceneLabel}`;
+// "Episode 2, Scene 5" in the language of the packet (the numbers stay as they are written in the script)
+export const sceneTitle = (scene, L = PACKET_LABELS.en) => {
+  const scenePart = String(scene.sceneLabel).replace(/^Scene\b/, L.scene);
+  const episodePart = scene.episodeLabel ? String(scene.episodeLabel).replace(/^Episode\b/, L.episode) : "";
+  return episodePart ? `${episodePart}, ${scenePart}` : scenePart;
+};
 
 // ---- the PDF ------------------------------------------------------------------------------------------------------------------------------
 // the line chart of the emotional graph: one point per scene (those with a number), 1–10 up the side, the scene numbers along the bottom
@@ -337,7 +342,7 @@ export function writeCharacterPacketPdf(doc, packet) {
       const s = insights.perScene[i];
       if (!s.emotion && s.intensity == null) return;
       room(18);
-      doc.font("Helvetica").fontSize(10).fillColor("#333").text(`${sceneTitle(scene)}: ${s.emotion || "—"}${s.intensity != null ? `  (${s.intensity}/10)` : ""}`, margin, doc.y, { width });
+      doc.font("Helvetica").fontSize(10).fillColor("#333").text(`${sceneTitle(scene, L)}: ${s.emotion || "—"}${s.intensity != null ? `  (${s.intensity}/10)` : ""}`, margin, doc.y, { width });
     });
     doc.fillColor("#000");
   }
@@ -351,7 +356,7 @@ export function writeCharacterPacketPdf(doc, packet) {
     const s = insights?.perScene[i];
     room(90);
     doc.moveDown(1);
-    doc.font("Helvetica-Bold").fontSize(12).fillColor("#000").text(`${sceneTitle(scene)}${scene.heading ? ` — ${scene.heading}` : ""}`, margin, doc.y, { width });
+    doc.font("Helvetica-Bold").fontSize(12).fillColor("#000").text(`${sceneTitle(scene, L)}${scene.heading ? ` — ${scene.heading}` : ""}`, margin, doc.y, { width });
     if (s && (s.emotion || s.objective)) {
       doc.font("Helvetica-Oblique").fontSize(10).fillColor("#b23a48").text(
         [s.emotion ? `${L.emotion}: ${s.emotion}${s.intensity != null ? ` (${s.intensity}/10)` : ""}` : "", s.objective ? `${L.objective}: ${s.objective}` : "", s.note ? `${L.note}: ${s.note}` : ""].filter(Boolean).join("   ·   "),
@@ -407,7 +412,7 @@ export function writeCharacterPacketExcel(workbook, packet) {
   graph.getRow(1).font = { bold: true };
   packet.scenes.forEach((scene, i) => {
     const s = insights?.perScene[i];
-    wrap(graph.addRow({ scene: sceneTitle(scene), emotion: s?.emotion ?? "", intensity: s?.intensity ?? "", objective: s?.objective ?? "", note: s?.note ?? "" }), "objective", "note");
+    wrap(graph.addRow({ scene: sceneTitle(scene, L), emotion: s?.emotion ?? "", intensity: s?.intensity ?? "", objective: s?.objective ?? "", note: s?.note ?? "" }), "objective", "note");
   });
 
   const sheet = workbook.addWorksheet(L.scenes.slice(0, 31));
@@ -415,6 +420,6 @@ export function writeCharacterPacketExcel(workbook, packet) {
   sheet.getRow(1).font = { bold: true };
   packet.scenes.forEach((scene) => {
     const content = scene.elements.map((e) => (e.type === "dialogue" ? `${String(e.character).toUpperCase()}: ${e.parenthetical ? `(${e.parenthetical}) ` : ""}${e.text}` : e.text)).join("\n");
-    wrap(sheet.addRow({ scene: sceneTitle(scene), heading: scene.heading, content }), "content", "heading");
+    wrap(sheet.addRow({ scene: sceneTitle(scene, L), heading: scene.heading, content }), "content", "heading");
   });
 }

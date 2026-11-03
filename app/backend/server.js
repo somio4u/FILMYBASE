@@ -15125,10 +15125,12 @@ async function characterPacketFor(sceneListId, characterLabel, lang) {
 
 // ---- "Prepare all artist scripts": every character x language is made BEFORE it is needed, as a background job with a progress card (kind "prepare-packets"),
 // so sending a link or opening a PDF finds the details, arc and emotional graph already there instead of waiting for the AI.
-const PACKET_LANGUAGES = ["en", "or", "hi"];
+const PACKET_LANGUAGES = ["or", "en", "hi"]; // all the languages a packet can be made in; the artists get Odia, so Odia is what is prepared unless more is asked for
+const PACKET_DEFAULT_LANGUAGES = ["or"];
+const chosenPacketLanguages = (list) => { const picked = PACKET_LANGUAGES.filter((l) => (Array.isArray(list) ? list : []).includes(l)); return picked.length ? picked : PACKET_DEFAULT_LANGUAGES; };
 const PACKET_LANGUAGE_NAME = { en: "English", or: "Odia", hi: "Hindi" };
 
-async function packetPlan(sceneListId, languages = PACKET_LANGUAGES) {
+async function packetPlan(sceneListId, languages = PACKET_DEFAULT_LANGUAGES) {
   const source = await characterPacketSource(sceneListId);
   if (!source) return { characters: [], items: [], ready: 0, total: 0 };
   const characters = packetCharacters(source.scenes, source.artistNames);
@@ -15164,8 +15166,7 @@ const preparePacketJobs = createWriteScenesJobs({
 
 // starts the job for the characters / languages that are not ready yet (a second press while one runs just returns that one)
 async function startPacketJob(sceneListId, userId, languages) {
-  const chosen = PACKET_LANGUAGES.filter((l) => (languages ?? PACKET_LANGUAGES).includes(l));
-  const plan = await packetPlan(sceneListId, chosen.length ? chosen : PACKET_LANGUAGES);
+  const plan = await packetPlan(sceneListId, chosenPacketLanguages(languages));
   if (plan.items.length === 0) return { job: null, plan };
   const { job, alreadyRunning } = await preparePacketJobs.start({ sceneListId: Number(sceneListId), userId, items: plan.items, language: "en" });
   return { job, plan, alreadyRunning };
@@ -15176,8 +15177,8 @@ app.get(packetRoutes("/current"), requireRole("admin", "production_manager"), as
   const sceneListId = Number(req.params.id);
   if (!(await userOwnsSceneList(req.user, sceneListId))) { res.status(403).json({ error: "You don't have access to this project." }); return; }
   const job = await preparePacketJobs.currentFor(sceneListId);
-  const plan = await packetPlan(sceneListId);
-  res.json({ job: publicWriteJob(job), ready: plan.ready, total: plan.total, characters: plan.characters.length });
+  const plan = await packetPlan(sceneListId, chosenPacketLanguages(String(req.query.languages ?? "").split(",")));
+  res.json({ job: publicWriteJob(job), ready: plan.ready, total: plan.total, characters: plan.characters.length, languages: chosenPacketLanguages(String(req.query.languages ?? "").split(",")) });
 });
 app.post(packetRoutes(""), requireRole("admin", "production_manager"), async (req, res) => {
   const sceneListId = Number(req.params.id);

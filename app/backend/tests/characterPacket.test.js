@@ -235,3 +235,23 @@ test("who gets a packet: the artist-list names that are really in the scenes, el
   assert.deepEqual(packetCharacters(scenes, ["Jagannath", "Balaram", "Ghost Who Is Nowhere", "jagannath"]), ["Jagannath", "Balaram"]);
   assert.deepEqual(packetCharacters(scenes, []).sort(), ["BALARAM", "DEBA", "JAGANNATH"]);
 });
+
+test("an Odia packet: the title, the headings and 'Scene n' are Odia, and the AI is told to write everything in Odia script", async () => {
+  const scenes = scenesFromSourceText(SCRIPT);
+  let prompt = "";
+  const packet = await buildCharacterPacket({
+    scenes, label: "Jagannath", lang: "or", now: 3e13,
+    askModel: async (contents) => { prompt = contents; return { profile: { summary: "ସଚ୍ଚୋଟ ପୂଜକ" }, arc: { start: "ଗର୍ବୀ", turningPoints: [], end: "ଶାନ୍ତ" }, scenes: [{ key: "1", emotion: "ଅବାଧ୍ୟତା", intensity: 8, objective: "ମନା", note: "ସ୍ଥିର" }, { key: "2", emotion: "ଶାନ୍ତି", intensity: 3, objective: "ପ୍ରାର୍ଥନା", note: "କୋମଳ" }] }; },
+  });
+  assert.match(prompt, /Odia script \(ଓଡ଼ିଆ ଅକ୍ଷର\)/);
+  assert.match(prompt, /no English sentences/);
+  // (pdftotext breaks Odia letters into pieces, so the Odia words are checked in the labels; the PDF is checked for what must NOT be English any more)
+  const { PACKET_LABELS, sceneTitle } = await import("../characterPacket.js");
+  assert.equal(sceneTitle({ sceneLabel: "Scene 4", episodeLabel: "Episode 2" }, PACKET_LABELS.or), "ଏପିସୋଡ୍ 2, ଦୃଶ୍ୟ 4");
+  assert.equal(sceneTitle({ sceneLabel: "Scene 4", episodeLabel: null }, PACKET_LABELS.or), "ଦୃଶ୍ୟ 4");
+  assert.equal(sceneTitle({ sceneLabel: "Scene 4", episodeLabel: "Episode 2" }), "Episode 2, Scene 4");
+  assert.equal(PACKET_LABELS.or.title, "ଚରିତ୍ର ସ୍କ୍ରିପ୍ଟ");
+  const text = await pdfText(packet);
+  assert.ok(text.includes("Jagannath"));
+  for (const english of ["CHARACTER SCRIPT", "Character details", "Character arc", "Emotional graph", "Scene 1", "Scene 4", "The scenes", "Objective"]) assert.ok(!text.includes(english), `no English “${english}” in an Odia packet`);
+});

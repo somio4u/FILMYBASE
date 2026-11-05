@@ -167,7 +167,7 @@ function Revision({ requestId, backendUrl, onOpenDraft, onClose, onChanged }) {
   )
 }
 
-export default function DraftAgentPanel({ backendUrl, draft, getContext, InputComponent, onClose, onOpenDraft, onApplied, initialRequestId = null, initialSelection = '', embedded = false }) {
+export default function DraftAgentPanel({ backendUrl, draft, getContext, InputComponent, onClose, onOpenDraft, onApplied, initialRequestId = null, initialSelection = '', embedded = false, onRevisionClosed = null }) {
   const api = `${backendUrl}/api/drafts/${draft.id}`
   const [text, setText] = useState('')
   const [source, setSource] = useState('pen')
@@ -213,7 +213,7 @@ export default function DraftAgentPanel({ backendUrl, draft, getContext, InputCo
           : <button type="button" className="dd-btn" onClick={onClose} aria-label="Close agent">×</button>}
       </header>
       {requestId ? (
-        <Revision requestId={requestId} backendUrl={backendUrl} onClose={() => setRequestId(null)} onChanged={onApplied} onOpenDraft={(what) => onOpenDraft?.(what, requestId)} />
+        <Revision requestId={requestId} backendUrl={backendUrl} onClose={() => { setRequestId(null); onRevisionClosed?.() }} onChanged={onApplied} onOpenDraft={(what) => onOpenDraft?.(what, requestId)} />
       ) : (
         <>
           {selection && <p className="da-selection">Selected: “{selection.slice(0, 160)}{selection.length > 160 ? '…' : ''}”</p>}

@@ -3630,7 +3630,7 @@ function FloatingAgentWidget({ currentUser, t, onRunCompleted, onOpenProject, dr
         const projectMode = Boolean(draftCtx?.draft)
         // while a story run is working, waiting for you, or stopped, Adu opens on that run by default
         const runNeedsYou = ['running', 'awaiting_approval', 'failed'].includes(status?.status)
-        const tab = projectMode ? (aduTab ?? (runNeedsYou ? 'new' : 'project')) : 'new'
+        const tab = projectMode ? (aduTab ?? (runNeedsYou ? 'new' : draftCtx.draft.module === 'ai_movie' ? 'talk' : 'project')) : 'new' // in AI Movie Adu opens on the chat
         const runBadge = status?.status === 'running' ? '● writing' : status?.status === 'awaiting_approval' ? '● needs your approval' : status?.status === 'failed' ? '● stopped' : ''
         const tabs = projectMode ? (
           <div className="floating-agent-tabs" role="tablist" aria-label="What Adu works on">
@@ -3653,7 +3653,7 @@ function FloatingAgentWidget({ currentUser, t, onRunCompleted, onOpenProject, dr
               {tabs}
               <div className="floating-agent-embed">
                 {tab === 'talk' ? (
-                  <ErrorBoundary inline><AduChat backendUrl={BACKEND_URL} projectId={draftCtx.draft.projectRef} language={draftCtx.language} getContext={draftCtx.getContext} selection={aduSelection} InputComponent={MicTextarea}
+                  <ErrorBoundary inline><AduChat backendUrl={BACKEND_URL} projectId={draftCtx.draft.projectRef} language={draftCtx.language} getContext={draftCtx.getContext} selection={aduSelection} InputComponent={MicTextarea} onAllDrafts={() => draftCtx.onOpenDraft?.('dashboard')}
                     renderAction={(p) => <AduAction {...p} ctx={{ backendUrl: BACKEND_URL, projectId: draftCtx.draft.projectRef, draft: draftCtx.draft, getContext: draftCtx.getContext, onApplied: draftCtx.onApplied, onOpenDraft: (what, extra) => { if (what !== 'dashboard' && what !== 'compare') setIsOpen(false); draftCtx.onOpenDraft?.(what, extra) }, onOpenRevision: (id) => { setAduRevisionId(id); setAduTab('project') } }} />} /></ErrorBoundary>
                 ) : (
                 <ErrorBoundary inline><Suspense fallback={null}><DraftAgentPanel embedded backendUrl={BACKEND_URL} draft={draftCtx.draft} getContext={draftCtx.getContext} InputComponent={MicTextarea} initialSelection={aduSelection}

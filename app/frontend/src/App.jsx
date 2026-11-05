@@ -4,6 +4,7 @@ import AdPapers from './AdPapers.jsx'
 import AiSettings from './AiSettings.jsx'
 import SyncProduction from './SyncProduction.jsx'
 import PacketPrep from './PacketPrep.jsx'
+import AiMovieWriteAll from './AiMovieWriteAll.jsx'
 import NamesPlaces from './NamesPlaces.jsx'
 import { useState, useEffect, useRef, useMemo, useCallback, useContext, createContext, Fragment, lazy, Suspense } from 'react'
 import { createPortal } from 'react-dom'
@@ -10439,6 +10440,19 @@ function App() {
     }
   }
 
+  // The beats on the screen follow the "Write the whole screenplay" job: fetch the project again and show whatever has been written so far
+  async function refreshAiMovieScreenplayNow(projectId) {
+    try {
+      const response = await fetch(`${BACKEND_URL}/api/ai-movie/projects/${projectId}`)
+      const data = await response.json()
+      if (!response.ok) return
+      setAiMovieBackfillResult((prev) => ({ ...(prev ?? {}), screenplayBeats: data.backfill?.screenplayBeats ?? [] }))
+      setAiMovieStageStatus(data.stageStatus ?? {})
+    } catch {
+      // the next refresh tries again
+    }
+  }
+
   async function handleGenerateAiMovieScreenplayClick() {
     if (!aiMovieProjectId) return
     const projectId = aiMovieProjectId
@@ -14717,6 +14731,10 @@ function App() {
 
                         {!collapsed && (
                           <>
+                            {!screenplayApproved && (
+                              <AiMovieWriteAll backendUrl={BACKEND_URL} projectId={aiMovieProjectId} language={aiMovieLanguage} onChanged={refreshAiMovieScreenplayNow} />
+                            )}
+
                             {screenplayBeats.length === 0 && (
                               <button
                                 type="button"

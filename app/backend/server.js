@@ -42,7 +42,7 @@ import { registerSubmissionRoutes, designerGatekeeper, DESIGNER_ROLE } from "./d
 import { sessionTokenOf } from "./sessionToken.js";
 import { analyzeImportedText, numberedHeadingsToPlain, reportLines } from "./importAnalysis.js";
 import { ADD_KIND, PREPARE_PACKETS_KIND, createWriteScenesJobs, publicView as publicWriteJob } from "./writeScenesJobs.js";
-import { WRITE_ALL_KIND, beatIsComplete, planWriteAll, writeWholeBeat } from "./aiMovieWriteAll.js";
+import { WRITE_ALL_KIND, beatIsComplete, planApproveAll, planWriteAll, writeWholeBeat } from "./aiMovieWriteAll.js";
 import { countOdiaWords, textsOfScene, textsOfSceneList } from "./odiaCorpus.js";
 import { languageOf, parseEpisodesFromText, sceneContent } from "./screenplayImport.js";
 import { planFill } from "./pdfFill.js";
@@ -5614,12 +5614,36 @@ async function refreshAiMovieAssetsInBackground(projectId) {
   }
 }
 
-// Approves one beat's scenes and, unless the whole screenplay is now done,
-// tops the generation buffer back up by one -- fire-and-forget, same
-// non-blocking pattern as the initial kickoff. Approves one beat of the screenplay (by hand through the button below, or automatically by "Write the whole screenplay"). `auto` marks the beat as
-// approved by the machine, so it can still be told apart and read; `startNext: false` keeps the 4-beat background writer from starting while the
-// whole-screenplay job is already going through the beats in order. Throws errors that carry a `status`.
-async function approveAiMovieScreenplayBeatNow(projectId, beatIndex, { auto = false, startNext = true } = {}) {
+// The whole screenplay is approved (the last beat was approved by hand, or "Approve all" was pressed): the stage is marked approved, and the silent agent
+// refreshes the production asset list from the finished screenplay (best-effort: the approval itself must still succeed if that fails).
+async function completeAiMovieScreenplayApproval(projectId) {
+  await db.query(
+    "UPDATE ai_movie_projects SET stage_status = stage_status || $1::jsonb, updated_at = now() WHERE id = $2",
+    [JSON.stringify({ screenplay: { status: "approved", feedback: null } }), projectId]
+  );
+  // Same silent asset-list refresh every other stage's approval already
+  // does on completion -- screenplay scenes are exactly where brand-new
+  // props/characters/locations tend to show up first, so this stage
+  // needs it as much as any other.
+  try {
+    const latest = (await db.query("SELECT pasted_text, backfill FROM ai_movie_projects WHERE id = $1", [projectId])).rows[0];
+    const referenceMaterialText = await getAiMovieReferenceMaterialText(projectId);
+    const assets = await generateAiMovieAssetExtraction(
+      flattenAiMovieContentForExtraction(latest.pasted_text, latest.backfill, { includeCinematic: true }),
+      referenceMaterialText
+    );
+    await db.query("UPDATE ai_movie_projects SET assets = $1, updated_at = now() WHERE id = $2", [JSON.stringify(assets), projectId]);
+    syncProductionQuietly(db, projectId);
+  } catch (error) {
+    console.error("Silent asset refresh failed after full screenplay approval (approval itself still succeeded):", error.message);
+  }
+}
+
+// Approves one beat of the screenplay. By hand (the button below) approving the LAST beat also approves the whole screenplay stage and tops up the 4-beat
+// writer. `auto: true` is "Write the whole screenplay" approving a beat for the person so the next one can be written: the beat is marked `autoApproved`
+// (so it can still be told apart and read), and neither the stage approval nor the production asset refresh happens — those wait for the person's
+// own "Approve all" after reading. Throws errors that carry a `status`.
+async function approveAiMovieScreenplayBeatNow(projectId, beatIndex, { auto = false } = {}) {
   const fail = (status, message) => Object.assign(new Error(message), { status });
   if (!projectId) throw fail(400, "No project to approve into.");
   const projectResult = await db.query("SELECT backfill FROM ai_movie_projects WHERE id = $1", [projectId]);
@@ -5634,30 +5658,10 @@ async function approveAiMovieScreenplayBeatNow(projectId, beatIndex, { auto = fa
   await saveAiMovieBackfillField(projectId, "screenplayBeats", screenplayBeats);
 
   const allApproved = screenplayBeats.every((b) => b.status === "approved");
+  if (auto) return { beatIndex, allApproved };
   if (allApproved) {
-    await db.query(
-      "UPDATE ai_movie_projects SET stage_status = stage_status || $1::jsonb, updated_at = now() WHERE id = $2",
-      [JSON.stringify({ screenplay: { status: "approved", feedback: null } }), projectId]
-    );
-
-    // Same silent asset-list refresh every other stage's approval already
-    // does on completion -- screenplay scenes are exactly where brand-new
-    // props/characters/locations tend to show up first, so this stage
-    // needs it as much as any other. Best-effort: approval itself must
-    // still succeed even if this fails.
-    try {
-      const latest = (await db.query("SELECT pasted_text, backfill FROM ai_movie_projects WHERE id = $1", [projectId])).rows[0];
-      const referenceMaterialText = await getAiMovieReferenceMaterialText(projectId);
-      const assets = await generateAiMovieAssetExtraction(
-        flattenAiMovieContentForExtraction(latest.pasted_text, latest.backfill, { includeCinematic: true }),
-        referenceMaterialText
-      );
-      await db.query("UPDATE ai_movie_projects SET assets = $1, updated_at = now() WHERE id = $2", [JSON.stringify(assets), projectId]);
-    syncProductionQuietly(db, projectId);
-    } catch (error) {
-      console.error("Silent asset refresh failed after full screenplay approval (approval itself still succeeded):", error.message);
-    }
-  } else if (startNext) {
+    await completeAiMovieScreenplayApproval(projectId);
+  } else {
     fillAiMovieScreenplayBuffer(projectId);
     // Keep the silent agent grabbing production details WHILE the screenplay
     // is still being written, not only at the end: every 5th approved beat.
@@ -5667,6 +5671,33 @@ async function approveAiMovieScreenplayBeatNow(projectId, beatIndex, { auto = fa
 
   return { beatIndex, allApproved };
 }
+
+// "Approve all": the person has read the screenplay and signs it off in one go — every written beat becomes approved by them (the "approved automatically"
+// marks go away) and the whole stage is approved. Refused while any beat is not written yet.
+async function approveWholeAiMovieScreenplayNow(projectId) {
+  const fail = (status, message) => Object.assign(new Error(message), { status });
+  if (!projectId) throw fail(400, "No project to approve into.");
+  const project = (await db.query("SELECT backfill FROM ai_movie_projects WHERE id = $1", [projectId])).rows[0];
+  if (!project) throw fail(404, "Project not found.");
+  const plan = planApproveAll(project.backfill?.screenplayBeats);
+  if (plan.empty) throw fail(400, "There is no screenplay to approve yet.");
+  const { unwritten } = plan;
+  if (unwritten.length > 0) throw fail(400, `Beat${unwritten.length === 1 ? "" : "s"} ${unwritten.slice(0, 8).join(", ")} ${unwritten.length === 1 ? "is" : "are"} not written yet, so the whole screenplay cannot be approved. Write ${unwritten.length === 1 ? "it" : "them"} first.`);
+  const approved = plan.beats;
+  const changed = plan.changed;
+  await saveAiMovieBackfillField(projectId, "screenplayBeats", approved);
+  await completeAiMovieScreenplayApproval(projectId);
+  return { approved: changed, allApproved: true };
+}
+
+app.post("/api/ai-movie/stages/screenplay/approve-all", requireRole("admin"), async (req, res) => {
+  try {
+    res.json(await approveWholeAiMovieScreenplayNow(req.body?.projectId));
+  } catch (error) {
+    if (!error.status) console.error("Approve all failed:", error.message);
+    res.status(error.status ?? 500).json({ error: error.message });
+  }
+});
 
 app.post("/api/ai-movie/stages/screenplay/beats/:index/approve", requireRole("admin"), async (req, res) => {
   try {
@@ -6744,7 +6775,7 @@ const aiMovieWriteAllJobs = createWriteScenesJobs({
         getBeat: async (i) => (await aiMovieProject(projectId))?.backfill?.screenplayBeats?.[i] ?? null,
         reviveStuck: async (i) => { const beats = (await aiMovieProject(projectId))?.backfill?.screenplayBeats; if (beats) await reviveStuckAiMovieScreenplayBeats(projectId, beats); },
         generateBeat: (i) => generateAiMovieScreenplayBeatAt(projectId, i),
-        approveBeat: (i) => approveAiMovieScreenplayBeatNow(projectId, i, { auto: true, startNext: false }),
+        approveBeat: (i) => approveAiMovieScreenplayBeatNow(projectId, i, { auto: true }),
         writeDialogue: (i, j) => writeAiMovieSceneDialogueNow(projectId, i, j),
         isSong: (i) => isAiMovieSongBeat(plot[i]),
         sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),

@@ -89,6 +89,8 @@ function AnalyzingProgressBar({ active, label, estimatedSeconds = 30 }) {
 // deployed Render backend in production (set VITE_BACKEND_URL at build time).
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:4000'
 const CURRENT_CONCEPT_STORAGE_KEY = 'filmmaking-app:currentConceptId'
+// shown on a beat that "Write the whole screenplay" approved for the person (it can still be read and changed; "Approve all" is the person's own sign-off)
+const AI_MOVIE_AUTO_APPROVED_NOTE = { en: '🤖 approved automatically — not read by you yet', hi: '🤖 अपने आप approve हुआ — आपने अभी पढ़ा नहीं', or: '🤖 ନିଜେ ନିଜେ ଅନୁମୋଦିତ — ଆପଣ ଏବେ ପଢ଼ିନାହାଁନ୍ତି' }
 const CURRENT_AI_MOVIE_PROJECT_STORAGE_KEY = 'filmmaking-app:currentAiMovieProjectId'
 
 // Every fetch() in this file targets our own backend — patched once here so
@@ -14732,7 +14734,7 @@ function App() {
                         {!collapsed && (
                           <>
                             {!screenplayApproved && (
-                              <AiMovieWriteAll backendUrl={BACKEND_URL} projectId={aiMovieProjectId} language={aiMovieLanguage} onChanged={refreshAiMovieScreenplayNow} />
+                              <AiMovieWriteAll backendUrl={BACKEND_URL} projectId={aiMovieProjectId} language={aiMovieLanguage} onChanged={refreshAiMovieScreenplayNow} allWritten={screenplayBeats.length > 0 && screenplayBeats.every((b) => Array.isArray(b.scenes) && b.scenes.length > 0)} autoApprovedCount={screenplayBeats.filter((b) => b.autoApproved).length} />
                             )}
 
                             {screenplayBeats.length === 0 && (
@@ -14847,6 +14849,9 @@ function App() {
                                     {t.aiMovieScreenplayBeatOfLabel(viewIndex + 1, screenplayBeats.length)}: {beatMeta?.title?.[aiMovieLanguage]}
                                     {beat.status === 'approved' && (
                                       <span className="approved-badge ai-movie-screenplay-nav-badge">{t.approvedBadge}</span>
+                                    )}
+                                    {beat.status === 'approved' && beat.autoApproved && (
+                                      <span className="ai-movie-auto-approved-note">{AI_MOVIE_AUTO_APPROVED_NOTE[aiMovieLanguage] ?? AI_MOVIE_AUTO_APPROVED_NOTE.en}</span>
                                     )}
                                   </p>
                                   <button

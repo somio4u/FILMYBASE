@@ -25,6 +25,11 @@ const WORDS = {
     wrong: 'Something went wrong. Please try again.',
     other: 'Prefer to review each beat as it comes? Use the beat-by-beat button below instead.',
     beat: 'Beat',
+    approveIntro: (auto) => `Every beat is written${auto ? ` — ${auto} of them were approved automatically` : ''}. Read them with the arrows below and change anything you like. When you are happy, approve the whole screenplay in one go: it signs the screenplay off and opens the next stages.`,
+    approveBtn: '✓ Approve the whole screenplay',
+    approveAsk: 'Approve the whole screenplay now? Every beat becomes approved by you, and the next stages open.',
+    approveYes: 'Yes, approve all',
+    approving: 'Approving…',
   },
   hi: {
     title: '✍ पूरी screenplay लिखो',
@@ -46,6 +51,11 @@ const WORDS = {
     wrong: 'कुछ गड़बड़ हुई। कृपया फिर कोशिश करो।',
     other: 'हर beat आने पर खुद देखना चाहते हो? तो नीचे वाला beat-by-beat बटन इस्तेमाल करो।',
     beat: 'Beat',
+    approveIntro: (auto) => `हर beat लिखा जा चुका है${auto ? ` — इनमें से ${auto} अपने आप approve हुए थे` : ''}। नीचे तीरों से इन्हें पढ़ो और जो चाहो बदल लो। जब संतुष्ट हो जाओ, तो पूरी screenplay एक साथ approve कर दो: इससे screenplay पर आपकी मुहर लग जाती है और अगले stages खुल जाते हैं।`,
+    approveBtn: '✓ पूरी screenplay approve करो',
+    approveAsk: 'अभी पूरी screenplay approve करें? हर beat आपकी ओर से approved हो जाएगा, और अगले stages खुल जाएँगे।',
+    approveYes: 'हाँ, सब approve करो',
+    approving: 'Approve हो रहा है…',
   },
   or: {
     title: '✍ ପୁରା ସ୍କ୍ରିନପ୍ଲେ ଲେଖ',
@@ -67,16 +77,23 @@ const WORDS = {
     wrong: 'କିଛି ଭୁଲ ହେଲା। ଦୟାକରି ପୁଣି ଚେଷ୍ଟା କରନ୍ତୁ।',
     other: 'ପ୍ରତ୍ୟେକ ବିଟ୍ ଆସିଲେ ନିଜେ ଦେଖିବାକୁ ଚାହାଁନ୍ତି? ତେବେ ତଳର ବିଟ୍-ବାଇ-ବିଟ୍ ବଟନ୍ ବ୍ୟବହାର କରନ୍ତୁ।',
     beat: 'ବିଟ୍',
+    approveIntro: (auto) => `ପ୍ରତ୍ୟେକ ବିଟ୍ ଲେଖା ହୋଇଯାଇଛି${auto ? ` — ସେଥିରୁ ${auto} ଟି ନିଜେ ନିଜେ ଅନୁମୋଦିତ ହୋଇଥିଲା` : ''}। ତଳେ ତୀର ଦ୍ୱାରା ପଢ଼ନ୍ତୁ ଓ ଯାହା ଚାହାଁନ୍ତି ବଦଳାନ୍ତୁ। ସନ୍ତୁଷ୍ଟ ହେଲେ ପୁରା ସ୍କ୍ରିନପ୍ଲେକୁ ଏକାଥରେ ଅନୁମୋଦନ କରନ୍ତୁ: ଏହା ସ୍କ୍ରିନପ୍ଲେ ଉପରେ ଆପଣଙ୍କ ମୁଦ୍ରା ଲଗାଏ ଓ ପରବର୍ତ୍ତୀ ପର୍ଯ୍ୟାୟ ଖୋଲେ।`,
+    approveBtn: '✓ ପୁରା ସ୍କ୍ରିନପ୍ଲେ ଅନୁମୋଦନ କର',
+    approveAsk: 'ବର୍ତ୍ତମାନ ପୁରା ସ୍କ୍ରିନପ୍ଲେ ଅନୁମୋଦନ କରିବା? ପ୍ରତ୍ୟେକ ବିଟ୍ ଆପଣଙ୍କ ପକ୍ଷରୁ ଅନୁମୋଦିତ ହେବ, ଓ ପରବର୍ତ୍ତୀ ପର୍ଯ୍ୟାୟ ଖୋଲିବ।',
+    approveYes: 'ହଁ, ସବୁ ଅନୁମୋଦନ କର',
+    approving: 'ଅନୁମୋଦନ ହେଉଛି…',
   },
 }
 
 const clock = (ms) => { const s = Math.max(0, Math.floor(ms / 1000)); return `${Math.floor(s / 60)}m ${String(s % 60).padStart(2, '0')}s` }
 
-export default function AiMovieWriteAll({ backendUrl, projectId, language = 'en', onChanged }) {
+export default function AiMovieWriteAll({ backendUrl, projectId, language = 'en', onChanged, allWritten = false, autoApprovedCount = 0 }) {
   const W = WORDS[language === 'or' ? 'or' : language === 'hi' ? 'hi' : 'en']
   const [job, setJob] = useState(null)
   const [dialogue, setDialogue] = useState(true)
   const [asking, setAsking] = useState(false)
+  const [askingApprove, setAskingApprove] = useState(false)
+  const [approving, setApproving] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [tick, setTick] = useState(0)
@@ -130,6 +147,20 @@ export default function AiMovieWriteAll({ backendUrl, projectId, language = 'en'
     setBusy(false)
   }
 
+  // "Approve all": the person has read the screenplay and signs it off
+  async function approveAll() {
+    setAskingApprove(false); setApproving(true); setError('')
+    try {
+      const response = await fetch(`${backendUrl}/api/ai-movie/stages/screenplay/approve-all`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ projectId }) })
+      const body = await response.json().catch(() => ({}))
+      if (!response.ok) setError(body.error || W.wrong)
+      changedRef.current?.(projectId)
+    } catch {
+      setError(W.offline)
+    }
+    setApproving(false)
+  }
+
   async function stop() {
     if (!job?.jobId) return
     try { await fetch(`${backendUrl}/api/ai-movie/projects/${projectId}/write-all/${job.jobId}/stop`, { method: 'POST' }) } catch { /* the next look shows what happened */ }
@@ -174,6 +205,19 @@ export default function AiMovieWriteAll({ backendUrl, projectId, language = 'en'
         </div>
       )}
 
+      {!running && allWritten && (
+        <div className="ss-note ai-movie-approve-all">
+          <p>{W.approveIntro(autoApprovedCount)}</p>
+          {!askingApprove && <button type="button" className="ss-go" onClick={() => setAskingApprove(true)} disabled={approving}>{approving ? W.approving : W.approveBtn}</button>}
+          {askingApprove && (
+            <div className="sync-ask" role="alertdialog">
+              <p>{W.approveAsk}</p>
+              <button type="button" className="ss-go" onClick={approveAll}>{W.approveYes}</button>{' '}
+              <button type="button" className="ss-back" onClick={() => setAskingApprove(false)}>{W.no}</button>
+            </div>
+          )}
+        </div>
+      )}
       {finished && job.status === 'done' && job.failed?.length === 0 && <p className="ss-note">{W.done(job.done, clock(elapsed))}</p>}
       {finished && job.status === 'stopped' && <p className="ss-note">{W.stopped}</p>}
       {finished && job.failed?.length > 0 && (

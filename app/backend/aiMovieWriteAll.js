@@ -85,3 +85,19 @@ export async function writeWholeBeat({ item, say = async () => {}, deps }) {
     if (failures.length > 0) throw new Error(`Beat ${n}: the dialogue could not be written for ${failures.join("; ")}. Press the button again to try those scenes again.`);
   }
 }
+
+// "Approve all": the person has read the screenplay and signs it off. Every written beat becomes approved BY THEM (the "approved automatically" marks go);
+// refused while any beat is not written yet. Returns { unwritten: [beat numbers], changed, beats } — `beats` is the new list (unchanged when something is unwritten).
+export function planApproveAll(screenplayBeats) {
+  const list = Array.isArray(screenplayBeats) ? screenplayBeats : [];
+  const unwritten = list.map((b, i) => (Array.isArray(b?.scenes) && b.scenes.length > 0 ? null : i + 1)).filter(Boolean);
+  if (list.length === 0 || unwritten.length > 0) return { unwritten, changed: 0, beats: list, empty: list.length === 0 };
+  let changed = 0;
+  const beats = list.map((beat) => {
+    if (beat.status === "approved" && !beat.autoApproved) return beat;
+    changed += 1;
+    const { autoApproved: _mark, ...rest } = beat;
+    return { ...rest, status: "approved" };
+  });
+  return { unwritten, changed, beats, empty: false };
+}

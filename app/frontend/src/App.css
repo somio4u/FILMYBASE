@@ -8072,3 +8072,7 @@ body.is-script-edit-mode { overflow: hidden; }
 /* "Upload your draft": what is this (film / series / one episode) and how long */
 .draft-format { display: grid; gap: 0.6rem; margin: 0.6rem 0; }
 .draft-format-note { margin: 0; font-size: 0.85rem; opacity: 0.75; }
+
+/* AI Movie: a beat the machine approved for the person */
+.ai-movie-auto-approved-note { display: block; margin-top: 4px; font-size: 0.8rem; opacity: 0.85; }
+.ai-movie-approve-all { margin: 8px 0; }

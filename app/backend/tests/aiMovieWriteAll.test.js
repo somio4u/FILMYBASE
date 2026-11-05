@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { beatIsComplete, planWriteAll, sceneHasDialogue, writeWholeBeat } from "../aiMovieWriteAll.js";
+import { beatIsComplete, planApproveAll, planWriteAll, sceneHasDialogue, writeWholeBeat } from "../aiMovieWriteAll.js";
 import { createWriteScenesJobs } from "../writeScenesJobs.js";
 
 const scene = (withDialogue) => ({ sceneHeading: { en: "INT. HOUSE - DAY" }, action: { en: "Something happens." }, ...(withDialogue ? { content: [{ type: "dialogue", character: "ASHA", text: { en: "Hi" } }] } : {}) });
@@ -129,4 +129,26 @@ test("in the shared job machine: beats run in order, finished ones are skipped, 
   assert.match(job.failed[0].error, /Beat 2 could not be written/);
   assert.ok(steps.some((t) => /Beat 3 of 3/.test(t)));
   assert.equal(project.beats[2].status, "approved");
+});
+
+test("Approve all: every written beat becomes the person's own approval (the automatic marks go); refused while any beat is not written", () => {
+  const beats = [
+    { status: "approved", autoApproved: true, scenes: [scene(true)] }, // the machine approved it
+    { status: "approved", scenes: [scene(true)] }, // the person approved it by hand
+    { status: "pending", scenes: [scene(true)] }, // written, waiting
+  ];
+  const plan = planApproveAll(beats);
+  assert.equal(plan.changed, 2);
+  assert.deepEqual(plan.unwritten, []);
+  assert.deepEqual(plan.beats.map((b) => b.status), ["approved", "approved", "approved"]);
+  assert.ok(plan.beats.every((b) => !("autoApproved" in b)));
+  assert.equal(plan.beats[1], beats[1]); // a beat the person already approved is left exactly as it is
+  assert.ok("autoApproved" in beats[0]); // the input is not changed
+
+  const blocked = planApproveAll([...beats, { status: "not_started", scenes: null }, { status: "error", scenes: [] }]);
+  assert.deepEqual(blocked.unwritten, [4, 5]);
+  assert.equal(blocked.changed, 0);
+  assert.equal(blocked.beats.length, 5);
+  assert.equal(planApproveAll([]).empty, true);
+  assert.equal(planApproveAll(undefined).empty, true);
 });

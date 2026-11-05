@@ -6,7 +6,7 @@ import assert from "node:assert/strict";
 import express from "express";
 import pg from "pg";
 import { ensureAllProductionSchemas } from "../productionSchema.js";
-import { ensureAduChatSchema, registerAduChatRoutes, handleAduMessage, loadHistory, clearHistory, looksLikeQuestion, sortWithoutAi, answerPrompt } from "../aduChat.js";
+import { ensureAduChatSchema, registerAduChatRoutes, handleAduMessage, loadHistory, clearHistory, looksLikeQuestion, sortWithoutAi, answerPrompt, extendInfo, resolveMessage } from "../aduChat.js";
 
 const db = new pg.Pool({ database: process.env.TEST_DB || "filmmaking_app_test", user: process.env.PGUSER || "root", host: process.env.PGHOST || "/var/run/postgresql" });
 const J = (v) => JSON.stringify(v);
@@ -32,7 +32,7 @@ async function fixtures() {
   const scene = (h, text) => ({ sceneHeading: t(h), content: [{ type: "action", text: t(text) }, { type: "dialogue", character: "MALA", text: t("Stay back.") }], estimatedMinutes: 1 });
   const backfill = {
     story: t("A dancer defies a cyclone."), synopsis: t("A village temple stands in a storm's path."),
-    plot: [{ title: t("The warning"), description: t("Mala hears the bells.") }, { title: t("The storm"), description: t("The cyclone arrives.") }],
+    plot: [{ title: t("The warning"), description: t("Mala hears the bells."), runtimeMinutes: 5 }, { title: t("The storm"), description: t("The cyclone arrives."), runtimeMinutes: 6 }],
     screenplayBeats: [{ status: "approved", autoApproved: true, scenes: [scene("EXT. TEMPLE - DAY", "Mala dances before the storm."), scene("INT. TEMPLE - NIGHT", "Wind shakes the doors.")] }, { status: "not_started", scenes: null }],
   };
   ai = (await db.query("INSERT INTO ai_movie_projects (title, pasted_text, backfill, stage_status) VALUES ($1,$2,$3,$4) RETURNING id", ["[ADU-TEST] AI", "A dancer fights a cyclone.", J(backfill), J({})])).rows[0].id;
@@ -142,8 +142,17 @@ test("'write the whole screenplay' and 'make a beat longer' become proposals (no
   assert.match(w.assistant.content, /every beat that is not finished yet, with the dialogue of every scene/);
   const w2 = await handleAduMessage(db, m, { projectId: ai, userId: 7, text: "write all remaining scenes without dialogue", language: "or" });
   assert.deepEqual(w2.assistant.action, { type: "write_all", dialogue: false });
-  const e = await handleAduMessage(db, m, { projectId: ai, userId: 7, text: "Make beat 2 longer, 6 minutes", language: "en" });
-  assert.deepEqual(e.assistant.action, { type: "extend_beat", beatIndex: 1, minutes: 6, needsClarification: false });
+  // beat 1: planned 5 minutes in the Beat Sheet, 2 written -> it can be extended, and the reply says the real target (not the 8 minutes asked for)
+  const e = await handleAduMessage(db, m, { projectId: ai, userId: 7, text: "Make beat 1 longer, 8 minutes", language: "en" });
+  assert.deepEqual(e.assistant.action, { type: "extend_beat", beatIndex: 0, askedMinutes: 8, beatCount: 2, needsClarification: false, writtenMinutes: 2, targetMinutes: 5, canExtend: true, why: "ok" });
+  assert.match(e.assistant.content, /planned for 5 minutes in the Beat Sheet and has about 2 written/);
+  assert.match(e.assistant.content, /you said 8; the Beat Sheet decides the time/);
+  // beat 2 has no written scenes; beat 9 does not exist; no beat named: it asks
+  const e1 = await handleAduMessage(db, m, { projectId: ai, userId: 7, text: "Make beat 2 longer, 6 minutes", language: "en" });
+  assert.equal(e1.assistant.action.canExtend, false); assert.equal(e1.assistant.action.why, "unwritten");
+  assert.match(e1.assistant.content, /Beat 2 has no written scenes yet/);
+  const e3 = await handleAduMessage(db, m, { projectId: ai, userId: 7, text: "Make beat 9 longer, 6 minutes", language: "hi" });
+  assert.equal(e3.assistant.action.why, "missing"); assert.match(e3.assistant.content, /beat 9 नहीं है \(film में 2 beats हैं\)/);
   const e2 = await handleAduMessage(db, m, { projectId: ai, userId: 7, text: "make this beat longer, 6 minutes please", language: "en" });
   assert.equal(e2.assistant.action.needsClarification, true);
   assert.match(e2.assistant.content, /Which beat/);
@@ -199,4 +208,35 @@ test("when the classifier's model cannot be asked, Adu says the person's own wor
   assert.equal(r.assistant.action.intent, "SCOPED_REWRITE"); // from the words alone
   assert.match(r.assistant.content, /I understood: “Rewrite scenes 1-1 so the hero is braver”/);
   assert.ok(!/Interpreted as/.test(r.assistant.content));
+});
+
+test("what 'make a beat longer' can really do: the beat's own Beat Sheet time decides (enough / no time set / unwritten)", () => {
+  const backfill = { plot: [{ runtimeMinutes: 4 }, {}, { runtimeMinutes: 3 }], screenplayBeats: [{ status: "approved", scenes: [{ estimatedMinutes: 1.5 }, { estimatedMinutes: 1 }] }, { status: "pending", scenes: [{ estimatedMinutes: 1 }] }, { status: "approved", scenes: [{ estimatedMinutes: 2 }, { estimatedMinutes: 1.5 }] }] };
+  assert.equal(extendInfo(backfill, 0, null).why, "ok");
+  assert.equal(extendInfo(backfill, 0, null).writtenMinutes, 2.5);
+  assert.equal(extendInfo(backfill, 1, 9).why, "notarget");
+  assert.equal(extendInfo(backfill, 2, null).why, "enough"); // 3.5 written, 3 planned
+  assert.equal(extendInfo(backfill, null, 4).why, "which");
+  assert.equal(extendInfo(backfill, 5, 4).why, "missing");
+});
+
+test("a card's button is remembered: the message is marked done with its outcome, only for the person it belongs to", async () => {
+  const m = models();
+  const r = await handleAduMessage(db, m, { projectId: ai, userId: 7, text: "Write the whole screenplay", language: "en" });
+  assert.equal(r.assistant.resolved, false);
+  const done = await resolveMessage(db, ai, 7, { messageId: r.assistant.id, outcome: "applied" });
+  assert.equal(done.resolved, true);
+  assert.equal(done.action.outcome, "applied");
+  assert.equal(done.action.type, "write_all"); // the rest of the card is kept
+  const again = (await loadHistory(db, ai, 7)).find((x) => x.id === r.assistant.id);
+  assert.equal(again.resolved, true);
+  await assert.rejects(() => resolveMessage(db, ai, 8, { messageId: r.assistant.id, outcome: "applied" }), /not found/); // not another person's
+  await assert.rejects(() => resolveMessage(db, ai, 7, { messageId: r.user.id, outcome: "applied" }), /not found/); // only Adu's own messages carry cards
+  assert.equal((await resolveMessage(db, ai, 7, { messageId: r.assistant.id, outcome: "whatever" })).action.outcome, "dismissed"); // an unknown outcome is read as "no thanks"
+});
+
+test("an action for the Draft Agent carries the draft id (the card needs it to call the Agent)", async () => {
+  const r = await handleAduMessage(db, models({ classify: { intent: "SCOPED_REWRITE", summary: "x", targets: [{ type: "scenes", from: 1, to: 1 }] } }), { projectId: ai, userId: 7, text: "Make Mala braver in scenes 1-1", language: "en" });
+  assert.equal(r.assistant.action.draftId, r.draftId);
+  assert.ok(r.draftId > 0);
 });

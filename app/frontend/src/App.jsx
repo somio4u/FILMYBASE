@@ -6,6 +6,7 @@ import SyncProduction from './SyncProduction.jsx'
 import PacketPrep from './PacketPrep.jsx'
 import AiMovieWriteAll from './AiMovieWriteAll.jsx'
 import AduChat from './AduChat.jsx'
+import AduAction from './AduCards.jsx'
 import NamesPlaces from './NamesPlaces.jsx'
 import { useState, useEffect, useRef, useMemo, useCallback, useContext, createContext, Fragment, lazy, Suspense } from 'react'
 import { createPortal } from 'react-dom'
@@ -3168,6 +3169,7 @@ function FloatingAgentWidget({ currentUser, t, onRunCompleted, onOpenProject, dr
   }, [isOpen, aduExpanded]) // eslint-disable-line react-hooks/exhaustive-deps
   // Adu is also the Auto Screenplay Agent for the open project: one tab for the project's drafts, one for writing a brand-new story
   const [aduTab, setAduTab] = useState(null) // null = follow whether a project is open
+  const [aduRevisionId, setAduRevisionId] = useState(null) // a new-draft revision started from the chat: the classic panel opens on it
   const aduSelectionRef = useRef('')
   const [aduSelection, setAduSelection] = useState('')
   const [isDragging, setIsDragging] = useState(false)
@@ -3651,10 +3653,11 @@ function FloatingAgentWidget({ currentUser, t, onRunCompleted, onOpenProject, dr
               {tabs}
               <div className="floating-agent-embed">
                 {tab === 'talk' ? (
-                  <ErrorBoundary inline><AduChat backendUrl={BACKEND_URL} projectId={draftCtx.draft.projectRef} language={draftCtx.language} getContext={draftCtx.getContext} selection={aduSelection} InputComponent={MicTextarea} /></ErrorBoundary>
+                  <ErrorBoundary inline><AduChat backendUrl={BACKEND_URL} projectId={draftCtx.draft.projectRef} language={draftCtx.language} getContext={draftCtx.getContext} selection={aduSelection} InputComponent={MicTextarea}
+                    renderAction={(p) => <AduAction {...p} ctx={{ backendUrl: BACKEND_URL, projectId: draftCtx.draft.projectRef, draft: draftCtx.draft, getContext: draftCtx.getContext, onApplied: draftCtx.onApplied, onOpenDraft: (what, extra) => { if (what !== 'dashboard' && what !== 'compare') setIsOpen(false); draftCtx.onOpenDraft?.(what, extra) }, onOpenRevision: (id) => { setAduRevisionId(id); setAduTab('project') } }} />} /></ErrorBoundary>
                 ) : (
                 <ErrorBoundary inline><Suspense fallback={null}><DraftAgentPanel embedded backendUrl={BACKEND_URL} draft={draftCtx.draft} getContext={draftCtx.getContext} InputComponent={MicTextarea} initialSelection={aduSelection}
-                  initialRequestId={draftCtx.openRequestId ?? null} onClose={() => setIsOpen(false)} onOpenDraft={(what, extra) => { if (what !== 'dashboard' && what !== 'compare') setIsOpen(false); draftCtx.onOpenDraft?.(what, extra) }} onApplied={draftCtx.onApplied} /></Suspense></ErrorBoundary>
+                  key={aduRevisionId ?? 'panel'} initialRequestId={aduRevisionId ?? draftCtx.openRequestId ?? null} onClose={() => setIsOpen(false)} onOpenDraft={(what, extra) => { if (what !== 'dashboard' && what !== 'compare') setIsOpen(false); draftCtx.onOpenDraft?.(what, extra) }} onApplied={draftCtx.onApplied} /></Suspense></ErrorBoundary>
                 )}
               </div>
             </div>

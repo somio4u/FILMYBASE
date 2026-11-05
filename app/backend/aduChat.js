@@ -81,25 +81,65 @@ const SAYS = {
     clarify: (a) => `I am not sure what you want me to do with this. ${a.summary || ""} Tell me a little more, or choose: edit the current draft, create a new draft, explore an alternative, or start a new story.`,
     big: (a) => `${a.summary} This is a bigger change, so I will only start it after you confirm it.`,
     write: (dialogue) => `I can write every beat that is not finished yet${dialogue ? ", with the dialogue of every scene" : " (scenes only, no dialogue)"} — one beat after the other, in the background. Beats already approved with their dialogue stay as they are. Press the button to start.`,
-    extend: (a) => (a.beatIndex === null ? `Which beat should I make longer? Tell me its number, for example “beat 3, ${a.minutes} minutes”.` : `I can extend beat ${a.beatIndex + 1} to about ${a.minutes} minutes by adding scenes that fit the story. Press the button to do it.`),
+    extend: (a) => ({
+      which: `Which beat should I make longer? Tell me its number, for example “beat 3”.`,
+      missing: `There is no beat ${a.beatIndex + 1} (the film has ${a.beatCount} beats).`,
+      unwritten: `Beat ${a.beatIndex + 1} has no written scenes yet, so there is nothing to make longer. Write it first.`,
+      notarget: `The Beat Sheet gives beat ${a.beatIndex + 1} no time, so I do not know how long it should be. Set its time in the Beat Sheet first.`,
+      enough: `Beat ${a.beatIndex + 1} already has about ${a.writtenMinutes} minutes, which meets its Beat Sheet time of ${a.targetMinutes}. To make it longer, change its time in the Beat Sheet first.`,
+      ok: `Beat ${a.beatIndex + 1} is planned for ${a.targetMinutes} minutes in the Beat Sheet and has about ${a.writtenMinutes} written. I can add scenes that fit the story until it reaches ${a.targetMinutes} minutes${a.askedMinutes && Math.abs(a.askedMinutes - a.targetMinutes) > 0.01 ? ` (you said ${a.askedMinutes}; the Beat Sheet decides the time)` : ""}. Press the button to do it.`,
+    })[a.why],
   },
   hi: {
     agent: (a) => `मैंने यह समझा: ${a.summary}${a.targets.length ? ` इसमें ${a.targets.length} हिस्से छुए जाएँगे: ${a.targets.slice(0, 6).map((t) => t.label).join("; ")}${a.targets.length > 6 ? "…" : ""}।` : ""} जब तक आप बटन नहीं दबाते, कुछ नहीं बदलेगा।`,
     clarify: (a) => `मुझे पक्का नहीं पता कि आप इससे क्या कराना चाहते हो। ${a.summary || ""} थोड़ा और बताओ, या चुनो: मौजूदा draft बदलना, नया draft बनाना, कोई दूसरा रास्ता आज़माना, या नई कहानी शुरू करना।`,
     big: (a) => `${a.summary} यह बड़ा बदलाव है, इसलिए मैं इसे आपके पक्का करने के बाद ही शुरू करूँगा।`,
     write: (dialogue) => `मैं हर अधूरा beat लिख सकता हूँ${dialogue ? ", हर scene के dialogue के साथ" : " (सिर्फ़ scenes, dialogue नहीं)"} — एक के बाद एक, पीछे चलते हुए। जो beats पहले से approve हैं और जिनका dialogue हो चुका है, वे जैसे हैं वैसे रहेंगे। शुरू करने के लिए बटन दबाओ।`,
-    extend: (a) => (a.beatIndex === null ? `किस beat को लंबा करूँ? उसका नंबर बताओ, जैसे “beat 3, ${a.minutes} मिनट”।` : `मैं beat ${a.beatIndex + 1} को करीब ${a.minutes} मिनट तक बढ़ा सकता हूँ, कहानी में फिट होने वाले scenes जोड़कर। करने के लिए बटन दबाओ।`),
+    extend: (a) => ({
+      which: `किस beat को लंबा करूँ? उसका नंबर बताओ, जैसे “beat 3”।`,
+      missing: `beat ${a.beatIndex + 1} नहीं है (film में ${a.beatCount} beats हैं)।`,
+      unwritten: `beat ${a.beatIndex + 1} के scenes अभी लिखे नहीं गए, इसलिए लंबा करने को कुछ नहीं है। पहले उसे लिखो।`,
+      notarget: `Beat Sheet में beat ${a.beatIndex + 1} का कोई समय नहीं है, इसलिए मुझे पता नहीं कि वह कितना लंबा होना चाहिए। पहले Beat Sheet में उसका समय तय करो।`,
+      enough: `beat ${a.beatIndex + 1} में पहले से करीब ${a.writtenMinutes} मिनट हैं, जो Beat Sheet के ${a.targetMinutes} मिनट के समय को पूरा करते हैं। उसे और लंबा करना हो तो पहले Beat Sheet में उसका समय बदलो।`,
+      ok: `Beat Sheet में beat ${a.beatIndex + 1} के लिए ${a.targetMinutes} मिनट तय हैं और अभी करीब ${a.writtenMinutes} मिनट लिखे हैं। मैं कहानी में फिट होने वाले scenes जोड़कर उसे ${a.targetMinutes} मिनट तक ला सकता हूँ${a.askedMinutes && Math.abs(a.askedMinutes - a.targetMinutes) > 0.01 ? ` (आपने ${a.askedMinutes} कहा था; समय Beat Sheet तय करती है)` : ""}। करने के लिए बटन दबाओ।`,
+    })[a.why],
   },
   or: {
     agent: (a) => `ମୁଁ ଏହା ବୁଝିଲି: ${a.summary}${a.targets.length ? ` ଏଥିରେ ${a.targets.length} ଟି ଅଂଶ ଛୁଇଁବ: ${a.targets.slice(0, 6).map((t) => t.label).join("; ")}${a.targets.length > 6 ? "…" : ""}।` : ""} ତୁମେ ବଟନ୍ ନ ଦବାଇଲେ କିଛି ବଦଳିବ ନାହିଁ।`,
     clarify: (a) => `ତୁମେ ମୋଠାରୁ କଣ ଚାହୁଁଛ ମୁଁ ଠିକ୍ ବୁଝିପାରିଲି ନାହିଁ। ${a.summary || ""} ଟିକେ ଆଉ କୁହ, କିମ୍ବା ବାଛ: ଏବେକାର ଡ୍ରାଫ୍ଟ ବଦଳାଇବା, ନୂଆ ଡ୍ରାଫ୍ଟ ବନାଇବା, ଅନ୍ୟ ଗୋଟେ ବାଟ ଚେଷ୍ଟା କରିବା, କିମ୍ବା ନୂଆ ଗପ ଆରମ୍ଭ କରିବା।`,
     big: (a) => `${a.summary} ଏହା ଏକ ବଡ଼ ବଦଳ, ତେଣୁ ତୁମେ ପକ୍କା କଲା ପରେ ହିଁ ମୁଁ ଏହାକୁ ଆରମ୍ଭ କରିବି।`,
     write: (dialogue) => `ମୁଁ ପ୍ରତ୍ୟେକ ଅଧୁରା ବିଟ୍ ଲେଖିପାରିବି${dialogue ? ", ପ୍ରତ୍ୟେକ ଦୃଶ୍ୟର ସଂଳାପ ସହିତ" : " (କେବଳ ଦୃଶ୍ୟ, ସଂଳାପ ନୁହେଁ)"} — ଗୋଟିଏ ପରେ ଗୋଟିଏ, ପଛରେ ଚାଲି। ଯେଉଁ ବିଟ୍ ଆଗରୁ ଅନୁମୋଦିତ ଓ ସଂଳାପ ସହିତ ଅଛି, ସେଗୁଡ଼ିକ ଯେମିତି ଅଛି ସେମିତି ରହିବ। ଆରମ୍ଭ କରିବାକୁ ବଟନ୍ ଦବାଅ।`,
-    extend: (a) => (a.beatIndex === null ? `କେଉଁ ବିଟ୍‌କୁ ଲମ୍ବା କରିବି? ତାର ନମ୍ବର କୁହ, ଯେମିତି “beat 3, ${a.minutes} ମିନିଟ୍”।` : `ମୁଁ beat ${a.beatIndex + 1} କୁ ପ୍ରାୟ ${a.minutes} ମିନିଟ୍ ପର୍ଯ୍ୟନ୍ତ ବଢ଼ାଇପାରିବି, ଗପ ସହ ମେଳ ଖାଉଥିବା ଦୃଶ୍ୟ ଯୋଡ଼ି। କରିବାକୁ ବଟନ୍ ଦବାଅ।`),
+    extend: (a) => ({
+      which: `କେଉଁ ବିଟ୍‌କୁ ଲମ୍ବା କରିବି? ତାର ନମ୍ବର କୁହ, ଯେମିତି “beat 3”।`,
+      missing: `beat ${a.beatIndex + 1} ନାହିଁ (ଫିଲ୍ମରେ ${a.beatCount} ଟି ବିଟ୍ ଅଛି)।`,
+      unwritten: `beat ${a.beatIndex + 1} ର ଦୃଶ୍ୟ ଏଯାଏଁ ଲେଖାହୋଇନାହିଁ, ତେଣୁ ଲମ୍ବା କରିବାକୁ କିଛି ନାହିଁ। ପ୍ରଥମେ ତାକୁ ଲେଖ।`,
+      notarget: `Beat Sheet ରେ beat ${a.beatIndex + 1} ପାଇଁ କୌଣସି ସମୟ ନାହିଁ, ତେଣୁ ସେ କେତେ ଲମ୍ବା ହେବା ଉଚିତ ମୁଁ ଜାଣିନାହିଁ। ପ୍ରଥମେ Beat Sheet ରେ ତାର ସମୟ ଠିକ୍ କର।`,
+      enough: `beat ${a.beatIndex + 1} ରେ ଆଗରୁ ପ୍ରାୟ ${a.writtenMinutes} ମିନିଟ୍ ଅଛି, ଯାହା Beat Sheet ର ${a.targetMinutes} ମିନିଟ୍ ସମୟକୁ ପୂରଣ କରେ। ଆହୁରି ଲମ୍ବା କରିବାକୁ ହେଲେ ପ୍ରଥମେ Beat Sheet ରେ ସମୟ ବଦଳାଅ।`,
+      ok: `Beat Sheet ରେ beat ${a.beatIndex + 1} ପାଇଁ ${a.targetMinutes} ମିନିଟ୍ ଅଛି ଓ ଏବେ ପ୍ରାୟ ${a.writtenMinutes} ମିନିଟ୍ ଲେଖା ହୋଇଛି। ମୁଁ ଗପ ସହ ମେଳ ଖାଉଥିବା ଦୃଶ୍ୟ ଯୋଡ଼ି ତାକୁ ${a.targetMinutes} ମିନିଟ୍ ପର୍ଯ୍ୟନ୍ତ ଆଣିପାରିବି${a.askedMinutes && Math.abs(a.askedMinutes - a.targetMinutes) > 0.01 ? ` (ତୁମେ ${a.askedMinutes} କହିଥିଲ; ସମୟ Beat Sheet ଠିକ୍ କରେ)` : ""}। କରିବାକୁ ବଟନ୍ ଦବାଅ।`,
+    })[a.why],
   },
 };
 
 const BIG = new Set(["NEW_DRAFT", "NEW_STORY", "ALTERNATIVE"]);
+
+// What can really be done for "make beat N longer": the existing Extend adds scenes until the beat reaches ITS OWN time from the Beat Sheet
+// (not minutes named in a chat), so the proposal says that time, how much is written, and whether there is anything to add.
+const round1 = (n) => Math.round(n * 10) / 10;
+export function extendInfo(backfill, beatIndex, askedMinutes) {
+  if (beatIndex === null || beatIndex === undefined) return { beatIndex: null, askedMinutes, canExtend: false, needsClarification: true, why: "which" };
+  const plot = Array.isArray(backfill?.plot) ? backfill.plot : [];
+  const base = { beatIndex, askedMinutes, beatCount: plot.length, needsClarification: false };
+  if (!(beatIndex >= 0 && beatIndex < plot.length)) return { ...base, canExtend: false, why: "missing" };
+  const beat = backfill?.screenplayBeats?.[beatIndex];
+  const scenes = Array.isArray(beat?.scenes) ? beat.scenes : [];
+  const writtenMinutes = round1(scenes.reduce((n, s) => n + (Number(s?.estimatedMinutes) || 0), 0));
+  const targetMinutes = Number(plot[beatIndex]?.runtimeMinutes) > 0 ? Number(plot[beatIndex].runtimeMinutes) : null;
+  const filled = { ...base, writtenMinutes, targetMinutes };
+  if (scenes.length === 0 || !["pending", "approved"].includes(beat?.status)) return { ...filled, canExtend: false, why: "unwritten" };
+  if (!targetMinutes) return { ...filled, canExtend: false, why: "notarget" };
+  if (writtenMinutes >= targetMinutes) return { ...filled, canExtend: false, why: "enough" };
+  return { ...filled, canExtend: true, why: "ok" };
+}
 
 // ---- answering in words ------------------------------------------------------------------------------------------------------------------
 const GUIDE = `WHAT THE AI MOVIE SCREEN CAN DO (explain it when asked, plainly, never invent a button that is not listed):
@@ -208,13 +248,13 @@ export async function handleAduMessage(db, models, { projectId, userId = null, t
     else if (read.intent === "UNCLEAR") {
       // it could not tell: ask, with the choices — unless it is only talk, which is then answered
       kind = "unclear";
-      action = { type: "agent", intent: read.intent, instruction: said, summary: read.summary, targets: [], unresolved: read.unresolved ?? [], options: read.allChoices ?? read.options ?? [], needsClarification: true, big: false };
+      action = { type: "agent", draftId: draft.id, intent: read.intent, instruction: said, summary: read.summary, targets: [], unresolved: read.unresolved ?? [], options: read.allChoices ?? read.options ?? [], needsClarification: true, big: false };
       reply = SAYS[lang].clarify({ summary: read.summary && !/^Interpreted as/i.test(read.summary) ? read.summary : "" });
     } else {
       // when the classifier's model could not be asked, the Agent falls back to the words alone and its summary is only "Interpreted as …": say the person's own words instead
       const summary = /^Interpreted as/i.test(read.summary ?? "") ? `“${clip(said, 140)}”` : read.summary;
       action = {
-        type: "agent", intent: read.intent, instruction: said, summary, targets: read.targets ?? [], unresolved: read.unresolved ?? [], candidates: read.candidates ?? [],
+        type: "agent", draftId: draft.id, intent: read.intent, instruction: said, summary, targets: read.targets ?? [], unresolved: read.unresolved ?? [], candidates: read.candidates ?? [],
         options: read.options ?? [], needsClarification: Boolean(read.needsClarification), constraints: read.constraints ?? {}, big: BIG.has(read.intent), confidence: read.confidence,
       };
       reply = action.needsClarification ? SAYS[lang].clarify(action) : action.big ? SAYS[lang].big(action) : SAYS[lang].agent(action);
@@ -223,8 +263,9 @@ export async function handleAduMessage(db, models, { projectId, userId = null, t
     action = { type: "write_all", dialogue: sorted.dialogue };
     reply = SAYS[lang].write(sorted.dialogue);
   } else if (kind === "extend") {
-    action = { type: "extend_beat", beatIndex: sorted.beatIndex, minutes: sorted.minutes, needsClarification: sorted.beatIndex === null };
-    reply = SAYS[lang].extend(sorted);
+    const info = extendInfo(project.backfill, sorted.beatIndex, sorted.minutes);
+    action = { type: "extend_beat", ...info };
+    reply = SAYS[lang].extend(info);
   }
   if (kind === "chat") {
     reply = await answerInWords({ db, models, draft, project, history, text: said, language: lang, context });
@@ -234,6 +275,18 @@ export async function handleAduMessage(db, models, { projectId, userId = null, t
   const userRow = (await db.query("INSERT INTO adu_chat_messages (module, project_ref, user_id, role, content) VALUES ('ai_movie', $1, $2, 'user', $3) RETURNING *", [projectId, userId, said])).rows[0];
   const aduRow = (await db.query("INSERT INTO adu_chat_messages (module, project_ref, user_id, role, content, action) VALUES ('ai_movie', $1, $2, 'assistant', $3, $4) RETURNING *", [projectId, userId, reply, action ? JSON.stringify(action) : null])).rows[0];
   return { user: row(userRow), assistant: row(aduRow), sortedAs: kind, draftId: draft.id };
+}
+
+// the person pressed a card's button (or "no thanks"): the card is remembered as done, so it does not come back after a reload
+export async function resolveMessage(db, projectId, userId, { messageId, outcome }) {
+  const done = ["applied", "dismissed"].includes(outcome) ? outcome : "dismissed";
+  const updated = (await db.query(
+    `UPDATE adu_chat_messages SET resolved = true, action = COALESCE(action, '{}'::jsonb) || jsonb_build_object('outcome', $4::text)
+     WHERE id = $1 AND module = 'ai_movie' AND project_ref = $2 AND user_id IS NOT DISTINCT FROM $3 AND role = 'assistant' RETURNING *`,
+    [Number(messageId) || 0, projectId, userId ?? null, done]
+  )).rows[0];
+  if (!updated) throw httpError("That message was not found.", 404, "not_found");
+  return row(updated);
 }
 
 export async function clearHistory(db, projectId, userId) {
@@ -254,6 +307,7 @@ export function registerAduChatRoutes(app, db, requireRole, { models }) {
   const base = "/api/ai-movie/assistant/:projectId";
   app.get(`${base}/history`, admin, wrap(async (req, res) => res.json({ messages: await loadHistory(db, project(req), req.user?.id ?? null) })));
   app.delete(`${base}/history`, admin, wrap(async (req, res) => { await clearHistory(db, project(req), req.user?.id ?? null); res.json({ ok: true }); }));
+  app.post(`${base}/resolve`, admin, wrap(async (req, res) => res.json({ message: await resolveMessage(db, project(req), req.user?.id ?? null, { messageId: req.body?.messageId, outcome: req.body?.outcome }) })));
   app.post(`${base}/message`, admin, wrap(async (req, res) => res.json(await handleAduMessage(db, models, {
     projectId: project(req), userId: req.user?.id ?? null, text: req.body?.text, language: req.body?.language, context: req.body?.context && typeof req.body.context === "object" ? req.body.context : {},
   }))));

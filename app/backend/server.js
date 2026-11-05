@@ -33,6 +33,7 @@ import { AsyncLocalStorage } from "async_hooks";
 import { marked } from "marked";
 import { registerProductionRoutes, syncProductionQuietly } from "./production.js";
 import { ensureAllProductionSchemas } from "./productionSchema.js";
+import { ensureAduChatSchema, registerAduChatRoutes } from "./aduChat.js";
 import { registerScreenplayRoutes } from "./screenplayAnalysis.js";
 import { registerPipelineRoutes } from "./pipelineRoutes.js";
 import { createProviders } from "./providers.js";
@@ -21361,6 +21362,8 @@ const draftAgentModels = {
     },
 };
 registerDraftAgentRoutes(app, db, requireRole, { models: draftAgentModels.value });
+// Adu, the friendly front door of AI Movie (aduChat.js): one conversation, remembered per person and draft; it sorts what is said and uses the Draft Agent above for edits
+registerAduChatRoutes(app, db, requireRole, { models: draftAgentModels.value });
 registerShotPlanRoutes(app, db, requireRole, { getTextJson: async (projectId) => async (prompt) => (await aiMovieStory.ask.ask(projectId, "shot-cutter-complex", { contents: prompt, maxOutputTokens: 8192 })).data });
 registerTimelineExportRoutes(app, db, requireRole, { store: productionMedia.store });
 registerScreenplayRoutes(app, db, requireRole);
@@ -21560,6 +21563,7 @@ ensureAiMovieSchema()
   .then(async () => { try { const fixed = await repairStoredTransitions(db); if (fixed) console.log(`Screenplay: ${fixed} scene(s) had a transition (FREEZE. BREAK- …) written as a character — corrected.`); } catch (error) { console.error("Transition repair failed:", error.message); } })
   .then(async () => { try { await productionSync.resume(); await resumeAdSheetJobs(); await skipStartJobs.resume(); await writeScenesJobs.resume(); await addScenesJobs.resume(); await preparePacketJobs.resume(); await aiMovieWriteAllJobs.resume(); } catch (error) { console.error("Resuming interrupted background jobs failed:", error.message); } })
   .then(() => ensureAllProductionSchemas(db))
+  .then(() => ensureAduChatSchema(db))
   .then(async (failures) => { try { const made = await backfillDrafts(db); await failInterruptedRequests(db); if (made) console.log(`Draft Management: ${made} existing project(s) are now Draft 1 of their project.`); } catch (error) { console.error("Draft backfill failed:", error.message); } return failures; })
   .catch((error) => console.error("Schema setup failed:", error.message))
   .finally(() => {

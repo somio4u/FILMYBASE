@@ -68,6 +68,12 @@ test("sorting without the AI: questions and greetings are talk; commands are not
   assert.equal(sortWithoutAi("extend this beat to 6 minutes").beatIndex, null); // which beat? it will ask
   assert.deepEqual(sortWithoutAi("make it longer, 6 minutes", { beatIndex: 0 }), { kind: "extend", beatIndex: 0, minutes: 6 }); // the beat on screen
   assert.equal(sortWithoutAi("make it longer, 6 minutes").kind, "agent"); // no beat, no scene, nothing on screen: the Agent's classifier decides
+  // the starter buttons of the chat in Hindi and Odia are commands too
+  assert.deepEqual(sortWithoutAi("पूरी screenplay लिखो"), { kind: "write", dialogue: true });
+  assert.deepEqual(sortWithoutAi("बाकी सारे scenes लिखो"), { kind: "write", dialogue: true });
+  assert.deepEqual(sortWithoutAi("ପୁରା ସ୍କ୍ରିନପ୍ଲେ ଲେଖ"), { kind: "write", dialogue: true });
+  assert.deepEqual(sortWithoutAi("beat 3 को 8 मिनट लंबा करो"), { kind: "extend", beatIndex: 2, minutes: 8 });
+  assert.equal(sortWithoutAi("मैं जिस beat पर हूँ वह कितना लंबा है?").kind, "chat"); // a question about length is not an order to lengthen
   assert.equal(sortWithoutAi("How do I write the whole screenplay?").kind, "chat"); // a question about it is not the command
   assert.equal(sortWithoutAi("How do I make this scene longer?").kind, "chat");
   assert.equal(sortWithoutAi("Make the villain colder").kind, "agent");

@@ -5,6 +5,7 @@ import AiSettings from './AiSettings.jsx'
 import SyncProduction from './SyncProduction.jsx'
 import PacketPrep from './PacketPrep.jsx'
 import AiMovieWriteAll from './AiMovieWriteAll.jsx'
+import AduChat from './AduChat.jsx'
 import NamesPlaces from './NamesPlaces.jsx'
 import { useState, useEffect, useRef, useMemo, useCallback, useContext, createContext, Fragment, lazy, Suspense } from 'react'
 import { createPortal } from 'react-dom'
@@ -3631,11 +3632,12 @@ function FloatingAgentWidget({ currentUser, t, onRunCompleted, onOpenProject, dr
         const runBadge = status?.status === 'running' ? '● writing' : status?.status === 'awaiting_approval' ? '● needs your approval' : status?.status === 'failed' ? '● stopped' : ''
         const tabs = projectMode ? (
           <div className="floating-agent-tabs" role="tablist" aria-label="What Adu works on">
+            {draftCtx.draft.module === 'ai_movie' && <button type="button" role="tab" aria-selected={tab === 'talk'} className={tab === 'talk' ? 'on' : ''} onClick={() => setAduTab('talk')}>💬 Talk to Adu</button>}
             <button type="button" role="tab" aria-selected={tab === 'project'} className={tab === 'project' ? 'on' : ''} onClick={() => setAduTab('project')}>This project</button>
             <button type="button" role="tab" aria-selected={tab === 'new'} className={tab === 'new' ? 'on' : ''} onClick={() => setAduTab('new')}>Write a new story{runBadge && <small className="floating-agent-tab-badge"> {runBadge}</small>}</button>
           </div>
         ) : null
-        if (tab === 'project') {
+        if (tab === 'project' || tab === 'talk') {
           return (
             <>
             {aduExpanded && <div className="adu-backdrop" onClick={() => setAduExpanded(false)} aria-hidden="true" />}
@@ -3648,8 +3650,12 @@ function FloatingAgentWidget({ currentUser, t, onRunCompleted, onOpenProject, dr
               </div>
               {tabs}
               <div className="floating-agent-embed">
+                {tab === 'talk' ? (
+                  <ErrorBoundary inline><AduChat backendUrl={BACKEND_URL} projectId={draftCtx.draft.projectRef} language={draftCtx.language} getContext={draftCtx.getContext} selection={aduSelection} InputComponent={MicTextarea} /></ErrorBoundary>
+                ) : (
                 <ErrorBoundary inline><Suspense fallback={null}><DraftAgentPanel embedded backendUrl={BACKEND_URL} draft={draftCtx.draft} getContext={draftCtx.getContext} InputComponent={MicTextarea} initialSelection={aduSelection}
                   initialRequestId={draftCtx.openRequestId ?? null} onClose={() => setIsOpen(false)} onOpenDraft={(what, extra) => { if (what !== 'dashboard' && what !== 'compare') setIsOpen(false); draftCtx.onOpenDraft?.(what, extra) }} onApplied={draftCtx.onApplied} /></Suspense></ErrorBoundary>
+                )}
               </div>
             </div>
           </>
@@ -9576,7 +9582,7 @@ function App() {
     }
   }
 
-  const aduDraftCtx = { openAduNonce: aduOpenNonce, openLinked: (d) => continueDraft({ id: d.id, module: d.module, projectRef: d.projectRef, resumeContext: {}, currentStage: null }), openDrafts: currentDraft ? () => setDraftDashboard({ module: currentDraft.module, projectRef: currentDraft.projectRef }) : null, draft: currentDraft ?? aduReviewDraft, onAduClosed: () => setAduReviewDraft(null), getContext: agentContext, onOpenDraft: handleAgentOpen, onApplied: refreshOpenDraft, openRequestId: aduRequestId }
+  const aduDraftCtx = { openAduNonce: aduOpenNonce, openLinked: (d) => continueDraft({ id: d.id, module: d.module, projectRef: d.projectRef, resumeContext: {}, currentStage: null }), openDrafts: currentDraft ? () => setDraftDashboard({ module: currentDraft.module, projectRef: currentDraft.projectRef }) : null, draft: currentDraft ?? aduReviewDraft, onAduClosed: () => setAduReviewDraft(null), getContext: agentContext, onOpenDraft: handleAgentOpen, onApplied: refreshOpenDraft, openRequestId: aduRequestId, language: aiMovieLanguage }
 
   // Which draft is the open project? (Every existing project is Draft 1 automatically.)
   useEffect(() => {

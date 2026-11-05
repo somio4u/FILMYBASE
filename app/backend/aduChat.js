@@ -51,16 +51,17 @@ export function looksLikeQuestion(text) {
   return /[?？]\s*$/.test(t) || QUESTION_START.test(t) || QUESTION_WORD_ANYWHERE.test(t);
 }
 
-const WRITE_VERB = /\b(write|likho|likh\s*do|likhdo|generate|create|banao|bana\s*do)\b|ଲେଖ/i;
-const WHOLE = /\b(whole|full|entire|complete|all|rest|remaining|left|baaki|baki|pura|poora|sab|sabhi)\b|ସବୁ|ପୂରା|ବାକି/i;
-const SCREENPLAY_WORD = /\b(screenplay|script|scenes?|beats?|dialogues?|film|movie)\b|ସ୍କ୍ରିନପ୍ଲେ/i;
+// (Hindi and Odia letters are not "word" letters for \b, so those words are matched without it)
+const WRITE_VERB = /\b(write|likho|likh\s*do|likhdo|generate|create|banao|bana\s*do)\b|ଲେଖ|लिख|बनाओ/i;
+const WHOLE = /\b(whole|full|entire|complete|all|rest|remaining|left|baaki|baki|pura|poora|sab|sabhi)\b|ସବୁ|ପୂରା|ପୁରା|ବାକି|पूरी|पूरा|सारी|सारा|बाकी|बचे|बचा/i;
+const SCREENPLAY_WORD = /\b(screenplay|script|scenes?|beats?|dialogues?|film|movie)\b|ସ୍କ୍ରିନପ୍ଲେ|ସିନ୍|ବିଟ୍|ସଂଳାପ|स्क्रीनप्ले|पटकथा|सीन|बीट|संवाद|फ़िल्म|फिल्म/i;
 
 export function sortWithoutAi(text, context = {}) {
   const t = String(text ?? "").trim();
   if (!t) return { kind: "empty" };
   // "make beat 3 longer — 8 minutes": extend one beat to a time
   const minutes = /(\d+(?:\.\d+)?)\s*(?:min|mins|minute|minutes|मिनट|ମିନିଟ୍?)/i.exec(t);
-  if (/\b(extend|longer|lengthen|increase|stretch|badha|badhao|lamba|lamb)\b|ବଢ଼ା/i.test(t) && (/\b(beat|scene)\b/i.test(t) || Number.isInteger(context.beatIndex)) && minutes && !looksLikeQuestion(t)) {
+  if (/\b(extend|longer|lengthen|increase|stretch|badha|badhao|lamba|lamb)\b|ବଢ଼ା|ଲମ୍ବା|बढ़ा|लंबा|लम्बा/i.test(t) && (/\b(beat|scene)\b/i.test(t) || Number.isInteger(context.beatIndex)) && minutes && !looksLikeQuestion(t)) {
     const beat = /\bbeat\s*(\d+)\b/i.exec(t);
     const beatIndex = beat ? Number(beat[1]) - 1 : Number.isInteger(context.beatIndex) ? context.beatIndex : null;
     return { kind: "extend", beatIndex, minutes: Number(minutes[1]) };

@@ -1,0 +1,5 @@
+/* Adu's chat inside the floating Adu window (AduChat.jsx): the Buddy's message and input styles, laid out to fill the window instead of floating */
+.adu-chat { display: flex; flex-direction: column; height: min(62vh, 520px); min-height: 320px; box-sizing: border-box; text-align: left; text-transform: none; }
+.adu-chat-bar { display: flex; justify-content: flex-end; padding: 0 4px; }
+.adu-chat .buddy-list { flex: 1 1 auto; }
+.adu-action blockquote { margin: 6px 0; font-size: 0.85rem; opacity: 0.9; }

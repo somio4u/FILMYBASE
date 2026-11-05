@@ -27,7 +27,7 @@ export function publicView(job, now = Date.now()) {
 const keyOf = (item) => `${item.episodeIndex ?? "film"}:${item.sceneIndex}`;
 const defaultDescribe = (item, number, total) => `Writing scene ${item.label} (${number} of ${total})${item.heading ? ` — ${item.heading}` : ""}`;
 
-// writeOne(item) writes and saves ONE scene; isWritten(item) says whether a scene already has written lines
+// writeOne(item, { say }) writes and saves ONE scene (say(text) updates the progress line); isWritten(item) says whether a scene already has written lines
 // `kind` names the sort of job in the shared table; `describe(item, number, total)` is the plain sentence shown while an item is being worked on
 export function createWriteScenesJobs({ jobStore, writeOne, isWritten, kind = WRITE_KIND, describe = defaultDescribe, now = () => Date.now(), log = console }) {
   const jobs = new Map(); // id -> job of this server run; the database answers for the rest
@@ -49,7 +49,7 @@ export function createWriteScenesJobs({ jobStore, writeOne, isWritten, kind = WR
         job.step = describe(item, job.done.length + job.failed.length + 1, job.items.length);
         await persist(job);
         try {
-          await writeOne(item);
+          await writeOne(item, { say: async (text) => { job.step = String(text).slice(0, 300); await persist(job); } }); // the second argument lets a long item tell the screen what it is doing now
           job.done.push({ episodeIndex: item.episodeIndex, sceneIndex: item.sceneIndex, label: item.label, ...(item.rewrite ? { rewrite: true } : {}) });
           failuresInARow = 0;
         } catch (error) {

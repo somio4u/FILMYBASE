@@ -42,6 +42,7 @@ import { registerSubmissionRoutes, designerGatekeeper, DESIGNER_ROLE } from "./d
 import { sessionTokenOf } from "./sessionToken.js";
 import { analyzeImportedText, numberedHeadingsToPlain, reportLines } from "./importAnalysis.js";
 import { ADD_KIND, PREPARE_PACKETS_KIND, createWriteScenesJobs, publicView as publicWriteJob } from "./writeScenesJobs.js";
+import { WRITE_ALL_KIND, beatIsComplete, planWriteAll, writeWholeBeat } from "./aiMovieWriteAll.js";
 import { countOdiaWords, textsOfScene, textsOfSceneList } from "./odiaCorpus.js";
 import { languageOf, parseEpisodesFromText, sceneContent } from "./screenplayImport.js";
 import { planFill } from "./pdfFill.js";
@@ -5436,14 +5437,21 @@ function flattenAiMovieScreenplayScenesSoFar(screenplayBeats, beforeIndex) {
 // "generated", "no_more", or "error" -- fillAiMovieScreenplayBuffer below
 // uses this to know whether to keep looping.
 async function generateNextAiMovieScreenplayBeat(projectId) {
+  const projectResult = await db.query("SELECT backfill FROM ai_movie_projects WHERE id = $1", [projectId]);
+  const nextIndex = (projectResult.rows[0]?.backfill?.screenplayBeats ?? []).findIndex((b) => b.status === "not_started");
+  if (!projectResult.rows[0] || nextIndex === -1) return "no_more";
+  return generateAiMovieScreenplayBeatAt(projectId, nextIndex);
+}
+
+// Writes THIS beat's scenes (whatever its status was), with the same saving of progress as above. "generated" or "error".
+async function generateAiMovieScreenplayBeatAt(projectId, nextIndex) {
   const projectResult = await db.query("SELECT pasted_text, backfill FROM ai_movie_projects WHERE id = $1", [projectId]);
   const project = projectResult.rows[0];
-  if (!project) return "no_more";
+  if (!project) return "error";
 
   const beats = project.backfill?.plot ?? [];
   const screenplayBeats = project.backfill?.screenplayBeats ?? [];
-  const nextIndex = screenplayBeats.findIndex((b) => b.status === "not_started");
-  if (nextIndex === -1) return "no_more";
+  if (!screenplayBeats[nextIndex]) return "error";
 
   screenplayBeats[nextIndex] = { ...screenplayBeats[nextIndex], status: "generating", generatingSince: new Date().toISOString() };
   await saveAiMovieBackfillField(projectId, "screenplayBeats", screenplayBeats);
@@ -5608,29 +5616,21 @@ async function refreshAiMovieAssetsInBackground(projectId) {
 
 // Approves one beat's scenes and, unless the whole screenplay is now done,
 // tops the generation buffer back up by one -- fire-and-forget, same
-// non-blocking pattern as the initial kickoff.
-app.post("/api/ai-movie/stages/screenplay/beats/:index/approve", requireRole("admin"), async (req, res) => {
-  const beatIndex = Number(req.params.index);
-  const { projectId } = req.body;
-  if (!projectId) {
-    res.status(400).json({ error: "No project to approve into." });
-    return;
-  }
-
+// non-blocking pattern as the initial kickoff. Approves one beat of the screenplay (by hand through the button below, or automatically by "Write the whole screenplay"). `auto` marks the beat as
+// approved by the machine, so it can still be told apart and read; `startNext: false` keeps the 4-beat background writer from starting while the
+// whole-screenplay job is already going through the beats in order. Throws errors that carry a `status`.
+async function approveAiMovieScreenplayBeatNow(projectId, beatIndex, { auto = false, startNext = true } = {}) {
+  const fail = (status, message) => Object.assign(new Error(message), { status });
+  if (!projectId) throw fail(400, "No project to approve into.");
   const projectResult = await db.query("SELECT backfill FROM ai_movie_projects WHERE id = $1", [projectId]);
   const project = projectResult.rows[0];
-  if (!project) {
-    res.status(404).json({ error: "Project not found." });
-    return;
-  }
+  if (!project) throw fail(404, "Project not found.");
 
   const screenplayBeats = project.backfill?.screenplayBeats ?? [];
-  if (!Number.isInteger(beatIndex) || beatIndex < 0 || beatIndex >= screenplayBeats.length) {
-    res.status(400).json({ error: "Not a valid beat." });
-    return;
-  }
+  if (!Number.isInteger(beatIndex) || beatIndex < 0 || beatIndex >= screenplayBeats.length) throw fail(400, "Not a valid beat.");
 
-  screenplayBeats[beatIndex] = { ...screenplayBeats[beatIndex], status: "approved" };
+  const { autoApproved: _wasAuto, ...rest } = screenplayBeats[beatIndex]; // approving by hand clears the "approved automatically" mark
+  screenplayBeats[beatIndex] = { ...rest, status: "approved", ...(auto ? { autoApproved: true } : {}) };
   await saveAiMovieBackfillField(projectId, "screenplayBeats", screenplayBeats);
 
   const allApproved = screenplayBeats.every((b) => b.status === "approved");
@@ -5657,7 +5657,7 @@ app.post("/api/ai-movie/stages/screenplay/beats/:index/approve", requireRole("ad
     } catch (error) {
       console.error("Silent asset refresh failed after full screenplay approval (approval itself still succeeded):", error.message);
     }
-  } else {
+  } else if (startNext) {
     fillAiMovieScreenplayBuffer(projectId);
     // Keep the silent agent grabbing production details WHILE the screenplay
     // is still being written, not only at the end: every 5th approved beat.
@@ -5665,7 +5665,15 @@ app.post("/api/ai-movie/stages/screenplay/beats/:index/approve", requireRole("ad
     if (approvedCount % AI_MOVIE_MID_SCREENPLAY_REFRESH_EVERY === 0) refreshAiMovieAssetsInBackground(projectId);
   }
 
-  res.json({ beatIndex, allApproved });
+  return { beatIndex, allApproved };
+}
+
+app.post("/api/ai-movie/stages/screenplay/beats/:index/approve", requireRole("admin"), async (req, res) => {
+  try {
+    res.json(await approveAiMovieScreenplayBeatNow(req.body.projectId, Number(req.params.index)));
+  } catch (error) {
+    res.status(error.status ?? 500).json({ error: error.message });
+  }
 });
 
 // Regenerates one beat's scenes -- with feedback (a real Request Changes)
@@ -6642,84 +6650,141 @@ function aiMovieNarrationInstruction(narrationBrief, sceneIndex, sceneCount) {
   return `ONE CONTINUOUS NARRATION ACROSS THIS BEAT: the user wants a single NARRATOR voice-over that flows across this beat's scenes, in order. This is scene ${number} of ${sceneCount}. The user's brief for the whole narration: "${narrationBrief.trim()}". Write ONLY the part of it that plays over THIS scene: pick up exactly where the narration in the earlier scenes of this beat (shown above) left off, never repeat a line already said, and move it one step further. ${ending} Keep any dialogue this scene already has, word for word.`;
 }
 
+// Writes the dialogue of ONE scene (the "Write dialogue" button, or "Write the whole screenplay" for every scene in turn). Throws errors that carry a `status`.
+async function writeAiMovieSceneDialogueNow(projectId, beatIndex, sceneIndex, { instruction = null, narrationBrief = null } = {}) {
+  const fail = (status, message) => Object.assign(new Error(message), { status });
+  if (!projectId) throw fail(400, "No project to write dialogue into.");
+
+  const projectResult = await db.query("SELECT pasted_text, backfill FROM ai_movie_projects WHERE id = $1", [projectId]);
+  const project = projectResult.rows[0];
+  if (!project) throw fail(404, "Project not found.");
+
+  const beats = project.backfill?.plot ?? [];
+  const screenplayBeats = project.backfill?.screenplayBeats ?? [];
+  if (!Number.isInteger(beatIndex) || beatIndex < 0 || beatIndex >= beats.length) throw fail(400, "Not a valid beat.");
+  const beat = screenplayBeats[beatIndex];
+  if (!beat || beat.status !== "approved" || !Array.isArray(beat.scenes)) throw fail(400, "Approve this beat first before writing dialogue for its scenes.");
+  if (!Number.isInteger(sceneIndex) || sceneIndex < 0 || sceneIndex >= beat.scenes.length) throw fail(400, "Not a valid scene.");
+
+  const referenceMaterialText = await getAiMovieReferenceMaterialText(projectId);
+  const priorContextText = withAiMovieIntervalNote(
+    flattenAiMovieContentForExtraction(project.pasted_text, project.backfill, { includeScreenplay: false }),
+    project.backfill,
+    beatIndex
+  );
+  const scenesSoFarText = flattenAiMovieScreenplayScenesSoFar(screenplayBeats, beatIndex);
+  const beatSiblingScenesText = beat.scenes
+    .filter((_, i) => i !== sceneIndex)
+    .map((s) => sceneToPromptText(s))
+    .join("\n\n");
+  const targetScene = beat.scenes[sceneIndex];
+  const targetSceneText = sceneToPromptText(targetScene);
+  const characterDialogueBriefsText = aiMovieCharacterDialogueBriefsText(project.backfill);
+
+  const { characters, content } = await generateAiMovieSceneDialogue(
+    priorContextText,
+    referenceMaterialText,
+    scenesSoFarText,
+    beatSiblingScenesText,
+    aiMovieBeatForWriters(beats, beatIndex),
+    targetSceneText,
+    aiMovieNarrationInstruction(narrationBrief, sceneIndex, beat.scenes.length) || instruction || null,
+    characterDialogueBriefsText
+  );
+
+  const latest = (await db.query("SELECT backfill FROM ai_movie_projects WHERE id = $1", [projectId])).rows[0].backfill;
+  const latestBeats = latest.screenplayBeats ?? screenplayBeats;
+  const latestScenes = latestBeats[beatIndex]?.scenes ?? beat.scenes;
+  // Drops any older flat "dialogue" list this scene might still carry --
+  // "content" is now the one authoritative shape once dialogue exists.
+  const newScenes = latestScenes.map((s, i) => {
+    if (i !== sceneIndex) return s;
+    const { dialogue: _legacyDialogue, ...rest } = s;
+    const updated = normalizeAiMovieSceneFormat({ ...rest, content, characters });
+    return { ...updated, estimatedMinutes: computeAiMovieSceneMinutes(updated) };
+  });
+  latestBeats[beatIndex] = { ...latestBeats[beatIndex], scenes: newScenes };
+  await saveAiMovieBackfillField(projectId, "screenplayBeats", latestBeats);
+
+  return { beatIndex, sceneIndex, content, characters, estimatedMinutes: newScenes[sceneIndex].estimatedMinutes };
+}
+
 app.post("/api/ai-movie/stages/screenplay/beats/:beatIndex/scenes/:sceneIndex/dialogue", requireRole("admin"), async (req, res) => {
   const beatIndex = Number(req.params.beatIndex);
   const sceneIndex = Number(req.params.sceneIndex);
   const { projectId, instruction, narrationBrief } = req.body;
-  if (!projectId) {
-    res.status(400).json({ error: "No project to write dialogue into." });
-    return;
-  }
-
-  const projectResult = await db.query("SELECT pasted_text, backfill FROM ai_movie_projects WHERE id = $1", [projectId]);
-  const project = projectResult.rows[0];
-  if (!project) {
-    res.status(404).json({ error: "Project not found." });
-    return;
-  }
-
-  const beats = project.backfill?.plot ?? [];
-  const screenplayBeats = project.backfill?.screenplayBeats ?? [];
-  if (!Number.isInteger(beatIndex) || beatIndex < 0 || beatIndex >= beats.length) {
-    res.status(400).json({ error: "Not a valid beat." });
-    return;
-  }
-  const beat = screenplayBeats[beatIndex];
-  if (!beat || beat.status !== "approved" || !Array.isArray(beat.scenes)) {
-    res.status(400).json({ error: "Approve this beat first before writing dialogue for its scenes." });
-    return;
-  }
-  if (!Number.isInteger(sceneIndex) || sceneIndex < 0 || sceneIndex >= beat.scenes.length) {
-    res.status(400).json({ error: "Not a valid scene." });
-    return;
-  }
-
   try {
-    const referenceMaterialText = await getAiMovieReferenceMaterialText(projectId);
-    const priorContextText = withAiMovieIntervalNote(
-      flattenAiMovieContentForExtraction(project.pasted_text, project.backfill, { includeScreenplay: false }),
-      project.backfill,
-      beatIndex
-    );
-    const scenesSoFarText = flattenAiMovieScreenplayScenesSoFar(screenplayBeats, beatIndex);
-    const beatSiblingScenesText = beat.scenes
-      .filter((_, i) => i !== sceneIndex)
-      .map((s) => sceneToPromptText(s))
-      .join("\n\n");
-    const targetScene = beat.scenes[sceneIndex];
-    const targetSceneText = sceneToPromptText(targetScene);
-    const characterDialogueBriefsText = aiMovieCharacterDialogueBriefsText(project.backfill);
-
-    const { characters, content } = await generateAiMovieSceneDialogue(
-      priorContextText,
-      referenceMaterialText,
-      scenesSoFarText,
-      beatSiblingScenesText,
-      aiMovieBeatForWriters(beats, beatIndex),
-      targetSceneText,
-      aiMovieNarrationInstruction(narrationBrief, sceneIndex, beat.scenes.length) || instruction || null,
-      characterDialogueBriefsText
-    );
-
-    const latest = (await db.query("SELECT backfill FROM ai_movie_projects WHERE id = $1", [projectId])).rows[0].backfill;
-    const latestBeats = latest.screenplayBeats ?? screenplayBeats;
-    const latestScenes = latestBeats[beatIndex]?.scenes ?? beat.scenes;
-    // Drops any older flat "dialogue" list this scene might still carry --
-    // "content" is now the one authoritative shape once dialogue exists.
-    const newScenes = latestScenes.map((s, i) => {
-      if (i !== sceneIndex) return s;
-      const { dialogue: _legacyDialogue, ...rest } = s;
-      const updated = normalizeAiMovieSceneFormat({ ...rest, content, characters });
-      return { ...updated, estimatedMinutes: computeAiMovieSceneMinutes(updated) };
-    });
-    latestBeats[beatIndex] = { ...latestBeats[beatIndex], scenes: newScenes };
-    await saveAiMovieBackfillField(projectId, "screenplayBeats", latestBeats);
-
-    res.json({ beatIndex, sceneIndex, content, characters, estimatedMinutes: newScenes[sceneIndex].estimatedMinutes });
+    res.json(await writeAiMovieSceneDialogueNow(projectId, beatIndex, sceneIndex, { instruction, narrationBrief }));
   } catch (error) {
-    console.error(`Screenplay beat ${beatIndex} scene ${sceneIndex} dialogue failed:`, error.message);
-    res.status(502).json({ error: error.message });
+    if (!error.status) console.error(`Screenplay beat ${beatIndex} scene ${sceneIndex} dialogue failed:`, error.message);
+    res.status(error.status ?? 502).json({ error: error.message });
   }
+});
+
+// ---- "Write the whole screenplay" (aiMovieWriteAll.js): every beat that is not finished is written, approved automatically and given its dialogue, in order,
+// as ONE background job with a progress card (the project id travels in the `sceneListId` field of the shared job machine).
+const aiMovieProject = async (projectId) => (await db.query("SELECT backfill FROM ai_movie_projects WHERE id = $1", [projectId])).rows[0] ?? null;
+
+const aiMovieWriteAllJobs = createWriteScenesJobs({
+  jobStore,
+  kind: WRITE_ALL_KIND,
+  isWritten: async (item) => {
+    const backfill = (await aiMovieProject(item.sceneListId))?.backfill;
+    if (!backfill) return true; // the project is gone: nothing to write
+    return beatIsComplete(backfill.screenplayBeats?.[item.beatIndex], { dialogue: item.dialogue, isSong: isAiMovieSongBeat(backfill.plot?.[item.beatIndex]) });
+  },
+  describe: (item) => `Beat ${item.beatIndex + 1} of ${item.totalBeats}${item.title ? ` — ${item.title}` : ""}`,
+  writeOne: async (item, tools) => {
+    const projectId = item.sceneListId;
+    const plot = (await aiMovieProject(projectId))?.backfill?.plot ?? [];
+    await writeWholeBeat({
+      item,
+      say: tools?.say,
+      deps: {
+        getBeat: async (i) => (await aiMovieProject(projectId))?.backfill?.screenplayBeats?.[i] ?? null,
+        reviveStuck: async (i) => { const beats = (await aiMovieProject(projectId))?.backfill?.screenplayBeats; if (beats) await reviveStuckAiMovieScreenplayBeats(projectId, beats); },
+        generateBeat: (i) => generateAiMovieScreenplayBeatAt(projectId, i),
+        approveBeat: (i) => approveAiMovieScreenplayBeatNow(projectId, i, { auto: true, startNext: false }),
+        writeDialogue: (i, j) => writeAiMovieSceneDialogueNow(projectId, i, j),
+        isSong: (i) => isAiMovieSongBeat(plot[i]),
+        sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+        now: () => Date.now(),
+      },
+    });
+  },
+});
+
+app.get("/api/ai-movie/projects/:id/write-all/current", requireRole("admin"), async (req, res) => {
+  res.json(publicWriteJob(await aiMovieWriteAllJobs.currentFor(Number(req.params.id))) ?? { jobId: null });
+});
+
+// body: { dialogue?: false } — by default the dialogue of every scene is written too
+app.post("/api/ai-movie/projects/:id/write-all", requireRole("admin"), async (req, res) => {
+  const projectId = Number(req.params.id);
+  try {
+    const project = await aiMovieProject(projectId);
+    if (!project) { res.status(404).json({ error: "Project not found." }); return; }
+    const beats = project.backfill?.plot ?? [];
+    if (beats.length === 0) { res.status(400).json({ error: "Generate the Beat Sheet first." }); return; }
+    // the beats that have not been started yet get their (empty) place; nothing already written is touched
+    const screenplayBeats = Array.isArray(project.backfill?.screenplayBeats) ? [...project.backfill.screenplayBeats] : [];
+    while (screenplayBeats.length < beats.length) screenplayBeats.push({ scenes: null, status: "not_started", feedback: null });
+    if (screenplayBeats.length !== (project.backfill?.screenplayBeats?.length ?? -1)) await saveAiMovieBackfillField(projectId, "screenplayBeats", screenplayBeats);
+    const dialogue = req.body?.dialogue !== false;
+    const items = planWriteAll({ beats, screenplayBeats, isSong: (i) => isAiMovieSongBeat(beats[i]), dialogue, projectId });
+    if (items.length === 0) { res.status(400).json({ error: dialogue ? "Everything is already written: every beat is approved and every scene has its dialogue." : "Every beat is already written and approved." }); return; }
+    const { job, alreadyRunning } = await aiMovieWriteAllJobs.start({ sceneListId: projectId, userId: req.user.id, items, language: "en" });
+    res.json({ ...publicWriteJob(job), alreadyRunning });
+  } catch (error) {
+    console.error("Starting 'write the whole screenplay' failed:", error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post("/api/ai-movie/projects/:id/write-all/:jobId/stop", requireRole("admin"), async (req, res) => {
+  const job = await aiMovieWriteAllJobs.get(req.params.jobId);
+  if (!job || job.sceneListId !== Number(req.params.id)) { res.status(404).json({ error: "This job was not found." }); return; }
+  res.json({ stopped: await aiMovieWriteAllJobs.stop(req.params.jobId) });
 });
 
 // AUTO PRODUCTION (autoProduction.js): when an AI Movie's screenplay is locked, the cinematic directions, shot
@@ -21462,7 +21527,7 @@ ensureAiMovieSchema()
   .then(async () => { try { await aiCredentials.load(); aiCredentials.startRefresh(); const c = aiCredentials.current(); console.log(`AI connection: ${c.source}${c.serviceAccount ? ` — project ${c.serviceAccount.project_id}, ${c.location}` : ""}${c.problem ? ` — PROBLEM: ${c.problem}` : ""}`); } catch (error) { console.error("Reading the saved AI key failed:", error.message); } })
   .then(async () => { try { const fixed = await repairStoredLabels(db); if (fixed) console.log(`Screenplay: ${fixed} scene(s) had "ACTION:" written at the start of lines — corrected.`); } catch (error) { console.error("Label repair failed:", error.message); } })
   .then(async () => { try { const fixed = await repairStoredTransitions(db); if (fixed) console.log(`Screenplay: ${fixed} scene(s) had a transition (FREEZE. BREAK- …) written as a character — corrected.`); } catch (error) { console.error("Transition repair failed:", error.message); } })
-  .then(async () => { try { await productionSync.resume(); await resumeAdSheetJobs(); await skipStartJobs.resume(); await writeScenesJobs.resume(); await addScenesJobs.resume(); await preparePacketJobs.resume(); } catch (error) { console.error("Resuming interrupted background jobs failed:", error.message); } })
+  .then(async () => { try { await productionSync.resume(); await resumeAdSheetJobs(); await skipStartJobs.resume(); await writeScenesJobs.resume(); await addScenesJobs.resume(); await preparePacketJobs.resume(); await aiMovieWriteAllJobs.resume(); } catch (error) { console.error("Resuming interrupted background jobs failed:", error.message); } })
   .then(() => ensureAllProductionSchemas(db))
   .then(async (failures) => { try { const made = await backfillDrafts(db); await failInterruptedRequests(db); if (made) console.log(`Draft Management: ${made} existing project(s) are now Draft 1 of their project.`); } catch (error) { console.error("Draft backfill failed:", error.message); } return failures; })
   .catch((error) => console.error("Schema setup failed:", error.message))

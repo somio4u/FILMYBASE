@@ -15,7 +15,8 @@ export function sceneKeysInOrder(units) {
 }
 
 // items (from the report) + the draft's scenes -> { tasks: one per scene to rewrite, manual: items that need a person, perItem: how many scenes each item reaches }
-export function planApply(items, units, selectedIds = []) {
+export function planApply(rawItems, units, selectedIds = []) {
+  const items = annotateItems(rawItems); // adds, to each change, the scenes it reaches (named, or worked out from its pages) and what it needs
   const scenes = sceneKeysInOrder(units);
   const chosen = new Set((selectedIds ?? []).map(Number));
   const take = (i) => i.kind !== "keep" && (chosen.size === 0 || chosen.has(i.id));
@@ -28,9 +29,9 @@ export function planApply(items, units, selectedIds = []) {
   const add = (scene, item) => { if (!perScene.has(scene.number)) perScene.set(scene.number, []); perScene.get(scene.number).push(item); perItem[item.id] = (perItem[item.id] ?? 0) + 1; };
   for (const item of doable) {
     if (item.kind === "global") { scenes.forEach((s) => add(s, item)); continue; }
-    const named = (item.scenes ?? []).map((n) => byNumber.get(n)).filter(Boolean);
+    const named = (item.scenesUsed ?? item.scenes ?? []).map((n) => byNumber.get(n)).filter(Boolean);
     if (named.length > 0) { named.forEach((s) => add(s, item)); continue; }
-    manual.push({ ...item, why: (item.scenes ?? []).length > 0 ? "The scene numbers it names are not in this draft." : "It changes the story itself (it adds or moves scenes), so it needs your decision." });
+    manual.push({ ...item, why: (item.scenesUsed ?? []).length > 0 ? "The scenes it reaches are not in this draft." : item.impact === "new_draft" ? "It changes the story itself (it adds, removes or moves scenes, or changes cause and effect), so it needs your decision — a new draft is the safe way." : "The report gives no scene number and no page numbers to place it by, so it needs your decision." });
   }
   const mustKeep = keeps.map((k) => clip(k.action, 200)).slice(0, 30);
   const tasks = scenes.filter((s) => perScene.has(s.number)).map((s) => {
@@ -126,4 +127,87 @@ export function directionsInstruction(directions) {
 export function uncovered(directions, items) {
   const covered = new Set(directions.flatMap((d) => d.fromIds));
   return (items ?? []).filter((i) => !covered.has(i.id));
+}
+
+// ---------------------------------------------------------------------------------------------------------------------------------------------
+// WHAT EACH CHANGE NEEDS — shown before anything is made, so the person can plan:
+//   in_place  — a fix INSIDE existing scenes (trim, cut to silence, rewrite a line, voices, camera directions …): no new draft, no story change
+//   careful   — also inside existing scenes, but it touches a story fact, a sensitive moment or adds a line / callback: made in place, but read it
+//   new_draft — it adds, removes or moves scenes, changes cause and effect or the ending: the safe way is a NEW draft
+// This is an ESTIMATE made from the words of the change (it is said so on the screen); the person can tick anything.
+// A report often cites PAGES, not scene numbers; its own scene table gives page ↔ scene pairs (p7–9 = scenes 15–17), so pages are turned into scenes by
+// interpolating between those pairs. Such scenes are marked "estimated from the pages".
+// ---------------------------------------------------------------------------------------------------------------------------------------------
+const NEW_SCENES = /\b(add(?:ing)?|write|create|insert|introduce)\b[^.]{0,60}\b(scenes?|songs?|montage|ending|resolution|epilogue|sequence)\b|\b(new scenes?|new song|new ending|resolution|epilogue)\b|\bcut\b[^.]{0,50}\b(scenes?|beats|sequence|arrival|training)\b|\b(move|reorder|swap|reverse)\b[^.]{0,60}\b(before|after|earlier|later|order)\b|\b(restructure|rebuild|merge|combine)\b|\bbackstor/i;
+const LINE_CHANGE = /\b(one line|a line|the line|last line|sample line|callback|one beat|one sentence|a short|short exchange|a few lines|one short|add .{0,25} lines?)\b/i;
+const LINE_LEVEL = /\b(trim|shorten|tighten|cut|remove|delete|replace|rewrite|polish|re-?type|strip|simplify|reduce)\b[^.]{0,60}\b(narration|narrator|dialogues?|lines?|cues?|speech|camera|jargon|paragraphs?|action lines?|sluglines?|tags?)\b/i;
+const SENSITIVE = /\b(sensitiv|certification|protest|communal|brahma|idol|deity|khokhli)\b/i;
+
+export function impactOf(item) {
+  const text = `${item?.title ?? ""} ${item?.action ?? ""}`;
+  if (item?.kind === "global") return "in_place";
+  if (item?.kind === "scene") return NEW_SCENES.test(text) && !(item.scenes?.length) ? "new_draft" : "in_place";
+  if (item?.kind === "risk") return NEW_SCENES.test(text) && !(item.scenes?.length) ? "new_draft" : "careful";
+  if (item?.kind === "structure") {
+    if (NEW_SCENES.test(text) && !LINE_CHANGE.test(text)) return "new_draft";
+    if (LINE_LEVEL.test(text)) return "in_place"; // trimming narration, cutting jargon lines … is a fix inside scenes, whatever kind the AI gave it
+    return LINE_CHANGE.test(text) || SENSITIVE.test(text) ? "careful" : "new_draft";
+  }
+  return "in_place";
+}
+
+// page -> scene number (a fraction), from the pairs the report gives itself; null when it gives too few
+export function buildPageMap(items) {
+  const raw = [];
+  const pairs = (items ?? []).filter((i) => i.pages?.length && i.scenes?.length);
+  if (pairs.length < 3) return null; // too few pairs to trust a map
+  for (const i of pairs) {
+    raw.push([Math.min(...i.pages), Math.min(...i.scenes)], [Math.max(...i.pages) + 1, Math.max(...i.scenes) + 1]);
+  }
+  raw.sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+  const anchors = [];
+  for (const [page, scene] of raw) { // keep the pairs that only go forward (a pair that goes back is a misread: dropped)
+    const last = anchors.at(-1);
+    if (last && page === last[0]) continue;
+    if (last && scene < last[1]) continue;
+    anchors.push([page, scene]);
+  }
+  if (anchors.length < 2) return null;
+  const slope = (anchors.at(-1)[1] - anchors[0][1]) / Math.max(1, anchors.at(-1)[0] - anchors[0][0]);
+  return (page) => {
+    if (page <= anchors[0][0]) return Math.max(1, anchors[0][1] - (anchors[0][0] - page) * slope);
+    if (page >= anchors.at(-1)[0]) return anchors.at(-1)[1] + (page - anchors.at(-1)[0]) * slope;
+    const k = anchors.findIndex((a) => a[0] > page);
+    const [p0, s0] = anchors[k - 1];
+    const [p1, s1] = anchors[k];
+    return s0 + ((page - p0) / (p1 - p0)) * (s1 - s0);
+  };
+}
+
+const MAX_DERIVED_SPAN = 40; // a change that would reach more than this many scenes by its pages is too broad to place: a person decides
+
+// every item with { impact, scenesUsed, estimated }: the scenes it is made in (named by the report, or worked out from its pages), or none
+export function annotateItems(items) {
+  const toScene = buildPageMap(items);
+  return (items ?? []).map((item) => {
+    const impact = impactOf(item);
+    let scenesUsed = item.scenes ?? [];
+    let estimated = false;
+    if (item.kind !== "keep" && item.kind !== "global" && scenesUsed.length === 0 && item.pages?.length && toScene && impact !== "new_draft") {
+      const from = Math.max(1, Math.floor(toScene(Math.min(...item.pages))));
+      const to = Math.max(from, Math.ceil(toScene(Math.max(...item.pages) + 1)) - 1);
+      if (to - from + 1 <= MAX_DERIVED_SPAN) { scenesUsed = Array.from({ length: to - from + 1 }, (_, n) => from + n); estimated = true; }
+    }
+    return { ...item, impact, scenesUsed, estimated };
+  });
+}
+
+// the counts for the person: how many changes are in place / careful / new draft, and which scene numbers the in-place ones reach
+export function impactSummary(annotated) {
+  const doable = (annotated ?? []).filter((i) => i.kind !== "keep");
+  const count = (k) => doable.filter((i) => i.impact === k).length;
+  const scenes = new Set();
+  let everyScene = false;
+  for (const i of doable) { if (i.impact === "new_draft" && !(i.scenes?.length)) continue; if (i.kind === "global") everyScene = true; else i.scenesUsed.forEach((n) => scenes.add(n)); }
+  return { inPlace: count("in_place"), careful: count("careful"), newDraft: count("new_draft"), namedScenes: scenes.size, everyScene };
 }

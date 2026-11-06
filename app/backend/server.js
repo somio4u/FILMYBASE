@@ -47,8 +47,8 @@ import { WRITE_ALL_KIND, beatIsComplete, planApproveAll, planWriteAll, writeWhol
 import { newBlankScene, insertScene, removeSceneAt, moveSceneBy, keepRemoved, restoreRemoved } from "./aiMovieSceneOps.js";
 import { ensureSceneHistorySchema, changedBeats, recordChanges, historyInfo, undoLast, redoLast } from "./aiMovieSceneHistory.js";
 import { renameCharacter as renameAiMovieCharacter, renameUndoInfo, undoRename, ensureRenameUndoSchema } from "./aiMovieRename.js";
-import { REPORT_SCHEMA, REPORT_SYSTEM, reportPrompt, normalizeItems, ensureReportSchema, createRead, saveParts, getRead, saveSelection, revisionFromReport, savePlan, saveResult, markUndone, latestReadId } from "./scriptDoctorReport.js";
-import { planApply, itemProgress, condensePrompt, CONDENSE_SCHEMA, CONDENSE_SYSTEM, normalizeDirections, fallbackDirections, directionsInstruction, uncovered } from "./scriptDoctorApply.js";
+import { REPORT_SCHEMA, REPORT_SYSTEM, reportPrompt, normalizeItems, ensureReportSchema, createRead, saveParts, getRead, saveSelection, revisionFromReport, savePlan, saveResult, markUndone, latestReadId, groupByKind } from "./scriptDoctorReport.js";
+import { planApply, itemProgress, annotateItems, impactSummary, condensePrompt, CONDENSE_SCHEMA, CONDENSE_SYSTEM, normalizeDirections, fallbackDirections, directionsInstruction, uncovered } from "./scriptDoctorApply.js";
 import { countOdiaWords, textsOfScene, textsOfSceneList } from "./odiaCorpus.js";
 import { languageOf, parseEpisodesFromText, sceneContent } from "./screenplayImport.js";
 import { planFill } from "./pdfFill.js";
@@ -6479,8 +6479,10 @@ app.get("/api/ai-movie/assistant/:projectId/report/:readId", requireRole("admin"
     const counts = { changed: 0, unchanged: 0, undone: 0 };
     for (const r of Object.values(results ?? {})) if (counts[r.status] !== undefined) counts[r.status] += 1;
     const lastMovedAt = Math.max(applyJob?.startedAt ?? 0, ...Object.values(results ?? {}).map((r) => r.at ?? 0)) || null; // when the work last moved: the last scene finished
+    // each change with what it needs (in place / careful / new draft) and the scenes it reaches (named, or worked out from its pages): the person plans with it
+    const annotated = annotateItems(read.items);
     res.json({
-      ...rest, job: job ? publicWriteJob(job) : null,
+      ...rest, items: annotated, groups: groupByKind(annotated), summary: impactSummary(annotated), job: job ? publicWriteJob(job) : null,
       // what making the changes looks like: the plan in short (never the long instructions), where each change stands, and the running job
       plan: plan ? { scenes: plan.tasks.length, manual: plan.manual, protected: plan.mustKeep?.length ?? 0 } : null,
       progress: plan ? itemProgress(read.items, plan, results) : [], counts, lastMovedAt, apply: applyJob ? publicWriteJob(applyJob) : null,

@@ -23,6 +23,10 @@ const EN = {
   storyBtn: (n) => `⚡ Shortcut: make a new story from these ${n} changes`,
   askStory: (n) => `Make a NEW draft from these ${n} story changes? What happens: (1) the ${n} changes are merged into a few clear directions; (2) a NEW draft is made — the draft that is open now stays exactly as it is; (3) the revised story is designed and approved by itself; (4) the WHOLE screenplay is written again from it — EVERY beat, EVERY scene and EVERY line of dialogue, not only the scenes that need a change. This takes a long time (hours for a long film) and the new draft is written fresh — it does not keep the scene-by-scene fixes above, and your old scenes and dialogue are not copied into it (they stay in the draft that is open now). You watch every step in Adu's “New draft” tab and in the bar at the top, and only the final “Approve” is left to you.`,
   storyStarted: (d, from, merged) => `Started: ${from} changes → ${d} direction${d === 1 ? '' : 's'}${merged ? '' : ' (the AI could not merge them, so the most serious ones were used as they are)'}. Follow it in Adu's “New draft” tab or the bar at the top.`, storyStarting: 'Starting the new story…',
+  tags: { in_place: '🟢 inside existing scenes — no new draft', careful: '🟡 inside existing scenes — read it after', new_draft: '🔴 changes the story — a new draft is the safe way' },
+  estimated: ' (worked out from the page numbers)', summaryTitle: 'What this report asks, in short (an estimate from the words of each change)',
+  summaryLine: (s) => `🟢 ${s.inPlace} can be made inside existing scenes · 🟡 ${s.careful} inside scenes but worth reading · 🔴 ${s.newDraft} change the story (new draft)`,
+  summaryScenes: (s) => `The ▶ button makes the 🟢 and 🟡 ones${s.everyScene ? ' — the whole-script ones touch every scene, and the others about ' + s.namedScenes + ' scenes named or placed by their pages' : ': about ' + s.namedScenes + ' scenes'}. The 🔴 ones are not made by it: they are listed afterwards, with the shortcut for a new draft.`,
   needsYou: (n) => `Needs you (${n}) — not made automatically`, send: 'Send to Adu', sent: '✓ sent to Adu', startOver: 'Use another report', offline: 'Could not reach the server. Try again in a minute.', wrong: 'Something went wrong.',
   counts: (p, a, c) => `${p} protected line${p === 1 ? '' : 's'} are kept in every rewrite.`,
 }
@@ -45,6 +49,10 @@ const HI = {
   storyBtn: (n) => `⚡ शॉर्टकट: इन ${n} बदलावों से नई कहानी बनाओ`,
   askStory: (n) => `इन ${n} कहानी वाले बदलावों से एक नया draft बनाएँ? यह होगा: (1) ${n} बदलाव मिलाकर कुछ साफ़ दिशाओं में बदले जाएँगे; (2) एक नया draft बनेगा — अभी खुला draft जैसा है वैसा रहेगा; (3) संशोधित कहानी बनकर अपने-आप approve होगी; (4) उससे पूरी screenplay फिर से लिखी जाएगी — हर beat, हर scene और हर dialogue, सिर्फ़ वे scenes नहीं जिनमें बदलाव चाहिए। इसमें बहुत समय लगता है (लंबी film में कई घंटे) और नया draft नए सिरे से लिखा जाता है — ऊपर वाले scene-दर-scene सुधार उसमें नहीं रहते, और आपके पुराने scenes और dialogue उसमें कॉपी नहीं होते (वे अभी खुले draft में ही रहते हैं)। हर कदम आप Adu के “New draft” tab और ऊपर वाली bar में देखोगे, और सिर्फ़ आख़िरी “Approve” आपके लिए बचा है।`,
   storyStarted: (d, from, merged) => `शुरू हो गया: ${from} बदलाव → ${d} दिशाएँ${merged ? '' : ' (AI उन्हें मिला नहीं पाया, इसलिए सबसे गंभीर वाले जैसे हैं वैसे लिए गए)'}। इसे Adu के “New draft” tab या ऊपर वाली bar में देखो।`, storyStarting: 'नई कहानी शुरू हो रही है…',
+  tags: { in_place: '🟢 मौजूदा scenes में — नया draft नहीं', careful: '🟡 मौजूदा scenes में — बाद में पढ़ लेना', new_draft: '🔴 कहानी बदलता है — नया draft ही सुरक्षित' },
+  estimated: ' (पन्ना-नंबर से निकाला)', summaryTitle: 'यह report क्या माँगती है, संक्षेप में (हर बदलाव के शब्दों से लगाया अंदाज़ा)',
+  summaryLine: (s) => `🟢 ${s.inPlace} मौजूदा scenes में हो सकते हैं · 🟡 ${s.careful} scenes में होंगे पर पढ़ने लायक · 🔴 ${s.newDraft} कहानी बदलते हैं (नया draft)`,
+  summaryScenes: (s) => `▶ बटन 🟢 और 🟡 वाले करता है${s.everyScene ? ' — पूरी-script वाले हर scene को छूते हैं, और बाक़ी क़रीब ' + s.namedScenes + ' scenes को जो नंबर से या पन्नों से तय हुए' : ': क़रीब ' + s.namedScenes + ' scenes'}। 🔴 वाले इससे नहीं होते: वे बाद में अलग सूची में आते हैं, नया draft बनाने के शॉर्टकट के साथ।`,
   needsYou: (n) => `आपका काम (${n}) — अपने-आप नहीं किए गए`, send: 'Adu को भेजो', sent: '✓ Adu को भेजा', startOver: 'दूसरी report लो', offline: 'Server तक पहुँच नहीं हुई। एक मिनट बाद फिर कोशिश करो।', wrong: 'कुछ गड़बड़ हुई।',
   counts: (p) => `${p} बचाई जाने वाली लाइनें हर rewrite में सुरक्षित रहती हैं।`,
 }
@@ -122,7 +130,7 @@ export default function ScriptDoctorPanel({ backendUrl, projectId, draft, langua
   const items = read?.items ?? []
   const doable = items.filter((i) => i.kind !== 'keep')
   const keeps = items.filter((i) => i.kind === 'keep')
-  const ticked = selected ?? doable.map((i) => i.id)
+  const ticked = selected ?? doable.filter((i) => i.impact !== 'new_draft').map((i) => i.id) // the changes that need a new draft are not ticked: the button does not make them
   const toggle = (id) => setSelected(ticked.includes(id) ? ticked.filter((x) => x !== id) : [...ticked, id])
 
   async function make(resume = false) {
@@ -193,6 +201,13 @@ export default function ScriptDoctorPanel({ backendUrl, projectId, draft, langua
           <h3>{L.step2(doable.length)}</h3>
           <p className="sd-fine">{L.how}</p>
           <p className="sd-fine">{L.counts(keeps.length)}</p>
+          {read.summary && (
+            <div className="sd-summary">
+              <strong>{L.summaryTitle}</strong>
+              <p>{L.summaryLine(read.summary)}</p>
+              <p className="sd-fine">{L.summaryScenes(read.summary)}</p>
+            </div>
+          )}
           <p>
             <button type="button" className="sd-btn" onClick={() => setSelected(doable.map((i) => i.id))}>{L.all}</button>{' '}
             <button type="button" className="sd-btn" onClick={() => setSelected([])}>{L.clear}</button>
@@ -205,8 +220,9 @@ export default function ScriptDoctorPanel({ backendUrl, projectId, draft, langua
                   <li key={i.id} className={`sd-item is-${i.severity}`}>
                     <label>
                       <input type="checkbox" checked={ticked.includes(i.id)} onChange={() => toggle(i.id)} /> <strong>{i.title}</strong>
-                      <small> · {i.kind === 'global' ? L.wholeScript : i.scenes?.length ? L.sceneWord(i.scenes) : L.needsYouTag}</small>
+                      <small> · {i.kind === 'global' ? L.wholeScript : i.scenesUsed?.length ? `${L.sceneWord(i.scenesUsed.length > 6 ? [`${i.scenesUsed[0]}–${i.scenesUsed.at(-1)}`] : i.scenesUsed)}${i.estimated ? L.estimated : ''}` : L.needsYouTag}</small>
                     </label>
+                    <p className="sd-tag">{L.tags[i.impact] ?? ''}</p>
                     <p className="sd-text">{i.action}</p>
                   </li>
                 ))}

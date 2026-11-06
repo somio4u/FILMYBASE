@@ -35,3 +35,6 @@
 :root[data-theme='light'] .sd-text { background: rgba(0, 0, 0, 0.06); }
 :root[data-theme='light'] .sd-link { color: #2a4fc4; }
 .sd-backdrop { backdrop-filter: blur(2px); }
+.sd-summary { margin: 10px 0; padding: 10px 12px; border: 1px solid var(--border-subtle, #2c3556); border-radius: 10px; background: rgba(128, 128, 128, 0.1); }
+.sd-summary p { margin: 6px 0 0; }
+.sd-tag { margin: 2px 0 0; font-size: 0.82rem; opacity: 0.9; }

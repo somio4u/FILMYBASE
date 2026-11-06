@@ -88,3 +88,69 @@ test("the story shortcut: the AI's merged directions are cleaned, nothing a dire
   assert.ok(fb.directions.length < 100 && fb.left === 100 - fb.directions.length);
   assert.deepEqual(fallbackDirections([], 100), { directions: [], left: 0 });
 });
+
+// the report's own scene table (page(s) -> scene(s)), as the AI lists it: the pairs the page map is built from
+const TABLE = [[[2, 7], [1, 14]], [[7, 9], [15, 17]], [[13, 15], [22, 24]], [[26, 30], [37, 44]], [[33, 39], [48, 55]], [[41, 43], [57, 60]], [[54, 56], [71, 72]], [[64, 65], [81, 82]], [[79, 83], [97, 101]], [[89, 92], [109, 114]], [[121, 125], [154, 158]], [[138, 144], [170, 181]], [[146, 153], [184, 193]], [[154, 154], [194, 194]], [[159, 159], [203, 203]]]
+  .map(([p, s], i) => ({ id: 100 + i, kind: "scene", title: `row ${i}`, action: "x", pages: p[0] === p[1] ? [p[0]] : [p[0], p[1]], scenes: s[0] === s[1] ? [s[0]] : Array.from({ length: s[1] - s[0] + 1 }, (_, n) => s[0] + n), severity: "minor" }));
+
+test("what each change needs: a fix inside scenes is in place, a line or a sensitive moment is careful, new scenes / a new ending / moving or cutting scenes need a new draft", async () => {
+  const { impactOf } = await import("../scriptDoctorApply.js");
+  const it = (kind, title, action, scenes = []) => ({ kind, title, action, scenes, pages: [], severity: "major" });
+  assert.equal(impactOf(it("global", "Cut the narration", "Cut about 70% of the narrator's cues.")), "in_place");
+  assert.equal(impactOf(it("scene", "Silence the deathbed", "Cut the medical lines.", [97])), "in_place");
+  assert.equal(impactOf(it("scene", "Rewrite the last line", "Callback line.", [203])), "in_place");
+  assert.equal(impactOf(it("risk", "Soften the Brahma extraction", "Show light through the cloth, never the opened idol.", [170])), "careful");
+  assert.equal(impactOf(it("structure", "Give Kalapahada a voice early", "Add one line spoken by Kalapahada in the prologue: his philosophy.")), "careful");
+  assert.equal(impactOf(it("structure", "Introduce Kalapahada in Act One", "Show his silhouette, armor or voice in the first act.")), "new_draft");
+  assert.equal(impactOf(it("structure", "Write the real ending", "Add a 2-3 page resolution: the pilgrims are restored.")), "new_draft");
+  assert.equal(impactOf(it("structure", "Cut repeated training beats", "Cut the training between pages 33 and 61.")), "new_draft");
+  assert.equal(impactOf(it("structure", "Swap the order", "Move the Maha Guru's demonstration before the flagship raid.")), "new_draft");
+  assert.equal(impactOf(it("structure", "Add a Bahuda song", "Add a celebration song at the end.")), "new_draft");
+  assert.equal(impactOf(it("risk", "Consult a scholar", "Add three new scenes about the ritual.")), "new_draft");
+});
+
+test("pages become scenes through the report's own scene table: p5–6 lands in the prologue, p79–83 in the deathbed scenes, p159 is the last scene; too few pairs give no map", async () => {
+  const { buildPageMap, annotateItems } = await import("../scriptDoctorApply.js");
+  const map = buildPageMap(TABLE);
+  assert.ok(Math.floor(map(5)) >= 6 && Math.floor(map(5)) <= 12); // inside scenes 1-14 (p2-7)
+  assert.equal(Math.floor(map(79)), 97);
+  assert.equal(Math.floor(map(159)), 203);
+  assert.ok(map(100) > map(99) && map(60) > map(50)); // it only goes forward
+  assert.equal(buildPageMap([]), null);
+  assert.equal(buildPageMap([TABLE[0]]), null); // one pair is not enough
+  const [narration, training, villain] = annotateItems([
+    ...TABLE,
+    { id: 1, kind: "structure", title: "Trim narration before the hook", action: "Cut or trim the narration that precedes the hook.", scenes: [], pages: [5, 6], severity: "major" },
+    { id: 2, kind: "structure", title: "Cut repeated training beats", action: "Cut the repeated training beats between pages 33 and 61.", scenes: [], pages: [33, 61], severity: "major" },
+    { id: 3, kind: "structure", title: "Introduce Kalapahada in Act One", action: "Show his silhouette in the first act.", scenes: [], pages: [5], severity: "critical" },
+  ]).slice(-3);
+  assert.equal(narration.impact, "in_place"); // "trim the narration" is a fix inside scenes, although the AI called it a story change: it is placed
+  assert.equal(narration.estimated, true);
+  assert.ok(narration.scenesUsed.length >= 2 && narration.scenesUsed[0] >= 1 && narration.scenesUsed.at(-1) <= 14);
+  assert.equal(training.impact, "new_draft"); // cutting scenes needs a new draft: it is not placed
+  assert.deepEqual(training.scenesUsed, []);
+  assert.equal(villain.impact, "new_draft");
+  assert.deepEqual(villain.scenesUsed, []);
+});
+
+test("the plan now uses the pages: a change with only page numbers is made in the scenes those pages reach; the story changes stay with the person; the summary counts them", async () => {
+  const { impactSummary, annotateItems } = await import("../scriptDoctorApply.js");
+  const many = Array.from({ length: 210 }, (_, i) => ({ section: "screenplay", key: `b${Math.floor(i / 10)}s${i % 10}`, label: `Scene ${i + 1}` }));
+  const extra = [
+    { id: 1, kind: "scene", title: "Trim narration before the hook", action: "Cut the narration before the hook.", scenes: [], pages: [5, 6], severity: "major" },
+    { id: 2, kind: "structure", title: "Introduce Kalapahada in Act One", action: "Show his silhouette in the first act.", scenes: [], pages: [5], severity: "critical" },
+    { id: 3, kind: "global", title: "Cut the narration", action: "Cut 70%.", scenes: [], pages: [], severity: "major" },
+  ];
+  const all = [...TABLE, ...extra];
+  const plan = planApply(all, many, [1, 2, 3]);
+  const sceneNumbers = plan.tasks.filter((t) => t.itemIds.includes(1)).map((t) => t.sceneNumber);
+  assert.ok(sceneNumbers.length >= 2 && sceneNumbers.length <= 14);
+  assert.deepEqual(plan.manual.map((m) => m.id), [2]); // the story change is not made by itself
+  assert.match(plan.manual[0].why, /new draft/);
+  assert.equal(plan.perItem[1], sceneNumbers.length);
+  assert.equal(plan.tasks.length, 210); // the whole-script change reaches every scene
+  const summary = impactSummary(annotateItems(all));
+  assert.equal(summary.newDraft, 1);
+  assert.equal(summary.everyScene, true);
+  assert.ok(summary.inPlace >= 16 && summary.namedScenes >= 80);
+});

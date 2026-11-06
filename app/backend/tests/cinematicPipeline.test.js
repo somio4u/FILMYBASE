@@ -91,7 +91,7 @@ test("Shot Cutter: a complex fight scene with an approved direction gets the dir
 test("Shot Cutter: a quiet scene (no direction) stays on Flash with no direction block — routine work is not upgraded", async () => {
   const r = await divide("b0s0");
   assert.equal(r.status, 200);
-  assert.equal(r.json.model, "Gemini 2.5 Flash");
+  assert.equal(r.json.model, "Gemini 3.5 Flash");
   assert.equal(r.json.usedCinematicDirections, false);
   assert.equal(calls[0].tier, "flash");
   assert.doesNotMatch(calls[0].params.contents, /APPROVED CINEMATIC DIRECTIONS/);
@@ -100,7 +100,7 @@ test("Shot Cutter: a quiet scene (no direction) stays on Flash with no direction
 test("Shot Cutter: an action scene WITHOUT a direction is still recognised as complex in Professional mode, but stays Flash in Economy", async () => {
   assert.equal((await divide("b0s1")).json.model, "Gemini 3.1 Pro");
   await db.query("UPDATE ai_movie_projects SET quality_mode = 'economy' WHERE id = $1", [pid]);
-  assert.equal((await divide("b0s1")).json.model, "Gemini 2.5 Flash");
+  assert.equal((await divide("b0s1")).json.model, "Gemini 3.5 Flash");
 });
 
 test("Shot Cutter: Maximum quality uses Pro even for a quiet scene", async () => {

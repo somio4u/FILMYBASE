@@ -18,6 +18,7 @@ import AiMovieSceneTools from './AiMovieSceneTools.jsx'
 import AiMovieMultiChange from './AiMovieMultiChange.jsx'
 import AiMovieRename from './AiMovieRename.jsx'
 import ScriptDoctorPanel from './ScriptDoctorPanel.jsx'
+import DialogueDoctorPanel from './DialogueDoctorPanel.jsx'
 import { cleanForSave, collectCharacterNames } from './scriptDoc.js'
 import { splitSceneContexts } from './sceneContexts.js'
 import './App.css'
@@ -9159,6 +9160,7 @@ function App() {
   const [aiMovieSelectedSceneIndex, setAiMovieSelectedSceneIndex] = useState(0)
   // Edit mode (like the Movie screenplay): the screenplay area fills the screen; Esc or the button leaves it. The page zoom is shared with Movie.
   const [aiEditMode, setAiEditMode] = useState(false)
+  const [showDialogueDoctor, setShowDialogueDoctor] = useState(false) // Dialogue Doctor: only the dialogue
   const [showScriptDoctor, setShowScriptDoctor] = useState(false) // the one screen for a script doctor's report
   const [aiScriptZoom, setAiScriptZoom] = useState(() => { try { const v = Number(localStorage.getItem('filmybase.scriptZoom')); return v >= 0.5 && v <= 2.5 ? v : 1 } catch { return 1 } })
   const changeAiScriptZoom = (next) => { const v = Math.max(0.5, Math.min(2.5, Math.round(next * 100) / 100)); setAiScriptZoom(v); try { localStorage.setItem('filmybase.scriptZoom', String(v)) } catch { /* private window */ } }
@@ -14790,8 +14792,13 @@ function App() {
                           <>
                             {aiMovieProjectId && screenplayBeats.length > 0 && (
                               <p className="script-doctor-open">
-                                <button type="button" className="choose-button" onClick={() => setShowScriptDoctor(true)}>📄 Script Doctor report — upload it and make its changes</button>
+                                <button type="button" className="choose-button" onClick={() => setShowScriptDoctor(true)}>📄 Script Doctor report — upload it and make its changes</button>{' '}
+                                <button type="button" className="choose-button" onClick={() => setShowDialogueDoctor(true)}>🩺 Dialogue Doctor — check the dialogue</button>
                               </p>
+                            )}
+                            {showDialogueDoctor && (
+                              <DialogueDoctorPanel backendUrl={BACKEND_URL} projectId={aiMovieProjectId} language={aiMovieLanguage} onClose={() => setShowDialogueDoctor(false)}
+                                onOpenScriptDoctor={() => { setShowDialogueDoctor(false); setShowScriptDoctor(true) }} />
                             )}
                             {showScriptDoctor && (
                               <ScriptDoctorPanel backendUrl={BACKEND_URL} projectId={aiMovieProjectId} draft={currentDraft ? { id: currentDraft.id, title: currentDraft.label ?? currentDraft.title ?? null, draftNumber: currentDraft.draftNumber } : null} language={aiMovieLanguage}

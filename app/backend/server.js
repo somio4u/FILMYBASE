@@ -83,6 +83,8 @@ import { ensureAiMovieStorySchema, getProjectModes, judgedStage, registerAiMovie
 import { assertWithinBudget, recordSpend } from "./pipelineSettings.js";
 import { ensureCinematicSchema, registerSpectacleRoutes, createShotCutterHook } from "./spectacleDirector.js";
 import { MODEL_TIERS, estimateCost, isKeyBeat, modelFor } from "./modelRouting.js";
+import { createDialogueDoctor, ensureDialogueDoctorSchema } from "./dialogueDoctorRun.js";
+import { GENRES as DOCTOR_GENRES } from "./dialogueDoctor.js";
 import { withSceneTag, tagOfScene } from "./aiMovieSceneNotes.js";
 import { withWritingStyle, dialogueStyleText } from "./writingStyleGuide.js";
 import { ensureAiMovieLanguageSchema, registerAiMovieLanguageRoutes } from "./aiMovieLanguage.js";
@@ -6581,6 +6583,35 @@ app.post("/api/ai-movie/projects/:projectId/multi-change/stop", requireRole("adm
     const job = await aiMovieMultiJobs.currentFor(Number(req.params.projectId));
     res.json({ stopped: job ? await aiMovieMultiJobs.stop(job.id ?? job.jobId) : false });
   } catch (error) { res.status(error.status ?? 500).json({ error: error.message }); }
+});
+
+// ---- Dialogue Doctor: looks only at the dialogue (the counting by code, the judging by the AI), scene group by scene group, in the background ----
+const dialogueDoctor = createDialogueDoctor({ db, jobStore, makeAsk: () => brainAsker(newUsage(), () => {}, PDF_READER_MODELS) });
+const doctorView = async (projectId) => {
+  const job = await dialogueDoctor.jobs.currentFor(projectId).catch(() => null);
+  return { job: job ? publicWriteJob(job) : null, run: await dialogueDoctor.latestRun(projectId), genres: Object.entries(DOCTOR_GENRES).map(([id, g]) => ({ id, label: g.label, min: g.min, max: g.max })) };
+};
+app.get("/api/ai-movie/projects/:projectId/dialogue-doctor", requireRole("admin"), async (req, res) => {
+  try { res.json(await doctorView(Number(req.params.projectId))); } catch (error) { res.status(error.status ?? 500).json({ error: error.message }); }
+});
+app.post("/api/ai-movie/projects/:projectId/dialogue-doctor", requireRole("admin"), async (req, res) => {
+  try {
+    const projectId = Number(req.params.projectId);
+    const writing = await aiMovieWriteAllJobs.currentFor(projectId).catch(() => null);
+    if (writing?.status === "running") throw Object.assign(new Error("The whole screenplay is being written right now. Wait for it to finish, then check the dialogue."), { status: 409 });
+    const out = await dialogueDoctor.start(projectId, { userId: req.user.id, genre: req.body?.genre });
+    res.status(out.alreadyRunning ? 200 : 202).json({ ...(await doctorView(projectId)), alreadyRunning: out.alreadyRunning });
+  } catch (error) { res.status(error.status ?? 500).json({ error: error.message }); }
+});
+app.post("/api/ai-movie/projects/:projectId/dialogue-doctor/stop", requireRole("admin"), async (req, res) => {
+  try {
+    const job = await dialogueDoctor.jobs.currentFor(Number(req.params.projectId));
+    res.json({ stopped: job ? await dialogueDoctor.jobs.stop(job.id ?? job.jobId) : false });
+  } catch (error) { res.status(error.status ?? 500).json({ error: error.message }); }
+});
+// the findings become a list of changes in Script Doctor (its ▶ "make the changes" and ⚡ "new story" work on them)
+app.post("/api/ai-movie/projects/:projectId/dialogue-doctor/:runId/send", requireRole("admin"), async (req, res) => {
+  try { res.json(await dialogueDoctor.sendToScriptDoctor(Number(req.params.projectId), Number(req.params.runId), req.user.id)); } catch (error) { res.status(error.status ?? 500).json({ error: error.message }); }
 });
 
 // body: { draftId, ids? } — makes the ticked changes (or all) in that draft. Needs a person's yes on the screen first.
@@ -22006,11 +22037,12 @@ ensureAiMovieSchema()
   .then(async () => { try { await aiCredentials.load(); aiCredentials.startRefresh(); const c = aiCredentials.current(); console.log(`AI connection: ${c.source}${c.serviceAccount ? ` — project ${c.serviceAccount.project_id}, ${c.location}` : ""}${c.problem ? ` — PROBLEM: ${c.problem}` : ""}`); } catch (error) { console.error("Reading the saved AI key failed:", error.message); } })
   .then(async () => { try { const fixed = await repairStoredLabels(db); if (fixed) console.log(`Screenplay: ${fixed} scene(s) had "ACTION:" written at the start of lines — corrected.`); } catch (error) { console.error("Label repair failed:", error.message); } })
   .then(async () => { try { const fixed = await repairStoredTransitions(db); if (fixed) console.log(`Screenplay: ${fixed} scene(s) had a transition (FREEZE. BREAK- …) written as a character — corrected.`); } catch (error) { console.error("Transition repair failed:", error.message); } })
-  .then(async () => { try { await productionSync.resume(); await resumeAdSheetJobs(); await skipStartJobs.resume(); await writeScenesJobs.resume(); await addScenesJobs.resume(); await preparePacketJobs.resume(); await aiMovieWriteAllJobs.resume(); await aduReportJobs.resume(); await aduReportApplyJobs.resume(); await aiMovieMultiJobs.resume(); } catch (error) { console.error("Resuming interrupted background jobs failed:", error.message); } })
+  .then(async () => { try { await productionSync.resume(); await resumeAdSheetJobs(); await skipStartJobs.resume(); await writeScenesJobs.resume(); await addScenesJobs.resume(); await preparePacketJobs.resume(); await aiMovieWriteAllJobs.resume(); await aduReportJobs.resume(); await aduReportApplyJobs.resume(); await aiMovieMultiJobs.resume(); await dialogueDoctor.jobs.resume(); } catch (error) { console.error("Resuming interrupted background jobs failed:", error.message); } })
   .then(() => ensureAllProductionSchemas(db))
   .then(() => ensureAduChatSchema(db))
   .then(() => ensureRenameUndoSchema(db))
   .then(() => ensureReportSchema(db))
+  .then(() => ensureDialogueDoctorSchema(db))
   .then(() => ensureSceneHistorySchema(db))
   .then(async (failures) => { try { const made = await backfillDrafts(db); await failInterruptedRequests(db); if (made) console.log(`Draft Management: ${made} existing project(s) are now Draft 1 of their project.`); } catch (error) { console.error("Draft backfill failed:", error.message); } return failures; })
   .catch((error) => console.error("Schema setup failed:", error.message))

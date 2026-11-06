@@ -47,7 +47,8 @@ import { WRITE_ALL_KIND, beatIsComplete, planApproveAll, planWriteAll, writeWhol
 import { newBlankScene, insertScene, removeSceneAt, moveSceneBy, keepRemoved, restoreRemoved } from "./aiMovieSceneOps.js";
 import { ensureSceneHistorySchema, changedBeats, recordChanges, historyInfo, undoLast, redoLast } from "./aiMovieSceneHistory.js";
 import { renameCharacter as renameAiMovieCharacter, renameUndoInfo, undoRename, ensureRenameUndoSchema } from "./aiMovieRename.js";
-import { REPORT_SCHEMA, REPORT_SYSTEM, reportPrompt, normalizeItems, ensureReportSchema, createRead, saveParts, getRead, saveSelection, revisionFromReport } from "./scriptDoctorReport.js";
+import { REPORT_SCHEMA, REPORT_SYSTEM, reportPrompt, normalizeItems, ensureReportSchema, createRead, saveParts, getRead, saveSelection, revisionFromReport, savePlan, saveResult, markUndone, latestReadId } from "./scriptDoctorReport.js";
+import { planApply, itemProgress } from "./scriptDoctorApply.js";
 import { countOdiaWords, textsOfScene, textsOfSceneList } from "./odiaCorpus.js";
 import { languageOf, parseEpisodesFromText, sceneContent } from "./screenplayImport.js";
 import { planFill } from "./pdfFill.js";
@@ -90,7 +91,7 @@ import { registerTimelineRoutes } from "./timeline.js";
 import { registerAudioCueRoutes } from "./audioCues.js";
 import { registerTimelineEditRoutes } from "./timelineEdit.js";
 import { registerShotPlanRoutes } from "./shotPlans.js";
-import { backfillDrafts, registerDraftRoutes } from "./drafts.js";
+import { backfillDrafts, registerDraftRoutes, draftUnits } from "./drafts.js";
 import { getAduWork, busyMessage } from "./aduWork.js";
 import { RunStopped, assertRunActive, inRunContext, stopRunJobs } from "./runControl.js";
 import { orderByLastWorked } from "./projectActivity.js";
@@ -98,7 +99,7 @@ import { buildSeriesSkip, saveSeriesSkip, seriesFormatFrom } from "./skipSeries.
 import { registerScriptFonts, writeScripted } from "./scriptPdf.js";
 import { cleanPastedStory, learnBoilerplate } from "./pasteClean.js";
 import { designBibleFromSynopsis, applyDecisions as applySynopsisDecisions, finalizeSynopsisBible, decorateSynopsisBible, lockedSynopsisIdea } from "./synopsisBrain.js";
-import { failInterruptedRequests, registerDraftAgentRoutes, setPollMs, startPlainDraft, startRevision } from "./draftAgent.js";
+import { failInterruptedRequests, registerDraftAgentRoutes, setPollMs, startPlainDraft, startRevision, propose as proposeChange, applyChangeSet, getChangeSet, undoChangeSet } from "./draftAgent.js";
 import { buildReferenceBlock, findRelated as findRelatedSources, ideaWithReferences, registerWorkspaceRoutes } from "./workspaceContext.js";
 import { registerTimelineExportRoutes } from "./timelineExport.js";
 import { registerEventRoutes } from "./events.js";
@@ -6473,11 +6474,111 @@ app.get("/api/ai-movie/assistant/:projectId/report/:readId", requireRole("admin"
     const read = await getRead(db, Number(req.params.readId), { projectRef: projectId });
     if (!read) throw Object.assign(new Error("Report not found."), { status: 404 });
     const job = await aduReportJobs.currentFor(projectId).catch(() => null);
-    res.json({ ...read, job: job ? publicWriteJob(job) : null });
+    const applyJob = read.plan ? await aduReportApplyJobs.currentFor(projectId).catch(() => null) : null;
+    const { plan, results, ...rest } = read;
+    const counts = { changed: 0, unchanged: 0, undone: 0 };
+    for (const r of Object.values(results ?? {})) if (counts[r.status] !== undefined) counts[r.status] += 1;
+    const lastMovedAt = Math.max(applyJob?.startedAt ?? 0, ...Object.values(results ?? {}).map((r) => r.at ?? 0)) || null; // when the work last moved: the last scene finished
+    res.json({
+      ...rest, job: job ? publicWriteJob(job) : null,
+      // what making the changes looks like: the plan in short (never the long instructions), where each change stands, and the running job
+      plan: plan ? { scenes: plan.tasks.length, manual: plan.manual, protected: plan.mustKeep?.length ?? 0 } : null,
+      progress: plan ? itemProgress(read.items, plan, results) : [], counts, lastMovedAt, apply: applyJob ? publicWriteJob(applyJob) : null,
+    });
   } catch (error) {
     res.status(error.status ?? 500).json({ error: error.message });
   }
 });
+app.get("/api/ai-movie/assistant/:projectId/report", requireRole("admin"), async (req, res) => {
+  try { res.json({ readId: await latestReadId(db, Number(req.params.projectId)) }); } catch (error) { res.status(error.status ?? 500).json({ error: error.message }); }
+});
+// ---- Making the report's changes in the OPEN draft, scene by scene (scriptDoctorApply.js): one job, one rewrite per scene with all of that scene's changes together,
+// each scene its own change set (so it can be undone). The scenes already done are skipped after a reload or a restart.
+const ADU_REPORT_APPLY_KIND = "adu-report-apply";
+const aduReportApplyJobs = createWriteScenesJobs({
+  jobStore,
+  kind: ADU_REPORT_APPLY_KIND,
+  isWritten: async (item) => {
+    const row = (await db.query("SELECT results FROM adu_report_reads WHERE id = $1", [item.readId])).rows[0];
+    return !row || Boolean(row.results?.[item.key]);
+  },
+  describe: (item, n, total) => `Scene ${item.sceneNumber} (${n} of ${total})`,
+  writeOne: async (item, tools) => {
+    const row = (await db.query("SELECT apply_plan FROM adu_report_reads WHERE id = $1", [item.readId])).rows[0];
+    await tools.say(`Scene ${item.sceneNumber}: the AI is rewriting it`);
+    const cs = await proposeChange(db, draftAgentModels.value, item.draftId, { instruction: item.instruction, intent: "SCOPED_REWRITE", targetKeys: [item.key], constraints: { mustKeep: row?.apply_plan?.mustKeep ?? [] }, confirmed: true, actorUserId: item.userId });
+    const proposed = await getChangeSet(db, cs.id);
+    if (!proposed.edits || proposed.edits.length === 0) {
+      // nothing in this scene needed the changes (or the AI left it as it was): said, not hidden
+      const failure = proposed.scope?.failures?.[0];
+      if (failure) throw new Error(failure.message);
+      await saveResult(db, item.readId, item.key, { status: "unchanged" });
+      return;
+    }
+    await applyChangeSet(db, cs.id, { confirmEditApproved: true });
+    await saveResult(db, item.readId, item.key, { status: "changed", changeSetId: cs.id });
+  },
+});
+
+// body: { draftId, ids? } — makes the ticked changes (or all) in that draft. Needs a person's yes on the screen first.
+app.post("/api/ai-movie/assistant/:projectId/report/:readId/apply", requireRole("admin"), async (req, res) => {
+  try {
+    const projectId = Number(req.params.projectId);
+    const read = await getRead(db, Number(req.params.readId), { projectRef: projectId });
+    if (!read) throw Object.assign(new Error("Report not found."), { status: 404 });
+    if (read.items.length === 0) throw Object.assign(new Error("The report has not been read yet."), { status: 409 });
+    const draftId = Number(req.body?.draftId);
+    const draft = Number.isInteger(draftId) && draftId > 0 ? (await db.query("SELECT id, module, project_ref, status FROM project_drafts WHERE id = $1", [draftId])).rows[0] : null;
+    if (!draft || draft.module !== "ai_movie" || draft.project_ref !== projectId) throw Object.assign(new Error("Open the draft you want to change first."), { status: 400 });
+    if (["locked", "archived"].includes(draft.status)) throw Object.assign(new Error(`This draft is ${draft.status}. Unlock it first, or open another draft.`), { status: 409 });
+    for (const [jobs, what] of [[aduReportApplyJobs, "The report's changes are already being made."], [aiMovieWriteAllJobs, "The whole screenplay is being written right now. Wait for it to finish."]]) {
+      const running = await jobs.currentFor(projectId).catch(() => null);
+      if (running?.status === "running") throw Object.assign(new Error(what), { status: 409 });
+    }
+    // "carry on": the same plan, the scenes already done are kept and skipped; otherwise a fresh plan from the ticked changes (and nothing is "done" yet)
+    const resume = req.body?.resume === true && read.plan && read.applyDraftId === draft.id;
+    let plan = read.plan;
+    if (!resume) {
+      const units = await draftUnits(db, "ai_movie", projectId);
+      const ids = Array.isArray(req.body?.ids) && req.body.ids.length ? req.body.ids : read.selected;
+      plan = planApply(read.items, units, ids);
+      if (plan.tasks.length === 0) throw Object.assign(new Error("None of the changes can be made scene by scene: they all need your decision. See the list under “Needs you”."), { status: 400 });
+      await savePlan(db, read.id, plan, draft.id);
+    }
+    const items = plan.tasks.map((t, i) => ({ episodeIndex: null, sceneIndex: i, label: `Scene ${t.sceneNumber}`, key: t.key, sceneNumber: t.sceneNumber, instruction: t.instruction, draftId: draft.id, userId: req.user.id, readId: read.id, sceneListId: projectId }));
+    await aduReportApplyJobs.start({ sceneListId: projectId, userId: req.user.id, items, language: "en" });
+    res.status(202).json({ started: true, scenes: plan.tasks.length, manual: plan.manual.length });
+  } catch (error) {
+    res.status(error.status ?? 500).json({ error: error.message });
+  }
+});
+app.post("/api/ai-movie/assistant/:projectId/report/:readId/apply/stop", requireRole("admin"), async (req, res) => {
+  try {
+    const job = await aduReportApplyJobs.currentFor(Number(req.params.projectId));
+    res.json({ stopped: job ? await aduReportApplyJobs.stop(job.id ?? job.jobId) : false });
+  } catch (error) { res.status(error.status ?? 500).json({ error: error.message }); }
+});
+// "Undo everything the report did": every rewritten scene is put back, newest first
+app.post("/api/ai-movie/assistant/:projectId/report/:readId/apply/undo", requireRole("admin"), async (req, res) => {
+  try {
+    const projectId = Number(req.params.projectId);
+    const read = await getRead(db, Number(req.params.readId), { projectRef: projectId });
+    if (!read) throw Object.assign(new Error("Report not found."), { status: 404 });
+    const running = await aduReportApplyJobs.currentFor(projectId).catch(() => null);
+    if (running?.status === "running") throw Object.assign(new Error("Stop the changes first, or wait for them to finish."), { status: 409 });
+    const changed = Object.entries(read.results ?? {}).filter(([, r]) => r.status === "changed" && r.changeSetId).sort((a, b) => b[1].changeSetId - a[1].changeSetId);
+    const undone = [];
+    const failed = [];
+    for (const [key, r] of changed) {
+      try { await undoChangeSet(db, r.changeSetId); undone.push(key); } catch (error) { failed.push({ key, error: error.message }); }
+    }
+    await markUndone(db, read.id, undone);
+    res.json({ undone: undone.length, failed });
+  } catch (error) {
+    res.status(error.status ?? 500).json({ error: error.message });
+  }
+});
+
 // "A new draft from this report": ALL the ticked changes (or every change, if none is ticked) go into ONE revision request — the same safe path as "create a new draft":
 // a copy, the whole screenplay analysed, the revised story shown for YOUR approval, then the rewrite, then your final approval. The protected lines become "must keep".
 app.post("/api/ai-movie/assistant/:projectId/report/:readId/new-draft", requireRole("admin"), async (req, res) => {
@@ -21769,7 +21870,7 @@ ensureAiMovieSchema()
   .then(async () => { try { await aiCredentials.load(); aiCredentials.startRefresh(); const c = aiCredentials.current(); console.log(`AI connection: ${c.source}${c.serviceAccount ? ` — project ${c.serviceAccount.project_id}, ${c.location}` : ""}${c.problem ? ` — PROBLEM: ${c.problem}` : ""}`); } catch (error) { console.error("Reading the saved AI key failed:", error.message); } })
   .then(async () => { try { const fixed = await repairStoredLabels(db); if (fixed) console.log(`Screenplay: ${fixed} scene(s) had "ACTION:" written at the start of lines — corrected.`); } catch (error) { console.error("Label repair failed:", error.message); } })
   .then(async () => { try { const fixed = await repairStoredTransitions(db); if (fixed) console.log(`Screenplay: ${fixed} scene(s) had a transition (FREEZE. BREAK- …) written as a character — corrected.`); } catch (error) { console.error("Transition repair failed:", error.message); } })
-  .then(async () => { try { await productionSync.resume(); await resumeAdSheetJobs(); await skipStartJobs.resume(); await writeScenesJobs.resume(); await addScenesJobs.resume(); await preparePacketJobs.resume(); await aiMovieWriteAllJobs.resume(); await aduReportJobs.resume(); } catch (error) { console.error("Resuming interrupted background jobs failed:", error.message); } })
+  .then(async () => { try { await productionSync.resume(); await resumeAdSheetJobs(); await skipStartJobs.resume(); await writeScenesJobs.resume(); await addScenesJobs.resume(); await preparePacketJobs.resume(); await aiMovieWriteAllJobs.resume(); await aduReportJobs.resume(); await aduReportApplyJobs.resume(); } catch (error) { console.error("Resuming interrupted background jobs failed:", error.message); } })
   .then(() => ensureAllProductionSchemas(db))
   .then(() => ensureAduChatSchema(db))
   .then(() => ensureRenameUndoSchema(db))

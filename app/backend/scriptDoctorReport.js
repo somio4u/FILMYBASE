@@ -121,6 +121,29 @@ export async function ensureReportSchema(db) {
     id SERIAL PRIMARY KEY, module TEXT NOT NULL DEFAULT 'ai_movie', project_ref INTEGER NOT NULL, user_id INTEGER, filename TEXT NOT NULL,
     chunks JSONB NOT NULL, done_chunks JSONB NOT NULL DEFAULT '[]', part_items JSONB NOT NULL DEFAULT '{}', items JSONB NOT NULL DEFAULT '[]',
     selected JSONB NOT NULL DEFAULT '[]', sent JSONB NOT NULL DEFAULT '[]', created_at TIMESTAMPTZ NOT NULL DEFAULT now())`);
+  // making the changes: the plan (a task per scene), the draft they are made in, and what happened to each scene
+  await db.query("ALTER TABLE adu_report_reads ADD COLUMN IF NOT EXISTS apply_plan JSONB");
+  await db.query("ALTER TABLE adu_report_reads ADD COLUMN IF NOT EXISTS apply_draft_id INTEGER");
+  await db.query("ALTER TABLE adu_report_reads ADD COLUMN IF NOT EXISTS results JSONB NOT NULL DEFAULT '{}'");
+}
+
+export async function savePlan(db, readId, plan, draftId) {
+  await db.query("UPDATE adu_report_reads SET apply_plan = $2, apply_draft_id = $3, results = '{}' WHERE id = $1", [readId, JSON.stringify(plan), draftId]);
+}
+// one scene's outcome: { status: 'changed' | 'unchanged', changeSetId? }; written under a lock so two finishing at once cannot lose each other
+export async function saveResult(db, readId, key, result) {
+  await db.query("UPDATE adu_report_reads SET results = results || $2::jsonb WHERE id = $1", [readId, JSON.stringify({ [key]: { ...result, at: Date.now() } })]);
+}
+export async function markUndone(db, readId, keys) {
+  const row = (await db.query("SELECT results FROM adu_report_reads WHERE id = $1 FOR UPDATE", [readId])).rows[0];
+  if (!row) return;
+  const next = { ...row.results };
+  for (const k of keys) if (next[k]) next[k] = { ...next[k], status: "undone" };
+  await db.query("UPDATE adu_report_reads SET results = $2 WHERE id = $1", [readId, JSON.stringify(next)]);
+}
+
+export async function latestReadId(db, projectRef) {
+  return (await db.query("SELECT id FROM adu_report_reads WHERE project_ref = $1 ORDER BY id DESC LIMIT 1", [projectRef])).rows[0]?.id ?? null;
 }
 
 export async function createRead(db, { module = "ai_movie", projectRef, userId = null, filename, text }) {
@@ -141,11 +164,11 @@ export async function saveParts(db, readId, partNo, items) {
 }
 
 export async function getRead(db, readId, { projectRef = null } = {}) {
-  const row = (await db.query("SELECT id, module, project_ref, filename, chunks, done_chunks, items, selected, sent, created_at FROM adu_report_reads WHERE id = $1", [readId])).rows[0];
+  const row = (await db.query("SELECT id, module, project_ref, filename, chunks, done_chunks, items, selected, sent, created_at, apply_plan, apply_draft_id, results FROM adu_report_reads WHERE id = $1", [readId])).rows[0];
   if (!row || (projectRef !== null && row.project_ref !== Number(projectRef))) return null;
   return {
     id: row.id, filename: row.filename, parts: row.chunks.length, partsDone: row.done_chunks.length, items: row.items, selected: row.selected, sent: row.sent, createdAt: row.created_at,
-    groups: groupByKind(row.items),
+    groups: groupByKind(row.items), plan: row.apply_plan, applyDraftId: row.apply_draft_id, results: row.results ?? {},
   };
 }
 

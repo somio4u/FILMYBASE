@@ -16,6 +16,7 @@ import BuddyChat from './BuddyChat.jsx'
 import AiMovieVoiceOrb from './AiMovieVoiceOrb.jsx'
 import AiMovieSceneTools from './AiMovieSceneTools.jsx'
 import AiMovieRename from './AiMovieRename.jsx'
+import ScriptDoctorPanel from './ScriptDoctorPanel.jsx'
 import { cleanForSave, collectCharacterNames } from './scriptDoc.js'
 import { splitSceneContexts } from './sceneContexts.js'
 import './App.css'
@@ -9157,6 +9158,7 @@ function App() {
   const [aiMovieSelectedSceneIndex, setAiMovieSelectedSceneIndex] = useState(0)
   // Edit mode (like the Movie screenplay): the screenplay area fills the screen; Esc or the button leaves it. The page zoom is shared with Movie.
   const [aiEditMode, setAiEditMode] = useState(false)
+  const [showScriptDoctor, setShowScriptDoctor] = useState(false) // the one screen for a script doctor's report
   const [aiScriptZoom, setAiScriptZoom] = useState(() => { try { const v = Number(localStorage.getItem('filmybase.scriptZoom')); return v >= 0.5 && v <= 2.5 ? v : 1 } catch { return 1 } })
   const changeAiScriptZoom = (next) => { const v = Math.max(0.5, Math.min(2.5, Math.round(next * 100) / 100)); setAiScriptZoom(v); try { localStorage.setItem('filmybase.scriptZoom', String(v)) } catch { /* private window */ } }
   useEffect(() => {
@@ -14785,6 +14787,16 @@ function App() {
 
                         {!collapsed && (
                           <>
+                            {aiMovieProjectId && screenplayBeats.length > 0 && (
+                              <p className="script-doctor-open">
+                                <button type="button" className="choose-button" onClick={() => setShowScriptDoctor(true)}>📄 Script Doctor report — upload it and make its changes</button>
+                              </p>
+                            )}
+                            {showScriptDoctor && (
+                              <ScriptDoctorPanel backendUrl={BACKEND_URL} projectId={aiMovieProjectId} draft={currentDraft ? { id: currentDraft.id, title: currentDraft.label ?? currentDraft.title ?? null, draftNumber: currentDraft.draftNumber } : null} language={aiMovieLanguage}
+                                onClose={() => setShowScriptDoctor(false)} onChanged={() => refreshAiMovieScreenplayNow(aiMovieProjectId)}
+                                onSendToChat={(text) => { setAduPending(text); setAduTalkNonce((n) => n + 1) }} />
+                            )}
                             {!screenplayApproved && (
                               <AiMovieWriteAll backendUrl={BACKEND_URL} projectId={aiMovieProjectId} language={aiMovieLanguage} onChanged={refreshAiMovieScreenplayNow} allWritten={screenplayBeats.length > 0 && screenplayBeats.every((b) => Array.isArray(b.scenes) && b.scenes.length > 0)} autoApprovedCount={screenplayBeats.filter((b) => b.autoApproved).length} unfinished={screenplayBeats.filter((b) => !(Array.isArray(b.scenes) && b.scenes.length > 0)).length} />
                             )}

@@ -46,7 +46,7 @@ const fakeBible = (title, notes = []) => ({
   review: { passed: true, keptVersion: 2, scores: { story: 8, audience: 9 }, history: [{ version: 1, scores: { story: 7, audience: 8 } }, { version: 2, scores: { story: 8, audience: 9 } }], reports: {} },
 });
 
-export function fakePipeline(db, { stageScores = {}, onCall = null } = {}) {
+export function fakePipeline(db, { stageScores = {}, onCall = null, writeAllJob = false } = {}) {
   const runs = new Map();
   let nextRun = 1;
   const attempts = new Map();
@@ -76,9 +76,16 @@ export function fakePipeline(db, { stageScores = {}, onCall = null } = {}) {
       return ok({ stageKey: stage, content, judge });
     }
     if ((m = /^\/api\/ai-movie\/stages\/(\w+)\/approve$/.exec(path)) && !/beats/.test(path)) { const prev = (await row()).stage_status?.[m[1]] ?? {}; await db.query("UPDATE ai_movie_projects SET stage_status = COALESCE(stage_status,'{}'::jsonb) || $2::jsonb WHERE id = $1", [pid, J({ [m[1]]: { ...prev, status: "approved", feedback: null } })]); return ok({ ok: true }); }
+    // the real server's behaviour since "Generate screenplay" starts the "write the whole screenplay" job: the beats arrive already approved (a mark only), the stage itself is NOT
+    // approved until the whole screenplay is signed off (approve-all), and the job can be asked about
+    if (writeAllJob && /\/write-all\/current$/.test(path)) return ok({ jobId: "job-1", status: "done" });
+    if (writeAllJob && path === "/api/ai-movie/stages/screenplay/approve-all") {
+      await db.query("UPDATE ai_movie_projects SET stage_status = COALESCE(stage_status,'{}'::jsonb) || $2::jsonb WHERE id = $1", [pid, J({ screenplay: { status: "approved", feedback: null } })]);
+      return ok({ approved: true });
+    }
     if (path === "/api/ai-movie/stages/screenplay/generate") {
       const r = await row();
-      const beats = (r.backfill?.plot ?? []).map((b, i) => ({ status: "pending", feedback: null, scenes: [{ sceneHeading: { en: `Beat ${i + 1} scene`, hi: `Beat ${i + 1} scene` }, content: [{ type: "action", text: { en: `Written in the new draft, beat ${i + 1}.`, hi: `Written in the new draft, beat ${i + 1}.` } }] }] }));
+      const beats = (r.backfill?.plot ?? []).map((b, i) => ({ status: writeAllJob ? "approved" : "pending", feedback: null, scenes: [{ sceneHeading: { en: `Beat ${i + 1} scene`, hi: `Beat ${i + 1} scene` }, content: [{ type: "action", text: { en: `Written in the new draft, beat ${i + 1}.`, hi: `Written in the new draft, beat ${i + 1}.` } }] }] }));
       await db.query("UPDATE ai_movie_projects SET backfill = jsonb_set(COALESCE(backfill,'{}'::jsonb), '{screenplayBeats}', $2::jsonb), stage_status = stage_status - 'screenplay' WHERE id = $1", [pid, J(beats)]);
       return ok({ started: true });
     }

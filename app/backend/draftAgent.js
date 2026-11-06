@@ -896,10 +896,28 @@ async function polishBeat(pl, pid, i, row) {
 async function aiScreenplay(db, pl, request, pid, log, save) {
   must(await pl.call("POST", "/api/ai-movie/stages/screenplay/generate", { projectId: pid }), "The screenplay");
   const polished = new Set(), retries = new Map();
+  let restarts = 0;
+  // "Generate screenplay" starts the "write the whole screenplay" job: it writes every beat, approves each one automatically (a mark only) and writes the dialogue.
+  // The screenplay itself is signed off here once that job has finished; and if the job ended with beats still unwritten, it is started again (three times at most).
+  const jobRunning = async () => { try { const r = await pl.call("GET", `/api/ai-movie/projects/${pid}/write-all/current`); return r.status < 400 && r.json?.status === "running"; } catch { return false; } };
   await waitFor(db, request.id, async () => {
     const row = (await db.query("SELECT backfill, stage_status FROM ai_movie_projects WHERE id = $1", [pid])).rows[0];
     if (row.stage_status?.screenplay?.status === "approved") return true;
     const beats = row.backfill?.screenplayBeats ?? [];
+    if (beats.length > 0) {
+      const written = beats.filter((b) => b.status === "approved" || b.status === "pending").length;
+      await setLive(db, request.id, 4, `Writing the screenplay: ${written} of ${beats.length} beats written`);
+      if (beats.every((b) => b.status === "approved")) {
+        if (await jobRunning()) return false; // the last beat's dialogue is still being written
+        must(await pl.call("POST", "/api/ai-movie/stages/screenplay/approve-all", { projectId: pid }), "Approving the whole screenplay");
+        return false;
+      }
+      if (beats.some((b) => b.status === "not_started") && !beats.some((b) => b.status === "generating" || b.status === "pending" || b.status === "error") && !(await jobRunning())) {
+        if (++restarts > 3) throw httpError("The screenplay could not be finished: some beats were still unwritten after three more tries.", 502, "beats_unwritten");
+        must(await pl.call("POST", `/api/ai-movie/projects/${pid}/write-all`, { dialogue: true }), "Writing the rest of the screenplay");
+        return false;
+      }
+    }
     for (let i = 0; i < beats.length; i++) {
       const b = beats[i];
       if (b.status === "error") {

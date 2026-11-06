@@ -31,7 +31,7 @@ const mutate = (v) => {
 function mockModels(over = {}) {
   calls = [];
   pipelineCalls = [];
-  const pipe = fakePipeline(db, { stageScores: over.stageScores ?? {}, onCall: (m, path, body) => { pipelineCalls.push({ m, path, body }); over.onPipeline?.(m, path, body); } });
+  const pipe = fakePipeline(db, { stageScores: over.stageScores ?? {}, writeAllJob: over.writeAllJob === true, onCall: (m, path, body) => { pipelineCalls.push({ m, path, body }); over.onPipeline?.(m, path, body); } });
   return {
     pipeline: pipe,
     async json(draft, agent, prompt, opts) {
@@ -649,4 +649,17 @@ test("routes: the whole flow over HTTP for both modules, with plain errors", asy
     assert.equal((await http("GET", `/api/drafts/${d.id}/production-impact`)).status, 200);
     assert.equal((await http("GET", "/api/drafts/requests/999999")).status, 404);
   }
+});
+
+test("the new draft's screenplay is written by the 'write the whole screenplay' job: the beats arrive approved, the agent waits for the job and then signs the whole screenplay off — it does not wait forever", async () => {
+  const d = await ensureDraftFor(db, "ai_movie", ai);
+  const models = mockModels({ writeAllJob: true });
+  const { request } = await startRevision(db, models, d.id, { instruction: "Change the villain.", confirmed: true, actorUserId: 1 });
+  await whenIdle(request.id); await approveSynopsis(db, models, request.id, { actorUserId: 1 }); await whenIdle(request.id);
+  const r = await getRequest(db, request.id);
+  assert.equal(r.status, "awaiting_final_approval", r.error ?? "");
+  assert.ok(pipelineCalls.some((c) => /screenplay\/approve-all$/.test(c.path)), "the whole screenplay was signed off");
+  assert.ok(!pipelineCalls.some((c) => /beats\/\d+\/approve$/.test(c.path)), "the beats were not approved one by one: the job had already done it");
+  const p = (await db.query("SELECT stage_status FROM ai_movie_projects WHERE id = $1", [(await getDraft(db, r.draft_id)).project_ref])).rows[0];
+  assert.equal(p.stage_status.screenplay.status, "approved");
 });

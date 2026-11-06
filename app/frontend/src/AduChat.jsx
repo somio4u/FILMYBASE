@@ -13,6 +13,7 @@ const TEXT = {
     listen: 'Listen', stopListen: 'Stop', readAloud: 'Read replies aloud', noVoice: 'This device has no voice for this language, so it cannot read the reply aloud.', speakFail: 'The voice could not read this aloud.',
     failed: 'Adu could not answer.', retryNote: 'Your message is back in the box — press Send to try again.', loadFail: 'Could not load the earlier conversation.',
     starters: ['What can you help me with?', 'Write the whole screenplay', 'How long is the beat I am on?'],
+    filmStarters: ['What can you help me with?', 'Write all the scenes not written yet', 'Add 5 scenes'],
     proposes: 'Adu proposes', big: 'A bigger change', touches: 'It would touch', allDrafts: 'All drafts',
   },
   hi: {
@@ -22,6 +23,7 @@ const TEXT = {
     listen: 'सुनो', stopListen: 'रोको', readAloud: 'जवाब ज़ोर से पढ़कर सुनाओ', noVoice: 'इस device में इस भाषा की आवाज़ नहीं है, इसलिए जवाब पढ़कर सुनाया नहीं जा सकता।', speakFail: 'आवाज़ इसे पढ़ नहीं पाई।',
     failed: 'Adu जवाब नहीं दे पाया।', retryNote: 'आपका संदेश वापस डिब्बे में है — फिर से कोशिश के लिए भेजो दबाओ।', loadFail: 'पिछली बातचीत नहीं आ सकी।',
     starters: ['तुम किस काम में मेरी मदद कर सकते हो?', 'पूरी screenplay लिखो', 'मैं जिस beat पर हूँ वह कितना लंबा है?'],
+    filmStarters: ['तुम किस काम में मेरी मदद कर सकते हो?', 'बाकी सारे scenes लिखो', '5 scenes जोड़ो'],
     proposes: 'Adu का प्रस्ताव', big: 'एक बड़ा बदलाव', touches: 'इसमें छुआ जाएगा', allDrafts: 'सारे drafts',
   },
   or: {
@@ -31,6 +33,7 @@ const TEXT = {
     listen: 'ଶୁଣ', stopListen: 'ବନ୍ଦ', readAloud: 'ଉତ୍ତର ପଢ଼ି ଶୁଣାଅ', noVoice: 'ଏହି ଡିଭାଇସ୍‌ରେ ଏହି ଭାଷାର ଅଵାଜ୍ ନାହିଁ, ତେଣୁ ଉତ୍ତର ପଢ଼ି ଶୁଣାଇ ହେବ ନାହିଁ।', speakFail: 'ଅଵାଜ୍ ଏହାକୁ ପଢ଼ିପାରିଲା ନାହିଁ।',
     failed: 'Adu ଉତ୍ତର ଦେଇପାରିଲା ନାହିଁ।', retryNote: 'ତୁମ ବାର୍ତ୍ତା ପୁଣି ବାକ୍ସରେ ଅଛି — ପୁଣି ଚେଷ୍ଟା ପାଇଁ ପଠାଅ ଦବାଅ।', loadFail: 'ଆଗର କଥାବାର୍ତ୍ତା ଆଣିହେଲା ନାହିଁ।',
     starters: ['ତୁମେ କେଉଁ କାମରେ ସାହାଯ୍ୟ କରିପାରିବ?', 'ପୁରା ସ୍କ୍ରିନପ୍ଲେ ଲେଖ', 'ମୁଁ ଯେଉଁ ବିଟ୍‌ରେ ଅଛି ତାହା କେତେ ଲମ୍ବା?'],
+    filmStarters: ['ତୁମେ କେଉଁ କାମରେ ସାହାଯ୍ୟ କରିପାରିବ?', 'ବାକି ସବୁ ଦୃଶ୍ୟ ଲେଖ', '5 ଦୃଶ୍ୟ ଯୋଡ଼'],
     proposes: 'Adu ର ପ୍ରସ୍ତାବ', big: 'ଏକ ବଡ଼ ବଦଳ', touches: 'ଏଥିରେ ଛୁଇଁବ', allDrafts: 'ସବୁ ଡ୍ରାଫ୍ଟ',
   },
 }
@@ -52,7 +55,7 @@ function ActionNote({ action, L, children }) {
   )
 }
 
-export default function AduChat({ backendUrl, projectId, language = 'en', getContext, selection = '', InputComponent, renderAction = null, onNewMessage = null, onAllDrafts = null }) {
+export default function AduChat({ backendUrl, projectId, module = 'ai_movie', language = 'en', getContext, selection = '', InputComponent, renderAction = null, onNewMessage = null, onAllDrafts = null }) {
   const lang = language === 'or' || language === 'hi' ? language : 'en'
   const L = TEXT[lang]
   const [messages, setMessages] = useState([])
@@ -68,7 +71,7 @@ export default function AduChat({ backendUrl, projectId, language = 'en', getCon
   const alive = useRef(true)
   const readAloudRef = useRef(readAloud)
   const speakRef = useRef(null)
-  const base = `${backendUrl}/api/ai-movie/assistant/${projectId}`
+  const base = `${backendUrl}/api/${module === 'film' ? 'film' : 'ai-movie'}/assistant/${projectId}`
 
   useEffect(() => {
     alive.current = true
@@ -160,7 +163,7 @@ export default function AduChat({ backendUrl, projectId, language = 'en', getCon
         {!loading && messages.length === 0 && (
           <div className="buddy-empty">
             <p>{L.hint}</p>
-            <div className="buddy-starters">{L.starters.map((s) => <button type="button" key={s} onClick={() => send(s)}>{s}</button>)}</div>
+            <div className="buddy-starters">{(module === 'film' ? L.filmStarters : L.starters).map((s) => <button type="button" key={s} onClick={() => send(s)}>{s}</button>)}</div>
           </div>
         )}
         {messages.map((m) => (

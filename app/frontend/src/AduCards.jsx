@@ -6,6 +6,8 @@ import './Drafts.css'
 // Extend a beat), and "no thanks" just closes the card. A card that was pressed is remembered on the server (…/resolve), so it does not come back after a reload.
 const W = {
   en: {
+    someFailed: (n, total, why) => `⚠ ${n} of ${total} could not be done. ${why}`, nothingDone: (why) => `⚠ Nothing could be done. ${why}`, stoppedNote: '■ Stopped.',
+    filmWriteBtn: (n) => `✍ Write the ${n} scene${n === 1 ? '' : 's'} not written yet`, filmAddBtn: (n) => `➕ Add ${n} scene${n === 1 ? '' : 's'} to the scene list`, filmStop: 'Stop after this scene', filmRunning: (step, done, total) => `⏳ ${step} · ${done}/${total}`, filmDone: '✓ The job has finished — see the Scene List and Screenplay cards.', filmStarted: 'Started. It runs in the background; the progress is here and on the card:',
     older: 'An older suggestion — ask again if you still want it.', done: '✓ Done', dismissed: 'No thanks — closed.', no: 'No thanks',
     writeBtn: '✍ Start writing the whole screenplay', writeStarted: 'Started. The progress is on the Screenplay card, and here:', stop: 'Stop after this beat',
     running: (step, done, total) => `⏳ ${step} · ${done}/${total}`, writeDone: '✓ The writing job has finished — see the Screenplay card.',
@@ -19,6 +21,8 @@ const W = {
     continueBtn: 'Continue this draft where it stopped', choose: 'What should I do?', failed: 'That did not work.',
   },
   hi: {
+    someFailed: (n, total, why) => `⚠ ${total} में से ${n} नहीं हो पाए। ${why}`, nothingDone: (why) => `⚠ कुछ भी नहीं हो पाया। ${why}`, stoppedNote: '■ रोक दिया गया।',
+    filmWriteBtn: (n) => `✍ अभी तक न लिखे ${n} scenes लिखो`, filmAddBtn: (n) => `➕ Scene list में ${n} scenes जोड़ो`, filmStop: 'इस scene के बाद रोको', filmRunning: (step, done, total) => `⏳ ${step} · ${done}/${total}`, filmDone: '✓ काम पूरा हो गया — Scene List और Screenplay card देखो।', filmStarted: 'शुरू हो गया। यह background में चलता है; प्रगति यहाँ और card पर है:',
     older: 'यह पुराना सुझाव है — अब भी चाहिए तो फिर से कहो।', done: '✓ हो गया', dismissed: 'रहने दिया — बंद।', no: 'रहने दो',
     writeBtn: '✍ पूरी screenplay लिखना शुरू करो', writeStarted: 'शुरू हो गया। प्रगति Screenplay card पर है, और यहाँ भी:', stop: 'इस beat के बाद रोको',
     running: (step, done, total) => `⏳ ${step} · ${done}/${total}`, writeDone: '✓ लिखने का काम पूरा हो गया — Screenplay card देखो।',
@@ -32,6 +36,8 @@ const W = {
     continueBtn: 'इस draft को जहाँ रुका था वहीं से जारी रखो', choose: 'मुझे क्या करना है?', failed: 'यह नहीं हो पाया।',
   },
   or: {
+    someFailed: (n, total, why) => `⚠ ${total} ମଧ୍ୟରୁ ${n} ହୋଇପାରିଲା ନାହିଁ। ${why}`, nothingDone: (why) => `⚠ କିଛି ହୋଇପାରିଲା ନାହିଁ। ${why}`, stoppedNote: '■ ବନ୍ଦ କରାଗଲା।',
+    filmWriteBtn: (n) => `✍ ଏଯାଏଁ ଲେଖା ହୋଇନଥିବା ${n} ଦୃଶ୍ୟ ଲେଖ`, filmAddBtn: (n) => `➕ ସିନ୍ ତାଲିକାରେ ${n} ଦୃଶ୍ୟ ଯୋଡ଼`, filmStop: 'ଏହି ଦୃଶ୍ୟ ପରେ ଅଟକାଅ', filmRunning: (step, done, total) => `⏳ ${step} · ${done}/${total}`, filmDone: '✓ କାମ ସରିଲା — Scene List ଓ Screenplay କାର୍ଡ ଦେଖ।', filmStarted: 'ଆରମ୍ଭ ହୋଇଗଲା। ଏହା background ରେ ଚାଲେ; ପ୍ରଗତି ଏଠି ଏବଂ କାର୍ଡରେ:',
     older: 'ଏହା ପୁରୁଣା ପରାମର୍ଶ — ଏବେ ବି ଦରକାର ହେଲେ ପୁଣି କୁହ।', done: '✓ ହୋଇଗଲା', dismissed: 'ରହିଲା — ବନ୍ଦ।', no: 'ରହୁ',
     writeBtn: '✍ ପୁରା ସ୍କ୍ରିନପ୍ଲେ ଲେଖିବା ଆରମ୍ଭ କର', writeStarted: 'ଆରମ୍ଭ ହୋଇଗଲା। ପ୍ରଗତି Screenplay କାର୍ଡରେ ଅଛି, ଏବଂ ଏଠି ମଧ୍ୟ:', stop: 'ଏହି ବିଟ୍ ପରେ ଅଟକାଅ',
     running: (step, done, total) => `⏳ ${step} · ${done}/${total}`, writeDone: '✓ ଲେଖିବା କାମ ସରିଲା — Screenplay କାର୍ଡ ଦେଖ।',
@@ -64,6 +70,17 @@ function Diff({ edit, L }) {
   )
 }
 
+// what to say when a background job is no longer running: done, or honestly how much failed (never "done" over a failure)
+function finishedNote(job, L, doneText) {
+  const failed = job.failed?.length ?? 0
+  if (failed > 0) {
+    const why = String(job.failed[0]?.error ?? '').replace(/\s+/g, ' ').slice(0, 160)
+    return job.done > 0 ? L.someFailed(failed, job.total, why) : L.nothingDone(why)
+  }
+  if (job.stopRequested && job.done < job.total) return `${L.stoppedNote} ${job.done}/${job.total}`
+  return doneText
+}
+
 // the progress of the whole-screenplay job, shown under the card that started it
 function WriteMini({ backendUrl, projectId, L, onFinished }) {
   const [job, setJob] = useState(null)
@@ -90,12 +107,43 @@ function WriteMini({ backendUrl, projectId, L, onFinished }) {
       </div>
     )
   }
-  return <p className="dd-note">{L.writeDone}</p>
+  return <p className="dd-note">{finishedNote(job, L, L.writeDone)}</p>
+}
+
+// the progress of a film's background writing job (write the scenes / add scenes), shown under the card that started it
+function FilmMini({ backendUrl, sceneListId, L, onFinished }) {
+  const [job, setJob] = useState(null)
+  const finishedRef = useRef(onFinished)
+  finishedRef.current = onFinished
+  const load = useCallback(async () => {
+    const r = await call(`${backendUrl}/api/scene-lists/${sceneListId}/write-jobs/current`)
+    if (r.ok) { setJob(r.data.jobId ? r.data : null); if (r.data.jobId && r.data.status !== 'running') finishedRef.current?.() }
+    return r.data
+  }, [backendUrl, sceneListId])
+  useEffect(() => { load() }, [load])
+  useEffect(() => {
+    if (job?.status !== 'running') return undefined
+    const id = setInterval(load, 3000)
+    return () => clearInterval(id)
+  }, [job?.status, load])
+  if (!job) return null
+  if (job.status === 'running') {
+    const finished = job.done + (job.failed?.length ?? 0)
+    return (
+      <div className="dd-note" role="status">
+        <p>{L.filmRunning(job.step, finished, job.total)}</p>
+        <progress max={job.total} value={finished} />
+        {!job.stopRequested && <button type="button" className="dd-btn" onClick={async () => { await call(`${backendUrl}/api/scene-lists/${sceneListId}/write-jobs/${job.jobId}/stop`, 'POST'); load() }}>{L.filmStop}</button>}
+      </div>
+    )
+  }
+  return <p className="dd-note">{finishedNote(job, L, L.filmDone)}</p>
 }
 
 export default function AduAction({ message, action, current, update, lang = 'en', ctx }) {
   const L = W[lang] ?? W.en
-  const { backendUrl, projectId, draft, getContext, onApplied, onOpenDraft, onOpenRevision } = ctx
+  const { backendUrl, projectId, draft, getContext, onApplied, onOpenDraft, onOpenRevision, module = 'ai_movie' } = ctx
+  const assistantApi = `${backendUrl}/api/${module === 'film' ? 'film' : 'ai-movie'}/assistant/${projectId}`
   const [busy, setBusy] = useState('')
   const [error, setError] = useState('')
   const [note, setNote] = useState('')
@@ -110,7 +158,7 @@ export default function AduAction({ message, action, current, update, lang = 'en
   const body = () => ({ instruction: action.instruction, intent, targetKeys: picked, context: context(), constraints: action.constraints ?? {}, confirmed: true })
 
   async function resolve(outcome) {
-    const r = await call(`${backendUrl}/api/ai-movie/assistant/${projectId}/resolve`, 'POST', { messageId: message.id, outcome })
+    const r = await call(`${assistantApi}/resolve`, 'POST', { messageId: message.id, outcome })
     if (r.ok) update({ resolved: true, action: { ...action, outcome } })
   }
   async function run(label, fn) {
@@ -127,6 +175,7 @@ export default function AduAction({ message, action, current, update, lang = 'en
     return (
       <div className="adu-card-done">
         <small>{action.outcome === 'dismissed' ? L.dismissed : L.done}</small>
+        {(action.type === 'write_scenes' || action.type === 'add_scenes') && action.outcome === 'applied' && <FilmMini backendUrl={backendUrl} sceneListId={action.sceneListId} L={L} onFinished={onApplied} />}
         {action.type === 'write_all' && action.outcome === 'applied' && <WriteMini backendUrl={backendUrl} projectId={projectId} L={L} onFinished={onApplied} />}
         {cs?.status === 'applied' && <p className="dd-note">{L.applied}</p>}
       </div>
@@ -152,6 +201,26 @@ export default function AduAction({ message, action, current, update, lang = 'en
           </div>
         ) : null}
         {noteLine}{errorLine}
+      </div>
+    )
+  }
+
+  // ---- a film: write the scenes not written yet / add scenes to the scene list (the film's own background job)
+  if (action.type === 'write_scenes' || action.type === 'add_scenes') {
+    const adding = action.type === 'add_scenes'
+    return (
+      <div className="adu-card">
+        {!started ? (
+          <div className="dd-actions">
+            <button type="button" className="dd-btn primary" disabled={Boolean(busy)} onClick={async () => {
+              const d = await run('film', () => call(`${backendUrl}/api/scene-lists/${action.sceneListId}/write-jobs`, 'POST', adding ? { scope: 'add', count: action.count } : { scope: 'all' }))
+              if (d) { setStarted(true); setNote(L.filmStarted); await resolve('applied') }
+            }}>{adding ? L.filmAddBtn(action.count) : L.filmWriteBtn(action.unwritten)}</button>
+            {dismiss}
+          </div>
+        ) : null}
+        {noteLine}{errorLine}
+        {started && <FilmMini backendUrl={backendUrl} sceneListId={action.sceneListId} L={L} onFinished={onApplied} />}
       </div>
     )
   }

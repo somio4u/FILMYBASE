@@ -240,3 +240,87 @@ test("an action for the Draft Agent carries the draft id (the card needs it to c
   assert.equal(r.assistant.action.draftId, r.draftId);
   assert.ok(r.draftId > 0);
 });
+
+// ---------------------------------------------------------------------------------------------------------------------------------------------
+// The same front door for a FILM (module "film"): the project is a concept with a scene list; scenes are written one by one into screenplay_scenes.
+async function filmFixture({ written = 1, withList = true } = {}) {
+  await db.query("DELETE FROM concepts WHERE title LIKE '[ADU-TEST]%'");
+  const concept = (await db.query("INSERT INTO concepts (concept_text, storylines, title) VALUES ($1,$2,$3) RETURNING id", ["A fisherman's daughter learns to sail.", J([]), "[ADU-TEST] Film"])).rows[0].id;
+  if (!withList) return { concept, list: null };
+  const deck = (await db.query("INSERT INTO pitch_decks (concept_id, content, status) VALUES ($1,$2,'approved') RETURNING id", [concept, J({ logline: "A girl and the sea." })])).rows[0].id;
+  const act = (await db.query("INSERT INTO three_act_structures (pitch_deck_id, content, status) VALUES ($1,$2,'approved') RETURNING id", [deck, J({ act1: "Setup" })])).rows[0].id;
+  const bits = (await db.query("INSERT INTO bit_sheets (three_act_structure_id, content, status) VALUES ($1,$2,'approved') RETURNING id", [act, J({ beats: ["Opening"] })])).rows[0].id;
+  const scenes = [1, 2, 3].map((n) => ({ intExt: "EXT", location: `SHORE ${n}`, timeOfDay: "DAY", oneLiner: `Scene ${n} happens.` }));
+  const list = (await db.query("INSERT INTO scene_lists (bit_sheet_id, concept_id, content, status) VALUES ($1,$2,$3,'approved') RETURNING id", [bits, concept, J({ scenes })])).rows[0].id;
+  for (let i = 0; i < written; i++) await db.query("INSERT INTO screenplay_scenes (scene_list_id, scene_index, content, status) VALUES ($1,$2,$3,'approved')", [list, i, J({ heading: `EXT. SHORE ${i + 1} - DAY`, action: "She looks at the waves." })]);
+  return { concept, list };
+}
+
+test("film: 'add N scenes' is recognised for film only; extend is not offered for film", () => {
+  assert.deepEqual(sortWithoutAi("add 5 scenes", {}, { module: "film" }), { kind: "add", count: 5 });
+  assert.equal(sortWithoutAi("add 5 scenes", {}, { module: "ai_movie" }).kind, "agent");
+  assert.notEqual(sortWithoutAi("make beat 3 longer, 8 minutes", {}, { module: "film" }).kind, "extend");
+  assert.deepEqual(sortWithoutAi("Write the whole screenplay", {}, { module: "film" }), { kind: "write", dialogue: true });
+});
+
+test("film: 'write every scene' proposes writing the scenes not written yet, carrying the scene list id; 'all written' only says so", async () => {
+  const f = await filmFixture({ written: 1 });
+  const r = await handleAduMessage(db, models(), { projectId: f.concept, userId: 7, text: "Write the whole screenplay", language: "en", module: "film" });
+  assert.equal(r.assistant.action.type, "write_scenes");
+  assert.equal(r.assistant.action.sceneListId, f.list);
+  assert.equal(r.assistant.action.unwritten, 2);
+  assert.equal(r.assistant.action.total, 3);
+  assert.equal(calls.length, 0); // no AI call for a plain command
+  const g = await filmFixture({ written: 3 });
+  const all = await handleAduMessage(db, models(), { projectId: g.concept, userId: 7, text: "Write the whole screenplay", language: "en", module: "film" });
+  assert.equal(all.assistant.action, null);
+  assert.match(all.assistant.content, /already written/);
+  await db.query("DELETE FROM concepts WHERE title LIKE '[ADU-TEST]%'");
+});
+
+test("film: 'add 4 scenes' becomes an add_scenes proposal; without a scene list Adu says there is nothing to add to", async () => {
+  const f = await filmFixture({ written: 0 });
+  const r = await handleAduMessage(db, models(), { projectId: f.concept, userId: 7, text: "add 4 scenes", language: "en", module: "film" });
+  assert.deepEqual([r.assistant.action.type, r.assistant.action.count, r.assistant.action.sceneListId], ["add_scenes", 4, f.list]);
+  const n = await filmFixture({ withList: false });
+  const none = await handleAduMessage(db, models(), { projectId: n.concept, userId: 7, text: "add 4 scenes", language: "en", module: "film" });
+  assert.equal(none.assistant.action, null);
+  assert.match(none.assistant.content, /no approved scene list/);
+  await db.query("DELETE FROM concepts WHERE title LIKE '[ADU-TEST]%'");
+});
+
+test("film: questions see the film's own brief (idea, scene list), edits go to the Draft Agent of the film draft, and history is separate from AI Movie", async () => {
+  const f = await filmFixture({ written: 1 });
+  const m = models({ answer: { reply: "Three scenes are planned." } });
+  const q = await handleAduMessage(db, m, { projectId: f.concept, userId: 7, text: "How many scenes are planned?", language: "en", module: "film" });
+  assert.equal(q.assistant.content, "Three scenes are planned.");
+  const prompt = calls.find((c) => c.kind === "answer").prompt;
+  assert.match(prompt, /fisherman's daughter/);
+  assert.match(prompt, /SHORE 2/);
+  assert.equal(calls.find((c) => c.kind === "answer").module, "film");
+  const e = await handleAduMessage(db, models({ classify: { intent: "LOCAL_EDIT", summary: "Make it calmer.", targets: [{ type: "selection" }] } }), { projectId: f.concept, userId: 7, text: "Make the opening calmer", language: "en", module: "film" });
+  assert.equal(e.assistant.action.type, "agent");
+  assert.equal(e.assistant.action.draftId, e.draftId);
+  // history is kept per module: the AI Movie project with the same number sees none of it
+  assert.ok((await loadHistory(db, f.concept, 7, 100, "film")).length >= 4);
+  assert.equal((await loadHistory(db, f.concept, 7, 100, "ai_movie")).length, 0);
+  await clearHistory(db, f.concept, 7, "film");
+  assert.equal((await loadHistory(db, f.concept, 7, 100, "film")).length, 0);
+  await assert.rejects(() => handleAduMessage(db, models(), { projectId: 99999999, userId: 7, text: "hi", module: "film" }), /not found/i);
+  await db.query("DELETE FROM concepts WHERE title LIKE '[ADU-TEST]%'");
+});
+
+test("film: the web routes exist under /api/film/assistant", async () => {
+  const f = await filmFixture({ written: 0 });
+  const app = express();
+  app.use(express.json());
+  registerAduChatRoutes(app, db, () => (req, res, next) => { req.user = { id: 7 }; next(); }, { models: models() });
+  const s = await new Promise((ok) => { const x = app.listen(0, () => ok(x)); });
+  try {
+    const b = `http://127.0.0.1:${s.address().port}/api/film/assistant/${f.concept}`;
+    const post = await (await fetch(`${b}/message`, { method: "POST", headers: { "content-type": "application/json" }, body: J({ text: "add 2 scenes", language: "en" }) })).json();
+    assert.equal(post.assistant.action.type, "add_scenes");
+    const hist = await (await fetch(`${b}/history`)).json();
+    assert.equal(hist.messages.length, 2);
+  } finally { s.close(); await db.query("DELETE FROM concepts WHERE title LIKE '[ADU-TEST]%'"); }
+});

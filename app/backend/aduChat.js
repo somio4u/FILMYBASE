@@ -54,15 +54,18 @@ export function looksLikeQuestion(text) {
 // (Hindi and Odia letters are not "word" letters for \b, so those words are matched without it)
 const WRITE_VERB = /\b(write|likho|likh\s*do|likhdo|generate|create|banao|bana\s*do)\b|ଲେଖ|लिख|बनाओ/i;
 const WHOLE = /\b(whole|full|entire|complete|all|rest|remaining|left|baaki|baki|pura|poora|sab|sabhi)\b|ସବୁ|ପୂରା|ପୁରା|ବାକି|पूरी|पूरा|सारी|सारा|बाकी|बचे|बचा/i;
-const SCREENPLAY_WORD = /\b(screenplay|script|scenes?|beats?|dialogues?|film|movie)\b|ସ୍କ୍ରିନପ୍ଲେ|ସିନ୍|ବିଟ୍|ସଂଳାପ|स्क्रीनप्ले|पटकथा|सीन|बीट|संवाद|फ़िल्म|फिल्म/i;
+const SCREENPLAY_WORD = /\b(screenplay|script|scenes?|beats?|dialogues?|film|movie)\b|ସ୍କ୍ରିନପ୍ଲେ|ସିନ୍|ଦୃଶ୍ୟ|ବିଟ୍|ସଂଳାପ|स्क्रीनप्ले|पटकथा|सीन|बीट|संवाद|फ़िल्म|फिल्म/i;
 
 export function sortWithoutAi(text, context = {}, { module = "ai_movie" } = {}) {
   const t = String(text ?? "").trim();
   if (!t) return { kind: "empty" };
   // a film has no beats to extend; it has scenes to add: "add 10 scenes", "10 aur scenes jodo"
   if (module === "film" && !looksLikeQuestion(t)) {
-    const add = /\b(add|jodo|jod\s*do|aur|more|another)\b.*?\b(\d{1,3})\s*(?:more\s+|new\s+|aur\s+)?scenes?\b|\b(\d{1,3})\s*(?:more\s+|new\s+|aur\s+)?scenes?\b.*?\b(add|jodo|jod\s*do)\b/i.exec(t);
-    if (add) { const count = Number(add[2] ?? add[3]); if (count >= 1 && count <= 40) return { kind: "add", count }; }
+    // the number, a word for scene(s) and a word for add/more, in any order — English, Hindi, Odia (no \b for Indic letters)
+    const count = /(\d{1,3})/.exec(t);
+    const sceneWord = /scenes?\b|सीन|दृश्य|ସିନ୍|ଦୃଶ୍ୟ/i.test(t);
+    const addWord = /\b(add|jodo|jod\s*do|aur|more|another|new)\b|जोड़|जोड़ो|और\s|ଯୋଡ଼|ଯୋଡ|ଆହୁରି|ଆଉ/i.test(t);
+    if (count && sceneWord && addWord) { const n = Number(count[1]); if (n >= 1 && n <= 40) return { kind: "add", count: n }; }
   }
   // "make beat 3 longer — 8 minutes": extend one beat to a time
   const minutes = /(\d+(?:\.\d+)?)\s*(?:min|mins|minute|minutes|मिनट|ମିନିଟ୍?)/i.exec(t);

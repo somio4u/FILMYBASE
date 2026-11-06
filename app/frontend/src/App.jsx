@@ -3632,14 +3632,14 @@ function FloatingAgentWidget({ currentUser, t, onRunCompleted, onOpenProject, dr
         const runNeedsYou = ['running', 'awaiting_approval', 'failed'].includes(status?.status)
         // In AI Movie the old command box ("This project") is retired: the chat does everything it did. Only its revision view stays, because a new draft's approval
         // steps (the revised synopsis, the final approval) live there — it opens from the chat's card and "Back" returns to the chat.
-        const aiDraft = projectMode && draftCtx.draft.module === 'ai_movie'
+        const aiDraft = projectMode && ['ai_movie', 'film'].includes(draftCtx.draft.module)
         const revisionOpen = aiDraft && Boolean(aduRevisionId ?? draftCtx.openRequestId)
         let tab = projectMode ? (aduTab ?? (runNeedsYou ? 'new' : aiDraft ? 'talk' : 'project')) : 'new'
         if (aiDraft && tab === 'project' && !revisionOpen) tab = 'talk'
         const runBadge = status?.status === 'running' ? '● writing' : status?.status === 'awaiting_approval' ? '● needs your approval' : status?.status === 'failed' ? '● stopped' : ''
         const tabs = projectMode ? (
           <div className="floating-agent-tabs" role="tablist" aria-label="What Adu works on">
-            {draftCtx.draft.module === 'ai_movie' && <button type="button" role="tab" aria-selected={tab === 'talk'} className={tab === 'talk' ? 'on' : ''} onClick={() => setAduTab('talk')}>💬 Talk to Adu</button>}
+            {aiDraft && <button type="button" role="tab" aria-selected={tab === 'talk'} className={tab === 'talk' ? 'on' : ''} onClick={() => setAduTab('talk')}>💬 Talk to Adu</button>}
             {(!aiDraft || revisionOpen) && <button type="button" role="tab" aria-selected={tab === 'project'} className={tab === 'project' ? 'on' : ''} onClick={() => setAduTab('project')}>{aiDraft ? '📋 New draft' : 'This project'}</button>}
             <button type="button" role="tab" aria-selected={tab === 'new'} className={tab === 'new' ? 'on' : ''} onClick={() => setAduTab('new')}>Write a new story{runBadge && <small className="floating-agent-tab-badge"> {runBadge}</small>}</button>
           </div>
@@ -3658,8 +3658,8 @@ function FloatingAgentWidget({ currentUser, t, onRunCompleted, onOpenProject, dr
               {tabs}
               <div className="floating-agent-embed">
                 {tab === 'talk' ? (
-                  <ErrorBoundary inline><AduChat backendUrl={BACKEND_URL} projectId={draftCtx.draft.projectRef} language={draftCtx.language} getContext={draftCtx.getContext} selection={aduSelection} InputComponent={MicTextarea} onAllDrafts={() => draftCtx.onOpenDraft?.('dashboard')}
-                    renderAction={(p) => <AduAction {...p} ctx={{ backendUrl: BACKEND_URL, projectId: draftCtx.draft.projectRef, draft: draftCtx.draft, getContext: draftCtx.getContext, onApplied: draftCtx.onApplied, onOpenDraft: (what, extra) => { if (what !== 'dashboard' && what !== 'compare') setIsOpen(false); draftCtx.onOpenDraft?.(what, extra) }, onOpenRevision: (id) => { setAduRevisionId(id); setAduTab('project') } }} />} /></ErrorBoundary>
+                  <ErrorBoundary inline><AduChat backendUrl={BACKEND_URL} projectId={draftCtx.draft.projectRef} module={draftCtx.draft.module} language={draftCtx.language} getContext={draftCtx.getContext} selection={aduSelection} InputComponent={MicTextarea} onAllDrafts={() => draftCtx.onOpenDraft?.('dashboard')}
+                    renderAction={(p) => <AduAction {...p} ctx={{ backendUrl: BACKEND_URL, projectId: draftCtx.draft.projectRef, module: draftCtx.draft.module, draft: draftCtx.draft, getContext: draftCtx.getContext, onApplied: draftCtx.onApplied, onOpenDraft: (what, extra) => { if (what !== 'dashboard' && what !== 'compare') setIsOpen(false); draftCtx.onOpenDraft?.(what, extra) }, onOpenRevision: (id) => { setAduRevisionId(id); setAduTab('project') } }} />} /></ErrorBoundary>
                 ) : (
                 <ErrorBoundary inline><Suspense fallback={null}><DraftAgentPanel embedded backendUrl={BACKEND_URL} draft={draftCtx.draft} getContext={draftCtx.getContext} InputComponent={MicTextarea} initialSelection={aduSelection}
                   key={aduRevisionId ?? 'panel'} initialRequestId={aduRevisionId ?? draftCtx.openRequestId ?? null} onClose={() => setIsOpen(false)} onOpenDraft={(what, extra) => { if (what !== 'dashboard' && what !== 'compare') setIsOpen(false); draftCtx.onOpenDraft?.(what, extra) }} onApplied={draftCtx.onApplied} onRevisionClosed={aiDraft ? () => { setAduRevisionId(null); setAduTab('talk') } : undefined} /></Suspense></ErrorBoundary>

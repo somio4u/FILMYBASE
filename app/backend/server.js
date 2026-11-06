@@ -48,7 +48,7 @@ import { newBlankScene, insertScene, removeSceneAt, moveSceneBy, keepRemoved, re
 import { ensureSceneHistorySchema, changedBeats, recordChanges, historyInfo, undoLast, redoLast } from "./aiMovieSceneHistory.js";
 import { renameCharacter as renameAiMovieCharacter, renameUndoInfo, undoRename, ensureRenameUndoSchema } from "./aiMovieRename.js";
 import { REPORT_SCHEMA, REPORT_SYSTEM, reportPrompt, normalizeItems, ensureReportSchema, createRead, saveParts, getRead, saveSelection, revisionFromReport, savePlan, saveResult, markUndone, latestReadId, groupByKind } from "./scriptDoctorReport.js";
-import { planApply, itemProgress, annotateItems, impactSummary, condensePrompt, CONDENSE_SCHEMA, CONDENSE_SYSTEM, normalizeDirections, fallbackDirections, directionsInstruction, uncovered } from "./scriptDoctorApply.js";
+import { planApply, itemProgress, annotateItems, impactSummary, itemsForNewStory, condensePrompt, CONDENSE_SCHEMA, CONDENSE_SYSTEM, normalizeDirections, fallbackDirections, directionsInstruction, uncovered } from "./scriptDoctorApply.js";
 import { countOdiaWords, textsOfScene, textsOfSceneList } from "./odiaCorpus.js";
 import { languageOf, parseEpisodesFromText, sceneContent } from "./screenplayImport.js";
 import { planFill } from "./pdfFill.js";
@@ -6588,8 +6588,10 @@ app.post("/api/ai-movie/assistant/:projectId/report/:readId/story-draft", requir
     const projectId = Number(req.params.projectId);
     const read = await getRead(db, Number(req.params.readId), { projectRef: projectId });
     if (!read) throw Object.assign(new Error("Report not found."), { status: 404 });
-    const manual = read.plan?.manual ?? [];
-    if (manual.length === 0) throw Object.assign(new Error("There is nothing here that needs a new story: make the scene changes first."), { status: 400 });
+    // everything that is not tied to particular OLD scenes: the story changes, the whole-script rules (narration, camera directions, voices …) and the changes with no place to put them.
+    // (The new story is written again from scratch, so nothing made scene by scene first would survive: it all goes in at once.) No need to have made the scene changes first.
+    const manual = itemsForNewStory(annotateItems(read.items));
+    if (manual.length === 0) throw Object.assign(new Error("There is nothing in this report that needs a new story."), { status: 400 });
     const draftId = Number(req.body?.draftId);
     const draft = Number.isInteger(draftId) && draftId > 0 ? (await db.query("SELECT id, module, project_ref, status FROM project_drafts WHERE id = $1", [draftId])).rows[0] : null;
     if (!draft || draft.module !== "ai_movie" || draft.project_ref !== projectId) throw Object.assign(new Error("Open the draft you want to start from first."), { status: 400 });
@@ -6617,7 +6619,7 @@ app.post("/api/ai-movie/assistant/:projectId/report/:readId/story-draft", requir
     const keeps = read.items.filter((i) => i.kind === "keep").map((k) => k.action.slice(0, 200)).slice(0, 30);
     const out = await startRevision(db, draftAgentModels.value, draft.id, {
       instruction: directionsInstruction(directions), constraints: { mustKeep: keeps, mustChange: [] }, source: "report",
-      context: { report: { readId: read.id, filename: read.filename, included: directions.length, left, from: manual.length, merged }, autoApprove: true }, confirmed: true, actorUserId: req.user.id,
+      context: { report: { readId: read.id, filename: read.filename, included: directions.length, left, from: manual.length, merged, withRules: manual.some((i) => i.kind === "global") }, autoApprove: true }, confirmed: true, actorUserId: req.user.id,
     });
     res.status(out.duplicate ? 200 : 202).json({ ...out, directions: directions.length, from: manual.length, left, merged });
   } catch (error) {

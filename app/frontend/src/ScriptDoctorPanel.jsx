@@ -21,7 +21,8 @@ const EN = {
   doneLine: (c, u, f) => `✓ Finished: ${c} scene${c === 1 ? '' : 's'} rewritten, ${u} already fine${f ? `, ${f} could not be done` : ''}.`, failed: (n) => `${n} scene${n === 1 ? '' : 's'} could not be done:`, again: 'Press “Make the changes” again to try those scenes once more (the finished ones are skipped).',
   undoAll: '↶ Undo everything the report changed', askUndo: 'Put back every scene the report changed, exactly as it was? Anything you edited in those scenes since is kept only if it cannot be undone safely.', yesUndo: 'Yes, undo all', undoneLine: (n, f) => `Put back ${n} scene${n === 1 ? '' : 's'}${f ? `; ${f} could not be put back (edited since)` : ''}.`,
   storyBtn: (n) => `⚡ Shortcut: make a new story from these ${n} changes`,
-  askStory: (n) => `Make a NEW draft from these ${n} story changes? What happens: (1) the ${n} changes are merged into a few clear directions; (2) a NEW draft is made — the draft that is open now stays exactly as it is; (3) the revised story is designed and approved by itself; (4) the WHOLE screenplay is written again from it — EVERY beat, EVERY scene and EVERY line of dialogue, not only the scenes that need a change. This takes a long time (hours for a long film) and the new draft is written fresh — it does not keep the scene-by-scene fixes above, and your old scenes and dialogue are not copied into it (they stay in the draft that is open now). You watch every step in Adu's “New draft” tab and in the bar at the top, and only the final “Approve” is left to you.`,
+  oneWay: 'Choose ONE way — not both. ▶ “Make the changes” keeps your screenplay and fixes scene by scene. ⚡ “New story” writes the whole screenplay again, and it already includes the whole-script rules (narration, camera directions, voices, one register, theme). So if you go the new-story way, do NOT press ▶ first — those fixes would be thrown away when everything is rewritten.',
+  askStory: (n) => `Make a NEW draft from these ${n} story changes? What happens: (1) the ${n} changes are merged into a few clear directions; (2) a NEW draft is made — the draft that is open now stays exactly as it is; the whole-script rules from the report (narration, camera directions, voices, one register, theme) are included in the same rewrite, so you need no second pass; (3) the revised story is designed and approved by itself; (4) the WHOLE screenplay is written again from it — EVERY beat, EVERY scene and EVERY line of dialogue, not only the scenes that need a change. This takes a long time (hours for a long film) and the new draft is written fresh — it does not keep scene-by-scene fixes (they point to old scene numbers), and your old scenes and dialogue are not copied into it (they stay in the draft that is open now). You watch every step in Adu's “New draft” tab and in the bar at the top, and only the final “Approve” is left to you.`,
   storyStarted: (d, from, merged) => `Started: ${from} changes → ${d} direction${d === 1 ? '' : 's'}${merged ? '' : ' (the AI could not merge them, so the most serious ones were used as they are)'}. Follow it in Adu's “New draft” tab or the bar at the top.`, storyStarting: 'Starting the new story…',
   tags: { in_place: '🟢 inside existing scenes — no new draft', careful: '🟡 inside existing scenes — read it after', new_draft: '🔴 changes the story — a new draft is the safe way' },
   estimated: ' (worked out from the page numbers)', summaryTitle: 'What this report asks, in short (an estimate from the words of each change)',
@@ -47,7 +48,8 @@ const HI = {
   doneLine: (c, u, f) => `✓ पूरा हुआ: ${c} scene दोबारा लिखे गए, ${u} पहले से ठीक थे${f ? `, ${f} नहीं हो पाए` : ''}।`, failed: (n) => `${n} scene नहीं हो पाए:`, again: 'उन scenes को एक बार और आज़माने के लिए “बदलाव लगाओ” फिर दबाओ (पूरे हो चुके छोड़ दिए जाते हैं)।',
   undoAll: '↶ report ने जो बदला वह सब वापस लो', askUndo: 'report ने जो भी scenes बदले हैं, उन सबको ठीक पहले जैसा कर दें? उसके बाद आपने जो बदला है वह सिर्फ़ तभी बचेगा जब उसका Undo सुरक्षित न हो।', yesUndo: 'हाँ, सब वापस लो', undoneLine: (n, f) => `${n} scene वापस रखे${f ? `; ${f} वापस नहीं हो पाए (बाद में बदले गए)` : ''}।`,
   storyBtn: (n) => `⚡ शॉर्टकट: इन ${n} बदलावों से नई कहानी बनाओ`,
-  askStory: (n) => `इन ${n} कहानी वाले बदलावों से एक नया draft बनाएँ? यह होगा: (1) ${n} बदलाव मिलाकर कुछ साफ़ दिशाओं में बदले जाएँगे; (2) एक नया draft बनेगा — अभी खुला draft जैसा है वैसा रहेगा; (3) संशोधित कहानी बनकर अपने-आप approve होगी; (4) उससे पूरी screenplay फिर से लिखी जाएगी — हर beat, हर scene और हर dialogue, सिर्फ़ वे scenes नहीं जिनमें बदलाव चाहिए। इसमें बहुत समय लगता है (लंबी film में कई घंटे) और नया draft नए सिरे से लिखा जाता है — ऊपर वाले scene-दर-scene सुधार उसमें नहीं रहते, और आपके पुराने scenes और dialogue उसमें कॉपी नहीं होते (वे अभी खुले draft में ही रहते हैं)। हर कदम आप Adu के “New draft” tab और ऊपर वाली bar में देखोगे, और सिर्फ़ आख़िरी “Approve” आपके लिए बचा है।`,
+  oneWay: 'कोई ONE रास्ता चुनो — दोनों नहीं। ▶ “बदलाव लगाओ” आपकी screenplay रखकर scene-दर-scene सुधारता है। ⚡ “नई कहानी” पूरी screenplay फिर से लिखता है, और उसमें पूरी-script वाले नियम (narration, camera directions, voices, एक register, theme) पहले से शामिल हैं। इसलिए नई कहानी वाला रास्ता लो तो ▶ पहले मत दबाओ — पूरी लिखाई में वे सुधार बेकार चले जाएँगे।',
+  askStory: (n) => `इन ${n} कहानी वाले बदलावों से एक नया draft बनाएँ? यह होगा: (1) ${n} बदलाव मिलाकर कुछ साफ़ दिशाओं में बदले जाएँगे; (2) एक नया draft बनेगा — अभी खुला draft जैसा है वैसा रहेगा; report के पूरी-script वाले नियम (narration, camera directions, voices, एक register, theme) उसी लिखाई में शामिल हैं, दूसरा pass नहीं चाहिए; (3) संशोधित कहानी बनकर अपने-आप approve होगी; (4) उससे पूरी screenplay फिर से लिखी जाएगी — हर beat, हर scene और हर dialogue, सिर्फ़ वे scenes नहीं जिनमें बदलाव चाहिए। इसमें बहुत समय लगता है (लंबी film में कई घंटे) और नया draft नए सिरे से लिखा जाता है — scene-दर-scene सुधार उसमें नहीं रहते (वे पुराने scene-नंबर पर हैं), और आपके पुराने scenes और dialogue उसमें कॉपी नहीं होते (वे अभी खुले draft में ही रहते हैं)। हर कदम आप Adu के “New draft” tab और ऊपर वाली bar में देखोगे, और सिर्फ़ आख़िरी “Approve” आपके लिए बचा है।`,
   storyStarted: (d, from, merged) => `शुरू हो गया: ${from} बदलाव → ${d} दिशाएँ${merged ? '' : ' (AI उन्हें मिला नहीं पाया, इसलिए सबसे गंभीर वाले जैसे हैं वैसे लिए गए)'}। इसे Adu के “New draft” tab या ऊपर वाली bar में देखो।`, storyStarting: 'नई कहानी शुरू हो रही है…',
   tags: { in_place: '🟢 मौजूदा scenes में — नया draft नहीं', careful: '🟡 मौजूदा scenes में — बाद में पढ़ लेना', new_draft: '🔴 कहानी बदलता है — नया draft ही सुरक्षित' },
   estimated: ' (पन्ना-नंबर से निकाला)', summaryTitle: 'यह report क्या माँगती है, संक्षेप में (हर बदलाव के शब्दों से लगाया अंदाज़ा)',
@@ -229,6 +231,21 @@ export default function ScriptDoctorPanel({ backendUrl, projectId, draft, langua
               </ul>
             </div>
           ))}
+          {(read.summary?.forNewStory ?? 0) > 0 && (
+            <div className="sd-summary">
+              <p className="sd-fine">{L.oneWay}</p>
+              {!askStory ? (
+                <button type="button" className="sd-btn primary" disabled={Boolean(busy) || !draft?.id} onClick={() => setAskStory(true)}>{busy === 'story' ? L.storyStarting : L.storyBtn(read.summary.forNewStory)}</button>
+              ) : (
+                <div className="sd-ask" role="alertdialog">
+                  <p>{L.askStory(read.summary.forNewStory)}</p>
+                  <button type="button" className="sd-btn primary" onClick={storyDraft}>{L.yes}</button>{' '}
+                  <button type="button" className="sd-btn" onClick={() => setAskStory(false)}>{L.no}</button>
+                </div>
+              )}
+              {storyNote && <p className="sd-ok" role="status">{storyNote}</p>}
+            </div>
+          )}
           {!asking ? (
             <button type="button" className="sd-btn primary big" disabled={Boolean(busy) || !draft?.id || ticked.length === 0} onClick={() => setAsking(true)}>{busy === 'apply' ? L.starting : L.make(selected ? ticked.length : 0)}</button>
           ) : (
@@ -295,10 +312,10 @@ export default function ScriptDoctorPanel({ backendUrl, projectId, draft, langua
             <div className="sd-manual">
               <h4>{L.needsYou(read.plan.manual.length)}</h4>
               {!askStory ? (
-                <p><button type="button" className="sd-btn primary big" disabled={Boolean(busy) || applying || !draft?.id} onClick={() => setAskStory(true)}>{busy === 'story' ? L.storyStarting : L.storyBtn(read.plan.manual.length)}</button></p>
+                <p><button type="button" className="sd-btn primary big" disabled={Boolean(busy) || applying || !draft?.id} onClick={() => setAskStory(true)}>{busy === 'story' ? L.storyStarting : L.storyBtn(read.summary?.forNewStory ?? read.plan.manual.length)}</button></p>
               ) : (
                 <div className="sd-ask" role="alertdialog">
-                  <p>{L.askStory(read.plan.manual.length)}</p>
+                  <p>{L.askStory(read.summary?.forNewStory ?? read.plan.manual.length)}</p>
                   <button type="button" className="sd-btn primary" onClick={storyDraft}>{L.yes}</button>{' '}
                   <button type="button" className="sd-btn" onClick={() => setAskStory(false)}>{L.no}</button>
                 </div>

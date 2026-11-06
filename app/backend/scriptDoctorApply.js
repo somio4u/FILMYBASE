@@ -209,5 +209,13 @@ export function impactSummary(annotated) {
   const scenes = new Set();
   let everyScene = false;
   for (const i of doable) { if (i.impact === "new_draft" && !(i.scenes?.length)) continue; if (i.kind === "global") everyScene = true; else i.scenesUsed.forEach((n) => scenes.add(n)); }
-  return { inPlace: count("in_place"), careful: count("careful"), newDraft: count("new_draft"), namedScenes: scenes.size, everyScene };
+  return { inPlace: count("in_place"), careful: count("careful"), newDraft: count("new_draft"), namedScenes: scenes.size, everyScene, forNewStory: itemsForNewStory(annotated).length };
+}
+
+// THE NEW-STORY WAY writes everything again, so nothing made scene by scene first would survive. It must therefore be given, in ONE go, everything that is not tied to
+// particular OLD scenes: the changes to the story itself (🔴), the whole-script rules (narration, camera directions, voices, one register …), and any change the report
+// gave no scene or page to place it by. Changes tied to old scene numbers (or pages that were turned into scenes) refer to the OLD screenplay and are left out — a
+// rewritten screenplay has different scenes. The protected lines travel with it as "must keep".
+export function itemsForNewStory(annotated) {
+  return (annotated ?? []).filter((i) => i.kind !== "keep" && (i.kind === "global" || i.impact === "new_draft" || !(i.scenesUsed?.length)));
 }

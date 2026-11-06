@@ -154,3 +154,16 @@ test("the plan now uses the pages: a change with only page numbers is made in th
   assert.equal(summary.everyScene, true);
   assert.ok(summary.inPlace >= 16 && summary.namedScenes >= 80);
 });
+
+test("the new-story way is given everything not tied to old scenes (story changes, whole-script rules, changes with no place); scene-tied changes and protected lines are left out", async () => {
+  const { itemsForNewStory, annotateItems, impactSummary } = await import("../scriptDoctorApply.js");
+  const items = annotateItems([
+    { id: 1, kind: "structure", title: "Introduce Kalapahada in Act One", action: "Show his silhouette in the first act.", scenes: [], pages: [5], severity: "critical" },
+    { id: 2, kind: "global", title: "Cut the narration", action: "Cut about 70% of the cues.", scenes: [], pages: [], severity: "major" },
+    { id: 3, kind: "scene", title: "Silence the deathbed", action: "Cut the medical lines.", scenes: [97, 98], pages: [79], severity: "major" },
+    { id: 4, kind: "structure", title: "A voice for Rudra", action: "Give Rudra a soldier's clipped voice everywhere.", scenes: [], pages: [], severity: "minor" },
+    { id: 5, kind: "keep", title: "Keep payment", action: "Samir: payment?", scenes: [], pages: [], severity: "note" },
+  ]);
+  assert.deepEqual(itemsForNewStory(items).map((i) => i.id), [1, 2, 4]); // the whole-script rule and the unplaced change come along; the scene-tied one and the protected line do not
+  assert.equal(impactSummary(items).forNewStory, 3);
+});

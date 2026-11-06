@@ -6524,6 +6524,65 @@ const aduReportApplyJobs = createWriteScenesJobs({
   },
 });
 
+// ---- AI Movie: ONE instruction for SEVERAL scenes ("scenes 3-20: cut the narration") — a background job, one scene at a time, with progress that survives a reload ----
+const AI_MOVIE_MULTI_KIND = "ai-movie-multi-change";
+const aiMovieMultiJobs = createWriteScenesJobs({
+  jobStore,
+  kind: AI_MOVIE_MULTI_KIND,
+  isWritten: async () => false, // the job itself remembers which scenes are done
+  describe: (item, n, total) => `Scene ${item.sceneNumber} (${n} of ${total})`,
+  writeOne: async (item, tools) => {
+    await tools.say(`Scene ${item.sceneNumber}: the AI is rewriting it`);
+    const cs = await proposeChange(db, draftAgentModels.value, item.draftId, { instruction: item.instruction, intent: "SCOPED_REWRITE", targetKeys: [item.key], constraints: { mustKeep: [], mustChange: [] }, confirmed: true, actorUserId: item.userId });
+    const proposed = await getChangeSet(db, cs.id);
+    if (!proposed.edits || proposed.edits.length === 0) {
+      const failure = proposed.scope?.failures?.[0];
+      if (failure) throw new Error(failure.message);
+      return; // this scene needed nothing
+    }
+    await applyChangeSet(db, cs.id, { confirmEditApproved: true });
+  },
+});
+
+// body: { draftId, scenes: "3-20, 25", instruction }
+app.post("/api/ai-movie/projects/:projectId/multi-change", requireRole("admin"), async (req, res) => {
+  try {
+    const projectId = Number(req.params.projectId);
+    const draftId = Number(req.body?.draftId);
+    const draft = Number.isInteger(draftId) && draftId > 0 ? (await db.query("SELECT id, module, project_ref, status FROM project_drafts WHERE id = $1", [draftId])).rows[0] : null;
+    if (!draft || draft.module !== "ai_movie" || draft.project_ref !== projectId) throw Object.assign(new Error("Open the draft you want to change first."), { status: 400 });
+    if (["locked", "archived"].includes(draft.status)) throw Object.assign(new Error(`This draft is ${draft.status}. Unlock it first, or open another draft.`), { status: 409 });
+    const instruction = String(req.body?.instruction ?? "").trim();
+    if (instruction.length < 4 || instruction.length > 2000) throw Object.assign(new Error("Say what to change, in 4 to 2000 characters."), { status: 400 });
+    const scenes = sceneKeysInOrder(await draftUnits(db, "ai_movie", projectId));
+    const numbers = parseSceneNumbers(req.body?.scenes, scenes.length);
+    if (numbers.length === 0) throw Object.assign(new Error("Write which scenes, for example 3-20, 25."), { status: 400 });
+    for (const [jobs, what] of [[aduReportApplyJobs, "A report's changes are being made. Wait for them to finish."], [aiMovieWriteAllJobs, "The whole screenplay is being written right now. Wait for it to finish."]]) {
+      const running = await jobs.currentFor(projectId).catch(() => null);
+      if (running?.status === "running") throw Object.assign(new Error(what), { status: 409 });
+    }
+    const busy = await getAduWork(db, req.user.id);
+    if (busy) throw Object.assign(new Error(busyMessage(busy)), { status: 409, code: "adu_busy" });
+    const items = numbers.map((n) => ({ episodeIndex: null, sceneIndex: n, label: `Scene ${n}`, sceneNumber: n, key: scenes[n - 1].key, draftId: draft.id, instruction, userId: req.user.id }));
+    const out = await aiMovieMultiJobs.start({ sceneListId: projectId, userId: req.user.id, items, language: "en" });
+    res.status(out.alreadyRunning ? 200 : 202).json({ job: publicWriteJob(out.job), alreadyRunning: out.alreadyRunning, scenes: numbers.length });
+  } catch (error) {
+    res.status(error.status ?? 500).json({ error: error.message, code: error.code });
+  }
+});
+app.get("/api/ai-movie/projects/:projectId/multi-change/current", requireRole("admin"), async (req, res) => {
+  try {
+    const job = await aiMovieMultiJobs.currentFor(Number(req.params.projectId));
+    res.json({ job: job ? publicWriteJob(job) : null });
+  } catch (error) { res.status(error.status ?? 500).json({ error: error.message }); }
+});
+app.post("/api/ai-movie/projects/:projectId/multi-change/stop", requireRole("admin"), async (req, res) => {
+  try {
+    const job = await aiMovieMultiJobs.currentFor(Number(req.params.projectId));
+    res.json({ stopped: job ? await aiMovieMultiJobs.stop(job.id ?? job.jobId) : false });
+  } catch (error) { res.status(error.status ?? 500).json({ error: error.message }); }
+});
+
 // body: { draftId, ids? } — makes the ticked changes (or all) in that draft. Needs a person's yes on the screen first.
 app.post("/api/ai-movie/assistant/:projectId/report/:readId/apply", requireRole("admin"), async (req, res) => {
   try {
@@ -21947,7 +22006,7 @@ ensureAiMovieSchema()
   .then(async () => { try { await aiCredentials.load(); aiCredentials.startRefresh(); const c = aiCredentials.current(); console.log(`AI connection: ${c.source}${c.serviceAccount ? ` — project ${c.serviceAccount.project_id}, ${c.location}` : ""}${c.problem ? ` — PROBLEM: ${c.problem}` : ""}`); } catch (error) { console.error("Reading the saved AI key failed:", error.message); } })
   .then(async () => { try { const fixed = await repairStoredLabels(db); if (fixed) console.log(`Screenplay: ${fixed} scene(s) had "ACTION:" written at the start of lines — corrected.`); } catch (error) { console.error("Label repair failed:", error.message); } })
   .then(async () => { try { const fixed = await repairStoredTransitions(db); if (fixed) console.log(`Screenplay: ${fixed} scene(s) had a transition (FREEZE. BREAK- …) written as a character — corrected.`); } catch (error) { console.error("Transition repair failed:", error.message); } })
-  .then(async () => { try { await productionSync.resume(); await resumeAdSheetJobs(); await skipStartJobs.resume(); await writeScenesJobs.resume(); await addScenesJobs.resume(); await preparePacketJobs.resume(); await aiMovieWriteAllJobs.resume(); await aduReportJobs.resume(); await aduReportApplyJobs.resume(); } catch (error) { console.error("Resuming interrupted background jobs failed:", error.message); } })
+  .then(async () => { try { await productionSync.resume(); await resumeAdSheetJobs(); await skipStartJobs.resume(); await writeScenesJobs.resume(); await addScenesJobs.resume(); await preparePacketJobs.resume(); await aiMovieWriteAllJobs.resume(); await aduReportJobs.resume(); await aduReportApplyJobs.resume(); await aiMovieMultiJobs.resume(); } catch (error) { console.error("Resuming interrupted background jobs failed:", error.message); } })
   .then(() => ensureAllProductionSchemas(db))
   .then(() => ensureAduChatSchema(db))
   .then(() => ensureRenameUndoSchema(db))

@@ -15,6 +15,7 @@ import StartProgress from './StartProgress.jsx'
 import BuddyChat from './BuddyChat.jsx'
 import AiMovieVoiceOrb from './AiMovieVoiceOrb.jsx'
 import AiMovieSceneTools from './AiMovieSceneTools.jsx'
+import AiMovieMultiChange from './AiMovieMultiChange.jsx'
 import AiMovieRename from './AiMovieRename.jsx'
 import ScriptDoctorPanel from './ScriptDoctorPanel.jsx'
 import { cleanForSave, collectCharacterNames } from './scriptDoc.js'
@@ -15162,6 +15163,8 @@ function App() {
                                             <AiMovieSceneTools backendUrl={BACKEND_URL} projectId={aiMovieProjectId} beatIndex={viewIndex} sceneIndex={sceneIndex} sceneCount={beat.scenes.length}
                                               sceneNumber={sceneNumberOffset + sceneIndex + 1} tag={scene.tag ?? null} language={aiMovieLanguage} canUndo={(aiMovieBackfillResult?.removedScenes ?? []).length > 0} disabled={isAiWriting || Boolean(aiMovieEditingScene)}
                                               onChanged={async (picked) => { await refreshAiMovieScreenplayNow(aiMovieProjectId); if (Number.isInteger(picked?.sceneIndex)) setAiMovieSelectedSceneIndex(Math.max(0, picked.sceneIndex)) }} />
+                                            <AiMovieMultiChange backendUrl={BACKEND_URL} projectId={aiMovieProjectId} draftId={currentDraft?.id ?? null} language={aiMovieLanguage} disabled={isAiWriting || Boolean(aiMovieEditingScene)}
+                                              onChanged={async () => { await refreshAiMovieScreenplayNow(aiMovieProjectId) }} />
                                             <AiMovieRename backendUrl={BACKEND_URL} projectId={aiMovieProjectId} language={aiMovieLanguage} disabled={isAiWriting || Boolean(aiMovieEditingScene)}
                                               names={(aiMovieBackfillResult?.characterArc ?? []).map((c) => c?.name).filter(Boolean)}
                                               onChanged={async () => {

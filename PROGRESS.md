@@ -2699,3 +2699,9 @@ Plain version: every project is now a set of **drafts**. Opening a project shows
 - **How:** the mark is stored INSIDE the scene (`scene.tag`), so it moves with the scene when scenes are added, moved or removed (a test checks this). Route: `PUT /api/ai-movie/stages/screenplay/beats/:beat/scenes/:scene/tag` (admin; refused while the whole screenplay is being written). Code: `aiMovieSceneNotes.js`.
 - **Limits:** a scene that is written again from nothing (a whole beat rewritten) loses its mark. Marks are not yet shown as colour dots in a list of all scenes — only on the scene's own screen.
 - **Not browser-checked in this step** (build passes; tests: 3 new).
+
+## 2026-11-06 — AI Movie: one instruction for several scenes at once
+- **What:** under "Scenes" there is now "Change several scenes at once": type which scenes (3-20, 25) and what to change; after a yes-question the AI changes them ONE BY ONE in the background. Same rules as the other long jobs: the bar, "scene N of M", the step it is on right now, how long it has been running, a Stop button, and it still shows after a page reload (it also carries on after a server restart).
+- **How:** the same safe path as "Ask AI to change it" for each scene (`proposeChange` SCOPED_REWRITE + `applyChangeSet`); the scene numbers are checked (letters, scenes the film does not have, an empty instruction are refused with a plain message). Refused while a report's changes or the whole-screenplay writing are running. Routes: `POST /api/ai-movie/projects/:id/multi-change`, `GET …/multi-change/current`, `POST …/multi-change/stop`. 3 failures in a row stop the job (as everywhere).
+- **Checked:** in a browser (the box shows, the mark box and tag saved and were cleaned up afterwards) and the four refusal messages by hand. NOT checked: a real run (the sandbox AI is off).
+- **Limit:** there is no "undo all" for this job — each changed scene can be undone with the scene's own Undo (Undo/Redo of the last change).

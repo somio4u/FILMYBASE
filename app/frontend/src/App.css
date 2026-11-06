@@ -8084,3 +8084,4 @@ body.is-script-edit-mode { overflow: hidden; }
 .ai-scene-field { display: block; margin: 6px 0; font-size: 0.85rem; opacity: 0.9; }
 .ai-scene-field input, .ai-scene-field select { display: block; width: 100%; margin-top: 3px; padding: 6px 8px; border-radius: 8px; border: 1px solid var(--border-subtle); background: var(--bg-surface); color: inherit; font: inherit; }
 .ai-scene-mark { margin-top: 10px; } .ai-scene-mark-note { display: block; width: 100%; margin: 6px 0; padding: 6px 8px; border-radius: 8px; border: 1px solid var(--border-subtle); background: var(--bg-surface); color: inherit; font: inherit; }
+.ai-scene-multi { margin-top: 12px; }

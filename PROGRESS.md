@@ -2679,3 +2679,11 @@ Plain version: every project is now a set of **drafts**. Opening a project shows
 - **Honest limit:** it is an instruction to the AI, not a copy-paste — if the revised story changes, a kept scene may change too. A real "paste the old scene in unchanged" would need scenes to line up between old and new, which they do not once the story changes. Not checked with a real AI (sandbox AI is off).
 - Code: `parseSceneNumbers` (scriptDoctorApply.js), `context.keepScenes` in the story-draft route, carry-over section in `buildBrief`. Tests: 2 new.
 - **Next:** owner tries ⚡ once on the real film and checks the first scenes it writes.
+
+## 2026-11-06 — Easy-to-understand writing style for every screenplay writer (from the owner's sample scripts)
+- **Owner's complaint:** the dialogue is too technical for ordinary people and the action lines read like a dictionary. Wanted: Hindi dialogue like the Hindi films, action in simple English, emotion and style from Hindi/South Indian films, heroic style and fights from The Avengers, style from Inception, world-building from Avatar.
+- **Read** (from the owner's Drive folder, about 80–100 thousand characters of each file — the reader gives only part of a long script, and Stree's text came out jumbled): Lage Raho Munna Bhai, PK, Stree, Temper, The Avengers, Inception, Avatar. Not read: Interstellar (not fetched); Rang De Basanti (the file is empty).
+- **Made:** `writingStyleGuide.js` — a dialogue guide (plain spoken words, short lines, a hard idea is explained with an everyday comparison, emotion before information, heroic one-liners, every character a different voice) and an action guide (plain present-tense lines, one image per line, readable fights, clever ideas shown through a newcomer's questions, worlds seen through one person's eyes). It teaches the style; it quotes nothing from the scripts (a test checks that).
+- **Where it is used:** the AI Movie beat writer, beat expander, scene reviser, dialogue writer and dialogue polisher (5 places) and the Film module's screenplay writer, plus the Hindi/Odia conversion and the "spoken language" check.
+- **Switch off:** environment value `WRITING_STYLE_GUIDE=off` (no new release needed).
+- **Not verified:** how the real AI writes with it (sandbox AI is off). Owner: write 2–3 scenes and tell me what is still too heavy; the guide is easy to tune.

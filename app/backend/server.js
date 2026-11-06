@@ -83,6 +83,7 @@ import { ensureAiMovieStorySchema, getProjectModes, judgedStage, registerAiMovie
 import { assertWithinBudget, recordSpend } from "./pipelineSettings.js";
 import { ensureCinematicSchema, registerSpectacleRoutes, createShotCutterHook } from "./spectacleDirector.js";
 import { MODEL_TIERS, estimateCost, isKeyBeat, modelFor } from "./modelRouting.js";
+import { withWritingStyle, dialogueStyleText } from "./writingStyleGuide.js";
 import { ensureAiMovieLanguageSchema, registerAiMovieLanguageRoutes } from "./aiMovieLanguage.js";
 import { onScreenplayApproved, registerBlueprintRoutes } from "./blueprint.js";
 import { registerPlanningRoutes } from "./planning.js";
@@ -1199,7 +1200,7 @@ Every sentence must be something that takes real screen time. Never add words ju
 function buildScreenplaySystemPrompt(dialogueLanguage) {
   const craft = SCREENPLAY_DIALOGUE_CRAFT[dialogueLanguage] ?? SCREENPLAY_DIALOGUE_CRAFT.en;
   const actionLanguage = SCREENPLAY_ACTION_LANGUAGE_RULES[dialogueLanguage] ?? SCREENPLAY_ACTION_LANGUAGE_RULES.en;
-  return `${SCREENPLAY_BASE_PROMPT}\n\n${actionLanguage}\n\n${MOVIE_SCREEN_ONLY_RULE}\n\n${craft}`;
+  return withWritingStyle(`${SCREENPLAY_BASE_PROMPT}\n\n${actionLanguage}\n\n${MOVIE_SCREEN_ONLY_RULE}\n\n${craft}`);
 }
 
 const SCRIPT_BREAKDOWN_SYSTEM_PROMPT = `You are an experienced Assistant Director / Script Supervisor performing a professional SCRIPT BREAKDOWN — the standard pre-scheduling analysis every production does once a script is locked, reading it closely for everything the production team needs to plan for. You are precise and thorough, not creative — extract what's actually in the script, don't invent story content. Transitions and markers such as FADE IN/OUT, CUT TO, FREEZE, "FREEZE. BREAK-", BREAK, INTERVAL, THE END and END OF EPISODE are NOT characters and must never appear in the artist/cast list or as someone present in a scene.
@@ -4919,7 +4920,7 @@ async function generateAiMovieScreenplayBeat(priorContextText, referenceMaterial
     model: AI_MOVIE_SCREENPLAY_WRITER_MODEL_NAME,
     contents: `The story's approved layers so far:\n\n${priorContextText}${referenceBlock}${feedbackBlock}${scenesBlock}${lengthNote ? `\n\nLENGTH RULE: ${lengthNote}` : ""}\n\nNow write the scenes for this beat:\n${beat.title.en}: ${beat.description.en}${runtimeBlock}${aiMovieBeatBoundaryBlock(beat)}`,
     config: {
-      systemInstruction: lengthNote.includes("SHORT FILM") ? AI_MOVIE_SCREENPLAY_BEAT_SYSTEM_PROMPT.replace("never fewer than 2", "never fewer than 1") : AI_MOVIE_SCREENPLAY_BEAT_SYSTEM_PROMPT,
+      systemInstruction: withWritingStyle(lengthNote.includes("SHORT FILM") ? AI_MOVIE_SCREENPLAY_BEAT_SYSTEM_PROMPT.replace("never fewer than 2", "never fewer than 1") : AI_MOVIE_SCREENPLAY_BEAT_SYSTEM_PROMPT),
       responseMimeType: "application/json",
       // A beat with a genuinely open-ended scene count (no maxItems cap —
       // some beats need well more than 4) needs more headroom than a
@@ -4986,7 +4987,7 @@ async function generateAiMovieScreenplayBeatExpansion(
     model: AI_MOVIE_SCREENPLAY_WRITER_MODEL_NAME,
     contents: `The story's approved layers so far:\n\n${priorContextText}${referenceBlock}${scenesBlock}\n\nThis beat (${beat.title.en}: ${beat.description.en}) already has these scenes, fixed -- do not repeat them:\n\n${existingBeatScenesText}\n\nWrite additional new scenes only for this same beat, covering roughly ${remainingMinutes} more minutes of screen time — about ${remainingMinutes} standard screenplay pages (roughly ${Math.round(remainingMinutes * AI_MOVIE_LINES_PER_PAGE)} formatted lines), built from real on-screen moments (actions, reactions, events), never from extra descriptive words.${aiMovieBeatBoundaryBlock(beat)}`,
     config: {
-      systemInstruction: AI_MOVIE_SCREENPLAY_BEAT_EXPAND_SYSTEM_PROMPT,
+      systemInstruction: withWritingStyle(AI_MOVIE_SCREENPLAY_BEAT_EXPAND_SYSTEM_PROMPT),
       responseMimeType: "application/json",
       maxOutputTokens: 32768, // room for 2.5 Flash thinking, same as the first draft
       responseSchema: {
@@ -5180,7 +5181,7 @@ async function generateAiMovieScreenplaySceneRevision(
     model: GEMINI_MODEL_NAME,
     contents: `The story's approved layers so far:\n\n${priorContextText}${referenceBlock}${scenesBlock}${siblingBlock}\n\nRevise this one scene:\n\n${targetSceneText}${instructionBlock}${aiMovieBeatBoundaryBlock(beat)}`,
     config: {
-      systemInstruction: AI_MOVIE_SCREENPLAY_SCENE_REVISE_SYSTEM_PROMPT,
+      systemInstruction: withWritingStyle(AI_MOVIE_SCREENPLAY_SCENE_REVISE_SYSTEM_PROMPT),
       responseMimeType: "application/json",
       // Raised from 4096 for the same reason as Write Dialogue below: a
       // revise can now return dialogue-bearing content, sometimes across
@@ -5291,7 +5292,7 @@ async function generateAiMovieSceneDialogue(
     model: AI_MOVIE_DIALOGUE_MODEL_NAME,
     contents: `The story's approved layers so far:\n\n${priorContextText}${referenceBlock}${briefsBlock}${scenesBlock}${siblingBlock}\n\n${taskLine}\n\n${targetSceneText}${instructionBlock}${aiMovieBeatBoundaryBlock(beat)}`,
     config: {
-      systemInstruction: AI_MOVIE_SCENE_DIALOGUE_SYSTEM_PROMPT,
+      systemInstruction: withWritingStyle(AI_MOVIE_SCENE_DIALOGUE_SYSTEM_PROMPT),
       responseMimeType: "application/json",
       // Was 2048 -- too small once a scene carries interleaved dialogue,
       // camera direction, AND a full separate Hindi version of every block
@@ -5346,7 +5347,7 @@ async function polishAiMovieDialogue(content, { beat, characterDialogueBriefsTex
       model: AI_MOVIE_DIALOGUE_MODEL_NAME,
       contents: `Polish the dialogue of this one scene. KEEP exactly the same blocks in the same order with the same speakers, types, extensions and meaning — change only the wording of lines and parentheticals (and action text only where it is clumsy) so that each character sounds distinct, the subtext lands and the rhythm is natural, spoken, colloquial. Keep every English ("en") and Hindi ("hi") pair consistent with each other.${characterDialogueBriefsText ? `\n\nCharacter dialogue voice briefs:\n${characterDialogueBriefsText}` : ""}\n\nThis scene belongs to the beat "${beat?.title?.en ?? ""}".\n\n${AI_MOVIE_CONTENT_BLOCK_FORMAT_RULE}\n\nTHE DRAFT:\n${JSON.stringify(content)}`,
       config: {
-        systemInstruction: AI_MOVIE_SCENE_DIALOGUE_SYSTEM_PROMPT,
+        systemInstruction: withWritingStyle(AI_MOVIE_SCENE_DIALOGUE_SYSTEM_PROMPT),
         responseMimeType: "application/json",
         maxOutputTokens: 32768,
         responseSchema: { type: Type.OBJECT, properties: { content: { type: Type.ARRAY, items: AI_MOVIE_SCENE_CONTENT_BLOCK_SCHEMA } }, required: ["content"] },
@@ -12406,6 +12407,7 @@ async function convertScreenplaySceneLanguage(elements, dialogueTo, actionTo) {
   const rules = [
     dialogueTo !== "en" || actionTo !== "en" ? COLLOQUIAL_LANGUAGE_RULE : "",
     dialogueTo !== "en" ? SCREENPLAY_DIALOGUE_CRAFT[dialogueTo] ?? "" : "",
+    dialogueStyleText(),
     actionTo !== "en" ? SCREENPLAY_ACTION_LANGUAGE_RULES[actionTo] ?? "" : "Action lines in English are plain, simple, present-tense screenplay English.",
   ].filter(Boolean).join("\n\n");
 
@@ -21656,7 +21658,7 @@ registerAiMovieLanguageRoutes(app, db, requireRole, {
   translateElements: translateScreenplaySceneElements, // the Film module's translator, shared
   getSceneBlocks: getAiMovieSceneBlocks,
   ask: (projectId, agent, params) => aiMovieStory.ask.ask(projectId, agent, params),
-  spokenRule: COLLOQUIAL_LANGUAGE_RULE,
+  spokenRule: `${COLLOQUIAL_LANGUAGE_RULE}\n\n${dialogueStyleText()}`,
   voiceToElements: voiceNoteToScreenplayElements, // the Film module's Voice Writer, shared
 });
 

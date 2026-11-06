@@ -48,7 +48,7 @@ import { newBlankScene, insertScene, removeSceneAt, moveSceneBy, keepRemoved, re
 import { ensureSceneHistorySchema, changedBeats, recordChanges, historyInfo, undoLast, redoLast } from "./aiMovieSceneHistory.js";
 import { renameCharacter as renameAiMovieCharacter, renameUndoInfo, undoRename, ensureRenameUndoSchema } from "./aiMovieRename.js";
 import { REPORT_SCHEMA, REPORT_SYSTEM, reportPrompt, normalizeItems, ensureReportSchema, createRead, saveParts, getRead, saveSelection, revisionFromReport, savePlan, saveResult, markUndone, latestReadId } from "./scriptDoctorReport.js";
-import { planApply, itemProgress } from "./scriptDoctorApply.js";
+import { planApply, itemProgress, condensePrompt, CONDENSE_SCHEMA, CONDENSE_SYSTEM, normalizeDirections, fallbackDirections, directionsInstruction, uncovered } from "./scriptDoctorApply.js";
 import { countOdiaWords, textsOfScene, textsOfSceneList } from "./odiaCorpus.js";
 import { languageOf, parseEpisodesFromText, sceneContent } from "./screenplayImport.js";
 import { planFill } from "./pdfFill.js";
@@ -6576,6 +6576,50 @@ app.post("/api/ai-movie/assistant/:projectId/report/:readId/apply/undo", require
     res.json({ undone: undone.length, failed });
   } catch (error) {
     res.status(error.status ?? 500).json({ error: error.message });
+  }
+});
+
+// THE SHORTCUT for the changes that need a person (the story itself): they are merged into a few directions (by the AI; without it, the most serious ones as they are) and
+// given as ONE request to the "new draft" process, with the revised story approved by itself. A NEW draft is made; the open one stays as it is.
+app.post("/api/ai-movie/assistant/:projectId/report/:readId/story-draft", requireRole("admin"), async (req, res) => {
+  try {
+    const projectId = Number(req.params.projectId);
+    const read = await getRead(db, Number(req.params.readId), { projectRef: projectId });
+    if (!read) throw Object.assign(new Error("Report not found."), { status: 404 });
+    const manual = read.plan?.manual ?? [];
+    if (manual.length === 0) throw Object.assign(new Error("There is nothing here that needs a new story: make the scene changes first."), { status: 400 });
+    const draftId = Number(req.body?.draftId);
+    const draft = Number.isInteger(draftId) && draftId > 0 ? (await db.query("SELECT id, module, project_ref, status FROM project_drafts WHERE id = $1", [draftId])).rows[0] : null;
+    if (!draft || draft.module !== "ai_movie" || draft.project_ref !== projectId) throw Object.assign(new Error("Open the draft you want to start from first."), { status: 400 });
+    for (const [jobs, what] of [[aduReportApplyJobs, "The scene changes are still being made. Wait for them to finish (or stop them), so the new story starts from the finished draft."], [aiMovieWriteAllJobs, "The whole screenplay is being written right now. Wait for it to finish."]]) {
+      const running = await jobs.currentFor(projectId).catch(() => null);
+      if (running?.status === "running") throw Object.assign(new Error(what), { status: 409 });
+    }
+    const busy = await getAduWork(db, req.user.id);
+    if (busy) throw Object.assign(new Error(busyMessage(busy)), { status: 409, code: "adu_busy" });
+    let directions = [];
+    let left = 0;
+    let merged = true;
+    try {
+      const ask = brainAsker(newUsage(), () => {}, PDF_READER_MODELS);
+      const data = await Promise.race([ask("Merging the report's changes", condensePrompt(manual), CONDENSE_SCHEMA, CONDENSE_SYSTEM), new Promise((_, reject) => setTimeout(() => reject(new Error("The AI took too long.")), 90_000))]);
+      directions = normalizeDirections(data?.directions, manual);
+      if (directions.length === 0) throw new Error("The AI gave no directions.");
+      const forgotten = uncovered(directions, manual); // a change no direction covers is added at the end: nothing is lost silently
+      if (forgotten.length) { const extra = fallbackDirections(forgotten, 3000); directions.push(...extra.directions); left += extra.left; }
+    } catch (error) {
+      console.error("Merging the report's changes failed, using them as they are:", error.message);
+      merged = false;
+      ({ directions, left } = fallbackDirections(manual));
+    }
+    const keeps = read.items.filter((i) => i.kind === "keep").map((k) => k.action.slice(0, 200)).slice(0, 30);
+    const out = await startRevision(db, draftAgentModels.value, draft.id, {
+      instruction: directionsInstruction(directions), constraints: { mustKeep: keeps, mustChange: [] }, source: "report",
+      context: { report: { readId: read.id, filename: read.filename, included: directions.length, left, from: manual.length, merged }, autoApprove: true }, confirmed: true, actorUserId: req.user.id,
+    });
+    res.status(out.duplicate ? 200 : 202).json({ ...out, directions: directions.length, from: manual.length, left, merged });
+  } catch (error) {
+    res.status(error.status ?? 500).json({ error: error.message, code: error.code });
   }
 });
 

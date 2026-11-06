@@ -20,6 +20,9 @@ const EN = {
   endedLine: (c, u, f) => `Stopped with problems: ${c} scene${c === 1 ? '' : 's'} rewritten, ${u} already fine, ${f} could not be done.`,
   doneLine: (c, u, f) => `✓ Finished: ${c} scene${c === 1 ? '' : 's'} rewritten, ${u} already fine${f ? `, ${f} could not be done` : ''}.`, failed: (n) => `${n} scene${n === 1 ? '' : 's'} could not be done:`, again: 'Press “Make the changes” again to try those scenes once more (the finished ones are skipped).',
   undoAll: '↶ Undo everything the report changed', askUndo: 'Put back every scene the report changed, exactly as it was? Anything you edited in those scenes since is kept only if it cannot be undone safely.', yesUndo: 'Yes, undo all', undoneLine: (n, f) => `Put back ${n} scene${n === 1 ? '' : 's'}${f ? `; ${f} could not be put back (edited since)` : ''}.`,
+  storyBtn: (n) => `⚡ Shortcut: make a new story from these ${n} changes`,
+  askStory: (n) => `Make a NEW draft from these ${n} story changes? What happens: (1) the ${n} changes are merged into a few clear directions; (2) a NEW draft is made — the draft that is open now stays exactly as it is; (3) the revised story is designed and approved by itself; (4) the screenplay is written again from it, beat by beat. This takes a long time (hours for a long film) and the new draft is written fresh — it does not keep the scene-by-scene fixes above. You watch every step in Adu's “New draft” tab and in the bar at the top, and only the final “Approve” is left to you.`,
+  storyStarted: (d, from, merged) => `Started: ${from} changes → ${d} direction${d === 1 ? '' : 's'}${merged ? '' : ' (the AI could not merge them, so the most serious ones were used as they are)'}. Follow it in Adu's “New draft” tab or the bar at the top.`, storyStarting: 'Starting the new story…',
   needsYou: (n) => `Needs you (${n}) — not made automatically`, send: 'Send to Adu', sent: '✓ sent to Adu', startOver: 'Use another report', offline: 'Could not reach the server. Try again in a minute.', wrong: 'Something went wrong.',
   counts: (p, a, c) => `${p} protected line${p === 1 ? '' : 's'} are kept in every rewrite.`,
 }
@@ -39,6 +42,9 @@ const HI = {
   endedLine: (c, u, f) => `समस्याओं के साथ रुका: ${c} scene दोबारा लिखे गए, ${u} पहले से ठीक थे, ${f} नहीं हो पाए।`,
   doneLine: (c, u, f) => `✓ पूरा हुआ: ${c} scene दोबारा लिखे गए, ${u} पहले से ठीक थे${f ? `, ${f} नहीं हो पाए` : ''}।`, failed: (n) => `${n} scene नहीं हो पाए:`, again: 'उन scenes को एक बार और आज़माने के लिए “बदलाव लगाओ” फिर दबाओ (पूरे हो चुके छोड़ दिए जाते हैं)।',
   undoAll: '↶ report ने जो बदला वह सब वापस लो', askUndo: 'report ने जो भी scenes बदले हैं, उन सबको ठीक पहले जैसा कर दें? उसके बाद आपने जो बदला है वह सिर्फ़ तभी बचेगा जब उसका Undo सुरक्षित न हो।', yesUndo: 'हाँ, सब वापस लो', undoneLine: (n, f) => `${n} scene वापस रखे${f ? `; ${f} वापस नहीं हो पाए (बाद में बदले गए)` : ''}।`,
+  storyBtn: (n) => `⚡ शॉर्टकट: इन ${n} बदलावों से नई कहानी बनाओ`,
+  askStory: (n) => `इन ${n} कहानी वाले बदलावों से एक नया draft बनाएँ? यह होगा: (1) ${n} बदलाव मिलाकर कुछ साफ़ दिशाओं में बदले जाएँगे; (2) एक नया draft बनेगा — अभी खुला draft जैसा है वैसा रहेगा; (3) संशोधित कहानी बनकर अपने-आप approve होगी; (4) उससे screenplay फिर से beat-दर-beat लिखी जाएगी। इसमें बहुत समय लगता है (लंबी film में कई घंटे) और नया draft नए सिरे से लिखा जाता है — ऊपर वाले scene-दर-scene सुधार उसमें नहीं रहते। हर कदम आप Adu के “New draft” tab और ऊपर वाली bar में देखोगे, और सिर्फ़ आख़िरी “Approve” आपके लिए बचा है।`,
+  storyStarted: (d, from, merged) => `शुरू हो गया: ${from} बदलाव → ${d} दिशाएँ${merged ? '' : ' (AI उन्हें मिला नहीं पाया, इसलिए सबसे गंभीर वाले जैसे हैं वैसे लिए गए)'}। इसे Adu के “New draft” tab या ऊपर वाली bar में देखो।`, storyStarting: 'नई कहानी शुरू हो रही है…',
   needsYou: (n) => `आपका काम (${n}) — अपने-आप नहीं किए गए`, send: 'Adu को भेजो', sent: '✓ Adu को भेजा', startOver: 'दूसरी report लो', offline: 'Server तक पहुँच नहीं हुई। एक मिनट बाद फिर कोशिश करो।', wrong: 'कुछ गड़बड़ हुई।',
   counts: (p) => `${p} बचाई जाने वाली लाइनें हर rewrite में सुरक्षित रहती हैं।`,
 }
@@ -54,7 +60,7 @@ const call = async (url, method = 'GET', body, isForm = false) => {
 }
 const ICON = { waiting: '○', working: '⏳', done: '✓', manual: '👉' }
 
-export default function ScriptDoctorPanel({ backendUrl, projectId, draft, language = 'en', onClose, onChanged, onSendToChat }) {
+export default function ScriptDoctorPanel({ backendUrl, projectId, draft, language = 'en', onClose, onChanged, onSendToChat, onOpenRevision }) {
   const L = TEXT[language] ?? EN
   const api = `${backendUrl}/api/ai-movie/assistant/${projectId}`
   const [readId, setReadId] = useState(null)
@@ -67,6 +73,8 @@ export default function ScriptDoctorPanel({ backendUrl, projectId, draft, langua
   const [error, setError] = useState('')
   const [note, setNote] = useState('')
   const [sent, setSent] = useState([])
+  const [askStory, setAskStory] = useState(false)
+  const [storyNote, setStoryNote] = useState('')
   const [, setTick] = useState(0)
   const fileRef = useRef(null)
   const alive = useRef(true)
@@ -123,6 +131,14 @@ export default function ScriptDoctorPanel({ backendUrl, projectId, draft, langua
     setBusy('')
     if (!r.ok) { setError(r.offline ? L.offline : (r.data.error || L.wrong)); return }
     await load()
+  }
+  async function storyDraft() {
+    setAskStory(false); setBusy('story'); setError(''); setStoryNote('')
+    const r = await call(`${api}/report/${readId}/story-draft`, 'POST', { draftId: draft?.id })
+    setBusy('')
+    if (!r.ok) { setError(r.offline ? L.offline : (r.data.error || L.wrong)); return }
+    setStoryNote(L.storyStarted(r.data.directions, r.data.from, r.data.merged))
+    if (r.data.request?.id) onOpenRevision?.(r.data.request.id)
   }
   async function stop() { await call(`${api}/report/${readId}/apply/stop`, 'POST', {}); await load() }
   async function undoAll() {
@@ -262,6 +278,18 @@ export default function ScriptDoctorPanel({ backendUrl, projectId, draft, langua
           {(read.plan?.manual?.length ?? 0) > 0 && (
             <div className="sd-manual">
               <h4>{L.needsYou(read.plan.manual.length)}</h4>
+              {!askStory ? (
+                <p><button type="button" className="sd-btn primary big" disabled={Boolean(busy) || applying || !draft?.id} onClick={() => setAskStory(true)}>{busy === 'story' ? L.storyStarting : L.storyBtn(read.plan.manual.length)}</button></p>
+              ) : (
+                <div className="sd-ask" role="alertdialog">
+                  <p>{L.askStory(read.plan.manual.length)}</p>
+                  <button type="button" className="sd-btn primary" onClick={storyDraft}>{L.yes}</button>{' '}
+                  <button type="button" className="sd-btn" onClick={() => setAskStory(false)}>{L.no}</button>
+                </div>
+              )}
+              {storyNote && <p className="sd-ok" role="status">{storyNote}</p>}
+              <details>
+              <summary className="sd-fine">{L.needsYou(read.plan.manual.length)}</summary>
               <ul>
                 {read.plan.manual.map((m) => (
                   <li key={m.id}>
@@ -271,6 +299,7 @@ export default function ScriptDoctorPanel({ backendUrl, projectId, draft, langua
                   </li>
                 ))}
               </ul>
+              </details>
             </div>
           )}
           <p><button type="button" className="sd-link" onClick={() => { setRead(null); setReadId(null); setSelected(null) }}>{L.startOver}</button></p>

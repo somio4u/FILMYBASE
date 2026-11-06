@@ -699,7 +699,14 @@ async function analyze(db, models, requestId, { feedback = null } = {}) {
   proposal.brief = brief;
   proposal.feedbackHistory = [...(request.proposal?.feedbackHistory ?? []), ...(feedback ? [feedback] : [])];
   await setRequest(db, requestId, { status: "awaiting_synopsis_approval", proposal, error: null });
-  await setLive(db, requestId, 3, "The revised story is ready — open it and approve or ask for a change");
+  if (request.context?.autoApprove) {
+    // the person asked for the shortcut: the revised story is approved by itself (a moment later, when this analysis has fully finished), and the rewrite starts.
+    // Only the final "approve" is left to them. The revised story stays readable in the panel.
+    await setLive(db, requestId, 3, "The revised story is ready — approving it by itself (you asked for the shortcut) and starting the rewrite");
+    setTimeout(() => {
+      approveSynopsis(db, models, requestId, { actorUserId: request.created_by }).catch((error) => setLive(db, requestId, 3, `Could not approve it by itself (${String(error.message).slice(0, 160)}) — open it and press Approve`));
+    }, 2500);
+  } else await setLive(db, requestId, 3, "The revised story is ready — open it and approve or ask for a change");
   if (request.draft_id) await db.query("UPDATE project_drafts SET status = 'pending_approval', current_stage = 'synopsis_review', updated_at = now() WHERE id = $1", [request.draft_id]);
   publish(0, { type: "revision_ready", requestId });
 }

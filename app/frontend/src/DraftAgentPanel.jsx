@@ -69,7 +69,7 @@ function RevisionProgress({ request }) {
       )}
       {request.status === 'awaiting_synopsis_approval' && <p className="dd-note"><strong>Nothing in your scenes has been changed yet.</strong> Read the revised story below. Only when you approve it does the rewriting start.</p>}
       {report
-        ? <p className="dd-fine">📎 Script doctor report <strong>included</strong>: “{report.filename}” — {report.included} change{report.included === 1 ? '' : 's'} are in the instruction{report.left > 0 ? ` (${report.left} smaller ones did not fit and are left for a second pass)` : ''}.</p>
+        ? <p className="dd-fine">📎 Script doctor report <strong>included</strong>: “{report.filename}” — {report.from ? `${report.from} changes were merged into ${report.included} direction${report.included === 1 ? '' : 's'}` : `${report.included} change${report.included === 1 ? '' : 's'} are in the instruction`}{report.left > 0 ? ` (${report.left} smaller ones did not fit and are left for a second pass)` : ''}.{request.context?.autoApprove ? ' You chose the shortcut: the revised story is approved by itself; only the final approval waits for you.' : ''}</p>
         : <p className="dd-fine">📎 No script doctor report is attached to this draft: it follows only the instruction written below.</p>}
     </div>
   )

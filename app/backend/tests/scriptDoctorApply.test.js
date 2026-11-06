@@ -59,3 +59,32 @@ test("where each change stands: waiting, working (some scenes done), done, or ne
   const all = progress({ b0s0: { status: "changed" }, b0s1: { status: "changed" }, b1s0: { status: "changed" }, b1s1: { status: "changed" } });
   assert.deepEqual([all[2][0], all[3][0], all[4][0], all[5][0]], ["done", "done", "done", "done"]);
 });
+
+test("the story shortcut: the AI's merged directions are cleaned, nothing a direction forgot is lost, and without the AI the most serious fit first with the rest counted", async () => {
+  const { normalizeDirections, fallbackDirections, directionsInstruction, uncovered, condensePrompt, MAX_DIRECTIONS } = await import("../scriptDoctorApply.js");
+  const manual = [
+    { id: 1, kind: "structure", title: "Plant Kalapahada early", action: "Show his silhouette in act one.", severity: "critical" },
+    { id: 2, kind: "structure", title: "Move his reveal before the interval", action: "Helmet off before the INTERVAL card.", severity: "critical" },
+    { id: 3, kind: "structure", title: "Add a real ending", action: "A 2-3 page resolution.", severity: "major" },
+    { id: 4, kind: "structure", title: "Shreya pays off", action: "Find Shreya among the turned pilgrims.", severity: "minor" },
+  ];
+  const directions = normalizeDirections([
+    { title: "Bring Kalapahada into the first half", action: "Silhouette in act one; helmet off before the INTERVAL card.", fromIds: [1, 2, 99] },
+    { title: "", action: "no title" },
+    { title: "Write the real ending", action: "A short resolution.", fromIds: [3] },
+    null,
+  ], manual);
+  assert.equal(directions.length, 2);
+  assert.deepEqual(directions[0].fromIds, [1, 2]); // an id that is not a real request is dropped
+  assert.deepEqual(uncovered(directions, manual).map((i) => i.id), [4]); // change 4 was forgotten by the merge: it is found, so it can be added
+  assert.match(directionsInstruction(directions), /1\. Bring Kalapahada into the first half: Silhouette in act one/);
+  assert.match(directionsInstruction(directions), /2\. Write the real ending/);
+  assert.equal(normalizeDirections(Array.from({ length: 60 }, (_, i) => ({ title: `t${i}`, action: "a", fromIds: [] })), manual).length, MAX_DIRECTIONS);
+  assert.match(condensePrompt(manual), /#1 \(critical, structure\) Plant Kalapahada early/);
+  // no AI: the most serious first, as many as fit, the rest counted
+  const many = Array.from({ length: 100 }, (_, i) => ({ id: i + 1, kind: "structure", title: `Change ${i}`, action: "x".repeat(300), severity: i === 99 ? "critical" : "minor" }));
+  const fb = fallbackDirections(many, 3000);
+  assert.equal(fb.directions[0].title, "Change 99"); // the critical one comes first although it was last
+  assert.ok(fb.directions.length < 100 && fb.left === 100 - fb.directions.length);
+  assert.deepEqual(fallbackDirections([], 100), { directions: [], left: 0 });
+});

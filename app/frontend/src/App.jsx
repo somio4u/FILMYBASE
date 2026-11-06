@@ -14795,7 +14795,8 @@ function App() {
                             {showScriptDoctor && (
                               <ScriptDoctorPanel backendUrl={BACKEND_URL} projectId={aiMovieProjectId} draft={currentDraft ? { id: currentDraft.id, title: currentDraft.label ?? currentDraft.title ?? null, draftNumber: currentDraft.draftNumber } : null} language={aiMovieLanguage}
                                 onClose={() => setShowScriptDoctor(false)} onChanged={() => refreshAiMovieScreenplayNow(aiMovieProjectId)}
-                                onSendToChat={(text) => { setAduPending(text); setAduTalkNonce((n) => n + 1) }} />
+                                onSendToChat={(text) => { setAduPending(text); setAduTalkNonce((n) => n + 1) }}
+                                onOpenRevision={(id) => { setAduRequestId(id); setShowScriptDoctor(false) }} />
                             )}
                             {!screenplayApproved && (
                               <AiMovieWriteAll backendUrl={BACKEND_URL} projectId={aiMovieProjectId} language={aiMovieLanguage} onChanged={refreshAiMovieScreenplayNow} allWritten={screenplayBeats.length > 0 && screenplayBeats.every((b) => Array.isArray(b.scenes) && b.scenes.length > 0)} autoApprovedCount={screenplayBeats.filter((b) => b.autoApproved).length} unfinished={screenplayBeats.filter((b) => !(Array.isArray(b.scenes) && b.scenes.length > 0)).length} />

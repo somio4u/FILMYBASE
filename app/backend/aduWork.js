@@ -20,7 +20,7 @@ export async function getAduWork(db, userId) {
   }
   // draft requests that are not driven through a story run (AI Movie copies)
   const req = (await db.query(
-    `SELECT q.id, q.status, q.module, q.instruction, q.draft_id, q.created_at, q.updated_at, d.project_ref, d.label, d.draft_number
+    `SELECT q.id, q.status, q.module, q.instruction, q.draft_id, q.created_at, q.updated_at, q.live, d.project_ref, d.label, d.draft_number
      FROM draft_revision_requests q LEFT JOIN project_drafts d ON d.id = q.draft_id
      WHERE q.created_by = $1 AND q.intent = 'NEW_DRAFT' AND q.status IN ('analyzing', 'awaiting_synopsis_approval', 'synopsis_approved', 'rewriting')
        AND q.proposal->>'pipelineRunId' IS NULL AND q.updated_at > now() - interval '24 hours'
@@ -28,7 +28,7 @@ export async function getAduWork(db, userId) {
   if (req) {
     return {
       kind: "draft_request", requestId: req.id, title: String(req.label ?? (req.draft_number ? `Draft ${req.draft_number}` : req.instruction) ?? "New draft").slice(0, 80),
-      status: req.status, stage: req.status, waitingForYou: req.status === "awaiting_synopsis_approval", module: req.module, projectRef: req.project_ref ?? null, draftId: req.draft_id, startedAt: req.created_at, updatedAt: req.updated_at,
+      status: req.status, stage: req.status, waitingForYou: req.status === "awaiting_synopsis_approval", module: req.module, projectRef: req.project_ref ?? null, draftId: req.draft_id, startedAt: req.created_at, updatedAt: req.updated_at, step: req.live?.step ?? null, stepOf: req.live?.of ?? null, stepLabel: req.live?.label ?? null, detail: req.live?.detail ?? null, movedAt: req.live?.at ?? null,
     };
   }
   return null;

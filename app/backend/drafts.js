@@ -72,6 +72,7 @@ export async function ensureDraftSchema(db) {
       created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
       updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
     )`,
+    `ALTER TABLE draft_revision_requests ADD COLUMN IF NOT EXISTS live JSONB NOT NULL DEFAULT '{}'`,
     `CREATE TABLE IF NOT EXISTS draft_change_sets (
       id SERIAL PRIMARY KEY,
       draft_id INTEGER NOT NULL REFERENCES project_drafts(id) ON DELETE CASCADE,

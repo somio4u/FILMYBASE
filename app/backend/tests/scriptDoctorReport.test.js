@@ -78,3 +78,27 @@ test("storage: a read is created, parts are saved and joined in order, a selecti
   await assert.rejects(createRead(db, { projectRef: 1, filename: "[REP-TEST] e", text: "  " }), /could not read any text/);
   assert.equal(REPORT_SCHEMA.properties.items.type, "ARRAY");
 });
+
+test("a new draft from the report: all ticked changes (or all, if none ticked) in one request, the most serious first; protected lines become must-keep; size is limited", async () => {
+  const { revisionFromReport } = await import("../scriptDoctorReport.js");
+  const items = [
+    { id: 1, kind: "scene", title: "Trim narrator", action: "Cut the narrator cues.", scenes: [63], pages: [], severity: "minor" },
+    { id: 2, kind: "structure", title: "Plant Kalapahada early", action: "Show his silhouette in act one.", scenes: [], pages: [], severity: "critical" },
+    { id: 3, kind: "keep", title: "Keep payment", action: "Samir: “payment?” (p16)", scenes: [], pages: [], severity: "note" },
+    { id: 4, kind: "global", title: "One voice each", action: "Jargon for Meera only.", scenes: [], pages: [], severity: "major" },
+  ];
+  const all = revisionFromReport(items, []);
+  assert.equal(all.included, 3);
+  assert.match(all.instruction, /1\. \(critical, structure\) Plant Kalapahada early: Show his silhouette in act one\.\n2\. \(major, global\) One voice each/);
+  assert.match(all.instruction, /3\. \(minor, scene\) Trim narrator \[scene 63\]/);
+  assert.deepEqual(all.constraints.mustKeep, ["Samir: “payment?” (p16)"]); // a protected line is never a change
+  const some = revisionFromReport(items, [1, 3]);
+  assert.equal(some.included, 1); // a "keep" item that is ticked is still not a change
+  assert.match(some.instruction, /Trim narrator/);
+  const many = Array.from({ length: 200 }, (_, i) => ({ id: i + 1, kind: "scene", title: `Change ${i}`, action: "x".repeat(300), scenes: [], pages: [], severity: "minor" }));
+  const capped = revisionFromReport(many, []);
+  assert.ok(capped.instruction.length <= 9300);
+  assert.equal(capped.included + capped.left, 200);
+  assert.ok(capped.left > 0);
+  assert.equal(revisionFromReport([], []).included, 0);
+});

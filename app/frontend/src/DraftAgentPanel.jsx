@@ -33,6 +33,48 @@ function Diff({ edit }) {
   )
 }
 
+// WHAT IS HAPPENING NOW: the five steps, the one that is running, what it is doing inside that step, how long the whole thing has run and when it last moved.
+// If it has not moved for a while it says so plainly (it may be stuck: the person can then press "Run again" / ask).
+const STEP_NAMES = ['Read the whole screenplay for what your request touches', 'Design the revised story (Story Brain + critics)', 'YOUR approval of the revised story', 'Rewrite the screenplay, stage by stage', 'YOUR final approval']
+function RevisionProgress({ request }) {
+  const [, setTick] = useState(0)
+  const live = request.live ?? {}
+  const active = ['analyzing', 'rewriting', 'synopsis_approved'].includes(request.status)
+  useEffect(() => {
+    if (!active) return undefined
+    const timer = setInterval(() => setTick((n) => n + 1), 1000)
+    return () => clearInterval(timer)
+  }, [active])
+  const clock = (ms) => { const sec = Math.max(0, Math.floor(ms / 1000)); return sec >= 60 ? `${Math.floor(sec / 60)}m ${String(sec % 60).padStart(2, '0')}s` : `${sec}s` }
+  const step = live.step ?? (request.status === 'rewriting' ? 4 : request.status === 'awaiting_synopsis_approval' ? 3 : request.status === 'awaiting_final_approval' ? 5 : 1)
+  const startedMs = Date.parse(request.createdAt)
+  const movedMs = live.at ? Date.parse(live.at) : NaN
+  const quiet = Number.isFinite(movedMs) ? Date.now() - movedMs : 0
+  const report = request.context?.report
+  return (
+    <div className="da-progress" role="status" aria-label="What is happening now">
+      <ol className="da-steps">
+        {STEP_NAMES.map((name, i) => {
+          const n = i + 1
+          const state = request.status === 'completed' || n < step ? 'done' : n === step ? (active ? 'working' : request.status === 'failed' ? 'stopped' : 'waiting') : 'later'
+          return <li key={n} className={`is-${state}`}><span className="da-step-mark" aria-hidden="true">{state === 'done' ? '✓' : state === 'working' ? '⏳' : state === 'waiting' ? '👉' : state === 'stopped' ? '■' : '○'}</span> {name}</li>
+        })}
+      </ol>
+      {live.detail && <p className="dd-note"><strong>Right now:</strong> {live.detail}</p>}
+      {active && (
+        <p className="dd-fine">
+          Running for {Number.isFinite(startedMs) ? clock(Date.now() - startedMs) : '…'}{Number.isFinite(movedMs) ? ` · last moved ${clock(quiet)} ago` : ''}
+          {quiet > 10 * 60 * 1000 ? ' · ⚠ nothing has moved for over 10 minutes — it may be stuck. Open “Drafts” and press Run again, or tell me.' : ''}
+        </p>
+      )}
+      {request.status === 'awaiting_synopsis_approval' && <p className="dd-note"><strong>Nothing in your scenes has been changed yet.</strong> Read the revised story below. Only when you approve it does the rewriting start.</p>}
+      {report
+        ? <p className="dd-fine">📎 Script doctor report <strong>included</strong>: “{report.filename}” — {report.included} change{report.included === 1 ? '' : 's'} are in the instruction{report.left > 0 ? ` (${report.left} smaller ones did not fit and are left for a second pass)` : ''}.</p>
+        : <p className="dd-fine">📎 No script doctor report is attached to this draft: it follows only the instruction written below.</p>}
+    </div>
+  )
+}
+
 function Revision({ requestId, backendUrl, onOpenDraft, onClose, onChanged }) {
   const [data, setData] = useState(null)
   const [feedback, setFeedback] = useState('')
@@ -64,6 +106,7 @@ function Revision({ requestId, backendUrl, onOpenDraft, onClose, onChanged }) {
   return (
     <section className="da-revision" aria-label="Revision review">
       <h3>{data.draft?.title ?? 'New draft'} <span className="chip">{REQUEST_LABEL[status] ?? status}</span></h3>
+      <RevisionProgress request={r} />
       <p className="dd-fine">From {data.parentDraft?.title}. Your instruction (kept exactly): “{r.instruction}” {r.source === 'mic' ? '· spoken' : ''}</p>
       {r.constraints?.mustKeep?.length > 0 && <p className="dd-fine">Must keep: {r.constraints.mustKeep.join('; ')}</p>}
       {r.constraints?.mustChange?.length > 0 && <p className="dd-fine">Must change: {r.constraints.mustChange.join('; ')}</p>}

@@ -52,3 +52,11 @@
 .dd-making li { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .da-story, .da-work { margin: 10px 0; }
 .da-work ul { list-style: none; padding: 0; display: grid; gap: 6px; }
+
+/* the revision's "what is happening now" panel */
+.da-progress { margin: 8px 0 12px; padding: 10px 12px; border: 1px solid var(--border-subtle); border-radius: 12px; background: rgba(128, 128, 128, 0.08); }
+.da-steps { list-style: none; margin: 0 0 8px; padding: 0; }
+.da-steps li { padding: 3px 0; opacity: 0.55; }
+.da-steps li.is-done { opacity: 0.85; }
+.da-steps li.is-working, .da-steps li.is-waiting, .da-steps li.is-stopped { opacity: 1; font-weight: 600; }
+.da-step-mark { display: inline-block; width: 1.4em; }

@@ -94,6 +94,27 @@ export function instructionFor(item, keepItems = []) {
   return `${item.action}${where}${keeps.length ? ` — but keep these untouched: ${keeps.join("; ")}` : ""}`.slice(0, 1800);
 }
 
+// ALL the ticked changes as ONE revision request (for "a new draft from this report"): the most serious first, the structure before the scene fixes; the lines to protect
+// become "must keep". Nothing is invented: every sentence is the report's own change text. Limited in size, because the whole request is read by the writers.
+const SEVERITY_RANK = { critical: 0, major: 1, minor: 2, note: 3 };
+export function revisionFromReport(items, selectedIds = [], { maxChars = 9000 } = {}) {
+  const chosen = new Set((selectedIds ?? []).map(Number));
+  const doable = (items ?? []).filter((i) => i.kind !== "keep" && (chosen.size === 0 || chosen.has(i.id)));
+  const keeps = (items ?? []).filter((i) => i.kind === "keep");
+  const ordered = [...doable].sort((a, b) => (SEVERITY_RANK[a.severity] ?? 3) - (SEVERITY_RANK[b.severity] ?? 3) || KIND_ORDER.indexOf(a.kind) - KIND_ORDER.indexOf(b.kind) || a.id - b.id);
+  const lines = [];
+  let size = 0;
+  let included = 0;
+  for (const item of ordered) {
+    const where = item.scenes?.length ? ` [scene${item.scenes.length === 1 ? "" : "s"} ${item.scenes.join(", ")}]` : "";
+    const line = `${included + 1}. (${item.severity === "note" ? item.kind : `${item.severity}, ${item.kind}`}) ${item.title}${where}: ${item.action}`;
+    if (size + line.length + 1 > maxChars) break;
+    lines.push(line); size += line.length + 1; included += 1;
+  }
+  const instruction = `Make ALL of these changes from a script doctor's report, in order of importance. Do not skip any; where two conflict, the earlier one wins.\n${lines.join("\n")}`;
+  return { instruction, included, left: ordered.length - included, constraints: { mustKeep: keeps.map((k) => k.action.slice(0, 200)).slice(0, 30), mustChange: [] } };
+}
+
 // ---- storage: one row per uploaded report ---------------------------------------------------------------------------
 export async function ensureReportSchema(db) {
   await db.query(`CREATE TABLE IF NOT EXISTS adu_report_reads (

@@ -46,7 +46,7 @@ import { ADD_KIND, PREPARE_PACKETS_KIND, createWriteScenesJobs, publicView as pu
 import { WRITE_ALL_KIND, beatIsComplete, planApproveAll, planWriteAll, writeWholeBeat } from "./aiMovieWriteAll.js";
 import { newBlankScene, insertScene, removeSceneAt, moveSceneBy, keepRemoved, restoreRemoved } from "./aiMovieSceneOps.js";
 import { renameCharacter as renameAiMovieCharacter, renameUndoInfo, undoRename, ensureRenameUndoSchema } from "./aiMovieRename.js";
-import { REPORT_SCHEMA, REPORT_SYSTEM, reportPrompt, normalizeItems, ensureReportSchema, createRead, saveParts, getRead, saveSelection } from "./scriptDoctorReport.js";
+import { REPORT_SCHEMA, REPORT_SYSTEM, reportPrompt, normalizeItems, ensureReportSchema, createRead, saveParts, getRead, saveSelection, revisionFromReport } from "./scriptDoctorReport.js";
 import { countOdiaWords, textsOfScene, textsOfSceneList } from "./odiaCorpus.js";
 import { languageOf, parseEpisodesFromText, sceneContent } from "./screenplayImport.js";
 import { planFill } from "./pdfFill.js";
@@ -97,7 +97,7 @@ import { buildSeriesSkip, saveSeriesSkip, seriesFormatFrom } from "./skipSeries.
 import { registerScriptFonts, writeScripted } from "./scriptPdf.js";
 import { cleanPastedStory, learnBoilerplate } from "./pasteClean.js";
 import { designBibleFromSynopsis, applyDecisions as applySynopsisDecisions, finalizeSynopsisBible, decorateSynopsisBible, lockedSynopsisIdea } from "./synopsisBrain.js";
-import { failInterruptedRequests, registerDraftAgentRoutes, setPollMs, startPlainDraft } from "./draftAgent.js";
+import { failInterruptedRequests, registerDraftAgentRoutes, setPollMs, startPlainDraft, startRevision } from "./draftAgent.js";
 import { buildReferenceBlock, findRelated as findRelatedSources, ideaWithReferences, registerWorkspaceRoutes } from "./workspaceContext.js";
 import { registerTimelineExportRoutes } from "./timelineExport.js";
 import { registerEventRoutes } from "./events.js";
@@ -6470,6 +6470,29 @@ app.get("/api/ai-movie/assistant/:projectId/report/:readId", requireRole("admin"
     res.json({ ...read, job: job ? publicWriteJob(job) : null });
   } catch (error) {
     res.status(error.status ?? 500).json({ error: error.message });
+  }
+});
+// "A new draft from this report": ALL the ticked changes (or every change, if none is ticked) go into ONE revision request — the same safe path as "create a new draft":
+// a copy, the whole screenplay analysed, the revised story shown for YOUR approval, then the rewrite, then your final approval. The protected lines become "must keep".
+app.post("/api/ai-movie/assistant/:projectId/report/:readId/new-draft", requireRole("admin"), async (req, res) => {
+  try {
+    const projectId = Number(req.params.projectId);
+    const read = await getRead(db, Number(req.params.readId), { projectRef: projectId });
+    if (!read) throw Object.assign(new Error("Report not found."), { status: 404 });
+    if (read.partsDone < read.parts && read.items.length === 0) throw Object.assign(new Error("The report has not been read yet."), { status: 409 });
+    const draftId = Number(req.body?.draftId);
+    if (!Number.isInteger(draftId) || draftId <= 0) throw Object.assign(new Error("Open the screenplay draft you want to revise first."), { status: 400 });
+    const busy = await getAduWork(db, req.user.id);
+    if (busy) throw Object.assign(new Error(busyMessage(busy)), { status: 409, code: "adu_busy" });
+    const plan = revisionFromReport(read.items, read.selected);
+    if (plan.included === 0) throw Object.assign(new Error("There is no change in this report to make."), { status: 400 });
+    const out = await startRevision(db, draftAgentModels.value, draftId, {
+      instruction: plan.instruction, constraints: plan.constraints, source: "report", context: { report: { readId: read.id, filename: read.filename, included: plan.included, left: plan.left } },
+      confirmed: true, actorUserId: req.user.id,
+    });
+    res.status(out.duplicate ? 200 : 202).json({ ...out, included: plan.included, left: plan.left });
+  } catch (error) {
+    res.status(error.status ?? 500).json({ error: error.message, code: error.code });
   }
 });
 app.put("/api/ai-movie/assistant/:projectId/report/:readId/selection", requireRole("admin"), async (req, res) => {

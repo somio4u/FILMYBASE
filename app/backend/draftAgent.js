@@ -444,9 +444,21 @@ async function setRequest(db, id, fields) {
   for (const [k, v] of Object.entries(fields)) { params.push(v !== null && typeof v === "object" ? JSON.stringify(v) : v); sets.push(`${k} = $${params.length}`); }
   return (await db.query(`UPDATE draft_revision_requests SET ${sets.join(", ")} WHERE id = $1 RETURNING *`, params)).rows[0];
 }
+// WHAT IS HAPPENING NOW, for the screen: step n of 5, in words, with a detail (which part of how many) and the time it was last updated. Written at every move the
+// agent makes, so the person can see that it is working (and what it is doing) without guessing. `at` = the last time anything moved.
+export const REVISION_STEPS = [
+  "Reading the whole screenplay to see what your request touches",
+  "Designing the revised story (the Story Brain and its critics)",
+  "Waiting for YOUR approval of the revised story",
+  "Rewriting the screenplay, stage by stage",
+  "Waiting for YOUR final approval",
+];
+async function setLive(db, id, step, detail = "") {
+  await db.query("UPDATE draft_revision_requests SET live = $2, updated_at = now() WHERE id = $1", [id, JSON.stringify({ step, of: REVISION_STEPS.length, label: REVISION_STEPS[step - 1], detail: String(detail).slice(0, 240), at: new Date().toISOString() })]).catch(() => {});
+}
 const requestView = (r) => r && ({
   id: r.id, groupId: r.group_id, module: r.module, parentDraftId: r.parent_draft_id, draftId: r.draft_id, intent: r.intent, instruction: r.instruction, source: r.source,
-  constraints: r.constraints, context: r.context, status: r.status, impactMap: r.impact_map, proposal: r.proposal, progress: r.decisions, error: r.error, revision: r.revision, createdAt: r.created_at, updatedAt: r.updated_at,
+  constraints: r.constraints, context: r.context, status: r.status, live: r.live ?? {}, impactMap: r.impact_map, proposal: r.proposal, progress: r.decisions, error: r.error, revision: r.revision, createdAt: r.created_at, updatedAt: r.updated_at,
 });
 export async function getRequest(db, id) {
   const r = (await db.query("SELECT * FROM draft_revision_requests WHERE id = $1", [id])).rows[0];
@@ -619,6 +631,7 @@ async function storyBrainAi(db, pl, request, draft, brief, feedback) {
   }
   const view = await waitFor(db, request.id, async () => {
     const v = must(await pl.call("GET", `/api/ai-movie/projects/${pid}/story-bible`), "Reading the Story Bible");
+    await setLive(db, request.id, 2, v.job?.step || v.job?.label || v.job?.stage || (v.job?.status === "running" ? "The Story Brain is writing and its critics are scoring" : "Finishing"));
     if (v.job?.status === "failed") throw httpError(v.job.error ?? "The Story Brain stopped.", 502, "story_brain_failed");
     return v.job?.status === "running" ? null : v;
   }, { label: "the Story Brain" });
@@ -661,7 +674,9 @@ async function analyze(db, models, requestId, { feedback = null } = {}) {
     }
     if (cur.length) batches.push(cur);
     const seen = new Set();
+    await setLive(db, requestId, 1, `Starting: ${parentUnits.length} pieces in ${batches.length} part${batches.length === 1 ? "" : "s"}`);
     for (const [i, batch] of batches.entries()) {
+      await setLive(db, requestId, 1, `Reading part ${i + 1} of ${batches.length}`);
       const a = await models.json(parent, "story-writer", impactPrompt(request.instruction, request.constraints, batch, batches.length > 1 ? `part ${i + 1} of ${batches.length}` : "the whole outline"), { maxOutputTokens: 8192, responseSchema: IMPACT_SCHEMA });
       for (const bucket of ["modified", "removed", "indirect"]) for (const x of Array.isArray(a?.[bucket]) ? a[bucket] : []) if (valid.has(x.key) && !seen.has(x.key)) { impact[bucket].push({ key: x.key, why: clip(x.why, 240) }); seen.add(x.key); }
       for (const x of Array.isArray(a?.added) ? a.added : []) if (x?.label) impact.added.push({ label: clip(x.label, 120), why: clip(x.why, 240) });
@@ -669,7 +684,9 @@ async function analyze(db, models, requestId, { feedback = null } = {}) {
     impact.unchanged = parentUnits.filter((u) => !seen.has(u.key)).map((u) => u.key);
     impact.counts = { unchanged: impact.unchanged.length, modified: impact.modified.length, removed: impact.removed.length, indirect: impact.indirect.length, added: impact.added.length };
     await setRequest(db, requestId, { impact_map: impact });
+    await setLive(db, requestId, 1, `Found: ${impact.counts.modified} to change, ${impact.counts.indirect} knock-on, ${impact.counts.added} new, ${impact.counts.removed} removed`);
   }
+  await setLive(db, requestId, 2, "Starting the Story Brain");
   const brief = request.proposal?.brief ?? buildBrief(request, parentUnits, impact);
   // The story is designed by the app's own Story Brain (head writer + critics, pass mark 8) — the unchanged raw process.
   const pl = await openPipeline(models, request.created_by);
@@ -682,6 +699,7 @@ async function analyze(db, models, requestId, { feedback = null } = {}) {
   proposal.brief = brief;
   proposal.feedbackHistory = [...(request.proposal?.feedbackHistory ?? []), ...(feedback ? [feedback] : [])];
   await setRequest(db, requestId, { status: "awaiting_synopsis_approval", proposal, error: null });
+  await setLive(db, requestId, 3, "The revised story is ready — open it and approve or ask for a change");
   if (request.draft_id) await db.query("UPDATE project_drafts SET status = 'pending_approval', current_stage = 'synopsis_review', updated_at = now() WHERE id = $1", [request.draft_id]);
   publish(0, { type: "revision_ready", requestId });
 }
@@ -785,6 +803,7 @@ export async function retryRequest(db, models, requestId) {
   if (r.status !== "failed") throw httpError("Only a failed request can be retried.", 409, "not_failed");
   const writing = Boolean(r.proposal?.approved);
   await setRequest(db, requestId, { status: writing ? "rewriting" : "analyzing", error: null });
+  await setLive(db, requestId, writing ? 4 : 1, "Carrying on after the retry");
   launch(db, requestId, () => (writing ? rawRun(db, models, requestId) : analyze(db, models, requestId)));
   return requestView(await getRequest(db, requestId));
 }
@@ -818,6 +837,7 @@ export async function approveSynopsis(db, models, requestId, { expectedRevision 
   if (expectedRevision !== null && Number(expectedRevision) !== r.revision) throw httpError("This proposal changed since you loaded it. Reload it first.", 409, "stale_revision");
   const proposal = { ...r.proposal, approved: true, approvedAt: new Date().toISOString(), approvedBy: actorUserId };
   await setRequest(db, requestId, { status: "rewriting", proposal, decisions: [], created_by: actorUserId ?? r.created_by });
+  await setLive(db, requestId, 4, "Starting to rewrite after your approval");
   if (r.draft_id) await db.query("UPDATE project_drafts SET current_stage = 'rewriting', approval = $2 WHERE id = $1", [r.draft_id, JSON.stringify({ gate: "revised_synopsis", status: "approved", at: new Date().toISOString(), by: actorUserId })]);
   launch(db, requestId, () => rawRun(db, models, requestId));
   return requestView(await getRequest(db, requestId));
@@ -897,7 +917,11 @@ async function rawRun(db, models, requestId) {
   const r = await getRequest(db, requestId);
   const pl = await openPipeline(models, r.created_by);
   const log = [...(r.decisions ?? [])];
-  const save = () => setRequest(db, requestId, { decisions: log });
+  const save = async () => {
+    await setRequest(db, requestId, { decisions: log });
+    const finished = log.filter((x) => x.status === "done");
+    await setLive(db, requestId, 4, `${finished.length} of ${STAGES.length + 2} parts done${finished.length ? ` — last finished: ${String(finished.at(-1).key).replace("stage:", "")}` : ""}`);
+  };
   const done = (k) => log.some((x) => x.key === k && x.status === "done");
   try {
     if (r.module === "film") await rawRunFilm(db, pl, r, log, save);
@@ -912,6 +936,7 @@ async function rawRun(db, models, requestId) {
       await refreshProduction(db, "ai_movie", pid);
     }
     await setRequest(db, requestId, { status: "awaiting_final_approval", decisions: log });
+    await setLive(db, requestId, 5, "The new draft is written — read it and approve it, or ask for changes");
     publish(0, { type: "revision_ready", requestId });
   } finally { await pl.close(); }
 }

@@ -3041,9 +3041,22 @@ function AduWorkBar({ currentUser, t, onOpenAdu, onOpenProject, appMode }) {
     window.addEventListener('focus', onFocus)
     return () => { cancelled = true; clearInterval(timer); window.removeEventListener('focus', onFocus) }
   }, [currentUser?.username, currentUser?.role])
+  const [, setTick] = useState(0)
+  useEffect(() => {
+    if (!work) return undefined
+    const timer = setInterval(() => setTick((n) => n + 1), 1000) // the running time and "last moved" tick every second
+    return () => clearInterval(timer)
+  }, [work])
   if (!work) return null
   const names = t?.floatingAgentStageNames ?? {}
-  const stage = work.waitingForYou ? 'Waiting for your approval' : (names[work.stage] ?? String(work.stage ?? '').replace(/_/g, ' '))
+  const baseStage = work.waitingForYou ? 'Waiting for your approval' : (names[work.stage] ?? String(work.stage ?? '').replace(/_/g, ' '))
+  const clockOf = (ms) => { const sec = Math.max(0, Math.floor(ms / 1000)); return sec >= 60 ? `${Math.floor(sec / 60)}m ${String(sec % 60).padStart(2, '0')}s` : `${sec}s` }
+  const startedMs = work.startedAt ? Date.parse(work.startedAt) : NaN
+  const movedMs = work.movedAt ? Date.parse(work.movedAt) : NaN
+  // when the agent says exactly what it is doing, say it: the step (n of 5), the detail (which part of how many), how long it has run and when it last moved
+  const stage = work.stepLabel
+    ? `step ${work.step} of ${work.stepOf}: ${work.stepLabel}${work.detail ? ` · ${work.detail}` : ''}${Number.isFinite(startedMs) && !work.waitingForYou ? ` · running ${clockOf(Date.now() - startedMs)}` : ''}${Number.isFinite(movedMs) && !work.waitingForYou ? ` · last moved ${clockOf(Date.now() - movedMs)} ago` : ''}`
+    : baseStage
   const sameMode = appMode !== 'picker' && work.module === (appMode === 'ai' ? 'ai_movie' : 'film')
   return (
     <div className="adu-work-bar" role="status">

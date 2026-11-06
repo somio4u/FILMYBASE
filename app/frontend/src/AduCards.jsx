@@ -172,7 +172,7 @@ export default function AduAction({ message, action, current, update, lang = 'en
   }
 
   // ---- a script doctor's report read through the 📎 button: always shown (it is a list to work through, not a one-time question)
-  if (action.type === 'report_read') return <AduReportCard backendUrl={backendUrl} projectId={projectId} action={action} lang={lang} onSendToChat={onSendToChat} />
+  if (action.type === 'report_read') return <AduReportCard backendUrl={backendUrl} projectId={projectId} action={action} lang={lang} onSendToChat={onSendToChat} draftId={draft?.id ?? null} onOpenRevision={onOpenRevision} />
 
   // ---- already pressed: just say so (and keep showing the job's progress)
   if (message.resolved || action.outcome) {

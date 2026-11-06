@@ -5,6 +5,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 // Reading changes nothing in the screenplay.
 const TEXT = {
   en: {
+    newDraft: (n) => `📋 New draft from this report (${n} change${n === 1 ? '' : 's'})`, askDraft: (n) => `Make a NEW draft with ${n} change${n === 1 ? '' : 's'} from this report? Your screenplay stays as it is. The agent first reads the whole screenplay and designs the revised story — it stops and waits for YOUR approval before it rewrites anything.`, yesDraft: 'Yes, make the new draft', no: 'No', draftStarted: (n, left) => `Started with ${n} change${n === 1 ? '' : 's'}${left > 0 ? ` (${left} smaller ones did not fit and are left for a second pass)` : ''}. The progress is in the “New draft” tab.`, starting: 'Starting…', draftFail: 'It could not start.',
     reading: (done, total, step, time) => `⏳ ${step || 'Reading the report'} · ${done}/${total} parts · ${time}`, readFail: 'The report could not be read completely:', partial: (a, b) => `Read ${a} of ${b} parts; the list below is what was found.`,
     found: (n) => `${n} change${n === 1 ? '' : 's'} found. Tick the ones you want.`, none: 'No changes were found in this report.',
     kinds: { structure: 'Story and structure', scene: 'Scene fixes', global: 'Whole-script passes', risk: 'Risks to handle', keep: 'Protect — do not change' },
@@ -14,6 +15,7 @@ const TEXT = {
     tip: 'Tip: make a safe copy first, then send the changes one by one. Every change is shown before it is applied, and Undo is there.', severity: { critical: 'critical', major: 'major', minor: 'minor', note: '' }, more: 'details', less: 'hide',
   },
   hi: {
+    newDraft: (n) => `📋 इस report से नया draft (${n} बदलाव)`, askDraft: (n) => `इस report के ${n} बदलावों से एक नया draft बनाएँ? आपकी screenplay जैसी है वैसी रहेगी। एजेंट पहले पूरी screenplay पढ़कर संशोधित कहानी बनाता है — और कुछ भी दोबारा लिखने से पहले रुककर आपकी मंज़ूरी माँगता है।`, yesDraft: 'हाँ, नया draft बनाओ', no: 'नहीं', draftStarted: (n, left) => `${n} बदलावों के साथ शुरू हो गया${left > 0 ? ` (${left} छोटे बदलाव नहीं समाए, वे दूसरी बार के लिए बचे हैं)` : ''}। प्रगति “नया draft” tab में है।`, starting: 'शुरू हो रहा है…', draftFail: 'शुरू नहीं हो सका।',
     reading: (done, total, step, time) => `⏳ ${step || 'Report पढ़ रहा हूँ'} · ${done}/${total} हिस्से · ${time}`, readFail: 'Report पूरी नहीं पढ़ी जा सकी:', partial: (a, b) => `${b} में से ${a} हिस्से पढ़े; नीचे वही सूची है जो मिली।`,
     found: (n) => `${n} बदलाव मिले। जो चाहिए उन पर टिक करो।`, none: 'इस report में कोई बदलाव नहीं मिला।',
     kinds: { structure: 'कहानी और ढाँचा', scene: 'Scene के सुधार', global: 'पूरी script पर एक-जैसे काम', risk: 'सँभालने वाले जोखिम', keep: 'बचाकर रखो — मत बदलो' },
@@ -23,6 +25,7 @@ const TEXT = {
     tip: 'सुझाव: पहले सुरक्षित copy बनाओ, फिर बदलाव एक-एक करके भेजो। हर बदलाव लगने से पहले दिखता है, और Undo है।', severity: { critical: 'गंभीर', major: 'बड़ा', minor: 'छोटा', note: '' }, more: 'ब्योरा', less: 'छिपाओ',
   },
   or: {
+    newDraft: (n) => `📋 ଏହି ରିପୋର୍ଟରୁ ନୂଆ ଡ୍ରାଫ୍ଟ (${n} ବଦଳ)`, askDraft: (n) => `ଏହି ରିପୋର୍ଟର ${n} ବଦଳ ସହ ଗୋଟିଏ ନୂଆ ଡ୍ରାଫ୍ଟ ବନାଇବେ? ଆପଣଙ୍କ ସ୍କ୍ରିନପ୍ଲେ ଯେମିତି ଅଛି ସେମିତି ରହିବ। ଏଜେଣ୍ଟ ପ୍ରଥମେ ପୂରା ସ୍କ୍ରିନପ୍ଲେ ପଢ଼ି ସଂଶୋଧିତ କାହାଣୀ ବନାଏ — ଆଉ କିଛି ଲେଖିବା ପୂର୍ବରୁ ଆପଣଙ୍କ ଅନୁମୋଦନ ପାଇଁ ଅପେକ୍ଷା କରେ।`, yesDraft: 'ହଁ, ନୂଆ ଡ୍ରାଫ୍ଟ ବନାଅ', no: 'ନା', draftStarted: (n, left) => `${n} ବଦଳ ସହ ଆରମ୍ଭ ହେଲା${left > 0 ? ` (${left} ଛୋଟ ବଦଳ ଆଉ ଅଁଟିଲା ନାହିଁ)` : ''}। ପ୍ରଗତି “ନୂଆ ଡ୍ରାଫ୍ଟ” ଟ୍ୟାବ୍‌ରେ ଅଛି।`, starting: 'ଆରମ୍ଭ ହେଉଛି…', draftFail: 'ଆରମ୍ଭ ହୋଇପାରିଲା ନାହିଁ।',
     reading: (done, total, step, time) => `⏳ ${step || 'ରିପୋର୍ଟ ପଢ଼ୁଛି'} · ${done}/${total} ଭାଗ · ${time}`, readFail: 'ରିପୋର୍ଟ ପୂରା ପଢ଼ାଯାଇପାରିଲା ନାହିଁ:', partial: (a, b) => `${b} ମଧ୍ୟରୁ ${a} ଭାଗ ପଢ଼ାଗଲା; ତଳେ ଯାହା ମିଳିଲା ତାହା।`,
     found: (n) => `${n}ଟି ବଦଳ ମିଳିଲା। ଯାହା ଚାହାଁନ୍ତି ସେଥିରେ ଟିକ୍ କରନ୍ତୁ।`, none: 'ଏହି ରିପୋର୍ଟରେ କୌଣସି ବଦଳ ମିଳିଲା ନାହିଁ।',
     kinds: { structure: 'କାହାଣୀ ଓ ଢାଞ୍ଚା', scene: 'ସିନ୍ ସୁଧାର', global: 'ପୂରା ସ୍କ୍ରିପ୍ଟ ଉପରେ କାମ', risk: 'ସମ୍ଭାଳିବାର ବିପଦ', keep: 'ରଖ — ବଦଳାନାହିଁ' },
@@ -48,7 +51,7 @@ export function instructionFor(item, keeps) {
   return `${item.action}${where}${kept.length ? ` — but keep these untouched: ${kept.join('; ')}` : ''}`.slice(0, 1800)
 }
 
-export default function AduReportCard({ backendUrl, projectId, action, lang = 'en', onSendToChat }) {
+export default function AduReportCard({ backendUrl, projectId, action, lang = 'en', onSendToChat, draftId = null, onOpenRevision = null }) {
   const L = TEXT[lang] ?? TEXT.en
   const api = `${backendUrl}/api/ai-movie/assistant/${projectId}/report/${action.readId}`
   const [read, setRead] = useState(null)
@@ -56,6 +59,10 @@ export default function AduReportCard({ backendUrl, projectId, action, lang = 'e
   const [sent, setSent] = useState([])
   const [open, setOpen] = useState({})
   const [now, setNow] = useState(Date.now())
+  const [asking, setAsking] = useState(false)
+  const [starting, setStarting] = useState(false)
+  const [draftNote, setDraftNote] = useState('')
+  const [draftError, setDraftError] = useState('')
   const offset = useRef(0)
   const alive = useRef(true)
 
@@ -77,6 +84,17 @@ export default function AduReportCard({ backendUrl, projectId, action, lang = 'e
   const toggle = (id) => persist(selected.includes(id) ? selected.filter((x) => x !== id) : [...selected, id])
   const keeps = (read?.items ?? []).filter((i) => i.kind === 'keep')
   const sendItem = (item) => { onSendToChat?.(instructionFor(item, keeps)); const nextSent = [...new Set([...sent, item.id])]; setSent(nextSent); persist(selected, { sent: [item.id] }) }
+  const doable = (read?.items ?? []).filter((i) => i.kind !== 'keep')
+  const forDraft = selected.length ? doable.filter((i) => selected.includes(i.id)) : doable // ticked ones, or all when none is ticked
+  async function newDraft() {
+    setAsking(false); setStarting(true); setDraftError(''); setDraftNote('')
+    const r = await call(`${api}/new-draft`, 'POST', { draftId })
+    setStarting(false)
+    if (!r.ok) { setDraftError(r.data.error || L.draftFail); return }
+    setDraftNote(L.draftStarted(r.data.included, r.data.left))
+    const id = r.data.request?.id
+    if (id) onOpenRevision?.(id)
+  }
   const todo = (read?.items ?? []).filter((i) => i.kind !== 'keep' && selected.includes(i.id) && !sent.includes(i.id))
 
   if (!read) return <small>…</small>
@@ -102,6 +120,19 @@ export default function AduReportCard({ backendUrl, projectId, action, lang = 'e
         <>
           <p className="dd-note"><strong>{L.found(read.items.filter((i) => i.kind !== 'keep').length)}</strong></p>
           <p className="dd-note">{L.tip}</p>
+          {!asking ? (
+            <div className="dd-actions">
+              <button type="button" className="dd-btn primary" disabled={starting || !draftId || forDraft.length === 0} onClick={() => setAsking(true)}>{starting ? L.starting : L.newDraft(forDraft.length)}</button>
+            </div>
+          ) : (
+            <div className="dd-note" role="alertdialog">
+              <p>{L.askDraft(forDraft.length)}</p>
+              <button type="button" className="dd-btn primary" onClick={newDraft}>{L.yesDraft}</button>{' '}
+              <button type="button" className="dd-btn" onClick={() => setAsking(false)}>{L.no}</button>
+            </div>
+          )}
+          {draftNote && <p className="dd-note" role="status">{draftNote}</p>}
+          {draftError && <p className="dd-error" role="alert">{draftError}</p>}
           <div className="dd-actions">
             <button type="button" className="dd-btn" onClick={() => onSendToChat?.(L.copyMsg)}>{L.copyFirst}</button>
             <button type="button" className="dd-btn primary" disabled={todo.length === 0} onClick={() => sendItem(todo[0])}>{L.sendNext(todo.length)}</button>

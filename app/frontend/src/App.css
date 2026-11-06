@@ -8085,3 +8085,6 @@ body.is-script-edit-mode { overflow: hidden; }
 .ai-scene-field input, .ai-scene-field select { display: block; width: 100%; margin-top: 3px; padding: 6px 8px; border-radius: 8px; border: 1px solid var(--border-subtle); background: var(--bg-surface); color: inherit; font: inherit; }
 .ai-scene-mark { margin-top: 10px; } .ai-scene-mark-note { display: block; width: 100%; margin: 6px 0; padding: 6px 8px; border-radius: 8px; border: 1px solid var(--border-subtle); background: var(--bg-surface); color: inherit; font: inherit; }
 .ai-scene-multi { margin-top: 12px; }
+.script-nav-item[draggable="true"] { cursor: grab; }
+.script-nav-tag { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 6px; flex: none; }
+.script-nav-tag.is-change { background: #e5484d; } .script-nav-tag.is-check { background: #f5c542; } .script-nav-tag.is-new { background: #3b82f6; } .script-nav-tag.is-done { background: #30a46c; }

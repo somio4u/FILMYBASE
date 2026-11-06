@@ -19,6 +19,7 @@ import AiMovieMultiChange from './AiMovieMultiChange.jsx'
 import AiMovieRename from './AiMovieRename.jsx'
 import ScriptDoctorPanel from './ScriptDoctorPanel.jsx'
 import DialogueDoctorPanel from './DialogueDoctorPanel.jsx'
+import ScreenplayDoctorPanel from './ScreenplayDoctorPanel.jsx'
 import { cleanForSave, collectCharacterNames } from './scriptDoc.js'
 import { splitSceneContexts } from './sceneContexts.js'
 import './App.css'
@@ -9160,6 +9161,7 @@ function App() {
   const [aiMovieSelectedSceneIndex, setAiMovieSelectedSceneIndex] = useState(0)
   // Edit mode (like the Movie screenplay): the screenplay area fills the screen; Esc or the button leaves it. The page zoom is shared with Movie.
   const [aiEditMode, setAiEditMode] = useState(false)
+  const [showScreenplayDoctor, setShowScreenplayDoctor] = useState(false) // Screenplay Doctor: the whole film
   const [showDialogueDoctor, setShowDialogueDoctor] = useState(false) // Dialogue Doctor: only the dialogue
   const [showScriptDoctor, setShowScriptDoctor] = useState(false) // the one screen for a script doctor's report
   const [aiScriptZoom, setAiScriptZoom] = useState(() => { try { const v = Number(localStorage.getItem('filmybase.scriptZoom')); return v >= 0.5 && v <= 2.5 ? v : 1 } catch { return 1 } })
@@ -10500,6 +10502,19 @@ function App() {
   }
 
   // The beats on the screen follow the "Write the whole screenplay" job: fetch the project again and show whatever has been written so far
+  // Drag a scene in the list to a new place in its beat: done as the same safe "move up / move down" steps the buttons use, one after the other (each can be undone)
+  const aiMovieDragFrom = useRef(null)
+  async function moveAiMovieSceneTo(beatIndex, from, to) {
+    if (from === to || !Number.isInteger(from) || !Number.isInteger(to)) return
+    const direction = to > from ? 'down' : 'up'
+    for (let step = 0; step < Math.abs(to - from); step++) {
+      const response = await fetch(`${BACKEND_URL}/api/ai-movie/stages/screenplay/beats/${beatIndex}/scenes/${from + (direction === 'down' ? step : -step)}/move`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ projectId: aiMovieProjectId, direction }) })
+      if (!response.ok) break
+    }
+    await refreshAiMovieScreenplayNow(aiMovieProjectId)
+    setAiMovieSelectedSceneIndex(to)
+  }
+
   async function refreshAiMovieScreenplayNow(projectId) {
     try {
       const response = await fetch(`${BACKEND_URL}/api/ai-movie/projects/${projectId}`)
@@ -14793,8 +14808,13 @@ function App() {
                             {aiMovieProjectId && screenplayBeats.length > 0 && (
                               <p className="script-doctor-open">
                                 <button type="button" className="choose-button" onClick={() => setShowScriptDoctor(true)}>📄 Script Doctor report — upload it and make its changes</button>{' '}
-                                <button type="button" className="choose-button" onClick={() => setShowDialogueDoctor(true)}>🩺 Dialogue Doctor — check the dialogue</button>
+                                <button type="button" className="choose-button" onClick={() => setShowDialogueDoctor(true)}>🩺 Dialogue Doctor — check the dialogue</button>{' '}
+                                <button type="button" className="choose-button" onClick={() => setShowScreenplayDoctor(true)}>🎬 Screenplay Doctor — review the whole film</button>
                               </p>
+                            )}
+                            {showScreenplayDoctor && (
+                              <ScreenplayDoctorPanel backendUrl={BACKEND_URL} projectId={aiMovieProjectId} language={aiMovieLanguage} onClose={() => setShowScreenplayDoctor(false)}
+                                onOpenScriptDoctor={() => { setShowScreenplayDoctor(false); setShowScriptDoctor(true) }} />
                             )}
                             {showDialogueDoctor && (
                               <DialogueDoctorPanel backendUrl={BACKEND_URL} projectId={aiMovieProjectId} language={aiMovieLanguage} onClose={() => setShowDialogueDoctor(false)}
@@ -15051,7 +15071,14 @@ function App() {
                                                   type="button"
                                                   className={`script-nav-item${navIndex === sceneIndex ? ' is-active' : ''}`}
                                                   onClick={() => selectAiMovieScene(navIndex, true)}
+                                                  draggable={!isAiWriting}
+                                                  onDragStart={(e) => { aiMovieDragFrom.current = navIndex; e.dataTransfer.effectAllowed = 'move'; try { e.dataTransfer.setData('text/plain', String(navIndex)) } catch { /* some browsers need data to start a drag */ } }}
+                                                  onDragOver={(e) => { if (aiMovieDragFrom.current !== null) e.preventDefault() }}
+                                                  onDrop={(e) => { e.preventDefault(); const from = aiMovieDragFrom.current; aiMovieDragFrom.current = null; if (from !== null) moveAiMovieSceneTo(viewIndex, from, navIndex) }}
+                                                  onDragEnd={() => { aiMovieDragFrom.current = null }}
+                                                  title={navScene.tag?.tag ? `${navScene.tag.tag}${navScene.tag.note ? ` — ${navScene.tag.note}` : ''}` : undefined}
                                                 >
+                                                  {navScene.tag?.tag && <span className={`script-nav-tag is-${navScene.tag.tag}`} aria-hidden="true" />}
                                                   <span className="script-nav-number">{sceneNumberOffset + navIndex + 1}</span>
                                                   <span className="script-nav-heading">{navScene.sceneHeading?.en ?? ''}</span>
                                                   <span className="script-nav-duration">{t.aiMovieShortDuration(effectiveAiMovieSceneMinutes(navScene))}</span>

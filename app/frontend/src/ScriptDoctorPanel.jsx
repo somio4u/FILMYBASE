@@ -8,7 +8,7 @@ import './ScriptDoctorPanel.css'
 const EN = {
   title: '📄 Script Doctor report', close: 'Close', draftLine: (t) => `Changes are made in this draft: ${t}`,
   step1: '1. Choose the report file (PDF or Word)', choose: 'Choose the report file', reading: 'Reading the report…', readingLine: (a, b, t) => `Reading part ${a} of ${b} · ${t}`,
-  readFail: 'The report could not be read completely:', none: 'No changes were found in this report.',
+  readFail: 'The report could not be read completely:', reread: 'Read the missing parts again', rereading: 'Starting…', none: 'No changes were found in this report.',
   step2: (n) => `2. ${n} change${n === 1 ? '' : 's'} found — tick the ones to make`, all: 'Tick all', clear: 'Clear',
   kinds: { structure: 'Story and structure', scene: 'Scene fixes', global: 'Whole-script changes', risk: 'Risks', keep: 'Protected — will not be changed' },
   sceneWord: (s) => `scene${s.length === 1 ? '' : 's'} ${s.join(', ')}`, wholeScript: 'every scene', needsYouTag: 'needs your decision',
@@ -36,7 +36,7 @@ const HI = {
   ...EN,
   title: '📄 Script Doctor की report', close: 'बंद करो', draftLine: (t) => `बदलाव इस draft में होंगे: ${t}`,
   step1: '1. Report की file चुनो (PDF या Word)', choose: 'Report की file चुनो', reading: 'Report पढ़ रहा हूँ…', readingLine: (a, b, t) => `${b} में से हिस्सा ${a} पढ़ रहा हूँ · ${t}`,
-  readFail: 'Report पूरी नहीं पढ़ी जा सकी:', none: 'इस report में कोई बदलाव नहीं मिला।',
+  readFail: 'Report पूरी नहीं पढ़ी जा सकी:', reread: 'छूटे हुए हिस्से फिर से पढ़ो', rereading: 'शुरू हो रहा है…', none: 'इस report में कोई बदलाव नहीं मिला।',
   step2: (n) => `2. ${n} बदलाव मिले — जो करने हैं उन पर टिक करो`, all: 'सब टिक करो', clear: 'हटाओ',
   kinds: { structure: 'कहानी और ढाँचा', scene: 'Scene के सुधार', global: 'पूरी script पर बदलाव', risk: 'जोखिम', keep: 'सुरक्षित — बदला नहीं जाएगा' },
   sceneWord: (s) => `scene ${s.join(', ')}`, wholeScript: 'हर scene', needsYouTag: 'आपका फ़ैसला चाहिए',
@@ -153,6 +153,13 @@ export default function ScriptDoctorPanel({ backendUrl, projectId, draft, langua
     setStoryNote(L.storyStarted(r.data.directions, r.data.from, r.data.merged))
     if (r.data.request?.id) onOpenRevision?.(r.data.request.id)
   }
+  async function reread() {
+    setBusy('reread'); setError('')
+    const r = await call(`${api}/report/${readId}/reread`, 'POST', {})
+    setBusy('')
+    if (!r.ok) { setError(r.offline ? L.offline : (r.data.error || L.wrong)); return }
+    await load()
+  }
   async function stop() { await call(`${api}/report/${readId}/apply/stop`, 'POST', {}); await load() }
   async function undoAll() {
     setAskUndo(false); setBusy('undo'); setError('')
@@ -198,7 +205,12 @@ export default function ScriptDoctorPanel({ backendUrl, projectId, draft, langua
           <p className="sd-live">⏳ {L.readingLine(read.partsDone + 1 > read.parts ? read.parts : read.partsDone + 1, read.parts, clock(Date.now() - (read.job?.startedAt ?? new Date(read.createdAt).getTime())))}</p>
         </section>
       )}
-      {read && !reading && read.partsDone < read.parts && <p className="sd-error" role="alert">{L.readFail} {read.job?.failed?.[0]?.error || read.job?.error || ''}</p>}
+      {read && !reading && read.partsDone < read.parts && (
+        <div className="sd-error" role="alert">
+          <p>{L.readFail} {read.job?.failed?.[0]?.error || read.job?.error || ''}</p>
+          <button type="button" className="sd-btn primary" disabled={busy === 'reread'} onClick={reread}>{busy === 'reread' ? L.rereading : L.reread}</button>
+        </div>
+      )}
 
       {/* 2 — the list */}
       {read && items.length > 0 && !hasPlan && (

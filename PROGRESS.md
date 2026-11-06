@@ -2666,3 +2666,9 @@ Plain version: every project is now a set of **drafts**. Opening a project shows
 - **Screen:** the ⚡ button is now on the list screen, next to ▶, with a note "choose ONE way — not both" (EN + HI) and a confirm text that says the whole-script rules are included. Count = `summary.forNewStory`.
 - **Not verified:** real AI quality of the new story (sandbox AI is off).
 - **Next:** owner picks one way per report; ▶ for small fixes, ⚡ when the story must change.
+
+## 2026-11-06 — Fix: the new-story brief no longer cuts off the last scenes of a long film
+- **Found by reading the code (owner asked what the new story "remembers"):** the brief given to the AI (the old draft's story, characters, structure, beats and a gist of every scene) was cut at 16,000 characters, and the scene list came last — so on a 126–206 scene film the LAST scenes dropped out. (The old cut also flattened line breaks.)
+- **Fix (`buildBrief`, draftAgent.js):** every part gets a fair share of the room; the scene list gets 45% (60% for a film over 80 scenes) and every scene keeps at least a short heading + gist (about 30 characters each at 206 scenes, a full 160 for a short film). Dialogue is still not included — only the gist.
+- **Tests:** new `tests/draftBrief.test.js` (40 / 126 / 206 scenes: every scene is in the brief and it stays under the limit; a short film keeps the full gist).
+- **Next:** let the director choose old scenes/dialogue to carry over unchanged into the new story.

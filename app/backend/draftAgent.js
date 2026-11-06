@@ -543,26 +543,44 @@ ${lines}`;
 }
 
 // ---- Building the brief: the agent's understanding of the WHOLE current draft plus what must change ----
+export const BRIEF_LIMIT = 16000;
+// Every piece of the current draft is given a fair share of the room, so a long film is never cut off at its end: each scene keeps at least a short gist
+// (the old way clipped the whole text at the limit, which silently dropped the last scenes of a long film).
+function fitLines(units, makeText, maxEach, budget, minEach = 40) {
+  if (units.length === 0) return "";
+  const labels = units.reduce((n, u) => n + String(u.label ?? "").length, 0) / units.length; // the heading takes room too
+  const each = Math.max(minEach, Math.min(maxEach, Math.floor(budget / units.length - labels - 6)));
+  return units.map((u) => makeText(u, each)).join("\n");
+}
 export function buildBrief(request, parentUnits, impact) {
   const label = (k) => parentUnits.find((u) => u.key === k)?.label ?? k;
-  const part = (sections, max) => parentUnits.filter((u) => sections.includes(u.section)).map((u) => `${u.label}: ${clip(u.text, max)}`).join("\n");
-  const scenes = parentUnits.filter((u) => u.section === "screenplay").map((u) => `- ${u.label}: ${clip(u.text.split("\n").slice(1).join(" "), 160)}`).join("\n");
+  const of = (sections) => parentUnits.filter((u) => sections.includes(u.section));
   const list = (arr) => arr.map((x) => `- ${label(x.key)}${x.why ? `: ${x.why}` : ""}`).join("\n") || "(none)";
   const keep = (impact?.unchanged ?? []).map(label).slice(0, 60).join("; ");
-  return clip(`REVISION OF AN EXISTING DRAFT. Read the whole current draft below, then rework the story as requested. This is a NEW draft: write it fully, to the same standard as any new script, but start from this draft's story, people and world instead of from nothing.
+  const head = `REVISION OF AN EXISTING DRAFT. Read the whole current draft below, then rework the story as requested. This is a NEW draft: write it fully, to the same standard as any new script, but start from this draft's story, people and world instead of from nothing.
 
-REQUESTED CHANGES (verbatim): """${request.instruction}"""
-${request.constraints?.mustKeep?.length ? `MUST KEEP: ${request.constraints.mustKeep.join("; ")}\n` : ""}${request.constraints?.mustChange?.length ? `MUST CHANGE: ${request.constraints.mustChange.join("; ")}\n` : ""}${keep ? `PARTS THE REVISION SHOULD LEAVE ALONE: ${keep}\n` : ""}PARTS THAT MUST BE REWORKED:\n${list([...(impact?.modified ?? []), ...(impact?.indirect ?? [])])}
-NEW MATERIAL NEEDED: ${(impact?.added ?? []).map((a) => a.label).join("; ") || "(none)"}
-REMOVED: ${(impact?.removed ?? []).map((x) => label(x.key)).join("; ") || "(none)"}
+REQUESTED CHANGES (verbatim): """${String(request.instruction ?? "").slice(0, 6000)}"""
+${request.constraints?.mustKeep?.length ? `MUST KEEP: ${request.constraints.mustKeep.join("; ")}\n` : ""}${request.constraints?.mustChange?.length ? `MUST CHANGE: ${request.constraints.mustChange.join("; ")}\n` : ""}${keep ? `PARTS THE REVISION SHOULD LEAVE ALONE: ${keep}\n` : ""}PARTS THAT MUST BE REWORKED:\n${clip(list([...(impact?.modified ?? []), ...(impact?.indirect ?? [])]), 2500)}
+NEW MATERIAL NEEDED: ${clip((impact?.added ?? []).map((a) => a.label).join("; ") || "(none)", 600)}
+REMOVED: ${clip((impact?.removed ?? []).map((x) => label(x.key)).join("; ") || "(none)", 600)}
 
 THE COMPLETE CURRENT DRAFT
-${part(["idea", "story", "synopsis"], 2500)}
-${part(["characters"], 600)}
-${part(["structure"], 700)}
-${part(["beats", "sceneList"], 600)}
-SCENES (heading and gist):
-${scenes}`, 16000);
+`;
+  const room = Math.max(4000, BRIEF_LIMIT - head.length - 200);
+  const scenes = of(["screenplay"]), beats = of(["beats", "sceneList"]), people = of(["characters"]), shape = of(["structure"]), story = of(["idea", "story", "synopsis"]);
+  // the scene list gets 45% of the room (60% for a long film); the rest is shared by the story, characters, structure and beats
+  const sceneBudget = Math.floor(room * (scenes.length > 80 ? 0.6 : 0.45)), restBudget = room - sceneBudget;
+  const share = (n) => Math.floor(restBudget * n);
+  const line = (u, n) => `${u.label}: ${clip(u.text, n)}`;
+  const body = [
+    fitLines(story, line, 2500, share(0.3), 200),
+    fitLines(people, line, 600, share(0.25), 120),
+    fitLines(shape, line, 700, share(0.15), 120),
+    fitLines(beats, line, 600, share(0.3), 80),
+    "SCENES (heading and gist):",
+    fitLines(scenes, (u, n) => `- ${u.label}: ${clip(u.text.split("\n").slice(1).join(" "), n)}`, 160, sceneBudget, 30),
+  ].filter(Boolean).join("\n");
+  return (head + body).slice(0, BRIEF_LIMIT + 400);
 }
 
 const CRITIC_PASS = 8;

@@ -14917,6 +14917,11 @@ function App() {
                                 {t.aiMovieScreenplayPdfButton(aiMovieLanguage)}
                               </a>
                             )}
+                            {screenplayBeats.some((b) => Array.isArray(b.scenes) && b.scenes.length > 0) && (
+                              <a className="breakdown-pdf-link" href={`${BACKEND_URL}/api/ai-movie/projects/${aiMovieProjectId}/screenplay.docx?lang=${aiMovieLanguage}`}>
+                                {aiMovieLanguage === 'hi' ? '📝 Screenplay Word (.docx) डाउनलोड करो (हिंदी dialogue)' : '📝 Download screenplay Word (.docx)'}
+                              </a>
+                            )}
 
                             {/* One beat's card at a time, navigated with Prev/Next rather than
                                 a stacked list -- approving one auto-advances to the next, but

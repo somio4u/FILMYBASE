@@ -83,6 +83,7 @@ import { ensureAiMovieStorySchema, getProjectModes, judgedStage, registerAiMovie
 import { assertWithinBudget, recordSpend } from "./pipelineSettings.js";
 import { ensureCinematicSchema, registerSpectacleRoutes, createShotCutterHook } from "./spectacleDirector.js";
 import { MODEL_TIERS, estimateCost, isKeyBeat, modelFor } from "./modelRouting.js";
+import { screenplayDocxBuffer } from "./aiMovieDocx.js";
 import { createScreenplayDoctor, ensureScreenplayDoctorSchema } from "./screenplayDoctorRun.js";
 import { MARKETS as DOCTOR_MARKETS } from "./screenplayDoctor.js";
 import { createDialogueDoctor, ensureDialogueDoctorSchema } from "./dialogueDoctorRun.js";
@@ -6497,6 +6498,24 @@ app.get("/api/ai-movie/assistant/:projectId/report/:readId", requireRole("admin"
     res.status(error.status ?? 500).json({ error: error.message });
   }
 });
+// "Read the missing parts again": the parts of a report that failed to be read (a pause in the AI, a limit) are read once more; the parts already read are kept
+app.post("/api/ai-movie/assistant/:projectId/report/:readId/reread", requireRole("admin"), async (req, res) => {
+  try {
+    const projectId = Number(req.params.projectId);
+    const read = await getRead(db, Number(req.params.readId), { projectRef: projectId });
+    if (!read) throw Object.assign(new Error("Report not found."), { status: 404 });
+    const running = await aduReportJobs.currentFor(projectId).catch(() => null);
+    if (running?.status === "running") throw Object.assign(new Error("The report is still being read. Wait for it to finish."), { status: 409 });
+    const done = new Set((await db.query("SELECT done_chunks FROM adu_report_reads WHERE id = $1", [read.id])).rows[0]?.done_chunks ?? []);
+    const missing = Array.from({ length: read.parts }, (_, i) => i + 1).filter((n) => !done.has(n));
+    if (missing.length === 0) throw Object.assign(new Error("Every part of this report has been read already."), { status: 409 });
+    const items = missing.map((partNo) => ({ episodeIndex: null, sceneIndex: partNo - 1, label: `Part ${partNo}`, readId: read.id, partNo, parts: read.parts, sceneListId: projectId }));
+    await aduReportJobs.start({ sceneListId: projectId, userId: req.user.id, items, language: "en" });
+    res.status(202).json({ readId: read.id, missing: missing.length });
+  } catch (error) {
+    res.status(error.status ?? 500).json({ error: error.message });
+  }
+});
 app.get("/api/ai-movie/assistant/:projectId/report", requireRole("admin"), async (req, res) => {
   try { res.json({ readId: await latestReadId(db, Number(req.params.projectId)) }); } catch (error) { res.status(error.status ?? 500).json({ error: error.message }); }
 });
@@ -7843,6 +7862,24 @@ app.get("/api/ai-movie/projects/:id/screenplay.pdf", requireRole("admin"), async
     return;
   }
   renderAiMovieScreenplayPdf(res, { title: row.backfill?.story?.title?.en || row.title, scenes, lang });
+});
+
+app.get("/api/ai-movie/projects/:id/screenplay.docx", requireRole("admin"), async (req, res) => {
+  try {
+    const lang = req.query.lang === "hi" ? "hi" : "en";
+    const row = (await db.query("SELECT title, backfill FROM ai_movie_projects WHERE id = $1", [req.params.id])).rows[0];
+    if (!row) return res.status(404).json({ error: "Project not found." });
+    const scenes = (row.backfill?.screenplayBeats ?? []).flatMap((beat) => (Array.isArray(beat.scenes) ? beat.scenes.map((scene) => normalizeAiMovieSceneFormat(scene)) : []));
+    if (scenes.length === 0) return res.status(400).json({ error: "No screenplay scenes written yet." });
+    const title = row.backfill?.story?.title?.en || row.title || "Screenplay";
+    const buffer = await screenplayDocxBuffer(scenes, { title, lang });
+    res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.wordprocessingml.document");
+    res.setHeader("Content-Disposition", `attachment; filename="${String(title).replace(/[^a-z0-9]+/gi, "-")}-screenplay-${lang}-${formatExportTimestamp()}.docx"`);
+    res.send(buffer);
+  } catch (error) {
+    console.error("AI Movie Word export failed:", error.message);
+    if (!res.headersSent) res.status(500).json({ error: "The Word file could not be made. Please try again." });
+  }
 });
 
 // Deleting a project also removes its reference files — the

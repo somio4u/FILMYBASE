@@ -74,6 +74,9 @@ export async function writeWholeBeat({ item, say = async () => {}, deps }) {
     const failures = [];
     for (let j = 0; j < beat.scenes.length; j++) {
       if (sceneHasDialogue(beat.scenes[j])) continue; // already has its dialogue
+      // another writer may have saved an older copy of the beat list over this beat's approval since (the dialogue step refuses an unapproved beat): look again, approve again
+      const current = await deps.getBeat(i);
+      if (current && current.status !== "approved") await deps.approveBeat(i);
       await say(`Beat ${n} of ${total}: dialogue for scene ${j + 1} of ${beat.scenes.length}`);
       try {
         await deps.writeDialogue(i, j);

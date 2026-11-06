@@ -152,3 +152,14 @@ test("Approve all: every written beat becomes the person's own approval (the aut
   assert.equal(planApproveAll([]).empty, true);
   assert.equal(planApproveAll(undefined).empty, true);
 });
+
+test("an approval undone by another writer in the middle is put back before the next scene's dialogue, so the beat does not fail with 'Approve this beat first'", async () => {
+  const p = fakeProject([{ status: "pending", scenes: [scene(false), scene(false), scene(false)] }]);
+  const realDialogue = p.deps.writeDialogue;
+  let undone = false;
+  p.deps.writeDialogue = async (i, j) => { await realDialogue(i, j); if (!undone) { undone = true; p.beats[i] = { ...p.beats[i], status: "pending" }; } }; // an old copy of the list is saved over the approval
+  await writeWholeBeat({ item: item(0), deps: p.deps });
+  assert.deepEqual(p.log, ["approve 0", "dialogue 0.0", "approve 0", "dialogue 0.1", "dialogue 0.2"]);
+  assert.equal(p.beats[0].status, "approved");
+  assert.ok(p.beats[0].scenes.every(sceneHasDialogue));
+});

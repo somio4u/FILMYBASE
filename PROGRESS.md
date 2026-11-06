@@ -2601,3 +2601,7 @@ Plain version: every project is now a set of **drafts**. Opening a project shows
 - Screens: the settings label and the "Write the whole screenplay" question now say so (English / Hindi / Odia).
 - Tests: the 8 tests that expected writing to stop at the limit were rewritten to the new rule; one new test checks that text spend is recorded but never counts, while a picture over the limit is still refused.
 - Note: the "$5 limit" a project already has is unchanged for pictures, video and audio. The old "ran out at $0.02" stop on writing is gone.
+
+## 2026-11-06 — "Write the whole screenplay": pressing it again never starts over; an undone approval is put back
+- Pressing "Write the whole screenplay" again only writes what is not finished: a beat that is written, approved and has dialogue in every scene is skipped (that was already so — now the card says it in the failure and "stopped" notes too, in English / Hindi / Odia).
+- Fixed the "Beat 2: Approve this beat first before writing dialogue for its scenes" failure: when two writers ran at once, the older one could save an old copy of the beat list over an approval. The job now looks again before every scene's dialogue and approves the beat again if needed (new test).

@@ -1,3 +1,4 @@
+import AduReportCard from './AduReportCard.jsx'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import './Drafts.css'
 
@@ -142,7 +143,7 @@ function FilmMini({ backendUrl, sceneListId, L, onFinished }) {
 
 export default function AduAction({ message, action, current, update, lang = 'en', ctx }) {
   const L = W[lang] ?? W.en
-  const { backendUrl, projectId, draft, getContext, onApplied, onOpenDraft, onOpenRevision, module = 'ai_movie' } = ctx
+  const { backendUrl, projectId, draft, getContext, onApplied, onOpenDraft, onOpenRevision, onSendToChat, module = 'ai_movie' } = ctx
   const assistantApi = `${backendUrl}/api/${module === 'film' ? 'film' : 'ai-movie'}/assistant/${projectId}`
   const [busy, setBusy] = useState('')
   const [error, setError] = useState('')
@@ -169,6 +170,9 @@ export default function AduAction({ message, action, current, update, lang = 'en
     if (!r.ok) { setError(r.data.error ?? L.failed); return null }
     return r.data
   }
+
+  // ---- a script doctor's report read through the 📎 button: always shown (it is a list to work through, not a one-time question)
+  if (action.type === 'report_read') return <AduReportCard backendUrl={backendUrl} projectId={projectId} action={action} lang={lang} onSendToChat={onSendToChat} />
 
   // ---- already pressed: just say so (and keep showing the job's progress)
   if (message.resolved || action.outcome) {

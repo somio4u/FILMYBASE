@@ -33,7 +33,7 @@ import { AsyncLocalStorage } from "async_hooks";
 import { marked } from "marked";
 import { registerProductionRoutes, syncProductionQuietly } from "./production.js";
 import { ensureAllProductionSchemas } from "./productionSchema.js";
-import { ensureAduChatSchema, registerAduChatRoutes } from "./aduChat.js";
+import { ensureAduChatSchema, registerAduChatRoutes, addReportMessages } from "./aduChat.js";
 import { registerScreenplayRoutes } from "./screenplayAnalysis.js";
 import { registerPipelineRoutes } from "./pipelineRoutes.js";
 import { createProviders } from "./providers.js";
@@ -46,6 +46,7 @@ import { ADD_KIND, PREPARE_PACKETS_KIND, createWriteScenesJobs, publicView as pu
 import { WRITE_ALL_KIND, beatIsComplete, planApproveAll, planWriteAll, writeWholeBeat } from "./aiMovieWriteAll.js";
 import { newBlankScene, insertScene, removeSceneAt, moveSceneBy, keepRemoved, restoreRemoved } from "./aiMovieSceneOps.js";
 import { renameCharacter as renameAiMovieCharacter, renameUndoInfo, undoRename, ensureRenameUndoSchema } from "./aiMovieRename.js";
+import { REPORT_SCHEMA, REPORT_SYSTEM, reportPrompt, normalizeItems, ensureReportSchema, createRead, saveParts, getRead, saveSelection } from "./scriptDoctorReport.js";
 import { countOdiaWords, textsOfScene, textsOfSceneList } from "./odiaCorpus.js";
 import { languageOf, parseEpisodesFromText, sceneContent } from "./screenplayImport.js";
 import { planFill } from "./pdfFill.js";
@@ -6419,6 +6420,67 @@ function cleanAiMovieEditedBlocks(blocks) {
     .filter(Boolean)
     .slice(0, 200);
 }
+
+// ---- A script doctor's report read through Adu's 📎 button (scriptDoctorReport.js): upload -> a background job reads it part by part -> a checklist of changes.
+// Nothing here changes the screenplay; each ticked change is later handed to Adu, which shows before / after and waits for Apply.
+const ADU_REPORT_KIND = "adu-report-read";
+const aduReportJobs = createWriteScenesJobs({
+  jobStore,
+  kind: ADU_REPORT_KIND,
+  isWritten: async (item) => {
+    const row = (await db.query("SELECT done_chunks FROM adu_report_reads WHERE id = $1", [item.readId])).rows[0];
+    return !row || (row.done_chunks ?? []).includes(item.partNo); // gone, or this part was already read (a restart carries on from the next part)
+  },
+  describe: (item) => `Reading part ${item.partNo} of ${item.parts} of the report`,
+  writeOne: async (item) => {
+    const row = (await db.query("SELECT chunks FROM adu_report_reads WHERE id = $1", [item.readId])).rows[0];
+    if (!row) return;
+    const ask = brainAsker(newUsage(), () => {}, PDF_READER_MODELS);
+    const data = await ask(`Reading part ${item.partNo} of ${item.parts}`, reportPrompt(row.chunks[item.partNo - 1], item.partNo, item.parts), REPORT_SCHEMA, REPORT_SYSTEM);
+    await saveParts(db, item.readId, item.partNo, normalizeItems(data?.items));
+  },
+});
+const aduReportUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 25 * 1024 * 1024 } });
+
+app.post("/api/ai-movie/assistant/:projectId/report", requireRole("admin"), aduReportUpload.single("file"), async (req, res) => {
+  try {
+    const projectId = Number(req.params.projectId);
+    if (!Number.isInteger(projectId) || projectId <= 0) throw Object.assign(new Error("Not a valid project."), { status: 400 });
+    if (!req.file) throw Object.assign(new Error("Choose a PDF or Word file first."), { status: 400 });
+    if (!(await aiMovieProject(projectId))) throw Object.assign(new Error("Project not found."), { status: 404 });
+    const running = await aduReportJobs.currentFor(projectId).catch(() => null);
+    if (running?.status === "running") throw Object.assign(new Error("A report is still being read. Wait for it to finish."), { status: 409 });
+    let text;
+    try { text = await extractTextFromUploadedScreenplay(req.file); } catch (error) { throw Object.assign(new Error(`I could not read that file: ${error.message}`), { status: 422 }); }
+    const read = await createRead(db, { projectRef: projectId, userId: req.user.id, filename: req.file.originalname, text });
+    const items = Array.from({ length: read.parts }, (_, i) => ({ episodeIndex: null, sceneIndex: i, label: `Part ${i + 1}`, readId: read.id, partNo: i + 1, parts: read.parts, sceneListId: projectId }));
+    await aduReportJobs.start({ sceneListId: projectId, userId: req.user.id, items, language: "en" });
+    const messages = await addReportMessages(db, { projectId, userId: req.user.id, filename: req.file.originalname, readId: read.id, parts: read.parts, language: ["en", "hi", "or"].includes(req.body?.language) ? req.body.language : "en" });
+    res.json({ readId: read.id, parts: read.parts, ...messages });
+  } catch (error) {
+    res.status(error.status ?? 500).json({ error: error.message });
+  }
+});
+app.get("/api/ai-movie/assistant/:projectId/report/:readId", requireRole("admin"), async (req, res) => {
+  try {
+    const projectId = Number(req.params.projectId);
+    const read = await getRead(db, Number(req.params.readId), { projectRef: projectId });
+    if (!read) throw Object.assign(new Error("Report not found."), { status: 404 });
+    const job = await aduReportJobs.currentFor(projectId).catch(() => null);
+    res.json({ ...read, job: job ? publicWriteJob(job) : null });
+  } catch (error) {
+    res.status(error.status ?? 500).json({ error: error.message });
+  }
+});
+app.put("/api/ai-movie/assistant/:projectId/report/:readId/selection", requireRole("admin"), async (req, res) => {
+  try {
+    const projectId = Number(req.params.projectId);
+    if (!(await getRead(db, Number(req.params.readId), { projectRef: projectId }))) throw Object.assign(new Error("Report not found."), { status: 404 });
+    res.json({ selected: await saveSelection(db, Number(req.params.readId), req.body?.selected, { sent: Array.isArray(req.body?.sent) ? req.body.sent : null }) });
+  } catch (error) {
+    res.status(error.status ?? 500).json({ error: error.message });
+  }
+});
 
 // ---- "Rename a character in the whole script" for AI Movie (aiMovieRename.js). Nothing here calls the AI.
 async function refuseWhileWriting(projectId) {
@@ -21659,10 +21721,11 @@ ensureAiMovieSchema()
   .then(async () => { try { await aiCredentials.load(); aiCredentials.startRefresh(); const c = aiCredentials.current(); console.log(`AI connection: ${c.source}${c.serviceAccount ? ` — project ${c.serviceAccount.project_id}, ${c.location}` : ""}${c.problem ? ` — PROBLEM: ${c.problem}` : ""}`); } catch (error) { console.error("Reading the saved AI key failed:", error.message); } })
   .then(async () => { try { const fixed = await repairStoredLabels(db); if (fixed) console.log(`Screenplay: ${fixed} scene(s) had "ACTION:" written at the start of lines — corrected.`); } catch (error) { console.error("Label repair failed:", error.message); } })
   .then(async () => { try { const fixed = await repairStoredTransitions(db); if (fixed) console.log(`Screenplay: ${fixed} scene(s) had a transition (FREEZE. BREAK- …) written as a character — corrected.`); } catch (error) { console.error("Transition repair failed:", error.message); } })
-  .then(async () => { try { await productionSync.resume(); await resumeAdSheetJobs(); await skipStartJobs.resume(); await writeScenesJobs.resume(); await addScenesJobs.resume(); await preparePacketJobs.resume(); await aiMovieWriteAllJobs.resume(); } catch (error) { console.error("Resuming interrupted background jobs failed:", error.message); } })
+  .then(async () => { try { await productionSync.resume(); await resumeAdSheetJobs(); await skipStartJobs.resume(); await writeScenesJobs.resume(); await addScenesJobs.resume(); await preparePacketJobs.resume(); await aiMovieWriteAllJobs.resume(); await aduReportJobs.resume(); } catch (error) { console.error("Resuming interrupted background jobs failed:", error.message); } })
   .then(() => ensureAllProductionSchemas(db))
   .then(() => ensureAduChatSchema(db))
   .then(() => ensureRenameUndoSchema(db))
+  .then(() => ensureReportSchema(db))
   .then(async (failures) => { try { const made = await backfillDrafts(db); await failInterruptedRequests(db); if (made) console.log(`Draft Management: ${made} existing project(s) are now Draft 1 of their project.`); } catch (error) { console.error("Draft backfill failed:", error.message); } return failures; })
   .catch((error) => console.error("Schema setup failed:", error.message))
   .finally(() => {

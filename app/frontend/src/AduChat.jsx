@@ -7,6 +7,7 @@ import './AduChat.css'
 // The server side is aduChat.js (/api/ai-movie/assistant/:projectId/...).
 const TEXT = {
   en: {
+    attachTitle: 'Give me a script doctor’s report (PDF or Word) to read',
     hint: 'Ask me anything — about your story, the beat you are on, or how to do something here. Tell me what to change and I will show it first.',
     placeholder: 'Type here, or press the mic and speak…',
     send: 'Send', thinking: 'Adu is thinking', newChat: 'New chat', confirmNew: 'Start a new conversation? Adu will forget this one.',
@@ -17,6 +18,7 @@ const TEXT = {
     proposes: 'Adu proposes', big: 'A bigger change', touches: 'It would touch', allDrafts: 'All drafts',
   },
   hi: {
+    attachTitle: 'मुझे script doctor की report (PDF या Word) पढ़ने को दो',
     hint: 'मुझसे कुछ भी पूछो — अपनी कहानी, जिस beat पर हो उसके बारे में, या यहाँ कुछ कैसे करना है। क्या बदलना है बताओ, मैं पहले दिखाऊँगा।',
     placeholder: 'यहाँ लिखो, या mic दबाकर बोलो…',
     send: 'भेजो', thinking: 'Adu सोच रहा है', newChat: 'नई बातचीत', confirmNew: 'नई बातचीत शुरू करें? Adu इसे भूल जाएगा।',
@@ -27,6 +29,7 @@ const TEXT = {
     proposes: 'Adu का प्रस्ताव', big: 'एक बड़ा बदलाव', touches: 'इसमें छुआ जाएगा', allDrafts: 'सारे drafts',
   },
   or: {
+    attachTitle: 'ମୋତେ script doctor ଙ୍କ ରିପୋର୍ଟ (PDF କିମ୍ବା Word) ପଢ଼ିବାକୁ ଦିଅ',
     hint: 'ମତେ ଯାହା ପଚାର — ତୁମ ଗପ, ତୁମେ ଯେଉଁ ବିଟ୍‌ରେ ଅଛ ସେ ବିଷୟରେ, କିମ୍ବା ଏଠି କିଛି କେମିତି କରିବ। କଣ ବଦଳାଇବ କୁହ, ମୁଁ ପ୍ରଥମେ ଦେଖାଇବି।',
     placeholder: 'ଏଠି ଲେଖ, କିମ୍ବା ମାଇକ୍ ଦବାଇ କୁହ…',
     send: 'ପଠାଅ', thinking: 'Adu ଭାବୁଛି', newChat: 'ନୂଆ ଚାଟ୍', confirmNew: 'ନୂଆ କଥାବାର୍ତ୍ତା ଆରମ୍ଭ କରିବ? Adu ଏହାକୁ ଭୁଲିଯିବ।',
@@ -156,6 +159,24 @@ export default function AduChat({ backendUrl, projectId, module = 'ai_movie', la
     setMessages([]); setError('')
   }
 
+  // 📎: a script doctor's report (PDF or Word). It is read in the background; the chat gets a card that follows the reading and then lists the changes.
+  const fileRef = useRef(null)
+  const [uploading, setUploading] = useState(false)
+  async function uploadReport(file) {
+    if (!file) return
+    setUploading(true); setError('')
+    try {
+      const form = new FormData()
+      form.append('file', file); form.append('language', lang)
+      const response = await fetch(`${backendUrl}/api/ai-movie/assistant/${projectId}/report`, { method: 'POST', body: form })
+      const data = await response.json().catch(() => ({}))
+      if (!response.ok) setError(data.error || L.failed)
+      else setMessages((m) => [...m, data.user, data.assistant].filter(Boolean))
+    } catch { setError(L.failed) }
+    setUploading(false)
+    if (fileRef.current) fileRef.current.value = ''
+  }
+
   const updateMessage = useCallback((id, patch) => setMessages((m) => m.map((x) => (x.id === id ? { ...x, ...patch } : x))), [])
   const lastActionId = [...messages].reverse().find((x) => x.action && x.action.type !== 'none' && !x.resolved)?.id
 
@@ -201,6 +222,12 @@ export default function AduChat({ backendUrl, projectId, module = 'ai_movie', la
             <input type="checkbox" checked={readAloud} onChange={(e) => { setReadAloud(e.target.checked); if (!e.target.checked) stopSpeaking(); try { localStorage.setItem('filmybase:aduReadAloud', e.target.checked ? '1' : '0') } catch { /* fine */ } }} />
             {L.readAloud}
           </label>
+          {module !== 'film' && (
+            <>
+              <input ref={fileRef} type="file" accept=".pdf,.doc,.docx,application/pdf" style={{ display: 'none' }} onChange={(e) => uploadReport(e.target.files?.[0])} />
+              <button type="button" className="buddy-attach" disabled={uploading || Boolean(sending)} onClick={() => fileRef.current?.click()} title={L.attachTitle} aria-label={L.attachTitle}>{uploading ? '⏳' : '📎'}</button>
+            </>
+          )}
           <button type="submit" className="buddy-send" disabled={Boolean(sending) || !text.trim()}>{L.send}</button>
         </div>
       </form>

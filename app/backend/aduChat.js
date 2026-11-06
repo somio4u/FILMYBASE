@@ -344,6 +344,17 @@ export async function handleAduMessage(db, models, { projectId, userId = null, t
   return { user: row(userRow), assistant: row(aduRow), sortedAs: kind, draftId: draft.id };
 }
 
+// a report was uploaded through the 📎 button: the person's file and Adu's "reading it" card appear in the chat (the reading itself is a background job)
+export async function addReportMessages(db, { module = "ai_movie", projectId, userId = null, filename, readId, parts, language = "en" }) {
+  const said = `📎 ${String(filename ?? "report").slice(0, 160)}`;
+  const reply = { en: `I am reading your report (${parts} part${parts === 1 ? "" : "s"}). Nothing in your screenplay changes while I read. When I finish, you will see the list of changes it asks for — tick the ones you want, and I will show each one before changing anything.`,
+    hi: `मैं आपकी report पढ़ रहा हूँ (${parts} हिस्से)। पढ़ते समय आपकी screenplay में कुछ नहीं बदलता। पूरा होने पर आपको उसमें माँगे गए बदलावों की सूची दिखेगी — जो चाहिए उन पर टिक करो, और मैं हर एक को बदलने से पहले दिखाऊँगा।`,
+    or: `ମୁଁ ଆପଣଙ୍କ ରିପୋର୍ଟ ପଢ଼ୁଛି (${parts} ଭାଗ)। ପଢ଼ିବା ସମୟରେ ଆପଣଙ୍କ ସ୍କ୍ରିନପ୍ଲେରେ କିଛି ବଦଳେ ନାହିଁ। ସରିଲେ ଆପଣ ଏଥିରେ ମାଗାଯାଇଥିବା ବଦଳର ତାଲିକା ଦେଖିବେ — ଯାହା ଚାହାଁନ୍ତି ସେଗୁଡ଼ିକରେ ଟିକ୍ କରନ୍ତୁ, ମୁଁ ପ୍ରତ୍ୟେକକୁ ବଦଳାଇବା ପୂର୍ବରୁ ଦେଖାଇବି।` }[language] ?? "";
+  const userRow = (await db.query("INSERT INTO adu_chat_messages (module, project_ref, user_id, role, content) VALUES ($4, $1, $2, 'user', $3) RETURNING *", [projectId, userId, said, module])).rows[0];
+  const aduRow = (await db.query("INSERT INTO adu_chat_messages (module, project_ref, user_id, role, content, action) VALUES ($5, $1, $2, 'assistant', $3, $4) RETURNING *", [projectId, userId, reply || reply, JSON.stringify({ type: "report_read", readId, filename, parts }), module])).rows[0];
+  return { user: row(userRow), assistant: row(aduRow) };
+}
+
 // the person pressed a card's button (or "no thanks"): the card is remembered as done, so it does not come back after a reload
 export async function resolveMessage(db, projectId, userId, { messageId, outcome, module = "ai_movie" }) {
   const done = ["applied", "dismissed"].includes(outcome) ? outcome : "dismissed";

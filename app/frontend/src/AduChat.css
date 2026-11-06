@@ -8,3 +8,14 @@
 .adu-card .dd-sides { display: grid; grid-template-columns: 1fr; gap: 6px; }
 .adu-card .da-edits { padding-left: 0; list-style: none; }
 .adu-card pre { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 0.8rem; margin: 2px 0; }
+
+/* the 📎 button and the script doctor's report card */
+.buddy-attach { margin-left: auto; margin-right: 6px; padding: 6px 10px; border-radius: 999px; border: 1px solid var(--border-subtle); background: transparent; color: inherit; cursor: pointer; font-size: 1rem; }
+.buddy-attach:disabled { opacity: 0.5; cursor: default; }
+.adu-report-group { margin: 8px 0; }
+.adu-report-list { list-style: none; margin: 6px 0; padding: 0; }
+.adu-report-item { padding: 6px 0; border-top: 1px solid var(--border-subtle); font-size: 0.9rem; }
+.adu-report-item.is-critical strong { color: #ff8a8a; }
+.adu-report-item.is-major strong { color: #f0c06a; }
+.adu-report-sev { opacity: 0.8; }
+.adu-report-text { margin: 4px 0 0; padding: 6px 8px; border-radius: 8px; background: rgba(128,128,128,.12); white-space: pre-wrap; }

@@ -10,6 +10,7 @@ const TEXT = {
     create: 'Add the blank scene', cancel: 'Cancel', note: 'The new scene is blank: write it with “Edit this scene”, “Ask AI to change it” or “Write dialogue”.',
     askRemove: (n) => `Remove scene ${n}? You can bring it back with “Undo the last removal”.`, yesRemove: 'Yes, remove it', working: 'Working…', failed: 'Something went wrong. Please try again.',
     added: 'Added. It is blank — write it next.', moved: 'Moved.', removed: 'Removed. “Undo the last removal” brings it back.', restored: 'Put back.',
+    markTitle: 'Mark this scene', tags: { change: '🔴 change', check: '🟡 check', new: '🔵 new', done: '🟢 done' }, markNote: 'Note for yourself (optional)', markSave: 'Save the mark', markClear: 'Clear the mark', marked: 'Marked.', unmarked: 'Mark cleared.', markFine: 'A mark is only a reminder — it does not change the scene.',
   },
   hi: {
     undoChange: (l) => `↶ वापस लो: ${l}`, redoChange: (l) => `↷ फिर से लगाओ: ${l}`, undoneNote: 'जैसा था वैसा वापस रख दिया।', redoneNote: 'फिर से लगा दिया।',
@@ -18,6 +19,7 @@ const TEXT = {
     create: 'खाली scene जोड़ो', cancel: 'रद्द करो', note: 'नया scene खाली है: उसे “Edit this scene”, “Ask AI to change it” या “Write dialogue” से लिखो।',
     askRemove: (n) => `Scene ${n} हटाएँ? “आखिरी हटाया वापस लाओ” से इसे वापस ला सकते हो।`, yesRemove: 'हाँ, हटाओ', working: 'हो रहा है…', failed: 'कुछ गड़बड़ हुई। फिर कोशिश करो।',
     added: 'जुड़ गया। यह खाली है — अब इसे लिखो।', moved: 'खिसका दिया।', removed: 'हट गया। “आखिरी हटाया वापस लाओ” से वापस आएगा।', restored: 'वापस रख दिया।',
+    markTitle: 'इस scene पर निशान लगाओ', tags: { change: '🔴 बदलना है', check: '🟡 देखना है', new: '🔵 नया', done: '🟢 हो गया' }, markNote: 'अपने लिए नोट (चाहो तो)', markSave: 'निशान सहेजो', markClear: 'निशान हटाओ', marked: 'निशान लग गया।', unmarked: 'निशान हट गया।', markFine: 'निशान सिर्फ़ याद दिलाने के लिए है — scene को नहीं बदलता।',
   },
   or: {
     undoChange: (l) => `↶ ଫେରାଅ: ${l}`, redoChange: (l) => `↷ ପୁଣି ଲଗାଅ: ${l}`, undoneNote: 'ଯେମିତି ଥିଲା ସେମିତି ଫେରାଗଲା।', redoneNote: 'ପୁଣି ଲାଗିଗଲା।',
@@ -26,6 +28,7 @@ const TEXT = {
     create: 'ଖାଲି ସିନ୍ ଯୋଡ଼', cancel: 'ବାତିଲ୍', note: 'ନୂଆ ସିନ୍ ଖାଲି: ଏହାକୁ “Edit this scene”, “Ask AI to change it” କିମ୍ବା “Write dialogue” ଦ୍ୱାରା ଲେଖ।',
     askRemove: (n) => `ସିନ୍ ${n} ହଟାଇବା? “ଶେଷ ହଟାଇଥିବା ଫେରାଅ” ଦ୍ୱାରା ଫେରାଇପାରିବ।`, yesRemove: 'ହଁ, ହଟାଅ', working: 'ହେଉଛି…', failed: 'କିଛି ଭୁଲ ହେଲା। ପୁଣି ଚେଷ୍ଟା କର।',
     added: 'ଯୋଡ଼ାଗଲା। ଏହା ଖାଲି — ଏବେ ଲେଖ।', moved: 'ଘୁଞ୍ଚାଗଲା।', removed: 'ହଟିଗଲା। “ଶେଷ ହଟାଇଥିବା ଫେରାଅ” ଦ୍ୱାରା ଫେରିବ।', restored: 'ଫେରାଗଲା।',
+    markTitle: 'ଏହି ସିନ୍‌ରେ ଚିହ୍ନ ଦିଅ', tags: { change: '🔴 ବଦଳାଇବା', check: '🟡 ଦେଖିବା', new: '🔵 ନୂଆ', done: '🟢 ହୋଇଗଲା' }, markNote: 'ନିଜ ପାଇଁ ନୋଟ୍ (ଇଚ୍ଛାଧୀନ)', markSave: 'ଚିହ୍ନ ସେଭ୍ କର', markClear: 'ଚିହ୍ନ ହଟାଅ', marked: 'ଚିହ୍ନ ଦିଆଗଲା।', unmarked: 'ଚିହ୍ନ ହଟିଲା।', markFine: 'ଚିହ୍ନ କେବଳ ମନେପକାଇବା ପାଇଁ — ସିନ୍ ବଦଳାଏ ନାହିଁ।',
   },
 }
 
@@ -38,7 +41,7 @@ const call = async (url, method, body) => {
   }
 }
 
-export default function AiMovieSceneTools({ backendUrl, projectId, beatIndex, sceneIndex, sceneCount, sceneNumber, language = 'en', canUndo = false, disabled = false, onChanged }) {
+export default function AiMovieSceneTools({ backendUrl, projectId, beatIndex, sceneIndex, sceneCount, sceneNumber, tag = null, language = 'en', canUndo = false, disabled = false, onChanged }) {
   const L = TEXT[language === 'or' ? 'or' : language === 'hi' ? 'hi' : 'en']
   const [form, setForm] = useState(null) // { after: scene index to insert after (-1 = start), where }
   const [fields, setFields] = useState({ intExt: 'INT', location: '', timeOfDay: 'DAY', what: '' })
@@ -46,6 +49,9 @@ export default function AiMovieSceneTools({ backendUrl, projectId, beatIndex, sc
   const [busy, setBusy] = useState(false)
   const [note, setNote] = useState('')
   const [error, setError] = useState('')
+  const [markNote, setMarkNote] = useState('')
+  const [markPick, setMarkPick] = useState('')
+  useEffect(() => { setMarkNote(tag?.note ?? ''); setMarkPick(tag?.tag ?? '') }, [tag?.tag, tag?.note, beatIndex, sceneIndex])
   const base = `${backendUrl}/api/ai-movie/stages/screenplay`
   // Undo / Redo of the last change to any scene (an edit, an AI rewrite, a dialogue, add / move / remove): what the next Undo and the next Redo would be
   const [history, setHistory] = useState({ canUndo: false, canRedo: false })
@@ -67,6 +73,7 @@ export default function AiMovieSceneTools({ backendUrl, projectId, beatIndex, sc
   const open = (after, where) => { setForm({ after, where }); setAsking(false); setNote(''); setError('') }
   const create = () => run(() => call(`${base}/beats/${beatIndex}/scenes`, 'POST', { projectId, afterIndex: form.after, ...fields }), L.added).then(() => { setForm(null); setFields({ intExt: 'INT', location: '', timeOfDay: 'DAY', what: '' }) })
   const off = disabled || busy
+  const saveMark = (wanted) => run(() => call(`${base}/beats/${beatIndex}/scenes/${sceneIndex}/tag`, 'PUT', { projectId, tag: wanted, note: wanted ? markNote : '' }), wanted ? L.marked : L.unmarked, () => sceneIndex)
 
   return (
     <div className="ai-scene-tools" aria-label={L.title}>
@@ -108,6 +115,22 @@ export default function AiMovieSceneTools({ backendUrl, projectId, beatIndex, sc
           <p className="ai-movie-scene-duration">{L.note}</p>
           <button type="button" className="choose-button" disabled={busy || !fields.location.trim()} onClick={create}>{busy ? L.working : L.create}</button>{' '}
           <button type="button" className="cancel-button" disabled={busy} onClick={() => setForm(null)}>{L.cancel}</button>
+        </div>
+      )}
+      {!form && !asking && (
+        <div className="ai-scene-mark">
+          <p className="script-panel-title">{L.markTitle}{tag?.tag ? ` — ${L.tags[tag.tag]}` : ''}</p>
+          <div className="ai-scene-tools-grid">
+            {Object.entries(L.tags).map(([key, text]) => (
+              <button key={key} type="button" className={markPick === key ? 'choose-button' : 'cancel-button'} disabled={off} aria-pressed={markPick === key} onClick={() => setMarkPick(key)}>{text}</button>
+            ))}
+          </div>
+          <input type="text" className="ai-scene-mark-note" value={markNote} maxLength={300} placeholder={L.markNote} onChange={(e) => setMarkNote(e.target.value)} />
+          <p>
+            <button type="button" className="choose-button" disabled={off || !markPick} onClick={() => saveMark(markPick)}>{L.markSave}</button>{' '}
+            {tag?.tag && <button type="button" className="cancel-button" disabled={off} onClick={() => { setMarkPick(''); setMarkNote(''); saveMark(null) }}>{L.markClear}</button>}
+          </p>
+          <p className="ai-movie-scene-duration">{L.markFine}</p>
         </div>
       )}
       {note && <p className="ai-movie-scene-duration" role="status">{note}</p>}

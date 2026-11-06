@@ -83,6 +83,7 @@ import { ensureAiMovieStorySchema, getProjectModes, judgedStage, registerAiMovie
 import { assertWithinBudget, recordSpend } from "./pipelineSettings.js";
 import { ensureCinematicSchema, registerSpectacleRoutes, createShotCutterHook } from "./spectacleDirector.js";
 import { MODEL_TIERS, estimateCost, isKeyBeat, modelFor } from "./modelRouting.js";
+import { withSceneTag, tagOfScene } from "./aiMovieSceneNotes.js";
 import { withWritingStyle, dialogueStyleText } from "./writingStyleGuide.js";
 import { ensureAiMovieLanguageSchema, registerAiMovieLanguageRoutes } from "./aiMovieLanguage.js";
 import { onScreenplayApproved, registerBlueprintRoutes } from "./blueprint.js";
@@ -6733,6 +6734,30 @@ async function changeAiMovieBeatScenes(req, res, change, label = "A change to th
     res.status(error.status ?? 500).json({ error: error.message });
   }
 }
+
+// body: { projectId, tag: "change" | "check" | "new" | "done" | null (clears), note } — a colour mark and a short note on ONE scene (stored in the scene itself)
+app.put("/api/ai-movie/stages/screenplay/beats/:beatIndex/scenes/:sceneIndex/tag", requireRole("admin"), async (req, res) => {
+  try {
+    const projectId = Number(req.body?.projectId);
+    const beatIndex = Number(req.params.beatIndex), sceneIndex = Number(req.params.sceneIndex);
+    if (!Number.isInteger(projectId) || projectId <= 0) throw Object.assign(new Error("No project to save into."), { status: 400 });
+    const running = await aiMovieWriteAllJobs.currentFor(projectId).catch(() => null);
+    if (running?.status === "running") throw Object.assign(new Error("The whole screenplay is being written right now. Wait for it to finish (or stop it), then mark scenes."), { status: 409 });
+    const row = (await db.query("SELECT backfill FROM ai_movie_projects WHERE id = $1", [projectId])).rows[0];
+    if (!row) throw Object.assign(new Error("Project not found."), { status: 404 });
+    const backfill = row.backfill ?? {};
+    const beats = Array.isArray(backfill.screenplayBeats) ? backfill.screenplayBeats.slice() : [];
+    const scenes = beats[beatIndex]?.scenes;
+    if (!Array.isArray(scenes) || !scenes[sceneIndex]) throw Object.assign(new Error("Not a valid scene."), { status: 400 });
+    const nextScenes = scenes.slice();
+    nextScenes[sceneIndex] = withSceneTag(scenes[sceneIndex], req.body?.tag === null || req.body?.tag === undefined ? null : { tag: req.body.tag, note: req.body?.note }, { by: req.user?.name ?? null });
+    beats[beatIndex] = { ...beats[beatIndex], scenes: nextScenes };
+    await db.query("UPDATE ai_movie_projects SET backfill = $1 WHERE id = $2", [JSON.stringify({ ...backfill, screenplayBeats: beats }), projectId]);
+    res.json({ beatIndex, sceneIndex, tag: tagOfScene(nextScenes[sceneIndex]) });
+  } catch (error) {
+    res.status(error.status ?? 500).json({ error: error.message });
+  }
+});
 
 // body: { projectId, afterIndex (-1 = at the start), intExt, location, timeOfDay, what, heading? } — adds a BLANK scene (its first line is "what", if given)
 app.post("/api/ai-movie/stages/screenplay/beats/:beatIndex/scenes", requireRole("admin"), (req, res) => changeAiMovieBeatScenes(req, res, ({ scenes }) => {

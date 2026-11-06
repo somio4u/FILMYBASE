@@ -2687,3 +2687,15 @@ Plain version: every project is now a set of **drafts**. Opening a project shows
 - **Where it is used:** the AI Movie beat writer, beat expander, scene reviser, dialogue writer and dialogue polisher (5 places) and the Film module's screenplay writer, plus the Hindi/Odia conversion and the "spoken language" check.
 - **Switch off:** environment value `WRITING_STYLE_GUIDE=off` (no new release needed).
 - **Not verified:** how the real AI writes with it (sandbox AI is off). Owner: write 2–3 scenes and tell me what is still too heavy; the guide is easy to tune.
+
+## 2026-11-06 — Picture / voice / video models: if Google switches one off, the app finds a newer one by itself
+- **Why:** the picture model (`gemini-2.5-flash-image`), voice model (`gemini-2.5-flash-preview-tts`) and video model (`veo-3.1-fast-generate-preview`) are old-generation names. I could not confirm their status: the sandbox cannot open Google's pages, and what a web search found conflicts (one source says the picture model stops on 2 Oct 2026, another on 15 Mar 2027; the voice model's date is unclear; Imagen 4 is listed as shut down 24 Jun 2026).
+- **Fix (not a guess at new names):** `providers.js` — when Google answers "model not found / no longer available" for a picture, voice or video call, the app asks Google which models this key can use (the models list), picks the best match (not Imagen; a cheaper "flash/fast" one first, then the newest version, a stable name before a preview), remembers it and repeats the call once. Real failures (usage limit, safety block) are not treated this way. Plain API keys only (Vertex has no such list). Switch off with `MODEL_AUTO_REPLACE=off`.
+- **Tests:** `tests/providerModelRescue.test.js` (4): the choice from a list, the replace-once-and-remember flow, a limit error is not mistaken for it, the off switch.
+- **Not verified with real Google** (sandbox AI is off). The log line "The image model … is not available any more; using … instead" shows when it happened. Cost: the app's price table is per picture / second / 1000 characters, so a replacement model with a different price is not reflected — check Google's prices if it switches.
+
+## 2026-11-06 — AI Movie: colour tags and a note on each scene
+- **What:** under "Scenes" on the scene screen there is now "Mark this scene": 🔴 change · 🟡 check · 🔵 new · 🟢 done, a short note (up to 300 characters), "Save the mark" and "Clear the mark" (English / Hindi / Odia words). A mark is only a reminder for the director — it does not change the written scene, and it is not part of Undo/Redo.
+- **How:** the mark is stored INSIDE the scene (`scene.tag`), so it moves with the scene when scenes are added, moved or removed (a test checks this). Route: `PUT /api/ai-movie/stages/screenplay/beats/:beat/scenes/:scene/tag` (admin; refused while the whole screenplay is being written). Code: `aiMovieSceneNotes.js`.
+- **Limits:** a scene that is written again from nothing (a whole beat rewritten) loses its mark. Marks are not yet shown as colour dots in a list of all scenes — only on the scene's own screen.
+- **Not browser-checked in this step** (build passes; tests: 3 new).

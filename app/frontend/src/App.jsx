@@ -14,6 +14,7 @@ import ScriptEditor, { ScriptToolbar } from './ScriptEditor.jsx'
 import StartProgress from './StartProgress.jsx'
 import BuddyChat from './BuddyChat.jsx'
 import AiMovieVoiceOrb from './AiMovieVoiceOrb.jsx'
+import AiMovieSceneTools from './AiMovieSceneTools.jsx'
 import { cleanForSave, collectCharacterNames } from './scriptDoc.js'
 import { splitSceneContexts } from './sceneContexts.js'
 import './App.css'
@@ -10485,7 +10486,7 @@ function App() {
       const response = await fetch(`${BACKEND_URL}/api/ai-movie/projects/${projectId}`)
       const data = await response.json()
       if (!response.ok) return
-      setAiMovieBackfillResult((prev) => ({ ...(prev ?? {}), screenplayBeats: data.backfill?.screenplayBeats ?? [] }))
+      setAiMovieBackfillResult((prev) => ({ ...(prev ?? {}), screenplayBeats: data.backfill?.screenplayBeats ?? [], removedScenes: data.backfill?.removedScenes ?? [] }))
       setAiMovieStageStatus(data.stageStatus ?? {})
     } catch {
       // the next refresh tries again
@@ -15131,6 +15132,9 @@ function App() {
                                               </span>
                                             )}
                                             </div>
+                                            <AiMovieSceneTools backendUrl={BACKEND_URL} projectId={aiMovieProjectId} beatIndex={viewIndex} sceneIndex={sceneIndex} sceneCount={beat.scenes.length}
+                                              sceneNumber={sceneNumberOffset + sceneIndex + 1} language={aiMovieLanguage} canUndo={(aiMovieBackfillResult?.removedScenes ?? []).length > 0} disabled={isAiWriting || Boolean(aiMovieEditingScene)}
+                                              onChanged={async (picked) => { await refreshAiMovieScreenplayNow(aiMovieProjectId); if (Number.isInteger(picked?.sceneIndex)) setAiMovieSelectedSceneIndex(Math.max(0, picked.sceneIndex)) }} />
                                             <div className="script-tools-actions">
                                               {aiMovieEditingScene?.key === reviseKey ? (
                                                 <p className="script-tools-editing-note">{t.scriptEditEditingNote}</p>

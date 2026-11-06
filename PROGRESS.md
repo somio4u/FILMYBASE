@@ -2587,3 +2587,10 @@ Plain version: every project is now a set of **drafts**. Opening a project shows
 - Server: unchanged (the existing `/api/voice/understand` writes the recording down and translates it). The chat now also tells the server which scene is on screen.
 - **Checked** in a browser with a fake microphone: orb → listening → confirm panel → Adu's chat received the words and answered. NOT verified: the real speech-to-text and Adu's real understanding (the sandbox has no live AI).
 - Still NOT in AI Movie (they need server work, one step each): tags, add/remove/reorder scenes, rename a character, undo/redo of a scene.
+
+## 2026-11-06 — AI Movie: add, remove and move scenes by hand
+- In the AI Movie screenplay, the selected scene's tool panel now has a **Scenes** section: **+ Add a scene before / after** (INT/EXT, place, time and, if you like, what happens), **↑ Move up / ↓ Move down**, **🗑 Remove this scene** (asks first) and **↶ Undo the last removal** (puts the scene back exactly where it was; the last 20 removals are kept).
+- A new scene is **blank** (a heading and, if given, your one line): adding costs no AI money and cannot fail because of the AI; write it afterwards with "Edit this scene", "Ask AI to change it" or "Write dialogue". A beat always keeps at least one scene. While "Write the whole screenplay" is running these buttons are refused with a clear message (two writers on one list would collide).
+- Server: `aiMovieSceneOps.js` (pure functions, 5 tests) and routes `POST …/beats/:b/scenes`, `DELETE …/beats/:b/scenes/:s`, `POST …/beats/:b/scenes/:s/move`, `POST …/screenplay/scenes/restore`.
+- **Checked** in a browser against a local server: add after → remove → undo, scene list and numbers followed each step.
+- Still NOT in AI Movie: tags, drag to reorder, "add several scenes at once", rename a character, undo/redo of scene text.

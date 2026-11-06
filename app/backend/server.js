@@ -44,6 +44,7 @@ import { sessionTokenOf } from "./sessionToken.js";
 import { analyzeImportedText, numberedHeadingsToPlain, reportLines } from "./importAnalysis.js";
 import { ADD_KIND, PREPARE_PACKETS_KIND, createWriteScenesJobs, publicView as publicWriteJob } from "./writeScenesJobs.js";
 import { WRITE_ALL_KIND, beatIsComplete, planApproveAll, planWriteAll, writeWholeBeat } from "./aiMovieWriteAll.js";
+import { newBlankScene, insertScene, removeSceneAt, moveSceneBy, keepRemoved, restoreRemoved } from "./aiMovieSceneOps.js";
 import { countOdiaWords, textsOfScene, textsOfSceneList } from "./odiaCorpus.js";
 import { languageOf, parseEpisodesFromText, sceneContent } from "./screenplayImport.js";
 import { planFill } from "./pdfFill.js";
@@ -6417,6 +6418,62 @@ function cleanAiMovieEditedBlocks(blocks) {
     .filter(Boolean)
     .slice(0, 200);
 }
+
+// ---- adding, removing and moving the scenes of a beat by hand (aiMovieSceneOps.js). Nothing here calls the AI.
+async function changeAiMovieBeatScenes(req, res, change) {
+  try {
+    const projectId = Number(req.body?.projectId ?? req.query?.projectId);
+    const beatIndex = Number(req.params.beatIndex);
+    if (!Number.isInteger(projectId) || projectId <= 0) throw Object.assign(new Error("No project to save into."), { status: 400 });
+    const running = await aiMovieWriteAllJobs.currentFor(projectId).catch(() => null);
+    if (running?.status === "running") throw Object.assign(new Error("The whole screenplay is being written right now. Wait for it to finish (or stop it), then change the scenes."), { status: 409 });
+    const row = (await db.query("SELECT backfill FROM ai_movie_projects WHERE id = $1", [projectId])).rows[0];
+    if (!row) throw Object.assign(new Error("Project not found."), { status: 404 });
+    const backfill = row.backfill ?? {};
+    const beats = Array.isArray(backfill.screenplayBeats) ? backfill.screenplayBeats.slice() : [];
+    if (!Number.isInteger(beatIndex) || !beats[beatIndex]) throw Object.assign(new Error("Not a valid beat."), { status: 400 });
+    const result = change({ scenes: beats[beatIndex].scenes, backfill });
+    beats[beatIndex] = { ...beats[beatIndex], scenes: result.scenes };
+    const next = { ...backfill, screenplayBeats: beats, ...(result.removedList ? { removedScenes: result.removedList } : {}) };
+    await db.query("UPDATE ai_movie_projects SET backfill = $1, updated_at = now() WHERE id = $2", [JSON.stringify(next), projectId]);
+    res.json({ beatIndex, sceneIndex: result.index, sceneCount: result.scenes.length, canUndoRemove: (next.removedScenes ?? []).length > 0 });
+  } catch (error) {
+    res.status(error.status ?? 500).json({ error: error.message });
+  }
+}
+
+// body: { projectId, afterIndex (-1 = at the start), intExt, location, timeOfDay, what, heading? } — adds a BLANK scene (its first line is "what", if given)
+app.post("/api/ai-movie/stages/screenplay/beats/:beatIndex/scenes", requireRole("admin"), (req, res) => changeAiMovieBeatScenes(req, res, ({ scenes }) => {
+  const scene = newBlankScene(req.body ?? {});
+  const placed = insertScene(scenes, req.body?.afterIndex ?? (Array.isArray(scenes) ? scenes.length - 1 : -1), { ...scene, estimatedMinutes: scene.estimatedMinutes });
+  return placed;
+}));
+
+app.delete("/api/ai-movie/stages/screenplay/beats/:beatIndex/scenes/:sceneIndex", requireRole("admin"), (req, res) => changeAiMovieBeatScenes(req, res, ({ scenes, backfill }) => {
+  const done = removeSceneAt(scenes, req.params.sceneIndex);
+  return { scenes: done.scenes, index: done.index, removedList: keepRemoved(backfill.removedScenes, { beatIndex: Number(req.params.beatIndex), sceneIndex: done.index, scene: done.removed, at: new Date().toISOString() }) };
+}));
+
+app.post("/api/ai-movie/stages/screenplay/beats/:beatIndex/scenes/:sceneIndex/move", requireRole("admin"), (req, res) => changeAiMovieBeatScenes(req, res, ({ scenes }) => moveSceneBy(scenes, req.params.sceneIndex, req.body?.direction)));
+
+// Undo of the last removed scene: puts it back where it was
+app.post("/api/ai-movie/stages/screenplay/scenes/restore", requireRole("admin"), async (req, res) => {
+  try {
+    const projectId = Number(req.body?.projectId);
+    if (!Number.isInteger(projectId) || projectId <= 0) throw Object.assign(new Error("No project to restore into."), { status: 400 });
+    const running = await aiMovieWriteAllJobs.currentFor(projectId).catch(() => null);
+    if (running?.status === "running") throw Object.assign(new Error("The whole screenplay is being written right now. Wait for it to finish, then undo."), { status: 409 });
+    const row = (await db.query("SELECT backfill FROM ai_movie_projects WHERE id = $1", [projectId])).rows[0];
+    if (!row) throw Object.assign(new Error("Project not found."), { status: 404 });
+    const restored = restoreRemoved(row.backfill?.removedScenes, row.backfill?.screenplayBeats);
+    if (!restored) throw Object.assign(new Error("There is no removed scene to put back."), { status: 404 });
+    const next = { ...row.backfill, screenplayBeats: restored.beats, removedScenes: restored.kept };
+    await db.query("UPDATE ai_movie_projects SET backfill = $1, updated_at = now() WHERE id = $2", [JSON.stringify(next), projectId]);
+    res.json({ beatIndex: restored.beatIndex, sceneIndex: restored.sceneIndex, canUndoRemove: restored.kept.length > 0 });
+  } catch (error) {
+    res.status(error.status ?? 500).json({ error: error.message });
+  }
+});
 
 app.post("/api/ai-movie/stages/screenplay/beats/:beatIndex/scenes/:sceneIndex/edit", requireRole("admin"), async (req, res) => {
   const beatIndex = Number(req.params.beatIndex);

@@ -8076,3 +8076,10 @@ body.is-script-edit-mode { overflow: hidden; }
 /* AI Movie: a beat the machine approved for the person */
 .ai-movie-auto-approved-note { display: block; margin-top: 4px; font-size: 0.8rem; opacity: 0.85; }
 .ai-movie-approve-all { margin: 8px 0; }
+
+/* AI Movie: the Scenes tools (add / move / remove) in the selected scene's tool panel */
+.ai-scene-tools { margin: 12px 0; padding-top: 10px; border-top: 1px solid var(--border-subtle); }
+.ai-scene-tools-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.ai-scene-tools-grid button { font-size: 0.85rem; padding: 6px 8px; }
+.ai-scene-field { display: block; margin: 6px 0; font-size: 0.85rem; opacity: 0.9; }
+.ai-scene-field input, .ai-scene-field select { display: block; width: 100%; margin-top: 3px; padding: 6px 8px; border-radius: 8px; border: 1px solid var(--border-subtle); background: var(--bg-surface); color: inherit; font: inherit; }

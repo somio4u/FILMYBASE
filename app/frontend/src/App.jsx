@@ -15,6 +15,7 @@ import StartProgress from './StartProgress.jsx'
 import BuddyChat from './BuddyChat.jsx'
 import AiMovieVoiceOrb from './AiMovieVoiceOrb.jsx'
 import AiMovieSceneTools from './AiMovieSceneTools.jsx'
+import AiMovieRename from './AiMovieRename.jsx'
 import { cleanForSave, collectCharacterNames } from './scriptDoc.js'
 import { splitSceneContexts } from './sceneContexts.js'
 import './App.css'
@@ -15135,6 +15136,15 @@ function App() {
                                             <AiMovieSceneTools backendUrl={BACKEND_URL} projectId={aiMovieProjectId} beatIndex={viewIndex} sceneIndex={sceneIndex} sceneCount={beat.scenes.length}
                                               sceneNumber={sceneNumberOffset + sceneIndex + 1} language={aiMovieLanguage} canUndo={(aiMovieBackfillResult?.removedScenes ?? []).length > 0} disabled={isAiWriting || Boolean(aiMovieEditingScene)}
                                               onChanged={async (picked) => { await refreshAiMovieScreenplayNow(aiMovieProjectId); if (Number.isInteger(picked?.sceneIndex)) setAiMovieSelectedSceneIndex(Math.max(0, picked.sceneIndex)) }} />
+                                            <AiMovieRename backendUrl={BACKEND_URL} projectId={aiMovieProjectId} language={aiMovieLanguage} disabled={isAiWriting || Boolean(aiMovieEditingScene)}
+                                              names={(aiMovieBackfillResult?.characterArc ?? []).map((c) => c?.name).filter(Boolean)}
+                                              onChanged={async () => {
+                                                // the whole project is read again (the name changed in every stage); the person must stay where they were: the stage, the beat and the scene
+                                                const keepView = aiMovieView; const keepStage = aiMovieFocusedStage; const keepBeat = aiMovieScreenplayViewIndex; const keepScene = aiMovieSelectedSceneIndex; const keepOpen = aiMovieExpandedStages
+                                                await loadAiMovieProject(aiMovieProjectId)
+                                                setAiMovieView(keepView)
+                                                setTimeout(() => { setAiMovieFocusedStage(keepStage ?? 'screenplay'); setAiMovieExpandedStages({ ...keepOpen, screenplay: true }); setAiMovieScreenplayViewIndex(keepBeat); setAiMovieSelectedSceneIndex(keepScene) }, 350)
+                                              }} />
                                             <div className="script-tools-actions">
                                               {aiMovieEditingScene?.key === reviseKey ? (
                                                 <p className="script-tools-editing-note">{t.scriptEditEditingNote}</p>

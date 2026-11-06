@@ -45,6 +45,7 @@ import { analyzeImportedText, numberedHeadingsToPlain, reportLines } from "./imp
 import { ADD_KIND, PREPARE_PACKETS_KIND, createWriteScenesJobs, publicView as publicWriteJob } from "./writeScenesJobs.js";
 import { WRITE_ALL_KIND, beatIsComplete, planApproveAll, planWriteAll, writeWholeBeat } from "./aiMovieWriteAll.js";
 import { newBlankScene, insertScene, removeSceneAt, moveSceneBy, keepRemoved, restoreRemoved } from "./aiMovieSceneOps.js";
+import { renameCharacter as renameAiMovieCharacter, renameUndoInfo, undoRename, ensureRenameUndoSchema } from "./aiMovieRename.js";
 import { countOdiaWords, textsOfScene, textsOfSceneList } from "./odiaCorpus.js";
 import { languageOf, parseEpisodesFromText, sceneContent } from "./screenplayImport.js";
 import { planFill } from "./pdfFill.js";
@@ -6418,6 +6419,35 @@ function cleanAiMovieEditedBlocks(blocks) {
     .filter(Boolean)
     .slice(0, 200);
 }
+
+// ---- "Rename a character in the whole script" for AI Movie (aiMovieRename.js). Nothing here calls the AI.
+async function refuseWhileWriting(projectId) {
+  const running = await aiMovieWriteAllJobs.currentFor(projectId).catch(() => null);
+  if (running?.status === "running") throw Object.assign(new Error("The whole screenplay is being written right now. Wait for it to finish (or stop it), then rename."), { status: 409 });
+}
+app.post("/api/ai-movie/projects/:id/rename-character", requireRole("admin"), async (req, res) => {
+  try {
+    const projectId = Number(req.params.id);
+    if (!Number.isInteger(projectId) || projectId <= 0) throw Object.assign(new Error("Not a valid project."), { status: 400 });
+    const preview = req.body?.preview === true;
+    if (!preview) await refuseWhileWriting(projectId);
+    res.json(await renameAiMovieCharacter(db, projectId, { from: String(req.body?.from ?? ""), to: String(req.body?.to ?? ""), preview }));
+  } catch (error) {
+    res.status(error.status ?? 500).json({ error: error.message });
+  }
+});
+app.get("/api/ai-movie/projects/:id/rename-character", requireRole("admin"), async (req, res) => {
+  try { res.json(await renameUndoInfo(db, Number(req.params.id))); } catch (error) { res.status(error.status ?? 500).json({ error: error.message }); }
+});
+app.post("/api/ai-movie/projects/:id/rename-character/undo", requireRole("admin"), async (req, res) => {
+  try {
+    const projectId = Number(req.params.id);
+    await refuseWhileWriting(projectId);
+    res.json(await undoRename(db, projectId));
+  } catch (error) {
+    res.status(error.status ?? 500).json({ error: error.message });
+  }
+});
 
 // ---- adding, removing and moving the scenes of a beat by hand (aiMovieSceneOps.js). Nothing here calls the AI.
 async function changeAiMovieBeatScenes(req, res, change) {
@@ -21632,6 +21662,7 @@ ensureAiMovieSchema()
   .then(async () => { try { await productionSync.resume(); await resumeAdSheetJobs(); await skipStartJobs.resume(); await writeScenesJobs.resume(); await addScenesJobs.resume(); await preparePacketJobs.resume(); await aiMovieWriteAllJobs.resume(); } catch (error) { console.error("Resuming interrupted background jobs failed:", error.message); } })
   .then(() => ensureAllProductionSchemas(db))
   .then(() => ensureAduChatSchema(db))
+  .then(() => ensureRenameUndoSchema(db))
   .then(async (failures) => { try { const made = await backfillDrafts(db); await failInterruptedRequests(db); if (made) console.log(`Draft Management: ${made} existing project(s) are now Draft 1 of their project.`); } catch (error) { console.error("Draft backfill failed:", error.message); } return failures; })
   .catch((error) => console.error("Schema setup failed:", error.message))
   .finally(() => {

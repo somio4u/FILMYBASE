@@ -4821,7 +4821,8 @@ function withAiMovieIntervalNote(priorContextText, backfill, beatIndex) {
   return priorContextText;
 }
 
-const AI_MOVIE_SCREENPLAY_BUFFER_SIZE = 4;
+// No longer a wait-for-approval limit: the writer goes on to the end of the film by itself (approving only marks a beat as read).
+const AI_MOVIE_SCREENPLAY_BUFFER_SIZE = 1000;
 
 // Basic screenplay format, shared word-for-word by every agent that writes
 // scene text (first draft, expansion, per-scene revise, Write Dialogue).
@@ -5503,6 +5504,8 @@ async function generateAiMovieScreenplayBeatAt(projectId, nextIndex) {
 // strictly one at a time (never in parallel), both for continuity and to
 // keep Gemini call volume predictable.
 async function fillAiMovieScreenplayBuffer(projectId) {
+  // the "write the whole screenplay" job is already writing this film: two writers on the same beat would only collide
+  try { const running = await aiMovieWriteAllJobs.currentFor(Number(projectId)); if (running?.status === "running") return; } catch { /* no job machine yet: go on */ }
   for (;;) {
     const result = await db.query("SELECT backfill FROM ai_movie_projects WHERE id = $1", [projectId]);
     const screenplayBeats = result.rows[0]?.backfill?.screenplayBeats ?? [];
@@ -5553,7 +5556,15 @@ app.post("/api/ai-movie/stages/:stage/generate", requireRole("admin"), async (re
     // (backfill.screenplayBeats), so the client just polls the normal
     // project-detail endpoint rather than a separate status endpoint.
     res.json({ started: true });
-    fillAiMovieScreenplayBuffer(projectId);
+    // The whole screenplay is written one beat after the other WITHOUT waiting for anyone's approval (the beats are marked "approved automatically" and
+    // can be read and changed afterwards): the shared background job, so the screen shows its progress and it survives a reload or a restart.
+    try {
+      const items = planWriteAll({ beats, screenplayBeats, isSong: (i) => isAiMovieSongBeat(beats[i]), dialogue: true, projectId });
+      await aiMovieWriteAllJobs.start({ sceneListId: projectId, userId: req.user.id, items, language: "en" });
+    } catch (error) {
+      console.error("Starting the automatic screenplay job failed, falling back to the old writer:", error.message);
+      fillAiMovieScreenplayBuffer(projectId);
+    }
     return;
   }
 

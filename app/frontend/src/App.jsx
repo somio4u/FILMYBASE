@@ -440,6 +440,7 @@ const LABELS = {
     aiMovieScreenplayGenerateButton: 'Write the screenplay',
     aiMovieScreenplayStartingLabel: 'Getting started…',
     aiMovieScreenplayBeatWritingLabel: "Hang on, writing this beat's scenes…",
+    aiMovieScreenplayBeatWaitingLabel: "This beat is not written yet — the beats are written one after the other, and this one is waiting for its turn. The card above shows what is being written right now (if nothing is, press “Write the whole screenplay”).",
     aiMovieScreenplayBeatErrorLabel: 'Oops, something went wrong writing this beat.',
     aiMovieScreenplayRetryButton: 'Try again',
     aiMovieBeatShortNote: 'This beat is shorter than its Beat Sheet time — hit "Extend to…" below (everything already written stays).',
@@ -1400,6 +1401,7 @@ const LABELS = {
     aiMovieScreenplayGenerateButton: 'ସ୍କ୍ରିନପ୍ଲେ ଲେଖିଦେ',
     aiMovieScreenplayStartingLabel: 'ଆରମ୍ଭ କରୁଛି…',
     aiMovieScreenplayBeatWritingLabel: 'ଟିକେ ରହ, ଏ ବିଟ୍‌ର ସିନ୍ ଲେଖୁଛି…',
+    aiMovieScreenplayBeatWaitingLabel: 'ଏହି ବିଟ୍ ଏଯାଏଁ ଲେଖା ହୋଇନାହିଁ — ବିଟ୍‌ଗୁଡ଼ିକ ଗୋଟିକ ପରେ ଗୋଟିଏ ଲେଖାଯାଏ, ଏହାର ପାଳି ଆସିନାହିଁ। ଉପରର କାର୍ଡରେ ଏବେ କ’ଣ ଲେଖାଯାଉଛି ଦେଖାଯାଏ (କିଛି ନ ଚାଲିଥିଲେ “ପୁରା ସ୍କ୍ରିନପ୍ଲେ ଲେଖ” ଦବାଅ)।',
     aiMovieScreenplayBeatErrorLabel: 'ଆରେ, ଏ ବିଟ୍ ଲେଖିବାବେଳେ କିଛି ଗଡ଼ବଡ଼ ହେଇଗଲା।',
     aiMovieScreenplayRetryButton: 'ଆଉ ଥରେ ଚେଷ୍ଟା କର',
     aiMovieBeatShortNote: 'ଏ ବିଟ୍ ବିଟ୍ ସିଟ୍‌ର ଟାଇମ୍‌ଠୁ ଛୋଟ — ତଳେ "… ପର୍ଯ୍ୟନ୍ତ ବଢ଼ା" ଦବା (ଯାହା ଲେଖା ହେଇଛି ସବୁ ରହିବ)।',
@@ -9128,6 +9130,17 @@ function App() {
   // Which scene the tools panel is showing (step 2 of the redesign), and
   // which way the page last turned -- the page slides in from that side.
   const [aiMovieSelectedSceneIndex, setAiMovieSelectedSceneIndex] = useState(0)
+  // Edit mode (like the Movie screenplay): the screenplay area fills the screen; Esc or the button leaves it. The page zoom is shared with Movie.
+  const [aiEditMode, setAiEditMode] = useState(false)
+  const [aiScriptZoom, setAiScriptZoom] = useState(() => { try { const v = Number(localStorage.getItem('filmybase.scriptZoom')); return v >= 0.5 && v <= 2.5 ? v : 1 } catch { return 1 } })
+  const changeAiScriptZoom = (next) => { const v = Math.max(0.5, Math.min(2.5, Math.round(next * 100) / 100)); setAiScriptZoom(v); try { localStorage.setItem('filmybase.scriptZoom', String(v)) } catch { /* private window */ } }
+  useEffect(() => {
+    if (!aiEditMode) return undefined
+    const onKey = (event) => { if (event.key === 'Escape') setAiEditMode(false) }
+    document.addEventListener('keydown', onKey)
+    document.body.classList.add('is-script-edit-mode')
+    return () => { document.removeEventListener('keydown', onKey); document.body.classList.remove('is-script-edit-mode') }
+  }, [aiEditMode])
   // Which stage fills the centre screen -- the left menu's Story /
   // Synopsis / ... / Screenplay items work as switches (the user's
   // request) instead of one long column of every stage. null = follow the
@@ -14748,7 +14761,7 @@ function App() {
                         {!collapsed && (
                           <>
                             {!screenplayApproved && (
-                              <AiMovieWriteAll backendUrl={BACKEND_URL} projectId={aiMovieProjectId} language={aiMovieLanguage} onChanged={refreshAiMovieScreenplayNow} allWritten={screenplayBeats.length > 0 && screenplayBeats.every((b) => Array.isArray(b.scenes) && b.scenes.length > 0)} autoApprovedCount={screenplayBeats.filter((b) => b.autoApproved).length} />
+                              <AiMovieWriteAll backendUrl={BACKEND_URL} projectId={aiMovieProjectId} language={aiMovieLanguage} onChanged={refreshAiMovieScreenplayNow} allWritten={screenplayBeats.length > 0 && screenplayBeats.every((b) => Array.isArray(b.scenes) && b.scenes.length > 0)} autoApprovedCount={screenplayBeats.filter((b) => b.autoApproved).length} unfinished={screenplayBeats.filter((b) => !(Array.isArray(b.scenes) && b.scenes.length > 0)).length} />
                             )}
 
                             {screenplayBeats.length === 0 && (
@@ -14882,8 +14895,11 @@ function App() {
                                   </button>
                                 </div>
 
-                                {(beat.status === 'not_started' || beat.status === 'generating') && (
+                                {beat.status === 'generating' && (
                                   <p className="sidebar-section-note script-reel-note">{t.aiMovieScreenplayBeatWritingLabel}</p>
+                                )}
+                                {beat.status === 'not_started' && (
+                                  <p className="sidebar-section-note script-reel-note">{t.aiMovieScreenplayBeatWaitingLabel}</p>
                                 )}
 
                                 {beat.status === 'error' && (
@@ -14978,7 +14994,7 @@ function App() {
                                       const reviseKey = `${viewIndex}-${sceneIndex}`
                                       const isReviseFormOpen = aiMovieRevisingSceneIndex === reviseKey
                                       const isAiWriting = isWritingAiMovieDialogue || isRevisingAiMovieScreenplayScene || isGeneratingAiMovieScreenplayBeat || isSubmittingAiMovieSceneEdit
-                                      return (
+                                      const workspace = (
                                         <div className={`script-workspace${isAiWriting ? ' is-ai-writing' : ''}`}>
                                           <aside className="script-navigator" aria-label={t.scriptScenesTitle}>
                                             <p className="script-panel-title">{t.scriptScenesTitle}</p>
@@ -15010,11 +15026,21 @@ function App() {
                                             {mode === 'light' ? t.scriptThemeLight : t.scriptThemeDark}
                                           </button>
                                         ))}
+                                        <button type="button" className={`script-theme-option script-edit-mode-toggle${aiEditMode ? ' is-active' : ''}`} aria-pressed={aiEditMode}
+                                          onClick={() => { const next = !aiEditMode; setAiEditMode(next); if (next && !aiMovieEditingScene && !isAiWriting) startEditingAiMovieScene(viewIndex, sceneIndex, scene) }}>
+                                          {aiEditMode ? t.editModeOff : t.editModeOn}
+                                        </button>
+                                      </div>
+                                      <div className="script-zoom" role="group" aria-label={t.pageZoomLabel}>
+                                        <button type="button" onClick={() => changeAiScriptZoom(aiScriptZoom - 0.1)} aria-label={t.pageZoomOut} disabled={aiScriptZoom <= 0.5}>−</button>
+                                        <button type="button" className="script-zoom-value" onClick={() => changeAiScriptZoom(1)} title={t.pageZoomReset}>{Math.round(aiScriptZoom * 100)}%</button>
+                                        <button type="button" onClick={() => changeAiScriptZoom(aiScriptZoom + 0.1)} aria-label={t.pageZoomIn} disabled={aiScriptZoom >= 2.5}>+</button>
                                       </div>
                                             <div className="script-stage">
                                               <div
                                                 key={`beat-${viewIndex}`}
                                                 className={`script-page script-page-${scriptTheme} script-turn-${aiMovieBeatTurnDirection}`}
+                                                style={aiScriptZoom === 1 ? undefined : { zoom: aiScriptZoom }}
                                               >
                                                 {beat.scenes.map((scene, sceneIndex) => aiMovieEditingScene?.key === `${viewIndex}-${sceneIndex}` ? (
                                                   renderAiMovieEditableScene(viewIndex, sceneIndex, sceneNumberOffset + sceneIndex + 1)
@@ -15207,6 +15233,7 @@ function App() {
                                           </aside>
                                         </div>
                                       )
+                                      return aiEditMode ? createPortal(<div className="ai-movie-screenplay-current-card is-edit-mode"><p className="script-edit-mode-hint">{t.editModeHint}</p>{workspace}</div>, document.body) : workspace
                                     })()}
 
                                     {/* Song beats (the Beat Sheet says "song") get a song sheet:

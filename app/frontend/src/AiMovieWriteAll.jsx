@@ -87,9 +87,10 @@ const WORDS = {
 
 const clock = (ms) => { const s = Math.max(0, Math.floor(ms / 1000)); return `${Math.floor(s / 60)}m ${String(s % 60).padStart(2, '0')}s` }
 
-export default function AiMovieWriteAll({ backendUrl, projectId, language = 'en', onChanged, allWritten = false, autoApprovedCount = 0 }) {
+export default function AiMovieWriteAll({ backendUrl, projectId, language = 'en', onChanged, allWritten = false, autoApprovedCount = 0, unfinished = 0 }) {
   const W = WORDS[language === 'or' ? 'or' : language === 'hi' ? 'hi' : 'en']
   const [job, setJob] = useState(null)
+  const [jobLoaded, setJobLoaded] = useState(false) // the first look at the server has been made (so "no job yet" is a fact, not a guess)
   const [dialogue, setDialogue] = useState(true)
   const [asking, setAsking] = useState(false)
   const [askingApprove, setAskingApprove] = useState(false)
@@ -110,6 +111,7 @@ export default function AiMovieWriteAll({ backendUrl, projectId, language = 'en'
       if (!alive.current || !response.ok) return null
       if (body.now) offset.current = body.now - Date.now()
       setJob(body.jobId ? body : null)
+      setJobLoaded(true)
       // the beats on the screen below follow the job: refresh them whenever one more beat is done or the job ends
       const mark = body.jobId ? `${body.jobId}:${body.done}:${body.failed?.length}:${body.status}` : ''
       if (mark && mark !== lastSeen.current) { lastSeen.current = mark; changedRef.current?.(projectId) }
@@ -122,6 +124,7 @@ export default function AiMovieWriteAll({ backendUrl, projectId, language = 'en'
   useEffect(() => {
     alive.current = true
     lastSeen.current = ''
+    setJobLoaded(false)
     load()
     return () => { alive.current = false }
   }, [load])
@@ -146,6 +149,16 @@ export default function AiMovieWriteAll({ backendUrl, projectId, language = 'en'
     }
     setBusy(false)
   }
+
+  // Nobody should have to press anything or wait for an approval: when beats are still unwritten and no writing job was ever started for this film, it starts by
+  // itself (once). A job that was stopped or failed is NOT restarted by itself — the person sees why and decides.
+  const autoTried = useRef('')
+  useEffect(() => {
+    if (!jobLoaded || job || unfinished <= 0 || busy || autoTried.current === String(projectId)) return
+    autoTried.current = String(projectId)
+    start()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [jobLoaded, job, unfinished, busy, projectId])
 
   // "Approve all": the person has read the screenplay and signs it off
   async function approveAll() {
@@ -177,6 +190,7 @@ export default function AiMovieWriteAll({ backendUrl, projectId, language = 'en'
     <div className="ss-card sync-card ai-movie-write-all">
       <h3>{W.title}</h3>
       {!running && <p className="ss-sub">{W.intro}</p>}
+      {!running && !job && unfinished > 0 && busy && <p className="sync-live" role="status">{W.starting}</p>}
 
       {running && (
         <>

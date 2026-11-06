@@ -45,6 +45,7 @@ import { analyzeImportedText, numberedHeadingsToPlain, reportLines } from "./imp
 import { ADD_KIND, PREPARE_PACKETS_KIND, createWriteScenesJobs, publicView as publicWriteJob } from "./writeScenesJobs.js";
 import { WRITE_ALL_KIND, beatIsComplete, planApproveAll, planWriteAll, writeWholeBeat } from "./aiMovieWriteAll.js";
 import { newBlankScene, insertScene, removeSceneAt, moveSceneBy, keepRemoved, restoreRemoved } from "./aiMovieSceneOps.js";
+import { ensureSceneHistorySchema, changedBeats, recordChanges, historyInfo, undoLast, redoLast } from "./aiMovieSceneHistory.js";
 import { renameCharacter as renameAiMovieCharacter, renameUndoInfo, undoRename, ensureRenameUndoSchema } from "./aiMovieRename.js";
 import { REPORT_SCHEMA, REPORT_SYSTEM, reportPrompt, normalizeItems, ensureReportSchema, createRead, saveParts, getRead, saveSelection, revisionFromReport } from "./scriptDoctorReport.js";
 import { countOdiaWords, textsOfScene, textsOfSceneList } from "./odiaCorpus.js";
@@ -5103,8 +5104,13 @@ async function fillAiMovieScreenplayBeatToTarget(
 // Updates just the backfill JSON for one field, without touching
 // stage_status -- used throughout screenplay generation so partial/in-
 // progress work is visible and saved without the stage looking approved.
-async function saveAiMovieBackfillField(projectId, stageKey, content) {
+// `history`: a short label when this save is a CHANGE to the scenes made by a person or an AI edit (not the background writer): the scenes of every beat that
+// changed are first kept, so "Undo" can put them back (aiMovieSceneHistory.js)
+async function saveAiMovieBackfillField(projectId, stageKey, content, { history = null } = {}) {
   const result = await db.query("SELECT backfill FROM ai_movie_projects WHERE id = $1", [projectId]);
+  if (history && stageKey === "screenplayBeats") {
+    try { await recordChanges(db, projectId, changedBeats(result.rows[0]?.backfill?.screenplayBeats, content), history); } catch (error) { console.error("Keeping the scenes for Undo failed:", error.message); }
+  }
   const backfill = { ...(result.rows[0]?.backfill ?? {}), [stageKey]: content };
   await db.query("UPDATE ai_movie_projects SET backfill = $1, updated_at = now() WHERE id = $2", [JSON.stringify(backfill), projectId]);
 }
@@ -6175,7 +6181,7 @@ app.post("/api/ai-movie/stages/screenplay/beats/:index/extend-to-target", requir
     const latest = (await db.query("SELECT backfill FROM ai_movie_projects WHERE id = $1", [projectId])).rows[0].backfill;
     const latestBeats = latest.screenplayBeats ?? screenplayBeats;
     latestBeats[beatIndex] = { ...latestBeats[beatIndex], scenes, status: "pending" };
-    await saveAiMovieBackfillField(projectId, "screenplayBeats", latestBeats);
+    await saveAiMovieBackfillField(projectId, "screenplayBeats", latestBeats, { history: `Extend: scenes added to beat ${beatIndex + 1}` });
 
     const totalMinutes = Math.round((scenes.reduce((sum, s) => sum + (s.estimatedMinutes || 0), 0) + aiMovieBeatSongMinutes(beat)) * 10) / 10;
     res.json({ beatIndex, scenes, totalMinutes, targetMinutes });
@@ -6261,7 +6267,7 @@ app.post("/api/ai-movie/stages/screenplay/beats/:beatIndex/scenes/:sceneIndex/re
     // A fix applied from the Script Doctor is marked done in the same save.
     const doctorNote = latestBeats[beatIndex].doctorNotes?.notes?.[doctorNoteIndex];
     if (Number.isInteger(doctorNoteIndex) && doctorNote) doctorNote.applied = true;
-    await saveAiMovieBackfillField(projectId, "screenplayBeats", latestBeats);
+    await saveAiMovieBackfillField(projectId, "screenplayBeats", latestBeats, { history: `The AI rewrote scene ${sceneIndex + 1} of beat ${beatIndex + 1}` });
     // The beat's own runtimeMinutes target is deliberately left alone here
     // -- it's the film's designed pacing from the Beat Sheet and stays
     // fixed, same as a full-beat Request Changes (user's explicit call). A
@@ -6505,6 +6511,24 @@ app.put("/api/ai-movie/assistant/:projectId/report/:readId/selection", requireRo
   }
 });
 
+// ---- Undo / Redo of changes to the scenes (aiMovieSceneHistory.js). Nothing here calls the AI.
+app.get("/api/ai-movie/projects/:id/scene-history", requireRole("admin"), async (req, res) => {
+  try { res.json(await historyInfo(db, Number(req.params.id))); } catch (error) { res.status(error.status ?? 500).json({ error: error.message }); }
+});
+for (const direction of ["undo", "redo"]) {
+  app.post(`/api/ai-movie/projects/:id/scene-history/${direction}`, requireRole("admin"), async (req, res) => {
+    try {
+      const projectId = Number(req.params.id);
+      if (!Number.isInteger(projectId) || projectId <= 0) throw Object.assign(new Error("Not a valid project."), { status: 400 });
+      await refuseWhileWriting(projectId);
+      const done = await (direction === "undo" ? undoLast : redoLast)(db, projectId);
+      res.json({ ...done, ...(await historyInfo(db, projectId)) });
+    } catch (error) {
+      res.status(error.status ?? 500).json({ error: error.message });
+    }
+  });
+}
+
 // ---- "Rename a character in the whole script" for AI Movie (aiMovieRename.js). Nothing here calls the AI.
 async function refuseWhileWriting(projectId) {
   const running = await aiMovieWriteAllJobs.currentFor(projectId).catch(() => null);
@@ -6535,7 +6559,7 @@ app.post("/api/ai-movie/projects/:id/rename-character/undo", requireRole("admin"
 });
 
 // ---- adding, removing and moving the scenes of a beat by hand (aiMovieSceneOps.js). Nothing here calls the AI.
-async function changeAiMovieBeatScenes(req, res, change) {
+async function changeAiMovieBeatScenes(req, res, change, label = "A change to the scenes") {
   try {
     const projectId = Number(req.body?.projectId ?? req.query?.projectId);
     const beatIndex = Number(req.params.beatIndex);
@@ -6548,6 +6572,7 @@ async function changeAiMovieBeatScenes(req, res, change) {
     const beats = Array.isArray(backfill.screenplayBeats) ? backfill.screenplayBeats.slice() : [];
     if (!Number.isInteger(beatIndex) || !beats[beatIndex]) throw Object.assign(new Error("Not a valid beat."), { status: 400 });
     const result = change({ scenes: beats[beatIndex].scenes, backfill });
+    if (Array.isArray(beats[beatIndex].scenes) && beats[beatIndex].scenes.length > 0) await recordChanges(db, projectId, [{ beatIndex, before: beats[beatIndex].scenes }], `${label} (beat ${beatIndex + 1})`); // so "Undo" can put the beat back
     beats[beatIndex] = { ...beats[beatIndex], scenes: result.scenes };
     const next = { ...backfill, screenplayBeats: beats, ...(result.removedList ? { removedScenes: result.removedList } : {}) };
     await db.query("UPDATE ai_movie_projects SET backfill = $1, updated_at = now() WHERE id = $2", [JSON.stringify(next), projectId]);
@@ -6562,14 +6587,14 @@ app.post("/api/ai-movie/stages/screenplay/beats/:beatIndex/scenes", requireRole(
   const scene = newBlankScene(req.body ?? {});
   const placed = insertScene(scenes, req.body?.afterIndex ?? (Array.isArray(scenes) ? scenes.length - 1 : -1), { ...scene, estimatedMinutes: scene.estimatedMinutes });
   return placed;
-}));
+}, "You added a scene"));
 
 app.delete("/api/ai-movie/stages/screenplay/beats/:beatIndex/scenes/:sceneIndex", requireRole("admin"), (req, res) => changeAiMovieBeatScenes(req, res, ({ scenes, backfill }) => {
   const done = removeSceneAt(scenes, req.params.sceneIndex);
   return { scenes: done.scenes, index: done.index, removedList: keepRemoved(backfill.removedScenes, { beatIndex: Number(req.params.beatIndex), sceneIndex: done.index, scene: done.removed, at: new Date().toISOString() }) };
-}));
+}, "You removed a scene"));
 
-app.post("/api/ai-movie/stages/screenplay/beats/:beatIndex/scenes/:sceneIndex/move", requireRole("admin"), (req, res) => changeAiMovieBeatScenes(req, res, ({ scenes }) => moveSceneBy(scenes, req.params.sceneIndex, req.body?.direction)));
+app.post("/api/ai-movie/stages/screenplay/beats/:beatIndex/scenes/:sceneIndex/move", requireRole("admin"), (req, res) => changeAiMovieBeatScenes(req, res, ({ scenes }) => moveSceneBy(scenes, req.params.sceneIndex, req.body?.direction), "You moved a scene"));
 
 // Undo of the last removed scene: puts it back where it was
 app.post("/api/ai-movie/stages/screenplay/scenes/restore", requireRole("admin"), async (req, res) => {
@@ -6645,7 +6670,7 @@ app.post("/api/ai-movie/stages/screenplay/beats/:beatIndex/scenes/:sceneIndex/ed
       return { ...updated, estimatedMinutes: computeAiMovieSceneMinutes(updated) };
     });
     latestBeats[beatIndex] = { ...latestBeats[beatIndex], scenes: newScenes };
-    await saveAiMovieBackfillField(projectId, "screenplayBeats", latestBeats);
+    await saveAiMovieBackfillField(projectId, "screenplayBeats", latestBeats, { history: `You edited scene ${sceneIndex + 1} of beat ${beatIndex + 1}` });
 
     res.json({ beatIndex, sceneIndex, scene: newScenes[sceneIndex], fixes: corrected.fixes });
   } catch (error) {
@@ -6866,7 +6891,7 @@ function aiMovieNarrationInstruction(narrationBrief, sceneIndex, sceneCount) {
 }
 
 // Writes the dialogue of ONE scene (the "Write dialogue" button, or "Write the whole screenplay" for every scene in turn). Throws errors that carry a `status`.
-async function writeAiMovieSceneDialogueNow(projectId, beatIndex, sceneIndex, { instruction = null, narrationBrief = null } = {}) {
+async function writeAiMovieSceneDialogueNow(projectId, beatIndex, sceneIndex, { instruction = null, narrationBrief = null, recordHistory = false } = {}) {
   const fail = (status, message) => Object.assign(new Error(message), { status });
   if (!projectId) throw fail(400, "No project to write dialogue into.");
 
@@ -6919,7 +6944,7 @@ async function writeAiMovieSceneDialogueNow(projectId, beatIndex, sceneIndex, { 
     return { ...updated, estimatedMinutes: computeAiMovieSceneMinutes(updated) };
   });
   latestBeats[beatIndex] = { ...latestBeats[beatIndex], scenes: newScenes };
-  await saveAiMovieBackfillField(projectId, "screenplayBeats", latestBeats);
+  await saveAiMovieBackfillField(projectId, "screenplayBeats", latestBeats, recordHistory ? { history: `Dialogue written for scene ${sceneIndex + 1} of beat ${beatIndex + 1}` } : {});
 
   return { beatIndex, sceneIndex, content, characters, estimatedMinutes: newScenes[sceneIndex].estimatedMinutes };
 }
@@ -6929,7 +6954,7 @@ app.post("/api/ai-movie/stages/screenplay/beats/:beatIndex/scenes/:sceneIndex/di
   const sceneIndex = Number(req.params.sceneIndex);
   const { projectId, instruction, narrationBrief } = req.body;
   try {
-    res.json(await writeAiMovieSceneDialogueNow(projectId, beatIndex, sceneIndex, { instruction, narrationBrief }));
+    res.json(await writeAiMovieSceneDialogueNow(projectId, beatIndex, sceneIndex, { instruction, narrationBrief, recordHistory: true }));
   } catch (error) {
     if (!error.status) console.error(`Screenplay beat ${beatIndex} scene ${sceneIndex} dialogue failed:`, error.message);
     res.status(error.status ?? 502).json({ error: error.message });
@@ -21412,7 +21437,7 @@ async function applyAiMovieDirectorScene(projectId, beatIndex, sceneIndex, { hea
     return { ...updated, estimatedMinutes: computeAiMovieSceneMinutes(updated) };
   });
   latestBeats[beatIndex] = { ...latestBeats[beatIndex], scenes: newScenes, status: "pending" };
-  await saveAiMovieBackfillField(projectId, "screenplayBeats", latestBeats);
+  await saveAiMovieBackfillField(projectId, "screenplayBeats", latestBeats, { history: `The Cinematic Director rewrote scene ${sceneIndex + 1} of beat ${beatIndex + 1}` });
   await db.query("UPDATE ai_movie_projects SET stage_status = stage_status - 'screenplay', updated_at = now() WHERE id = $1", [projectId]);
 }
 
@@ -21749,6 +21774,7 @@ ensureAiMovieSchema()
   .then(() => ensureAduChatSchema(db))
   .then(() => ensureRenameUndoSchema(db))
   .then(() => ensureReportSchema(db))
+  .then(() => ensureSceneHistorySchema(db))
   .then(async (failures) => { try { const made = await backfillDrafts(db); await failInterruptedRequests(db); if (made) console.log(`Draft Management: ${made} existing project(s) are now Draft 1 of their project.`); } catch (error) { console.error("Draft backfill failed:", error.message); } return failures; })
   .catch((error) => console.error("Schema setup failed:", error.message))
   .finally(() => {

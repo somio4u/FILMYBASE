@@ -166,7 +166,7 @@ export function PipelineBar({ pipeline, api, projectId, onSaved }) {
                 {['16:9', '9:16', '1:1', '4:3', '3:4'].map((a) => <option key={a} value={a}>{a}</option>)}
               </select>
             </label>
-            <label className="dossier-field">Money limit for this project (US dollars)
+            <label className="dossier-field">Money limit for pictures, video and audio in this project (US dollars) — writing has no limit
               <input type="number" min="0" step="0.5" value={form.budget} placeholder={`${settings.effectiveBudgetUsd} (default)`} onChange={(e) => setForm({ ...form, budget: e.target.value })} />
             </label>
           </div>

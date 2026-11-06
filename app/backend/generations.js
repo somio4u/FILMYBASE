@@ -268,7 +268,7 @@ export function createGenerationService({ db, store, providers, env = process.en
     const targetWhere = "kind = $1 AND COALESCE(asset_id,0) = $2 AND COALESCE(shot_id,0) = $3 AND COALESCE(element_id,0) = $4";
     const targetParams = [kind, assetId ?? 0, shotId ?? 0, elementId ?? 0];
     if (await alreadyRunning(targetWhere, targetParams)) throw httpError("This is already being made. Wait for it to finish first.", 409, "already_running");
-    await assertWithinBudget(db, projectId, estimate + (await inflightEstimate(projectId)));
+    await assertWithinBudget(db, projectId, estimate + (await inflightEstimate(projectId)), { media: true });
     const version = await nextVersion(targetWhere, targetParams);
     const providerName = "gemini";
     const model = kind === "audio" ? providers.models.speech : kind === "video" ? providers.models.video : providers.models.image;

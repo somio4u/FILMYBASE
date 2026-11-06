@@ -149,12 +149,14 @@ test("convert: bad language / scope / no scenes are refused with plain messages"
   assert.equal((await api("GET", L("/export?language=zz"))).status, 400);
 });
 
-test("money limit: conversion stops cleanly at the limit (nothing translated, nothing spent); the spend is recorded otherwise", async () => {
+test("money limit: writing is not limited — conversion goes on even with a tiny limit, and its cost is recorded as writing, not against the limit", async () => {
   await saveSettings(db, pid, { budgetLimitUsd: 0.001 });
   const r = await api("POST", L("/convert"), { language: "or", scope: "all" });
-  assert.equal(r.json.stoppedByMoneyLimit, true);
-  assert.equal(translateCalls.length, 0);
-  assert.equal((await spendSummary(db, pid)).spentUsd, 0);
+  assert.notEqual(r.json.stoppedByMoneyLimit, true);
+  assert.ok(translateCalls.length > 0);
+  const s = await spendSummary(db, pid);
+  assert.equal(s.spentUsd, 0); // the limit counts pictures, video and audio only
+  assert.ok(s.writingUsd > 0);
 });
 
 test("Voice Writer (Speak Here): a recording becomes draft lines for the scene editor; nothing is saved; bad recordings and money limit are refused", async () => {
@@ -194,5 +196,5 @@ test("Voice Writer (Speak Here): a recording becomes draft lines for the scene e
   assert.equal(empty.status, 422);
   assert.equal(empty.json.error, "Nothing heard");
   await saveSettings(db, pid, { budgetLimitUsd: 0.001 });
-  assert.equal((await api("POST", `/api/ai-movie/projects/${pid}/scene/voice`, body)).status, 402);
+  assert.equal((await api("POST", `/api/ai-movie/projects/${pid}/scene/voice`, body)).status, 422); // a tiny money limit does not stop writing (still the empty recording's own refusal)
 });

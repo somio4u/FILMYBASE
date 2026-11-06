@@ -270,23 +270,23 @@ test("send to production: refused until the final screenplay is approved; then a
   assert.ok(await approvedDirectionFor(db, pid, "b0s0", scenes[0].text), "'sent' directions stay available to the Shot Cutter");
 });
 
-test("money limit: the Director stops cleanly when the limit is reached (partial results kept, nothing over the limit)", async () => {
-  await saveSettings(db, pid, { budgetLimitUsd: 0.15 }); // room for exactly one Pro call ($0.12)
+test("money limit: writing is not limited — the Director goes on to the end even when the limit is tiny (nothing counts against the limit)", async () => {
+  await saveSettings(db, pid, { budgetLimitUsd: 0.15 }); // would have been room for exactly one Pro call ($0.12) under the old rule
   const r = await api("POST", cin("/analyze"), {});
   assert.equal(r.status, 200);
   await settled();
   const v = (await api("GET", cin())).json;
-  assert.equal(calls.length, 1);
-  assert.equal(v.job.stoppedBy, "money_limit");
-  assert.match(v.job.error, /limit/);
-  assert.equal(v.items.filter((i) => i.kind === "cinematic_direction").length, 1);
-  assert.ok((await spendSummary(db, pid)).spentUsd <= 0.15);
+  assert.equal(calls.length, 2); // every scene was asked, not just the first
+  assert.notEqual(v.job.stoppedBy, "money_limit");
+  assert.equal(v.items.filter((i) => i.kind === "cinematic_direction").length, 2);
+  assert.equal((await spendSummary(db, pid)).spentUsd, 0); // the limit counts pictures, video and audio only
+  assert.ok((await spendSummary(db, pid)).writingUsd > 0);
   await saveSettings(db, pid, { budgetLimitUsd: 0.01 });
-  const blocked = await api("POST", cin("/analyze"), {});
-  assert.equal(blocked.status, 402);
+  const again = await api("POST", cin("/analyze"), {});
+  assert.notEqual(again.status, 402);
+  await settled();
   calls = [];
-  assert.equal((await api("POST", cin("/story-recommendations"))).status, 402);
-  assert.equal(calls.length, 0);
+  assert.notEqual((await api("POST", cin("/story-recommendations"))).status, 402);
 });
 
 test("a failure in the model stops the job with a plain message and keeps what was done; routes refuse unknown projects and items", async () => {

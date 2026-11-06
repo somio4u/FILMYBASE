@@ -2594,3 +2594,10 @@ Plain version: every project is now a set of **drafts**. Opening a project shows
 - Server: `aiMovieSceneOps.js` (pure functions, 5 tests) and routes `POST …/beats/:b/scenes`, `DELETE …/beats/:b/scenes/:s`, `POST …/beats/:b/scenes/:s/move`, `POST …/screenplay/scenes/restore`.
 - **Checked** in a browser against a local server: add after → remove → undo, scene list and numbers followed each step.
 - Still NOT in AI Movie: tags, drag to reorder, "add several scenes at once", rename a character, undo/redo of scene text.
+
+## 2026-11-06 — The money limit is now only for pictures, video and audio; writing has no limit
+- The owner's rule: no limit on **writing** (story, screenplay, dialogue, edits, checks, translations, the Director's and Shot Cutter's notes — every "text" call); the project's money limit applies only to **making pictures, video and audio**.
+- How: `pipelineSettings.js` — `spendSummary` counts only non-text spend against the limit (it still reports `writingUsd` and `totalSpentUsd`, so the Money Meter shows what writing cost), and `assertWithinBudget` only refuses when called with `{ media: true }`, which only the picture / video / audio generator does (`generations.js`). Every writing caller passes nothing, so it is never refused. The refusal message now says "picture / video / audio limit … (Writing has no limit.)".
+- Screens: the settings label and the "Write the whole screenplay" question now say so (English / Hindi / Odia).
+- Tests: the 8 tests that expected writing to stop at the limit were rewritten to the new rule; one new test checks that text spend is recorded but never counts, while a picture over the limit is still refused.
+- Note: the "$5 limit" a project already has is unchanged for pictures, video and audio. The old "ran out at $0.02" stop on writing is gone.

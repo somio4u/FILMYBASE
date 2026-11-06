@@ -151,13 +151,11 @@ test("Story Bible: your note revises it; approval marks the stage and tells the 
   assert.match(html.text, /<h1>Test Film/);
 });
 
-test("Story Bible: money limit is checked BEFORE the Pro-model run (nothing starts, nothing is spent)", async () => {
+test("Story Bible: a small money limit does not stop the writing (the limit is for pictures, video and audio only)", async () => {
   await saveSettings(db, pid, { budgetLimitUsd: 0.5 });
   const r = await api("POST", `/api/ai-movie/projects/${pid}/story-bible/design`, {});
-  assert.equal(r.status, 402);
-  assert.equal(r.json.code, "over_budget");
-  assert.equal((await api("GET", `/api/ai-movie/projects/${pid}/story-bible`)).json.status, "none");
-  assert.equal((await spendSummary(db, pid)).spentUsd, 0);
+  assert.notEqual(r.status, 402);
+  assert.notEqual(r.json.code, "over_budget");
 });
 
 test("Story Bible: a second design click while one is running is refused; an empty idea is refused", async () => {
@@ -221,10 +219,10 @@ test("stage judge loop: revisions are capped per quality mode (economy 1, profes
   }
 });
 
-test("stage judge loop: money limit is checked before every Pro judge call", async () => {
+test("stage judge loop: a tiny money limit does not stop the judges (writing has no limit)", async () => {
   await saveSettings(db, pid, { budgetLimitUsd: 0.05 });
-  await assert.rejects(judgedStage({ ask: makeAsk(), projectId: pid, stageKey: "synopsis", idea: "i", firstDraft: SYN, revise: async () => SYN }), (e) => e.status === 402);
-  assert.equal(calls.length, 0, "no model was called");
+  await judgedStage({ ask: makeAsk(), projectId: pid, stageKey: "synopsis", idea: "i", firstDraft: SYN, revise: async () => SYN });
+  assert.ok(calls.length > 0, "the judges were asked");
 });
 
 test("stageJudgeText reads the AI Movie layer shapes", () => {
@@ -291,12 +289,12 @@ test("judge panel: only the changed beat is re-judged (beat:N targets are cached
   assert.equal(calls.length, 4);
 });
 
-test("judge panel: money limit is checked before the whole panel; bad targets and missing material are refused", async () => {
+test("judge panel: a tiny money limit does not stop it (writing has no limit); bad targets and missing material are refused", async () => {
   await db.query("UPDATE ai_movie_projects SET story_bible = $2 WHERE id = $1", [pid, JSON.stringify(FAKE_BIBLE)]);
   await saveSettings(db, pid, { budgetLimitUsd: 0.3 });
   const r = await api("POST", `/api/ai-movie/projects/${pid}/judge-panel`, { target: "bible" });
-  assert.equal(r.status, 402);
-  assert.equal(calls.length, 0);
+  assert.notEqual(r.status, 402);
+  assert.ok(calls.length > 0);
   assert.equal((await api("POST", `/api/ai-movie/projects/${pid}/judge-panel`, { target: "nonsense" })).status, 400);
   assert.equal((await api("POST", `/api/ai-movie/projects/${pid}/judge-panel`, { target: "screenplay" })).status, 400);
   assert.equal((await api("POST", `/api/ai-movie/projects/${pid}/judge-panel`, { target: "stage:synopsis" })).status, 400);

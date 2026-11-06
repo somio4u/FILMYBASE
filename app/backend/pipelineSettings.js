@@ -125,26 +125,37 @@ export async function saveSettings(db, projectId, patch) {
   return getSettings(db, projectId);
 }
 
+// THE MONEY LIMIT AND WRITING: the project's money limit is only for MAKING pictures, video and voices/audio. Writing (story, screenplay, dialogue, edits, checks
+// — every "text" call) is never refused and never counted against the limit; it is still written to the spend ledger so the Money Meter shows what it cost.
+export const NOT_LIMITED_KINDS = ["text"];
+
 export async function spendSummary(db, projectId) {
   const settings = await getSettings(db, projectId);
   const rows = (await db.query("SELECT kind, COALESCE(sum(cost_usd),0)::float AS usd, count(*)::int AS n FROM production_spend WHERE project_id = $1 GROUP BY kind", [projectId])).rows;
-  const spent = rows.reduce((sum, r) => sum + r.usd, 0);
+  const round = (v) => Math.round(v * 10000) / 10000;
+  const spent = rows.filter((r) => !NOT_LIMITED_KINDS.includes(r.kind)).reduce((sum, r) => sum + r.usd, 0); // counts against the limit: pictures, video, audio
+  const writing = rows.filter((r) => NOT_LIMITED_KINDS.includes(r.kind)).reduce((sum, r) => sum + r.usd, 0); // writing: shown, never limited
   return {
-    spentUsd: Math.round(spent * 10000) / 10000,
+    spentUsd: round(spent),
+    writingUsd: round(writing),
+    totalSpentUsd: round(spent + writing),
     limitUsd: settings.effectiveBudgetUsd,
-    remainingUsd: Math.max(0, Math.round((settings.effectiveBudgetUsd - spent) * 10000) / 10000),
-    byKind: Object.fromEntries(rows.map((r) => [r.kind, { usd: Math.round(r.usd * 10000) / 10000, count: r.n }])),
+    remainingUsd: Math.max(0, round(settings.effectiveBudgetUsd - spent)),
+    limitAppliesTo: "images, video and audio (not writing)",
+    byKind: Object.fromEntries(rows.map((r) => [r.kind, { usd: round(r.usd), count: r.n }])),
     prices: priceTable(),
   };
 }
 
-// Refuses (HTTP 402) when this work would take the project over its limit.
-export async function assertWithinBudget(db, projectId, estimateUsd) {
+// Refuses (HTTP 402) when MAKING a picture / video / audio would take the project over its limit. The picture / video / audio generator calls it with
+// { media: true }; every other caller is writing and passes nothing, so writing is never refused (it only gets the summary back).
+export async function assertWithinBudget(db, projectId, estimateUsd, { media = false } = {}) {
   const summary = await spendSummary(db, projectId);
+  if (!media) return summary;
   if (summary.spentUsd + estimateUsd > summary.limitUsd + 1e-9) {
     throw Object.assign(
       new Error(
-        `This would cost about $${estimateUsd.toFixed(2)}, but only $${summary.remainingUsd.toFixed(2)} is left of the $${summary.limitUsd.toFixed(2)} limit for this project. Raise the money limit in Settings if you want to continue.`
+        `This would cost about $${estimateUsd.toFixed(2)}, but only $${summary.remainingUsd.toFixed(2)} is left of the $${summary.limitUsd.toFixed(2)} picture / video / audio limit for this project. Raise the money limit in Settings if you want to continue. (Writing has no limit.)`
       ),
       { status: 402, code: "over_budget" }
     );

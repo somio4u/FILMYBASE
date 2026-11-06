@@ -287,7 +287,7 @@ export async function interpret(db, models, draftId, { instruction, source = "te
     needsClarification, options: needsClarification ? CHOICES : CHOICES.filter((c) => c.intent === intent || (intent === "LOCAL_EDIT" && c.action === "edit_current")),
     allChoices: CHOICES,
     scope: { units: scenesTouched, ofScenes: units.filter((u) => u.section === "screenplay").length, cappedAt: MAX_UNITS_PER_PROPOSAL },
-    estimate: { modelCalls: proCalls, usd: Math.round(proCalls * PRO_CALL_USD * 100) / 100, note: draft.module === "ai_movie" ? "Estimate at the Pro-model price; checked against the project's money limit before each call." : "Film projects have no money limit; the same models are used." },
+    estimate: { modelCalls: proCalls, usd: Math.round(proCalls * PRO_CALL_USD * 100) / 100, note: "Estimate at the Pro-model price. Writing has no money limit; the limit is only for pictures, video and audio." },
     draft: { status: draft.status, editable, needsConfirmToEdit: draft.status === "approved", message: !editable ? `This draft is ${draft.status}. Unlock it, or create a new draft or alternative instead.` : null },
     usedModel, modelError, executesNothing: true,
   };

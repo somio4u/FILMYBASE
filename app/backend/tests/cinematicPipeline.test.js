@@ -125,10 +125,10 @@ test("Shot Cutter: a direction approved for one project never leaks into another
   assert.equal(r.json.usedCinematicDirections, false);
 });
 
-test("Shot Cutter: the money limit is enforced before the Pro call — the cut is refused with 402 and nothing is called or spent", async () => {
+test("Shot Cutter: a tiny money limit does not stop the cut (writing has no limit); nothing counts against the limit", async () => {
   await saveSettings(db, pid, { budgetLimitUsd: 0.05 });
   const r = await divide("b0s1");
-  assert.equal(r.status, 402);
-  assert.equal(calls.length, 0);
+  assert.notEqual(r.status, 402);
+  assert.ok(calls.length > 0);
   assert.equal((await spendSummary(db, pid)).spentUsd, 0);
 });

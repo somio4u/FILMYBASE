@@ -14,7 +14,7 @@ import { ensureAllProductionSchemas } from "../productionSchema.js";
 import { createMediaStore, createLocalBackend } from "../mediaStore.js";
 import { createProviders, pcmToWav, wavDurationMs } from "../providers.js";
 import { createGenerationService, frameSpec, failStaleGenerations, speechText, describeDetails, assetPrompt } from "../generations.js";
-import { saveSettings, getSettings, spendSummary, assertWithinBudget } from "../pipelineSettings.js";
+import { saveSettings, getSettings, spendSummary, assertWithinBudget, recordSpend } from "../pipelineSettings.js";
 import { divideScene, listShots, generateStoryboard, approveStoryboard, approveShots } from "../shots.js";
 import { startMockGemini } from "./mockGemini.js";
 import { assetLibrary, acceptCurrentPictures } from "../studio.js";
@@ -147,8 +147,26 @@ test("settings: defaults, saving, and strict checks", async () => {
   await assert.rejects(saveSettings(db, projectId, { budgetLimitUsd: "lots" }), /money limit/);
   await assert.rejects(saveSettings(db, projectId, { voices: { A: "Nobody" } }), /not one of the available voices/);
   assert.equal((await saveSettings(db, projectId, { budgetLimitUsd: null })).effectiveBudgetUsd, 5);
-  await assert.rejects(assertWithinBudget(db, projectId, 6), /Raise the money limit/);
+  await assert.rejects(assertWithinBudget(db, projectId, 6, { media: true }), /Raise the money limit/); // making a picture / video / audio over the limit is refused
+  assert.equal((await assertWithinBudget(db, projectId, 6)).limitUsd, 5); // writing is never refused, however much it would cost
   assert.equal((await spendSummary(db, projectId)).spentUsd, 0);
+});
+
+test("the money limit is for pictures, video and audio only: writing (text) is recorded but never counted against it", async () => {
+  const { projectId } = await ready();
+  await saveSettings(db, projectId, { budgetLimitUsd: 1 });
+  await recordSpend(db, projectId, { kind: "text", provider: "Gemini 3.1 Pro", units: 1, costUsd: 4 });
+  await recordSpend(db, projectId, { kind: "image", provider: "pictures", units: 1, costUsd: 0.4 });
+  const s = await spendSummary(db, projectId);
+  assert.equal(s.spentUsd, 0.4); // only the picture counts against the limit
+  assert.equal(s.writingUsd, 4);
+  assert.equal(s.totalSpentUsd, 4.4);
+  assert.equal(s.remainingUsd, 0.6);
+  await assertWithinBudget(db, projectId, 100); // writing: fine, even far over the limit
+  await assert.rejects(assertWithinBudget(db, projectId, 0.7, { media: true }), /picture \/ video \/ audio limit/);
+  await assertWithinBudget(db, projectId, 0.5, { media: true });
+  await db.query("DELETE FROM production_spend WHERE project_id = $1", [projectId]);
+  await saveSettings(db, projectId, { budgetLimitUsd: null });
 });
 
 // ---------------------------------------------------------------------------

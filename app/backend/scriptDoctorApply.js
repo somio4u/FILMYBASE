@@ -14,6 +14,19 @@ export function sceneKeysInOrder(units) {
   return (units ?? []).filter((u) => u.section === "screenplay").map((u, i) => ({ number: i + 1, key: u.key, label: u.label }));
 }
 
+// "1-5, 12, 20–22" -> [1,2,3,4,5,12,20,21,22]; throws a plain message for anything that is not a scene of the film
+export function parseSceneNumbers(text, max) {
+  const out = new Set();
+  for (const part of String(text ?? "").split(/[,;\s]+/).filter(Boolean)) {
+    const m = /^(\d{1,4})(?:[-–—](\d{1,4}))?$/.exec(part);
+    if (!m) throw Object.assign(new Error(`“${part}” is not a scene number. Write numbers like 1-5, 12, 20-22.`), { status: 400 });
+    const from = Number(m[1]), to = Number(m[2] ?? m[1]);
+    if (from < 1 || to < from || to > max) throw Object.assign(new Error(`Scene ${to < from ? part : to > max ? to : from} does not exist (this film has ${max} scenes).`), { status: 400 });
+    for (let n = from; n <= to; n++) out.add(n);
+  }
+  return [...out];
+}
+
 // items (from the report) + the draft's scenes -> { tasks: one per scene to rewrite, manual: items that need a person, perItem: how many scenes each item reaches }
 export function planApply(rawItems, units, selectedIds = []) {
   const items = annotateItems(rawItems); // adds, to each change, the scenes it reaches (named, or worked out from its pages) and what it needs

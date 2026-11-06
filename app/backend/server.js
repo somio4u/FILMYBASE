@@ -48,7 +48,7 @@ import { newBlankScene, insertScene, removeSceneAt, moveSceneBy, keepRemoved, re
 import { ensureSceneHistorySchema, changedBeats, recordChanges, historyInfo, undoLast, redoLast } from "./aiMovieSceneHistory.js";
 import { renameCharacter as renameAiMovieCharacter, renameUndoInfo, undoRename, ensureRenameUndoSchema } from "./aiMovieRename.js";
 import { REPORT_SCHEMA, REPORT_SYSTEM, reportPrompt, normalizeItems, ensureReportSchema, createRead, saveParts, getRead, saveSelection, revisionFromReport, savePlan, saveResult, markUndone, latestReadId, groupByKind } from "./scriptDoctorReport.js";
-import { planApply, itemProgress, annotateItems, impactSummary, itemsForNewStory, condensePrompt, CONDENSE_SCHEMA, CONDENSE_SYSTEM, normalizeDirections, fallbackDirections, directionsInstruction, uncovered } from "./scriptDoctorApply.js";
+import { planApply, parseSceneNumbers, sceneKeysInOrder, itemProgress, annotateItems, impactSummary, itemsForNewStory, condensePrompt, CONDENSE_SCHEMA, CONDENSE_SYSTEM, normalizeDirections, fallbackDirections, directionsInstruction, uncovered } from "./scriptDoctorApply.js";
 import { countOdiaWords, textsOfScene, textsOfSceneList } from "./odiaCorpus.js";
 import { languageOf, parseEpisodesFromText, sceneContent } from "./screenplayImport.js";
 import { planFill } from "./pdfFill.js";
@@ -6601,6 +6601,8 @@ app.post("/api/ai-movie/assistant/:projectId/report/:readId/story-draft", requir
     }
     const busy = await getAduWork(db, req.user.id);
     if (busy) throw Object.assign(new Error(busyMessage(busy)), { status: 409, code: "adu_busy" });
+    // old scenes the director wants carried over (given to the new story in full, with their dialogue)
+    const keepScenes = parseSceneNumbers(req.body?.keepScenes, sceneKeysInOrder(await draftUnits(db, "ai_movie", projectId)).length);
     let directions = [];
     let left = 0;
     let merged = true;
@@ -6619,7 +6621,7 @@ app.post("/api/ai-movie/assistant/:projectId/report/:readId/story-draft", requir
     const keeps = read.items.filter((i) => i.kind === "keep").map((k) => k.action.slice(0, 200)).slice(0, 30);
     const out = await startRevision(db, draftAgentModels.value, draft.id, {
       instruction: directionsInstruction(directions), constraints: { mustKeep: keeps, mustChange: [] }, source: "report",
-      context: { report: { readId: read.id, filename: read.filename, included: directions.length, left, from: manual.length, merged, withRules: manual.some((i) => i.kind === "global") }, autoApprove: true }, confirmed: true, actorUserId: req.user.id,
+      context: { report: { readId: read.id, filename: read.filename, included: directions.length, left, from: manual.length, merged, withRules: manual.some((i) => i.kind === "global") }, keepScenes, autoApprove: true }, confirmed: true, actorUserId: req.user.id,
     });
     res.status(out.duplicate ? 200 : 202).json({ ...out, directions: directions.length, from: manual.length, left, merged });
   } catch (error) {

@@ -566,7 +566,16 @@ REMOVED: ${clip((impact?.removed ?? []).map((x) => label(x.key)).join("; ") || "
 
 THE COMPLETE CURRENT DRAFT
 `;
-  const room = Math.max(4000, BRIEF_LIMIT - head.length - 200);
+  // scenes the director chose to CARRY OVER: given in full (heading, action and dialogue), so the new draft can reuse them as written
+  const keepNumbers = (request.context?.keepScenes ?? []).filter((n) => Number.isInteger(n) && n > 0);
+  const allScenes = of(["screenplay"]);
+  let carry = "";
+  if (keepNumbers.length) {
+    const wanted = keepNumbers.map((n) => ({ n, u: allScenes[n - 1] })).filter((x) => x.u);
+    const each = Math.max(300, Math.min(1500, Math.floor(5000 / Math.max(1, wanted.length))));
+    carry = `\nSCENES TO CARRY OVER: the director wants these old scenes kept in the new draft. Reuse each one's events and its dialogue AS WRITTEN wherever it still fits the revised story; change a line only where the requested changes force it, and say nothing about them being old.\n${wanted.map((x) => `[old scene ${x.n}] ${String(x.u.text ?? "").replace(/[ \t]+/g, " ").trim().slice(0, each)}`).join("\n\n")}\n`;
+  }
+  const room = Math.max(4000, BRIEF_LIMIT - head.length - carry.length - 200);
   const scenes = of(["screenplay"]), beats = of(["beats", "sceneList"]), people = of(["characters"]), shape = of(["structure"]), story = of(["idea", "story", "synopsis"]);
   // the scene list gets 45% of the room (60% for a long film); the rest is shared by the story, characters, structure and beats
   const sceneBudget = Math.floor(room * (scenes.length > 80 ? 0.6 : 0.45)), restBudget = room - sceneBudget;
@@ -580,7 +589,7 @@ THE COMPLETE CURRENT DRAFT
     "SCENES (heading and gist):",
     fitLines(scenes, (u, n) => `- ${u.label}: ${clip(u.text.split("\n").slice(1).join(" "), n)}`, 160, sceneBudget, 30),
   ].filter(Boolean).join("\n");
-  return (head + body).slice(0, BRIEF_LIMIT + 400);
+  return (head + body + carry).slice(0, BRIEF_LIMIT + 400);
 }
 
 const CRITIC_PASS = 8;

@@ -26,3 +26,15 @@ test("a short film keeps the full gist of each scene", () => {
   assert.ok(brief.includes("Something happens in this scene."));
   assert.ok(brief.includes("Beat 20:") && brief.includes("Character 11:"));
 });
+
+test("scenes chosen to carry over are given in full, with their dialogue", () => {
+  const units = film(126);
+  units[units.length - 126 + 6].text = "INT. KITCHEN - NIGHT\nRAMA\nYou never asked me why I stayed.";
+  const brief = buildBrief({ ...req, context: { keepScenes: [7, 500] } }, units, null);
+  assert.ok(brief.includes("SCENES TO CARRY OVER"));
+  assert.ok(brief.includes("[old scene 7] INT. KITCHEN - NIGHT"));
+  assert.ok(brief.includes("You never asked me why I stayed."));
+  assert.ok(!brief.includes("[old scene 500]"));
+  assert.ok(brief.length <= BRIEF_LIMIT + 400);
+  for (let i = 1; i <= 126; i++) assert.ok(brief.includes(`- Scene ${i}:`), `scene ${i} missing`);
+});

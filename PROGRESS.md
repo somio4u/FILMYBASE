@@ -2672,3 +2672,10 @@ Plain version: every project is now a set of **drafts**. Opening a project shows
 - **Fix (`buildBrief`, draftAgent.js):** every part gets a fair share of the room; the scene list gets 45% (60% for a film over 80 scenes) and every scene keeps at least a short heading + gist (about 30 characters each at 206 scenes, a full 160 for a short film). Dialogue is still not included — only the gist.
 - **Tests:** new `tests/draftBrief.test.js` (40 / 126 / 206 scenes: every scene is in the brief and it stays under the limit; a short film keeps the full gist).
 - **Next:** let the director choose old scenes/dialogue to carry over unchanged into the new story.
+
+## 2026-11-06 — Choose old scenes to carry over into the new story
+- **Why:** the new story only sees a short gist of the old scenes, never their dialogue. The director can now name old scenes to keep.
+- **How:** in the ⚡ new-story question there is a box "Old scenes to keep (optional) — e.g. 1-5, 12, 20-22". Those scenes go into the new story's brief IN FULL (heading, action, dialogue; up to ~1500 characters each, ~5000 in all) with the instruction to reuse them as written wherever they still fit. Bad numbers (letters, scenes the film does not have) are refused with a plain message.
+- **Honest limit:** it is an instruction to the AI, not a copy-paste — if the revised story changes, a kept scene may change too. A real "paste the old scene in unchanged" would need scenes to line up between old and new, which they do not once the story changes. Not checked with a real AI (sandbox AI is off).
+- Code: `parseSceneNumbers` (scriptDoctorApply.js), `context.keepScenes` in the story-draft route, carry-over section in `buildBrief`. Tests: 2 new.
+- **Next:** owner tries ⚡ once on the real film and checks the first scenes it writes.

@@ -38,3 +38,4 @@
 .sd-summary { margin: 10px 0; padding: 10px 12px; border: 1px solid var(--border-subtle, #2c3556); border-radius: 10px; background: rgba(128, 128, 128, 0.1); }
 .sd-summary p { margin: 6px 0 0; }
 .sd-tag { margin: 2px 0 0; font-size: 0.82rem; opacity: 0.9; }
+.sd-keep { width: 100%; max-width: 360px; padding: 6px 8px; border-radius: 6px; border: 1px solid var(--border-subtle, #2c3556); background: var(--surface, #fff); color: inherit; }

@@ -167,3 +167,12 @@ test("the new-story way is given everything not tied to old scenes (story change
   assert.deepEqual(itemsForNewStory(items).map((i) => i.id), [1, 2, 4]); // the whole-script rule and the unplaced change come along; the scene-tied one and the protected line do not
   assert.equal(impactSummary(items).forNewStory, 3);
 });
+
+test("parseSceneNumbers reads ranges and refuses scenes that do not exist", async () => {
+  const { parseSceneNumbers } = await import("../scriptDoctorApply.js");
+  assert.deepEqual(parseSceneNumbers("1-3, 7; 9–10 7", 20), [1, 2, 3, 7, 9, 10]);
+  assert.deepEqual(parseSceneNumbers("", 20), []);
+  assert.throws(() => parseSceneNumbers("21", 20), /does not exist/);
+  assert.throws(() => parseSceneNumbers("abc", 20), /not a scene number/);
+  assert.throws(() => parseSceneNumbers("5-3", 20), /does not exist/);
+});

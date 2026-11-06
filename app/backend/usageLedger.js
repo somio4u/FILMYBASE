@@ -158,8 +158,8 @@ const r4 = (v) => Math.round(Number(v ?? 0) * 10000) / 10000;
 // prompt size, the model's "thinking" and the Pro judge pass are assumptions, listed here so the screen can show them.
 // Versions that were overwritten or deleted, and failed or retried calls, left nothing behind — so this is a LOW estimate.
 // ---------------------------------------------------------------------------
-const FLASH = "gemini-2.5-flash";
-const LITE = "gemini-2.5-flash-lite";
+const FLASH = "gemini-3.5-flash";
+const LITE = "gemini-3.5-flash-lite";
 const PRO = "gemini-3.1-pro-preview";
 // inBase: fixed prompt tokens (rules, examples). inMult: prompt tokens per answer token (earlier stages sent as context).
 // think: the model's hidden thinking tokens per answer token. judge: a Pro judge read it (tokens in = answer + 2500, out 1200 + 2500 thinking).

@@ -11,20 +11,19 @@ import { GoogleAuth } from "google-auth-library";
 import { recordBrainCall } from "./usageLedger.js";
 
 // Best model first. Checked on the project on 2026-10-07: gemini-3.1-pro-preview
-// works on the "global" endpoint; gemini-2.5-pro is the fallback if the
-// preview is unavailable or overloaded.
+// works on the "global" endpoint. The old gemini-2.5-* models are retired by Google, so the fallback if the preview is unavailable or overloaded is
+// Gemini 3.5 Flash (lighter than Pro, but alive) — never a retired model.
 export const STORY_BRAIN_MODELS = [
   { model: "gemini-3.1-pro-preview", location: "global" },
-  { model: "gemini-2.5-pro", location: "us-central1" },
+  { model: "gemini-3.5-flash", location: "global" },
 ];
 
 // Reading pages of a PDF is copying, not inventing: the lighter Flash models do it well, faster and cheaper, and (unlike Pro) are usually open to every
 // key. Flash first, the Pro models only as the last resort. Used by the PDF reader.
 export const PDF_READER_MODELS = [
   { model: "gemini-3.5-flash", location: "global" },
-  { model: "gemini-2.5-flash", location: "us-central1" },
+  { model: "gemini-3.5-flash-lite", location: "global" },
   { model: "gemini-3.1-pro-preview", location: "global" },
-  { model: "gemini-2.5-pro", location: "us-central1" },
 ];
 
 // A Pro model thinks before it answers; a big design request can take minutes.

@@ -6,8 +6,8 @@
 // preview model first, which fallback — lives in storyBrain.js STORY_BRAIN_MODELS
 // so there is still only one list to maintain):
 //   pro        Gemini 3.1 Pro (fallback chain in storyBrain.js). Creative work + judgment.
-//   flash      Gemini 2.5 Flash. Routine, high-volume writing and checking.
-//   flashLite  Gemini 2.5 Flash-Lite. Small utility calls.
+//   flash      Gemini 3.5 Flash. Routine, high-volume writing and checking.
+//   flashLite  Gemini 3.5 Flash-Lite. Small utility calls.
 //
 // Creative mode (Balanced Cinematic / Mass Spectacle) is a different setting
 // and is NOT looked at here.
@@ -23,8 +23,8 @@ export const QUALITY_MODE_INFO = {
 
 export const MODEL_TIERS = {
   pro: { tier: "pro", label: "Gemini 3.1 Pro" },
-  flash: { tier: "flash", label: "Gemini 2.5 Flash", model: "gemini-2.5-flash" },
-  flashLite: { tier: "flashLite", label: "Gemini 2.5 Flash-Lite", model: "gemini-2.5-flash-lite" },
+  flash: { tier: "flash", label: "Gemini 3.5 Flash", model: "gemini-3.5-flash" },
+  flashLite: { tier: "flashLite", label: "Gemini 3.5 Flash-Lite", model: "gemini-3.5-flash-lite" },
 };
 
 // Models that are NOT text models and are never routed here (kept for the report).

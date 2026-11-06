@@ -208,27 +208,27 @@ console.log(
 // The AI Studio "-latest" alias doesn't resolve on Vertex AI, so every call
 // in this file uses this constant (a real, explicit model id valid on both
 // AI Studio and Vertex AI) instead of a literal model name.
-const GEMINI_MODEL_NAME = "gemini-2.5-flash-lite";
+const GEMINI_MODEL_NAME = "gemini-3.5-flash-lite";
 // AI Movie's final Write Dialogue pass only (the user's own call): that one
 // prompt carries by far the longest rule list in the app -- natural Hindi
 // code-switching, the NARRATOR, camera direction, subtext, the closing
 // button, screen-only writing, headings/names -- and a real scene showed
 // Flash-Lite dropping several of those rules at once. Everything else
 // stays on the cheaper GEMINI_MODEL_NAME above.
-const AI_MOVIE_DIALOGUE_MODEL_NAME = "gemini-2.5-flash";
+const AI_MOVIE_DIALOGUE_MODEL_NAME = "gemini-3.5-flash";
 // The screenplay first-draft writer and its "write more scenes" step (used
 // by fill-to-target and Extend) also use 2.5 Flash -- the user's call after
 // a real Akhada test run: on Flash-Lite, Beat 1 came out at 0.4 of its 2.5
 // minutes (or borrowed later beats), while 2.5 Flash reached 2.2 minutes
 // with scenes that all genuinely belonged to Beat 1. Slower and costs more
 // per call, but this is where screenplay quality is decided.
-const AI_MOVIE_SCREENPLAY_WRITER_MODEL_NAME = "gemini-2.5-flash";
+const AI_MOVIE_SCREENPLAY_WRITER_MODEL_NAME = "gemini-3.5-flash";
 // The story writers (storylines, pitch deck, character sheet, three-act,
 // bit sheet, scene list) — shared by the Movie stages and the automatic
 // pipeline. Also 2.5 Flash (the user's call, 2026-10-06): in a real
 // automatic run the Bit Sheet writer on Flash-Lite stayed at 5/10 for all
 // three revision rounds — it couldn't act on the story editor's notes.
-const STORY_WRITER_MODEL_NAME = "gemini-2.5-flash";
+const STORY_WRITER_MODEL_NAME = "gemini-3.5-flash";
 // DATABASE_URL (a full Postgres connection string, e.g. from Supabase) is
 // used when set; otherwise falls back to the local "filmmaking_app" dev
 // database. Supabase's pooled connection requires SSL but uses a
@@ -12618,7 +12618,7 @@ async function stepScreenplaySceneHistory(req, res, direction) {
 // Hindi or English, often mixed — and the AI writes it down and turns it
 // into proper screenplay lines (action / CHARACTER + dialogue) added to the
 // scene, as a new version so ↶ Undo takes it back.
-const VOICE_TO_SCREENPLAY_MODEL_NAME = "gemini-2.5-flash";
+const VOICE_TO_SCREENPLAY_MODEL_NAME = "gemini-3.5-flash";
 const VOICE_AUDIO_TYPES = ["audio/webm", "audio/ogg", "audio/mp4", "audio/mpeg", "audio/wav", "audio/aac", "audio/m4a"];
 
 const VOICE_ELEMENT_SCHEMA = {
@@ -21431,7 +21431,7 @@ registerAiSettingsRoutes(app, db, {
       try {
         const response = await fetch("https://generativelanguage.googleapis.com/v1beta/models?pageSize=200", { headers: { "x-goog-api-key": candidate.apiKey }, signal: AbortSignal.timeout(20000) });
         if (response.ok) {
-          const seen = summariseModels(await response.json(), [GEMINI_MODEL_NAME, "gemini-2.5-flash", "gemini-2.5-flash-image", "gemini-2.5-flash-preview-tts", ...STORY_BRAIN_MODELS.map((m) => m.model).slice(0, 1)]);
+          const seen = summariseModels(await response.json(), [GEMINI_MODEL_NAME, "gemini-3.5-flash", "gemini-2.5-flash-image", "gemini-2.5-flash-preview-tts", ...STORY_BRAIN_MODELS.map((m) => m.model).slice(0, 1)]);
           report?.("models", seen.note, { warn: seen.warn });
         } else report?.("models", `Google would not list models (HTTP ${response.status}): ${(await response.text()).slice(0, 150)}`, { warn: true });
       } catch (error) { report?.("models", `Could not ask Google for the model list: ${error.message}`, { warn: true }); }

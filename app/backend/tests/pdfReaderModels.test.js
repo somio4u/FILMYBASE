@@ -18,7 +18,7 @@ test("a model that is switched off (404) is skipped and the next one answers", a
   try {
     useServiceAccountSource(() => null); useApiKeySource(() => "AIza-test");
     const result = await ask(PDF_READER_MODELS);
-    assert.deepEqual(asked, ["gemini-3.5-flash", "gemini-2.5-flash"]);
+    assert.deepEqual(asked, ["gemini-3.5-flash", "gemini-3.5-flash-lite"]);
     assert.equal(result.data.ok, true);
   } finally { globalThis.fetch = realFetch; }
 });

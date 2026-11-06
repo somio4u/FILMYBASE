@@ -13,6 +13,7 @@ import { createPortal } from 'react-dom'
 import ScriptEditor, { ScriptToolbar } from './ScriptEditor.jsx'
 import StartProgress from './StartProgress.jsx'
 import BuddyChat from './BuddyChat.jsx'
+import AiMovieVoiceOrb from './AiMovieVoiceOrb.jsx'
 import { cleanForSave, collectCharacterNames } from './scriptDoc.js'
 import { splitSceneContexts } from './sceneContexts.js'
 import './App.css'
@@ -3397,6 +3398,13 @@ function FloatingAgentWidget({ currentUser, t, onRunCompleted, onOpenProject, dr
     window.dispatchEvent(new CustomEvent(ADU_EVENT, { detail: { active: true } }))
     setAduTab('new'); setIsOpen(true)
   }, [draftCtx?.openAduNonce])
+  // the Speak orb / 💬 badge of AI Movie ask for Adu's chat
+  useEffect(() => {
+    if (!draftCtx?.openTalkNonce) return
+    try { localStorage.setItem(ADU_ACTIVE_STORAGE_KEY, '1') } catch { /* per-browser convenience */ }
+    window.dispatchEvent(new CustomEvent(ADU_EVENT, { detail: { active: true } }))
+    setAduTab('talk'); setIsOpen(true)
+  }, [draftCtx?.openTalkNonce])
   useEffect(() => { if (!isOpen) draftCtx?.onAduClosed?.() }, [isOpen]) // eslint-disable-line react-hooks/exhaustive-deps
 
   async function handleStart() {
@@ -3660,7 +3668,7 @@ function FloatingAgentWidget({ currentUser, t, onRunCompleted, onOpenProject, dr
               {tabs}
               <div className="floating-agent-embed">
                 {tab === 'talk' ? (
-                  <ErrorBoundary inline><AduChat backendUrl={BACKEND_URL} projectId={draftCtx.draft.projectRef} module={draftCtx.draft.module} language={draftCtx.language} getContext={draftCtx.getContext} selection={aduSelection} InputComponent={MicTextarea} onAllDrafts={() => draftCtx.onOpenDraft?.('dashboard')}
+                  <ErrorBoundary inline><AduChat backendUrl={BACKEND_URL} projectId={draftCtx.draft.projectRef} module={draftCtx.draft.module} pendingMessage={draftCtx.pendingMessage} onPendingSent={draftCtx.onPendingSent} language={draftCtx.language} getContext={draftCtx.getContext} selection={aduSelection} InputComponent={MicTextarea} onAllDrafts={() => draftCtx.onOpenDraft?.('dashboard')}
                     renderAction={(p) => <AduAction {...p} ctx={{ backendUrl: BACKEND_URL, projectId: draftCtx.draft.projectRef, module: draftCtx.draft.module, draft: draftCtx.draft, getContext: draftCtx.getContext, onApplied: draftCtx.onApplied, onOpenDraft: (what, extra) => { if (what !== 'dashboard' && what !== 'compare') setIsOpen(false); draftCtx.onOpenDraft?.(what, extra) }, onOpenRevision: (id) => { setAduRevisionId(id); setAduTab('project') } }} />} /></ErrorBoundary>
                 ) : (
                 <ErrorBoundary inline><Suspense fallback={null}><DraftAgentPanel embedded backendUrl={BACKEND_URL} draft={draftCtx.draft} getContext={draftCtx.getContext} InputComponent={MicTextarea} initialSelection={aduSelection}
@@ -8913,6 +8921,8 @@ function App() {
   const [draftDashboard, setDraftDashboard] = useState(null) // { module, projectRef }
   const [currentDraft, setCurrentDraft] = useState(null) // { id, module, projectRef }
   const [aduReviewDraft, setAduReviewDraft] = useState(null) // lets Adu show a revision from the Drafts screen when no draft is open
+  const [aduTalkNonce, setAduTalkNonce] = useState(0) // the Speak orb / 💬 badge ask Adu's chat to open
+  const [aduPending, setAduPending] = useState(null) // words spoken to the orb, waiting to be put into Adu's chat
   const [aduOpenNonce, setAduOpenNonce] = useState(0) // the "Adu is working on…" bar asks Adu to open
   const [aduRequestId, setAduRequestId] = useState(null) // asks Adu to open a revision that is waiting for review
   const [projectTitle, setProjectTitle] = useState(null)
@@ -9580,7 +9590,7 @@ function App() {
       return { stage, stageLabel: stage, view: activeAgent }
     }
     const stage = aiMovieFocusedStage ?? getAiMovieCurrentStage(aiMovieStageStatus)?.key ?? 'screenplay'
-    return { stage, stageLabel: aiMovieView && aiMovieView !== 'editor' ? aiMovieView : stage, view: aiMovieView, beat: aiMovieScreenplayViewIndex }
+    return { stage, stageLabel: aiMovieView && aiMovieView !== 'editor' ? aiMovieView : stage, view: aiMovieView, beat: aiMovieScreenplayViewIndex, scene: aiMovieSelectedSceneIndex }
   }
   // After the agent changes the open draft: reload it without throwing away where you were (stage focus, production workspace).
   async function refreshOpenDraft() {
@@ -9603,7 +9613,7 @@ function App() {
     }
   }
 
-  const aduDraftCtx = { openAduNonce: aduOpenNonce, openLinked: (d) => continueDraft({ id: d.id, module: d.module, projectRef: d.projectRef, resumeContext: {}, currentStage: null }), openDrafts: currentDraft ? () => setDraftDashboard({ module: currentDraft.module, projectRef: currentDraft.projectRef }) : null, draft: currentDraft ?? aduReviewDraft, onAduClosed: () => setAduReviewDraft(null), getContext: agentContext, onOpenDraft: handleAgentOpen, onApplied: refreshOpenDraft, openRequestId: aduRequestId, language: aiMovieLanguage }
+  const aduDraftCtx = { openAduNonce: aduOpenNonce, openTalkNonce: aduTalkNonce, pendingMessage: aduPending, onPendingSent: () => setAduPending(null), openLinked: (d) => continueDraft({ id: d.id, module: d.module, projectRef: d.projectRef, resumeContext: {}, currentStage: null }), openDrafts: currentDraft ? () => setDraftDashboard({ module: currentDraft.module, projectRef: currentDraft.projectRef }) : null, draft: currentDraft ?? aduReviewDraft, onAduClosed: () => setAduReviewDraft(null), getContext: agentContext, onOpenDraft: handleAgentOpen, onApplied: refreshOpenDraft, openRequestId: aduRequestId, language: aiMovieLanguage }
 
   // Which draft is the open project? (Every existing project is Draft 1 automatically.)
   useEffect(() => {
@@ -15233,7 +15243,8 @@ function App() {
                                           </aside>
                                         </div>
                                       )
-                                      return aiEditMode ? createPortal(<div className="ai-movie-screenplay-current-card is-edit-mode"><p className="script-edit-mode-hint">{t.editModeHint}</p>{workspace}</div>, document.body) : workspace
+                                      const voiceOrb = <AiMovieVoiceOrb backendUrl={BACKEND_URL} language={aiMovieLanguage} sceneNumber={sceneNumberOffset + sceneIndex + 1} onSend={(text) => { setAduPending(text); setAduTalkNonce((n) => n + 1) }} onOpenChat={() => setAduTalkNonce((n) => n + 1)} />
+                                      return aiEditMode ? <>{createPortal(<div className="ai-movie-screenplay-current-card is-edit-mode"><p className="script-edit-mode-hint">{t.editModeHint}</p>{workspace}</div>, document.body)}{voiceOrb}</> : <>{workspace}{voiceOrb}</>
                                     })()}
 
                                     {/* Song beats (the Beat Sheet says "song") get a song sheet:

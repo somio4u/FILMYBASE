@@ -55,7 +55,7 @@ function ActionNote({ action, L, children }) {
   )
 }
 
-export default function AduChat({ backendUrl, projectId, module = 'ai_movie', language = 'en', getContext, selection = '', InputComponent, renderAction = null, onNewMessage = null, onAllDrafts = null }) {
+export default function AduChat({ backendUrl, projectId, module = 'ai_movie', language = 'en', getContext, selection = '', InputComponent, renderAction = null, onNewMessage = null, onAllDrafts = null, pendingMessage = null, onPendingSent = null }) {
   const lang = language === 'or' || language === 'hi' ? language : 'en'
   const L = TEXT[lang]
   const [messages, setMessages] = useState([])
@@ -100,7 +100,7 @@ export default function AduChat({ backendUrl, projectId, module = 'ai_movie', la
     setSending({ startedAt: Date.now() }); setSeconds(0)
     try {
       const ctx = getContext?.() ?? {}
-      const context = { stage: ctx.stage, ...(Number.isInteger(ctx.beat) ? { beatIndex: ctx.beat } : {}), ...(selection ? { selectedText: selection } : {}) }
+      const context = { stage: ctx.stage, ...(Number.isInteger(ctx.beat) ? { beatIndex: ctx.beat } : {}), ...(Number.isInteger(ctx.scene) ? { sceneIndex: ctx.scene } : {}), ...(selection ? { selectedText: selection } : {}) }
       const response = await fetch(`${base}/message`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text: message, language: lang, context }) })
       const data = await response.json().catch(() => ({}))
       if (!alive.current) return
@@ -115,6 +115,15 @@ export default function AduChat({ backendUrl, projectId, module = 'ai_movie', la
       setError(`${e.message || L.failed} — ${L.retryNote}`)
     } finally { if (alive.current) setSending(null) }
   }, [base, getContext, selection, lang, sending, L.failed, L.retryNote, onNewMessage])
+
+  // words that were spoken to the orb (confirmed by the person there) arrive here as if typed
+  const pendingRef = useRef(null)
+  useEffect(() => {
+    if (!pendingMessage || loading || sending || pendingRef.current === pendingMessage) return
+    pendingRef.current = pendingMessage
+    onPendingSent?.()
+    send(pendingMessage)
+  }, [pendingMessage, loading, sending, send, onPendingSent])
 
   const stopSpeaking = useCallback(() => { try { speechApi()?.cancel() } catch { /* nothing is speaking */ } setSpeakingId(null) }, [])
   const speak = useCallback((message) => {

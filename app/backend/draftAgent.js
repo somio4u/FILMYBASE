@@ -965,6 +965,62 @@ async function aiScreenplay(db, pl, request, pid, log, save) {
   await save();
 }
 
+// ---- THE SELF-CHECK: once the whole new screenplay is written, Dialogue Doctor and Screenplay Doctor each read it, and every fix that fits inside scenes is made (the same
+// path as Script Doctor's ▶), so the owner does not have to check and fix it all by hand afterwards. One pass only (no loop). Anything that needs a story change, or a person,
+// is listed for the owner at the final approval. A doctor that cannot run (no AI, an error) is skipped with the reason — it never stops the new draft.
+const SELF_DOCTORS = [["dialogue", "Dialogue Doctor", "dialogue-doctor"], ["screenplay", "Screenplay Doctor", "screenplay-doctor"]];
+async function aiSelfReview(db, pl, request, pid, draft, log, save) {
+  const say = (t) => setLive(db, request.id, 4, `Self-check: ${t}`);
+  const out = { dialogue: null, screenplay: null, applied: 0, unchanged: 0, failed: 0, left: 0 };
+  const reads = [];
+  for (const [key, label, route] of SELF_DOCTORS) {
+    try {
+      await say(`${label} is reading the new draft`);
+      must(await pl.call("POST", `/api/ai-movie/projects/${pid}/${route}`, {}), label);
+      const view = await waitFor(db, request.id, async () => {
+        const r = await pl.call("GET", `/api/ai-movie/projects/${pid}/${route}`);
+        if (r.status >= 400) throw httpError(`${label} could not be read back.`, 502, "self_check");
+        if (r.json?.job?.status === "running") { await say(`${label}: ${r.json.job.step ?? "working"}`); return false; }
+        return r.json;
+      }, { label, timeoutMs: 2 * 3600 * 1000 });
+      const run = view?.run;
+      if (!run?.overview) { out[key] = { error: view?.job?.failed?.[0]?.error || view?.job?.error || "It gave no result." }; continue; }
+      out[key] = { verdict: run.overview.verdict, overall: run.overview.overall ?? null, topFixes: (run.overview.topFixes ?? [run.overview.biggestFix]).filter(Boolean).slice(0, 3) };
+      const sent = must(await pl.call("POST", `/api/ai-movie/projects/${pid}/${route}/${run.id}/send`, {}), `${label}'s findings`);
+      reads.push({ key, label, readId: sent.readId });
+    } catch (error) {
+      if (error instanceof Cancelled) throw error;
+      out[key] = { error: String(error.message ?? "It did not run.").slice(0, 240) };
+    }
+  }
+  for (const { label, readId } of reads) {
+    try {
+      await say(`making ${label}'s fixes inside the scenes`);
+      const read = must(await pl.call("GET", `/api/ai-movie/assistant/${pid}/report/${readId}`), "Reading the findings");
+      const items = (read.items ?? []).filter((i) => i.kind !== "keep" && i.kind !== "risk");
+      const doable = items.filter((i) => i.impact !== "new_draft" && ((i.scenesUsed?.length ?? 0) > 0 || i.kind === "global"));
+      out.left += items.length - doable.length;
+      if (doable.length === 0) continue;
+      must(await pl.call("POST", `/api/ai-movie/assistant/${pid}/report/${readId}/apply`, { draftId: draft.id, ids: doable.map((i) => i.id) }), "Making the fixes");
+      const after = await waitFor(db, request.id, async () => {
+        const r = await pl.call("GET", `/api/ai-movie/assistant/${pid}/report/${readId}`);
+        if (r.status >= 400) throw httpError("The fixes could not be read back.", 502, "self_check");
+        if (r.json?.apply?.status === "running") { await say(`${label}'s fixes — ${r.json.apply.step ?? "working"}`); return false; }
+        return r.json;
+      }, { label: `${label}'s fixes`, timeoutMs: 4 * 3600 * 1000 });
+      out.applied += after.counts?.changed ?? 0; out.unchanged += after.counts?.unchanged ?? 0; out.failed += after.apply?.failed?.length ?? 0;
+    } catch (error) {
+      if (error instanceof Cancelled) throw error;
+      out.failed += 1;
+      out[label.startsWith("Dialogue") ? "dialogue" : "screenplay"] = { ...(out[label.startsWith("Dialogue") ? "dialogue" : "screenplay"] ?? {}), fixError: String(error.message ?? "").slice(0, 240) };
+    }
+  }
+  const current = await getRequest(db, request.id);
+  await setRequest(db, request.id, { proposal: { ...(current.proposal ?? {}), selfReview: out } });
+  log.push({ key: "selfReview", status: "done" });
+  await save();
+}
+
 async function rawRun(db, models, requestId) {
   const r = await getRequest(db, requestId);
   const pl = await openPipeline(models, r.created_by);
@@ -972,7 +1028,7 @@ async function rawRun(db, models, requestId) {
   const save = async () => {
     await setRequest(db, requestId, { decisions: log });
     const finished = log.filter((x) => x.status === "done");
-    await setLive(db, requestId, 4, `${finished.length} of ${STAGES.length + 2} parts done${finished.length ? ` — last finished: ${String(finished.at(-1).key).replace("stage:", "")}` : ""}`);
+    await setLive(db, requestId, 4, `${finished.length} of ${STAGES.length + 3} parts done${finished.length ? ` — last finished: ${String(finished.at(-1).key).replace("stage:", "")}` : ""}`);
   };
   const done = (k) => log.some((x) => x.key === k && x.status === "done");
   try {
@@ -984,6 +1040,7 @@ async function rawRun(db, models, requestId) {
       if (!done("storyBible")) { must(await pl.call("POST", `/api/ai-movie/projects/${pid}/story-bible/approve`, {}), "Approving the Story Bible"); log.push({ key: "storyBible", status: "done", score: r.proposal.critics?.scores ? Math.min(...Object.values(r.proposal.critics.scores)) : null }); await save(); }
       for (const stage of STAGES) if (!done(`stage:${stage}`)) await aiStage(db, pl, r, pid, stage, brief, log, save);
       if (!done("stage:screenplay")) await aiScreenplay(db, pl, r, pid, log, save);
+      if (!done("selfReview")) await aiSelfReview(db, pl, r, pid, draft, log, save);
       await db.query("UPDATE project_drafts SET current_stage = 'revision_review', status = 'pending_approval', updated_at = now() WHERE id = $1", [draft.id]);
       await refreshProduction(db, "ai_movie", pid);
     }

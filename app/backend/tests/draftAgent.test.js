@@ -31,7 +31,7 @@ const mutate = (v) => {
 function mockModels(over = {}) {
   calls = [];
   pipelineCalls = [];
-  const pipe = fakePipeline(db, { stageScores: over.stageScores ?? {}, writeAllJob: over.writeAllJob === true, onCall: (m, path, body) => { pipelineCalls.push({ m, path, body }); over.onPipeline?.(m, path, body); } });
+  const pipe = fakePipeline(db, { stageScores: over.stageScores ?? {}, writeAllJob: over.writeAllJob === true, doctors: over.doctors === true, onCall: (m, path, body) => { pipelineCalls.push({ m, path, body }); over.onPipeline?.(m, path, body); } });
   return {
     pipeline: pipe,
     async json(draft, agent, prompt, opts) {
@@ -662,4 +662,33 @@ test("the new draft's screenplay is written by the 'write the whole screenplay' 
   assert.ok(!pipelineCalls.some((c) => /beats\/\d+\/approve$/.test(c.path)), "the beats were not approved one by one: the job had already done it");
   const p = (await db.query("SELECT stage_status FROM ai_movie_projects WHERE id = $1", [(await getDraft(db, r.draft_id)).project_ref])).rows[0];
   assert.equal(p.stage_status.screenplay.status, "approved");
+});
+
+test("the self-check: when the new screenplay is written, both doctors read it and the fixes that fit inside scenes are made; the rest is listed for the owner", async () => {
+  const d = await ensureDraftFor(db, "ai_movie", ai);
+  const models = mockModels({ writeAllJob: true, doctors: true });
+  const { request } = await startRevision(db, models, d.id, { instruction: "Change the villain.", confirmed: true, actorUserId: 1 });
+  await whenIdle(request.id); await approveSynopsis(db, models, request.id, { actorUserId: 1 }); await whenIdle(request.id);
+  const r = await getRequest(db, request.id);
+  assert.equal(r.status, "awaiting_final_approval", r.error ?? "");
+  const paths = pipelineCalls.map((c) => `${c.m} ${c.path}`);
+  assert.ok(paths.some((x) => /POST .*dialogue-doctor$/.test(x)) && paths.some((x) => /POST .*screenplay-doctor$/.test(x)), "both doctors were started");
+  assert.equal(paths.filter((x) => /POST .*report\/\d+\/apply$/.test(x)).length, 2, "the in-scene fixes of both reports were applied");
+  const apply = pipelineCalls.find((c) => /report\/71\/apply$/.test(c.path));
+  assert.deepEqual(apply.body.ids, [1], "only the fix that fits inside scenes: not the story change, not 'keep', not the risk note");
+  const review = r.proposal.selfReview;
+  assert.equal(review.dialogue.verdict, "Dialogue pass"); assert.equal(review.screenplay.verdict, "Revise");
+  assert.equal(review.applied, 2); assert.equal(review.left, 2); assert.equal(review.failed, 0);
+  assert.ok(r.decisions.some((x) => x.key === "selfReview" && x.status === "done"));
+});
+
+test("the self-check never stops the new draft: with no doctors available it is skipped with the reason and the draft still reaches final approval", async () => {
+  const d = await ensureDraftFor(db, "ai_movie", ai);
+  const models = mockModels({ writeAllJob: true });
+  const { request } = await startRevision(db, models, d.id, { instruction: "Change the villain.", confirmed: true, actorUserId: 1 });
+  await whenIdle(request.id); await approveSynopsis(db, models, request.id, { actorUserId: 1 }); await whenIdle(request.id);
+  const r = await getRequest(db, request.id);
+  assert.equal(r.status, "awaiting_final_approval", r.error ?? "");
+  assert.ok(r.proposal.selfReview.dialogue.error && r.proposal.selfReview.screenplay.error);
+  assert.equal(r.proposal.selfReview.applied, 0);
 });

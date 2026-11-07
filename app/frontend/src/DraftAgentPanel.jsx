@@ -196,6 +196,17 @@ function Revision({ requestId, backendUrl, onOpenDraft, onClose, onChanged }) {
         <div className="da-gate">
           {data.comparison && <p>Compared with {data.parentDraft?.title}: <span className="chip preserved">{data.comparison.counts.preserved} preserved</span> <span className="chip modified">{data.comparison.counts.modified} modified</span> <span className="chip added">{data.comparison.counts.added} added</span> <span className="chip removed">{data.comparison.counts.removed} removed</span></p>}
           {(impact?.manual ?? []).length > 0 && <p className="dd-flag">Needs your hand: {impact.manual.join(' · ')}</p>}
+          {r.proposal?.selfReview && (() => {
+            const sr = r.proposal.selfReview
+            const line = (name, d) => d?.verdict ? `${name}: ${d.verdict}${d.overall ? ` (${d.overall}/10)` : ''}` : `${name}: skipped — ${d?.error ?? 'did not run'}`
+            return (
+              <div className="dd-fine" role="status">
+                <p><strong>🩺 Self-check done after writing:</strong> {line('Dialogue Doctor', sr.dialogue)} · {line('Screenplay Doctor', sr.screenplay)}</p>
+                <p>{sr.applied} scene{sr.applied === 1 ? '' : 's'} fixed by the doctors{sr.failed ? `, ${sr.failed} could not be fixed` : ''}{sr.left ? `, ${sr.left} point${sr.left === 1 ? '' : 's'} left for you (they need a story change or a person)` : ''}. Open “Dialogue Doctor” and “Screenplay Doctor” on the new draft to read the full reports.</p>
+                {[...(sr.dialogue?.topFixes ?? []), ...(sr.screenplay?.topFixes ?? [])].length > 0 && <p>Biggest fixes they named: {[...(sr.dialogue?.topFixes ?? []), ...(sr.screenplay?.topFixes ?? [])].join(' · ')}</p>}
+              </div>
+            )
+          })()}
           <p className="dd-fine">Every stage was judged by the normal process; the scores above are the judges' own.</p>
           <div className="dd-actions">
             <button type="button" className="dd-btn primary" disabled={busy} onClick={() => post('approve')}>Approve Revised Draft</button>

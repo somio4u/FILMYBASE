@@ -46,7 +46,7 @@ const fakeBible = (title, notes = []) => ({
   review: { passed: true, keptVersion: 2, scores: { story: 8, audience: 9 }, history: [{ version: 1, scores: { story: 7, audience: 8 } }, { version: 2, scores: { story: 8, audience: 9 } }], reports: {} },
 });
 
-export function fakePipeline(db, { stageScores = {}, onCall = null, writeAllJob = false } = {}) {
+export function fakePipeline(db, { stageScores = {}, onCall = null, writeAllJob = false, doctors = false } = {}) {
   const runs = new Map();
   let nextRun = 1;
   const attempts = new Map();
@@ -108,6 +108,13 @@ export function fakePipeline(db, { stageScores = {}, onCall = null, writeAllJob 
       return ok({ beatIndex: Number(m[1]), allApproved: all });
     }
     if (/beats\/\d+\/request-changes$/.test(path)) return ok({ ok: true });
+    // the two doctors (the self-check after the new screenplay is written): they finish at once and each hands over a short list of findings
+    if (doctors) {
+      if (/\/projects\/\d+\/(dialogue|screenplay)-doctor$/.test(path)) return method === "POST" ? ok({ job: { status: "running" } }) : ok({ job: { status: "done" }, run: { id: 5, overview: { verdict: /dialogue/.test(path) ? "Dialogue pass" : "Revise", overall: 6, topFixes: ["Cut the narration"] } } });
+      if (/\/(dialogue|screenplay)-doctor\/5\/send$/.test(path)) return ok({ readId: /dialogue/.test(path) ? 71 : 72, items: 3 });
+      if (/\/assistant\/\d+\/report\/(71|72)$/.test(path)) return ok({ items: [{ id: 1, kind: "scene", impact: "in_place", scenesUsed: [1] }, { id: 2, kind: "structure", impact: "new_draft", scenesUsed: [] }, { id: 3, kind: "keep" }, { id: 4, kind: "risk" }], counts: { changed: 1, unchanged: 0 }, apply: { status: "done", failed: [] } });
+      if (/\/assistant\/\d+\/report\/(71|72)\/apply$/.test(path)) return ok({ started: true });
+    }
     return null;
   }
   async function film(method, path, body) {

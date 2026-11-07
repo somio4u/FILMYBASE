@@ -7440,24 +7440,61 @@ async function createScreenplayOnlyProject({ title, text, userId, cookie }) {
 // A new draft from the owner's own final screenplay (a file): the draft chosen is copied — its story, synopsis, characters and beat sheet stay the same — and the copy's
 // screenplay is the uploaded one. Nothing of any older draft is touched. multipart: file (+ optional label)
 const draftScreenplayUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 25 * 1024 * 1024 } });
+// The reading and the making take a while (a PDF is READ PAGE BY PAGE by the AI, because a PDF's own text layer drops Hindi marks: "में" comes out as "म", "है" as "ह"),
+// so it runs in the background and the screen follows it: what it is doing now, how long it has run. Kept in memory (it finishes in a few minutes; a restart of the
+// server loses it and the screen says so — nothing is half-made, the draft is created only at the very end).
+const draftFromScreenplayJobs = new Map();
+const newestDraftFromScreenplayJob = (draftId) => [...draftFromScreenplayJobs.values()].filter((j) => j.draftId === draftId).sort((a, b) => b.startedAt - a.startedAt)[0] ?? null;
+const draftFromScreenplayView = (j) => (j ? { jobId: j.id, status: j.status, step: j.step, filename: j.filename, startedAt: j.startedAt, finishedAt: j.finishedAt ?? null, result: j.result ?? null, error: j.error ?? null, warnings: j.warnings ?? [], now: Date.now() } : null);
+
 app.post("/api/drafts/:draftId/from-screenplay", requireRole("admin"), draftScreenplayUpload.single("file"), async (req, res) => {
   try {
     if (!req.file) throw Object.assign(new Error("Choose your screenplay file first (PDF, Word, Final Draft, Fountain or text)."), { status: 400 });
     const parent = await getDraft(db, Number(req.params.draftId));
-    let text;
-    try { text = await extractTextFromUploadedScreenplay(req.file); } catch (error) { throw Object.assign(new Error(`I could not read that file: ${error.message}`), { status: 422 }); }
-    const known = ((await db.query("SELECT backfill FROM ai_movie_projects WHERE id = $1", [parent.project_ref])).rows[0]?.backfill?.characterArc ?? []).map((c) => c?.name).filter(Boolean);
-    const parsed = parseScreenplayText(text, { knownCharacters: known });
-    if (parsed.length === 0) throw Object.assign(new Error("I could not find any scenes in that file. A scene starts with a heading like “INT. TEMPLE - DAY” or “EXT. RIVER - NIGHT”."), { status: 422 });
-    const scenes = toAiMovieScenes(parsed).map((scene) => ({ ...scene, estimatedMinutes: computeAiMovieSceneMinutes(normalizeAiMovieSceneFormat(scene)) }));
+    const running = newestDraftFromScreenplayJob(parent.id);
+    if (running?.status === "running") throw Object.assign(new Error("Your screenplay is already being read for this draft. Wait for it to finish."), { status: 409 });
     const label = String(req.body?.label ?? "").trim().slice(0, 80) || null;
-    const out = await createDraftFromScreenplay(db, { parentDraftId: parent.id, scenes, filename: req.file.originalname, label, actorUserId: req.user.id });
-    syncProductionQuietly(db, out.draft.project_ref ?? out.draft.projectRef);
-    res.status(201).json({ draft: out.draft, scenes: out.scenes, beats: out.beats, dialogueLines: scenes.reduce((n, sc) => n + sc.content.filter((b) => b.type === "dialogue").length, 0) });
+    const job = { id: crypto.randomUUID(), draftId: parent.id, status: "running", step: "Starting", filename: req.file.originalname, startedAt: Date.now(), warnings: [] };
+    draftFromScreenplayJobs.set(job.id, job);
+    for (const [id, j] of draftFromScreenplayJobs) if (Date.now() - j.startedAt > 6 * 3600 * 1000) draftFromScreenplayJobs.delete(id); // old ones are forgotten
+    const file = req.file, userId = req.user.id;
+    (async () => {
+      try {
+        let text;
+        if (path.extname(file.originalname).toLowerCase() === ".pdf") {
+          // the pages are READ by the AI (what is printed), never the PDF's text layer — that drops the Hindi vowel marks and breaks words
+          try {
+            const read = await readStoryFromPdf(file.buffer, { kind: "screenplay", ask: brainAsker(newUsage(), (l) => { job.step = l; }, PDF_READER_MODELS), onProgress: (l) => { job.step = l; } });
+            text = read.text; job.warnings = read.warnings ?? [];
+          } catch (error) {
+            throw Object.assign(new Error(`The AI could not read the pages of this PDF (${String(error.message).slice(0, 220)}). A PDF's own text drops Hindi letters, so I did not use it. Upload a Word (.docx) or text version of the screenplay instead, or try the PDF again.`), { status: 422 });
+          }
+        } else {
+          job.step = "Reading the file";
+          try { text = await extractTextFromUploadedScreenplay(file); } catch (error) { throw Object.assign(new Error(`I could not read that file: ${error.message}`), { status: 422 }); }
+        }
+        job.step = "Finding the scenes";
+        const known = ((await db.query("SELECT backfill FROM ai_movie_projects WHERE id = $1", [parent.project_ref])).rows[0]?.backfill?.characterArc ?? []).map((c) => c?.name).filter(Boolean);
+        const parsed = parseScreenplayText(text, { knownCharacters: known });
+        if (parsed.length === 0) throw new Error("I could not find any scenes in that file. A scene starts with a heading like “INT. TEMPLE - DAY” or “EXT. RIVER - NIGHT”.");
+        const scenes = toAiMovieScenes(parsed).map((scene) => ({ ...scene, estimatedMinutes: computeAiMovieSceneMinutes(normalizeAiMovieSceneFormat(scene)) }));
+        job.step = `Making the new draft: ${scenes.length} scenes`;
+        const out = await createDraftFromScreenplay(db, { parentDraftId: parent.id, scenes, filename: file.originalname, label, actorUserId: userId });
+        syncProductionQuietly(db, out.draft.project_ref);
+        job.result = { draftId: out.draft.id, scenes: out.scenes, beats: out.beats, dialogueLines: scenes.reduce((n, sc) => n + sc.content.filter((b) => b.type === "dialogue").length, 0), title: out.draft.label ?? `Draft ${out.draft.draft_number}` };
+        job.status = "done"; job.step = "Done";
+      } catch (error) {
+        console.error("Draft from screenplay failed:", error.message);
+        job.status = "error"; job.error = String(error.message).slice(0, 600); job.step = "Stopped";
+      }
+      job.finishedAt = Date.now();
+    })();
+    res.status(202).json(draftFromScreenplayView(job));
   } catch (error) {
     res.status(error.status ?? 500).json({ error: error.message, code: error.code });
   }
 });
+app.get("/api/drafts/:draftId/from-screenplay/current", requireRole("admin"), (req, res) => { res.json({ job: draftFromScreenplayView(newestDraftFromScreenplayJob(Number(req.params.draftId))) }); });
 
 app.post("/api/ai-movie/projects/from-screenplay", requireRole("admin"), async (req, res) => {
   const text = String(req.body?.text ?? "").trim();

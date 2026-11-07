@@ -84,3 +84,13 @@ test("scenes are placed into beats in order: by running time, every beat gets at
   assert.throws(() => assignScenesToBeats([1, 1], [1, 1, 1]), /every beat needs at least one scene/);
   assert.throws(() => assignScenesToBeats([1], []), /no beat sheet/);
 });
+
+test("the time of day on the line under a heading belongs to the heading (it is not a speaker); a short Hindi action line ending in । is not a speaker", () => {
+  const text = "1 INT. HIDDEN PRAYER ROOM, KROULOKA MINING COLONY\nNIGHT\n\nक्रोलोक — आकाशगंगा के आख़िरी छोर पर एक खदान-दुनिया।\n\nकोठरी में अँधेरा।\nबाहर से मशीन की धीमी गड़गड़ाहट।\n\n2 INT. HIDDEN PRAYER ROOM, KROULOKA MINING COLONY\nCONTINUOUS\n\nएक तीखी आवाज़ सन्नाटे को चीर देती है।\n\nTHE RAKHYAKA\nये गर्भगृह की दहलीज़ है।\n";
+  const scenes = parseScreenplayText(text, { knownCharacters: [] });
+  assert.deepEqual(scenes.map((s) => s.heading), ["INT. HIDDEN PRAYER ROOM, KROULOKA MINING COLONY - NIGHT", "INT. HIDDEN PRAYER ROOM, KROULOKA MINING COLONY - CONTINUOUS"]);
+  assert.ok(scenes[0].blocks.every((b) => b.type === "action"), JSON.stringify(scenes[0].blocks));
+  assert.equal(scenes[1].blocks[1].character, "THE RAKHYAKA");
+  const already = parseScreenplayText("INT. ROOM - NIGHT\nNIGHT\n\nHe waits.\n");
+  assert.equal(already[0].heading, "INT. ROOM - NIGHT");
+});

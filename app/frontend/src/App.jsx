@@ -3068,6 +3068,15 @@ function AduWorkBar({ currentUser, t, onOpenAdu, onOpenProject, appMode }) {
       <span className="adu-work-text"><strong>Adu is working on “{work.title}”</strong> — {stage}</span>
       <button type="button" className="adu-work-btn" onClick={() => onOpenAdu?.(work)}>Open Adu</button>
       {work.projectRef && sameMode && <button type="button" className="adu-work-btn" onClick={() => onOpenProject?.(work)}>Open project</button>}
+      {work.waitingForYou && (work.requestId || work.runId) && (
+        // a draft that waits for your approval keeps Adu busy (he does one project at a time): approve it in Adu, or stop it here
+        <button type="button" className="adu-work-btn" onClick={async () => {
+          if (!window.confirm(`Stop “${work.title}”? Nothing you already saved is deleted, and Adu becomes free for other work. You can always make a new draft later.`)) return
+          const url = work.requestId ? `${BACKEND_URL}/api/drafts/requests/${work.requestId}/cancel` : `${BACKEND_URL}/api/auto-pipeline/${work.runId}/stop`
+          try { await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' }) } catch { /* the next refresh shows what is true */ }
+          setWork(null)
+        }}>Stop this draft</button>
+      )}
     </div>
   )
 }

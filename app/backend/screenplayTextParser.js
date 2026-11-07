@@ -4,6 +4,8 @@
 
 const HEADING = /^\s*(?:\d{1,4}[A-Z]?\s*[.):-]?\s+)?((?:INT|EXT|EST|INT\.?\s*\/\s*EXT|EXT\.?\s*\/\s*INT|I\s*\/\s*E)\b\.?\s*[-–—:]?\s*.+?)\s*(?:\d{1,4}[A-Z]?)?\s*$/i;
 const TRANSITION = /^\s*((?:SMASH |MATCH |JUMP |HARD )?CUT TO|DISSOLVE TO|FADE (?:IN|OUT|TO BLACK|TO WHITE)|WIPE TO|IRIS (?:IN|OUT)|FREEZE FRAME|SHARP CUT TO|BACK TO)\b[^a-z\n]*$/;
+// the time of day often sits on the line under the heading ("INT. ROOM" / "NIGHT"): it belongs to the heading, it is not a speaker
+const TIME_LINE = /^\s*(?:NIGHT|DAY|DAWN|DUSK|MORNING|EVENING|AFTERNOON|SUNSET|SUNRISE|MIDNIGHT|NOON|CONTINUOUS|LATER|MOMENTS LATER|SAME TIME|SAME|EARLIER|TIMELESS|MAGIC HOUR|DAY\/NIGHT|(?:LATER|EARLIER) THAT (?:DAY|NIGHT|MORNING|EVENING)|NEXT (?:DAY|MORNING)|THE NEXT (?:DAY|MORNING))(?:\s*[-–—,/]\s*[A-Z ]{1,30})?\s*$/;
 const EXTENSION = /\s*\((?:V\.?\s?O\.?|O\.?\s?S\.?|O\.?\s?C\.?|CONT'?D\.?|CONTINUED|FILTER|ON PHONE|PRE-?LAP)\)\s*/gi;
 
 const squash = (s) => String(s ?? "").replace(/\s+/g, " ").trim();
@@ -11,7 +13,8 @@ const isBlank = (s) => !String(s ?? "").trim();
 // a speaker's name on its own line: capital letters (or Devanagari/other scripts with no letter case) and a few marks, short
 const looksLikeCue = (line) => {
   const t = squash(line.replace(EXTENSION, " "));
-  if (!t || t.length > 36 || /[a-z]/.test(t) || /[.!?,;:]$/.test(t)) return false;
+  if (!t || t.length > 36 || /[a-z]/.test(t) || /[.!?,;:।॥]$/.test(t)) return false;
+  if (TIME_LINE.test(t)) return false;
   if (!/\p{L}/u.test(t)) return false;
   return /^[\p{L}\p{M}0-9 .'’()\-&/]+$/u.test(t) && !HEADING.test(line) && !TRANSITION.test(line);
 };
@@ -36,7 +39,12 @@ export function parseScreenplayText(text, { knownCharacters = [] } = {}) {
     const line = lines[i];
     if (isBlank(line)) { flushAction(); continue; }
     const head = HEADING.exec(line);
-    if (head) { startScene(head[1]); continue; }
+    if (head) {
+      startScene(head[1]);
+      // "NIGHT" / "CONTINUOUS" on the line right under the heading is part of the heading
+      if (lines[i + 1] !== undefined && TIME_LINE.test(lines[i + 1]) && !/\b(?:DAY|NIGHT|DAWN|DUSK|MORNING|EVENING|CONTINUOUS|LATER)\b/i.test(scene.heading.split(/\s[-–—]\s/).slice(1).join(" "))) { scene.heading = `${scene.heading} - ${squash(lines[i + 1])}`; i++; }
+      continue;
+    }
     if (!scene) continue; // the title page and anything before the first scene heading
     if (TRANSITION.test(line)) { flushAction(); scene.blocks.push({ type: "transition", text: squash(line).toUpperCase().replace(/:$/, "") }); continue; }
 

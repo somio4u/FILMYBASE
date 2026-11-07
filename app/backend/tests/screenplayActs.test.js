@@ -41,7 +41,7 @@ test("a very short film, an empty film, and a group's label", () => {
   const two = buildActs(beats([1, 1]), minutes);
   assert.equal(two.intervalAfter, 1);
   const acts = buildActs(beats([3, 3, 3, 3]), minutes);
-  assert.deepEqual(groupLabel(acts, 1), { act: "ACT 1", from: 4, to: 6, of: 12, range: "scenes 4–6" });
+  assert.deepEqual(groupLabel(acts, 1), { act: "ACT 2", from: 4, to: 6, of: 12, range: "scenes 4–6" });
   assert.equal(groupLabel(acts, 1).range, "scenes 4–6");
   assert.equal(groupLabel(acts, 9), null);
 });

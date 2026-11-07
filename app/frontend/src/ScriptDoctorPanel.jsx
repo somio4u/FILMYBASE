@@ -20,10 +20,11 @@ const EN = {
   endedLine: (c, u, f) => `Stopped with problems: ${c} scene${c === 1 ? '' : 's'} rewritten, ${u} already fine, ${f} could not be done.`,
   doneLine: (c, u, f) => `✓ Finished: ${c} scene${c === 1 ? '' : 's'} rewritten, ${u} already fine${f ? `, ${f} could not be done` : ''}.`, failed: (n) => `${n} scene${n === 1 ? '' : 's'} could not be done:`, again: 'Press “Make the changes” again to try those scenes once more (the finished ones are skipped).',
   undoAll: '↶ Undo everything the report changed', askUndo: 'Put back every scene the report changed, exactly as it was? Anything you edited in those scenes since is kept only if it cannot be undone safely.', yesUndo: 'Yes, undo all', undoneLine: (n, f) => `Put back ${n} scene${n === 1 ? '' : 's'}${f ? `; ${f} could not be put back (edited since)` : ''}.`,
-  storyBtn: (n) => `⚡ Shortcut: make a new story from these ${n} changes`,
+  storyBtn: (n) => `⚡ Create another draft with all these ${n} changes`,
+  anTitle: 'Or let the two doctors analyse your screenplay', anIntro: 'The Dialogue Doctor and the Screenplay Doctor read the whole film, one after the other, and give one verdict and one list of changes — just like an uploaded report. Nothing is changed until you press a button below.', anGenre: 'Kind of film (for the dialogue check)', anMarket: 'Who the film is for', anStart: '🩺 Analyse my screenplay', anStarting: 'Starting…', anWorking: (n, total, t) => `Analysing — step ${n} of ${total}, running for ${t}`, anFail: 'The analysis could not finish:', anVerdictTitle: 'The doctors say', anDialogue: 'Dialogue Doctor', anScreenplay: 'Screenplay Doctor', anFixes: 'Biggest fixes they named', anFull: 'Read the full report', anSkip: 'skipped',
   keepLabel: 'Old scenes to keep (optional) — e.g. 1-5, 12, 20-22', keepHelp: 'These old scenes are given to the new story in full, with their dialogue, and it is told to reuse them as written wherever they still fit. It is not a promise: if the story changes, a scene may have to change too. Leave empty to keep none.',
-  oneWay: 'Choose ONE way — not both. ▶ “Make the changes” keeps your screenplay and fixes scene by scene. ⚡ “New story” writes the whole screenplay again, and it already includes the whole-script rules (narration, camera directions, voices, one register, theme). So if you go the new-story way, do NOT press ▶ first — those fixes would be thrown away when everything is rewritten.',
-  askStory: (n) => `Make a NEW draft from these ${n} story changes? What happens: (1) the ${n} changes are merged into a few clear directions; (2) a NEW draft is made — the draft that is open now stays exactly as it is; the whole-script rules from the report (narration, camera directions, voices, one register, theme) are included in the same rewrite, so you need no second pass; (3) the revised story is designed and approved by itself; (4) the WHOLE screenplay is written again from it — EVERY beat, EVERY scene and EVERY line of dialogue, not only the scenes that need a change. This takes a long time (hours for a long film) and the new draft is written fresh — it does not keep scene-by-scene fixes (they point to old scene numbers), and your old scenes and dialogue are not copied into it (they stay in the draft that is open now). You watch every step in Adu's “New draft” tab and in the bar at the top, and only the final “Approve” is left to you.`,
+  oneWay: 'Choose ONE way — not both. ▶ “Make the changes” keeps your screenplay and fixes scene by scene. ⚡ “Create another draft” writes the whole screenplay again in a NEW draft with ALL the changes (the scene fixes too, restated as story moments) and the whole-script rules (narration, camera directions, voices, one register, theme) — and when it is written the two doctors check it again by themselves. So if you go the new-draft way, do NOT press ▶ first: those fixes would be thrown away when everything is rewritten.',
+  askStory: (n) => `Create ANOTHER draft with all these ${n} changes? What happens: (1) the ${n} changes — the scene fixes too, restated as story moments — are merged into a few clear directions; (2) a NEW draft is made — the draft that is open now stays exactly as it is; the whole-script rules from the report (narration, camera directions, voices, one register, theme) are included in the same rewrite, so you need no second pass; (3) the revised story is designed and approved by itself; (4) the WHOLE screenplay is written again from it — EVERY beat, EVERY scene and EVERY line of dialogue, not only the scenes that need a change. This takes a long time (hours for a long film) and the new draft is written fresh — it does not keep scene-by-scene fixes (they point to old scene numbers), and your old scenes and dialogue are not copied into it (they stay in the draft that is open now). You watch every step in Adu's “New draft” tab and in the bar at the top, and only the final “Approve” is left to you.`,
   storyStarted: (d, from, merged) => `Started: ${from} changes → ${d} direction${d === 1 ? '' : 's'}${merged ? '' : ' (the AI could not merge them, so the most serious ones were used as they are)'}. Follow it in Adu's “New draft” tab or the bar at the top.`, storyStarting: 'Starting the new story…',
   tags: { in_place: '🟢 inside existing scenes — no new draft', careful: '🟡 inside existing scenes — read it after', new_draft: '🔴 changes the story — a new draft is the safe way' },
   estimated: ' (worked out from the page numbers)', summaryTitle: 'What this report asks, in short (an estimate from the words of each change)',
@@ -48,10 +49,11 @@ const HI = {
   endedLine: (c, u, f) => `समस्याओं के साथ रुका: ${c} scene दोबारा लिखे गए, ${u} पहले से ठीक थे, ${f} नहीं हो पाए।`,
   doneLine: (c, u, f) => `✓ पूरा हुआ: ${c} scene दोबारा लिखे गए, ${u} पहले से ठीक थे${f ? `, ${f} नहीं हो पाए` : ''}।`, failed: (n) => `${n} scene नहीं हो पाए:`, again: 'उन scenes को एक बार और आज़माने के लिए “बदलाव लगाओ” फिर दबाओ (पूरे हो चुके छोड़ दिए जाते हैं)।',
   undoAll: '↶ report ने जो बदला वह सब वापस लो', askUndo: 'report ने जो भी scenes बदले हैं, उन सबको ठीक पहले जैसा कर दें? उसके बाद आपने जो बदला है वह सिर्फ़ तभी बचेगा जब उसका Undo सुरक्षित न हो।', yesUndo: 'हाँ, सब वापस लो', undoneLine: (n, f) => `${n} scene वापस रखे${f ? `; ${f} वापस नहीं हो पाए (बाद में बदले गए)` : ''}।`,
-  storyBtn: (n) => `⚡ शॉर्टकट: इन ${n} बदलावों से नई कहानी बनाओ`,
+  storyBtn: (n) => `⚡ इन सभी ${n} बदलावों के साथ एक और draft बनाओ`,
+  anTitle: 'या दोनों doctors से अपनी screenplay की जाँच करवाओ', anIntro: 'Dialogue Doctor और Screenplay Doctor पूरी film बारी-बारी से पढ़ते हैं और एक फ़ैसला व बदलावों की एक सूची देते हैं — बिल्कुल upload की गई report की तरह। नीचे का बटन दबाने तक कुछ नहीं बदलता।', anGenre: 'Film किस तरह की है (dialogue की जाँच के लिए)', anMarket: 'Film किसके लिए है', anStart: '🩺 मेरी screenplay जाँचो', anStarting: 'शुरू हो रहा है…', anWorking: (n, total, t) => `जाँच चल रही है — कदम ${n} / ${total}, ${t} से चल रहा है`, anFail: 'जाँच पूरी नहीं हो पाई:', anVerdictTitle: 'Doctors क्या कहते हैं', anDialogue: 'Dialogue Doctor', anScreenplay: 'Screenplay Doctor', anFixes: 'उन्होंने जो सबसे बड़े सुधार बताए', anFull: 'पूरी report पढ़ो', anSkip: 'छोड़ा गया',
   keepLabel: 'रखने वाले पुराने scenes (चाहो तो) — जैसे 1-5, 12, 20-22', keepHelp: 'ये पुराने scenes अपने dialogue समेत पूरे नई कहानी को दिए जाते हैं, और उसे कहा जाता है कि जहाँ फ़िट बैठें वहाँ इन्हें जैसा है वैसा रखे। यह पक्का वादा नहीं है: कहानी बदली तो scene को भी बदलना पड़ सकता है। खाली छोड़ो तो कोई नहीं रखा जाता।',
-  oneWay: 'कोई ONE रास्ता चुनो — दोनों नहीं। ▶ “बदलाव लगाओ” आपकी screenplay रखकर scene-दर-scene सुधारता है। ⚡ “नई कहानी” पूरी screenplay फिर से लिखता है, और उसमें पूरी-script वाले नियम (narration, camera directions, voices, एक register, theme) पहले से शामिल हैं। इसलिए नई कहानी वाला रास्ता लो तो ▶ पहले मत दबाओ — पूरी लिखाई में वे सुधार बेकार चले जाएँगे।',
-  askStory: (n) => `इन ${n} कहानी वाले बदलावों से एक नया draft बनाएँ? यह होगा: (1) ${n} बदलाव मिलाकर कुछ साफ़ दिशाओं में बदले जाएँगे; (2) एक नया draft बनेगा — अभी खुला draft जैसा है वैसा रहेगा; report के पूरी-script वाले नियम (narration, camera directions, voices, एक register, theme) उसी लिखाई में शामिल हैं, दूसरा pass नहीं चाहिए; (3) संशोधित कहानी बनकर अपने-आप approve होगी; (4) उससे पूरी screenplay फिर से लिखी जाएगी — हर beat, हर scene और हर dialogue, सिर्फ़ वे scenes नहीं जिनमें बदलाव चाहिए। इसमें बहुत समय लगता है (लंबी film में कई घंटे) और नया draft नए सिरे से लिखा जाता है — scene-दर-scene सुधार उसमें नहीं रहते (वे पुराने scene-नंबर पर हैं), और आपके पुराने scenes और dialogue उसमें कॉपी नहीं होते (वे अभी खुले draft में ही रहते हैं)। हर कदम आप Adu के “New draft” tab और ऊपर वाली bar में देखोगे, और सिर्फ़ आख़िरी “Approve” आपके लिए बचा है।`,
+  oneWay: 'कोई ONE रास्ता चुनो — दोनों नहीं। ▶ “बदलाव लगाओ” आपकी screenplay रखकर scene-दर-scene सुधारता है। ⚡ “एक और draft बनाओ” पूरी screenplay नए draft में सारे बदलावों के साथ फिर से लिखता है (scene वाले सुधार भी, कहानी के पलों के रूप में) और पूरी-script वाले नियम (narration, camera directions, voices, एक register, theme) भी — और लिखे जाने के बाद दोनों doctors उसे ख़ुद फिर जाँचते हैं। इसलिए नए draft वाला रास्ता लो तो ▶ पहले मत दबाओ — पूरी लिखाई में वे सुधार बेकार चले जाएँगे।',
+  askStory: (n) => `इन सभी ${n} बदलावों के साथ एक और draft बनाएँ? यह होगा: (1) ${n} बदलाव (scene वाले सुधार भी, कहानी के पलों के रूप में दोबारा लिखकर) मिलाकर कुछ साफ़ दिशाओं में बदले जाएँगे; (2) एक नया draft बनेगा — अभी खुला draft जैसा है वैसा रहेगा; report के पूरी-script वाले नियम (narration, camera directions, voices, एक register, theme) उसी लिखाई में शामिल हैं, दूसरा pass नहीं चाहिए; (3) संशोधित कहानी बनकर अपने-आप approve होगी; (4) उससे पूरी screenplay फिर से लिखी जाएगी — हर beat, हर scene और हर dialogue, सिर्फ़ वे scenes नहीं जिनमें बदलाव चाहिए। इसमें बहुत समय लगता है (लंबी film में कई घंटे) और नया draft नए सिरे से लिखा जाता है — scene-दर-scene सुधार उसमें नहीं रहते (वे पुराने scene-नंबर पर हैं), और आपके पुराने scenes और dialogue उसमें कॉपी नहीं होते (वे अभी खुले draft में ही रहते हैं)। हर कदम आप Adu के “New draft” tab और ऊपर वाली bar में देखोगे, और सिर्फ़ आख़िरी “Approve” आपके लिए बचा है।`,
   storyStarted: (d, from, merged) => `शुरू हो गया: ${from} बदलाव → ${d} दिशाएँ${merged ? '' : ' (AI उन्हें मिला नहीं पाया, इसलिए सबसे गंभीर वाले जैसे हैं वैसे लिए गए)'}। इसे Adu के “New draft” tab या ऊपर वाली bar में देखो।`, storyStarting: 'नई कहानी शुरू हो रही है…',
   tags: { in_place: '🟢 मौजूदा scenes में — नया draft नहीं', careful: '🟡 मौजूदा scenes में — बाद में पढ़ लेना', new_draft: '🔴 कहानी बदलता है — नया draft ही सुरक्षित' },
   estimated: ' (पन्ना-नंबर से निकाला)', summaryTitle: 'यह report क्या माँगती है, संक्षेप में (हर बदलाव के शब्दों से लगाया अंदाज़ा)',
@@ -72,8 +74,8 @@ const call = async (url, method = 'GET', body, isForm = false) => {
 }
 const ICON = { waiting: '○', working: '⏳', done: '✓', manual: '👉' }
 
-export default function ScriptDoctorPanel({ backendUrl, projectId, draft, language = 'en', onClose, onChanged, onSendToChat, onOpenRevision }) {
-  const L = TEXT[language] ?? EN
+export default function ScriptDoctorPanel({ backendUrl, projectId, draft, language = 'en', onClose, onChanged, onSendToChat, onOpenRevision, onOpenDialogueDoctor, onOpenScreenplayDoctor }) {
+  const L = { ...EN, ...(TEXT[language] ?? EN) }
   const api = `${backendUrl}/api/ai-movie/assistant/${projectId}`
   const [readId, setReadId] = useState(null)
   const [read, setRead] = useState(null)
@@ -86,6 +88,11 @@ export default function ScriptDoctorPanel({ backendUrl, projectId, draft, langua
   const [note, setNote] = useState('')
   const [sent, setSent] = useState([])
   const [askStory, setAskStory] = useState(false)
+  const [an, setAn] = useState({ job: null, genres: [], markets: [] })
+  const [anGenre, setAnGenre] = useState('drama')
+  const [anMarket, setAnMarket] = useState('indian_commercial')
+  const [anBusy, setAnBusy] = useState(false)
+  const anPrev = useRef('')
   const [keepText, setKeepText] = useState('')
   const [storyNote, setStoryNote] = useState('')
   const [, setTick] = useState(0)
@@ -111,6 +118,30 @@ export default function ScriptDoctorPanel({ backendUrl, projectId, draft, langua
     return () => { alive.current = false }
   }, [api])
   useEffect(() => { if (readId) load(readId) }, [readId, load])
+
+  const proj = `${backendUrl}/api/ai-movie/projects/${projectId}/script-doctor/analyse`
+  const loadAn = useCallback(async () => { const r = await call(proj); if (alive.current && r.ok) setAn(r.data) }, [proj])
+  useEffect(() => { loadAn() }, [loadAn])
+  const analysing = an.job?.status === 'running'
+  useEffect(() => {
+    const status = an.job?.status
+    // when the analysis has just finished, its list of changes is the one on screen
+    if (anPrev.current === 'running' && status && status !== 'running') { setSelected(null); setSent([]); (async () => { const r = await call(`${api}/report`); if (alive.current && r.data?.readId) { setReadId(r.data.readId); await load(r.data.readId) } })() }
+    anPrev.current = status ?? ''
+  }, [an.job?.status]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (!analysing) return undefined
+    const poll = setInterval(loadAn, 3000); const tick = setInterval(() => setTick((n) => n + 1), 1000)
+    return () => { clearInterval(poll); clearInterval(tick) }
+  }, [analysing, loadAn])
+  async function startAnalyse() {
+    setAnBusy(true); setError('')
+    const r = await call(proj, 'POST', { genre: anGenre, market: anMarket })
+    setAnBusy(false)
+    if (!r.ok) { setError(r.offline ? L.offline : (r.data.error || L.wrong)); return }
+    await loadAn()
+  }
+  async function stopAnalyse() { await call(`${proj}/stop`, 'POST', {}); loadAn() }
 
   const reading = read && read.partsDone < read.parts && read.job?.status === 'running'
   const applying = read?.apply?.status === 'running'
@@ -195,6 +226,25 @@ export default function ScriptDoctorPanel({ backendUrl, projectId, draft, langua
           <input ref={fileRef} type="file" accept=".pdf,.doc,.docx,application/pdf" style={{ display: 'none' }} onChange={(e) => upload(e.target.files?.[0])} />
           <button type="button" className="sd-btn primary" disabled={busy === 'upload' || !loaded} onClick={() => fileRef.current?.click()}>{busy === 'upload' ? L.reading : L.choose}</button>
           {read && !reading && items.length === 0 && read.partsDone >= read.parts && <p className="sd-fine">{L.none}</p>}
+          <h3 style={{ marginTop: 18 }}>{L.anTitle}</h3>
+          <p className="sd-fine">{L.anIntro}</p>
+          {analysing ? (
+            <>
+              <div className="sd-bar" role="progressbar" aria-valuenow={an.job.done ?? 0} aria-valuemax={an.job.total}><div style={{ width: `${Math.round(((an.job.done ?? 0) / Math.max(1, an.job.total)) * 100)}%` }} /></div>
+              <p className="sd-live">⏳ {L.anWorking(Math.min((an.job.done ?? 0) + 1, an.job.total), an.job.total, clock(Date.now() - an.job.startedAt))}</p>
+              <p className="sd-fine"><strong>{L.rightNow}:</strong> {an.job.step}</p>
+              <button type="button" className="sd-btn" disabled={an.job.stopRequested} onClick={stopAnalyse}>{an.job.stopRequested ? L.stopping : L.stop}</button>
+            </>
+          ) : (
+            <>
+              <p className="sd-fine">
+                <label>{L.anGenre}{' '}<select value={anGenre} onChange={(e) => setAnGenre(e.target.value)}>{(an.genres.length ? an.genres : [{ id: 'drama', label: 'Drama / family', min: 55, max: 70 }]).map((g) => <option key={g.id} value={g.id}>{g.label} ({g.min}–{g.max}%)</option>)}</select></label>{' '}
+                <label>{L.anMarket}{' '}<select value={anMarket} onChange={(e) => setAnMarket(e.target.value)}>{(an.markets.length ? an.markets : [{ id: 'indian_commercial', label: 'Indian commercial' }]).map((m) => <option key={m.id} value={m.id}>{m.label}</option>)}</select></label>
+              </p>
+              <button type="button" className="sd-btn primary" disabled={anBusy || !loaded} onClick={startAnalyse}>{anBusy ? L.anStarting : L.anStart}</button>
+              {(an.job?.status === 'error' || ((an.job?.failed?.length ?? 0) > 0 && an.job?.status !== 'running')) && <div className="sd-error" role="alert"><p>{L.anFail}</p><ul>{(an.job.failed ?? []).slice(0, 4).map((f) => <li key={f.label}>{f.label}: {f.error}</li>)}{an.job.error && <li>{an.job.error}</li>}</ul></div>}
+            </>
+          )}
         </section>
       )}
 
@@ -218,6 +268,14 @@ export default function ScriptDoctorPanel({ backendUrl, projectId, draft, langua
           <h3>{L.step2(doable.length)}</h3>
           <p className="sd-fine">{L.how}</p>
           <p className="sd-fine">{L.counts(keeps.length)}</p>
+          {read.analysis && (
+            <div className="sd-summary">
+              <strong>{L.anVerdictTitle}</strong>
+              <p>{L.anDialogue}: <strong>{read.analysis.dialogue.verdict}</strong>{read.analysis.dialogue.reason ? ` — ${read.analysis.dialogue.reason}` : ''} {onOpenDialogueDoctor && <button type="button" className="sd-link" onClick={onOpenDialogueDoctor}>{L.anFull}</button>}</p>
+              <p>{L.anScreenplay}: <strong>{read.analysis.screenplay.verdict}</strong>{read.analysis.screenplay.overall ? ` (${read.analysis.screenplay.overall}/10)` : ''}{read.analysis.screenplay.reason ? ` — ${read.analysis.screenplay.reason}` : ''} {onOpenScreenplayDoctor && <button type="button" className="sd-link" onClick={onOpenScreenplayDoctor}>{L.anFull}</button>}</p>
+              {[...(read.analysis.dialogue.topFixes ?? []), read.analysis.screenplay.biggestFix].filter(Boolean).length > 0 && <p className="sd-fine"><strong>{L.anFixes}:</strong> {[...(read.analysis.dialogue.topFixes ?? []), read.analysis.screenplay.biggestFix].filter(Boolean).join(' · ')}</p>}
+            </div>
+          )}
           {read.summary && (
             <div className="sd-summary">
               <strong>{L.summaryTitle}</strong>
@@ -246,14 +304,14 @@ export default function ScriptDoctorPanel({ backendUrl, projectId, draft, langua
               </ul>
             </div>
           ))}
-          {(read.summary?.forNewStory ?? 0) > 0 && (
+          {(read.summary?.allChanges ?? 0) > 0 && (
             <div className="sd-summary">
               <p className="sd-fine">{L.oneWay}</p>
               {!askStory ? (
-                <button type="button" className="sd-btn primary" disabled={Boolean(busy) || !draft?.id} onClick={() => setAskStory(true)}>{busy === 'story' ? L.storyStarting : L.storyBtn(read.summary.forNewStory)}</button>
+                <button type="button" className="sd-btn primary" disabled={Boolean(busy) || !draft?.id} onClick={() => setAskStory(true)}>{busy === 'story' ? L.storyStarting : L.storyBtn(read.summary.allChanges)}</button>
               ) : (
                 <div className="sd-ask" role="alertdialog">
-                  <p>{L.askStory(read.summary.forNewStory)}</p>
+                  <p>{L.askStory(read.summary.allChanges)}</p>
                   <p><label>{L.keepLabel}<br /><input type="text" className="sd-keep" value={keepText} onChange={(e) => setKeepText(e.target.value)} maxLength={200} placeholder="1-5, 12" /></label></p>
                   <p className="sd-fine">{L.keepHelp}</p>
                   <button type="button" className="sd-btn primary" onClick={storyDraft}>{L.yes}</button>{' '}
@@ -329,10 +387,10 @@ export default function ScriptDoctorPanel({ backendUrl, projectId, draft, langua
             <div className="sd-manual">
               <h4>{L.needsYou(read.plan.manual.length)}</h4>
               {!askStory ? (
-                <p><button type="button" className="sd-btn primary big" disabled={Boolean(busy) || applying || !draft?.id} onClick={() => setAskStory(true)}>{busy === 'story' ? L.storyStarting : L.storyBtn(read.summary?.forNewStory ?? read.plan.manual.length)}</button></p>
+                <p><button type="button" className="sd-btn primary big" disabled={Boolean(busy) || applying || !draft?.id} onClick={() => setAskStory(true)}>{busy === 'story' ? L.storyStarting : L.storyBtn(read.summary?.allChanges ?? read.plan.manual.length)}</button></p>
               ) : (
                 <div className="sd-ask" role="alertdialog">
-                  <p>{L.askStory(read.summary?.forNewStory ?? read.plan.manual.length)}</p>
+                  <p>{L.askStory(read.summary?.allChanges ?? read.plan.manual.length)}</p>
                   <p><label>{L.keepLabel}<br /><input type="text" className="sd-keep" value={keepText} onChange={(e) => setKeepText(e.target.value)} maxLength={200} placeholder="1-5, 12" /></label></p>
                   <p className="sd-fine">{L.keepHelp}</p>
                   <button type="button" className="sd-btn primary" onClick={storyDraft}>{L.yes}</button>{' '}

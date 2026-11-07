@@ -125,6 +125,8 @@ export async function ensureReportSchema(db) {
   await db.query("ALTER TABLE adu_report_reads ADD COLUMN IF NOT EXISTS apply_plan JSONB");
   await db.query("ALTER TABLE adu_report_reads ADD COLUMN IF NOT EXISTS apply_draft_id INTEGER");
   await db.query("ALTER TABLE adu_report_reads ADD COLUMN IF NOT EXISTS results JSONB NOT NULL DEFAULT '{}'");
+  // a read made by the two doctors (not uploaded): their verdicts, scores and top fixes, shown at the top of Script Doctor
+  await db.query("ALTER TABLE adu_report_reads ADD COLUMN IF NOT EXISTS analysis JSONB");
 }
 
 export async function savePlan(db, readId, plan, draftId) {
@@ -146,10 +148,10 @@ export async function latestReadId(db, projectRef) {
   return (await db.query("SELECT id FROM adu_report_reads WHERE project_ref = $1 ORDER BY id DESC LIMIT 1", [projectRef])).rows[0]?.id ?? null;
 }
 
-export async function createRead(db, { module = "ai_movie", projectRef, userId = null, filename, text }) {
+export async function createRead(db, { module = "ai_movie", projectRef, userId = null, filename, text, analysis = null }) {
   const chunks = chunkReportText(text);
   if (chunks.length === 0) throw Object.assign(new Error("I could not read any text from that file."), { status: 422 });
-  const r = await db.query("INSERT INTO adu_report_reads (module, project_ref, user_id, filename, chunks) VALUES ($1,$2,$3,$4,$5) RETURNING id", [module, projectRef, userId, clean(filename, 200), JSON.stringify(chunks)]);
+  const r = await db.query("INSERT INTO adu_report_reads (module, project_ref, user_id, filename, chunks, analysis) VALUES ($1,$2,$3,$4,$5,$6) RETURNING id", [module, projectRef, userId, clean(filename, 200), JSON.stringify(chunks), analysis ? JSON.stringify(analysis) : null]);
   return { id: r.rows[0].id, parts: chunks.length };
 }
 
@@ -164,11 +166,11 @@ export async function saveParts(db, readId, partNo, items) {
 }
 
 export async function getRead(db, readId, { projectRef = null } = {}) {
-  const row = (await db.query("SELECT id, module, project_ref, filename, chunks, done_chunks, items, selected, sent, created_at, apply_plan, apply_draft_id, results FROM adu_report_reads WHERE id = $1", [readId])).rows[0];
+  const row = (await db.query("SELECT id, module, project_ref, filename, chunks, done_chunks, items, selected, sent, created_at, apply_plan, apply_draft_id, results, analysis FROM adu_report_reads WHERE id = $1", [readId])).rows[0];
   if (!row || (projectRef !== null && row.project_ref !== Number(projectRef))) return null;
   return {
     id: row.id, filename: row.filename, parts: row.chunks.length, partsDone: row.done_chunks.length, items: row.items, selected: row.selected, sent: row.sent, createdAt: row.created_at,
-    groups: groupByKind(row.items), plan: row.apply_plan, applyDraftId: row.apply_draft_id, results: row.results ?? {},
+    groups: groupByKind(row.items), plan: row.apply_plan, applyDraftId: row.apply_draft_id, results: row.results ?? {}, analysis: row.analysis ?? null,
   };
 }
 

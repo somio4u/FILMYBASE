@@ -83,6 +83,9 @@ import { ensureAiMovieStorySchema, getProjectModes, judgedStage, registerAiMovie
 import { assertWithinBudget, recordSpend } from "./pipelineSettings.js";
 import { ensureCinematicSchema, registerSpectacleRoutes, createShotCutterHook } from "./spectacleDirector.js";
 import { MODEL_TIERS, estimateCost, isKeyBeat, modelFor } from "./modelRouting.js";
+import { createAnalyse } from "./scriptDoctorAnalyse.js";
+import { loadScenes as loadDoctorScenes } from "./dialogueDoctorRun.js";
+import { blocksOf as doctorBlocksOf } from "./dialogueDoctor.js";
 import { screenplayDocxBuffer } from "./aiMovieDocx.js";
 import { createScreenplayDoctor, ensureScreenplayDoctorSchema } from "./screenplayDoctorRun.js";
 import { MARKETS as DOCTOR_MARKETS } from "./screenplayDoctor.js";
@@ -6663,6 +6666,36 @@ app.post("/api/ai-movie/projects/:projectId/screenplay-doctor/:runId/send", requ
   try { res.json(await screenplayDoctor.sendToScriptDoctor(Number(req.params.projectId), Number(req.params.runId), req.user.id)); } catch (error) { res.status(error.status ?? 500).json({ error: error.message }); }
 });
 
+// ---- Script Doctor → "Analyse my screenplay": both doctors read the film one after the other, ONE list of changes comes out (like an uploaded report) ----
+const scriptDoctorAnalyse = createAnalyse({ db, jobStore, dialogueDoctor, screenplayDoctor });
+app.get("/api/ai-movie/projects/:projectId/script-doctor/analyse", requireRole("admin"), async (req, res) => {
+  try {
+    const job = await scriptDoctorAnalyse.jobs.currentFor(Number(req.params.projectId)).catch(() => null);
+    res.json({ job: job ? publicWriteJob(job) : null, readId: await latestReadId(db, Number(req.params.projectId)), genres: Object.entries(DOCTOR_GENRES).map(([id, g]) => ({ id, label: g.label, min: g.min, max: g.max })), markets: Object.entries(DOCTOR_MARKETS).map(([id, m]) => ({ id, label: m.label })) });
+  } catch (error) { res.status(error.status ?? 500).json({ error: error.message }); }
+});
+app.post("/api/ai-movie/projects/:projectId/script-doctor/analyse", requireRole("admin"), async (req, res) => {
+  try {
+    const projectId = Number(req.params.projectId);
+    for (const [jobs, what] of [[aiMovieWriteAllJobs, "The whole screenplay is being written right now. Wait for it to finish, then analyse it."], [aduReportApplyJobs, "A report's changes are being made. Wait for them to finish."], [dialogueDoctor.jobs, "The Dialogue Doctor is already running."], [screenplayDoctor.jobs, "The Screenplay Doctor is already running."]]) {
+      const running = await jobs.currentFor(projectId).catch(() => null);
+      if (running?.status === "running") throw Object.assign(new Error(what), { status: 409 });
+    }
+    const scenes = await loadDoctorScenes(db, projectId);
+    if (scenes.length < 3) throw Object.assign(new Error("The screenplay needs at least 3 written scenes to be analysed."), { status: 409 });
+    if (!scenes.some((s) => doctorBlocksOf(s).some((b) => b.type === "dialogue"))) throw Object.assign(new Error("None of the scenes has dialogue yet. Write the dialogue first."), { status: 409 });
+    const out = await scriptDoctorAnalyse.start(projectId, { userId: req.user.id, genre: req.body?.genre, market: req.body?.market });
+    res.status(out.alreadyRunning ? 200 : 202).json({ job: publicWriteJob(out.job), alreadyRunning: out.alreadyRunning });
+  } catch (error) { res.status(error.status ?? 500).json({ error: error.message }); }
+});
+app.post("/api/ai-movie/projects/:projectId/script-doctor/analyse/stop", requireRole("admin"), async (req, res) => {
+  try {
+    const projectId = Number(req.params.projectId);
+    for (const jobs of [scriptDoctorAnalyse.jobs, dialogueDoctor.jobs, screenplayDoctor.jobs]) { const job = await jobs.currentFor(projectId).catch(() => null); if (job?.status === "running") await jobs.stop(job.id ?? job.jobId); }
+    res.json({ stopped: true });
+  } catch (error) { res.status(error.status ?? 500).json({ error: error.message }); }
+});
+
 // body: { draftId, ids? } — makes the ticked changes (or all) in that draft. Needs a person's yes on the screen first.
 app.post("/api/ai-movie/assistant/:projectId/report/:readId/apply", requireRole("admin"), async (req, res) => {
   try {
@@ -6731,7 +6764,7 @@ app.post("/api/ai-movie/assistant/:projectId/report/:readId/story-draft", requir
     if (!read) throw Object.assign(new Error("Report not found."), { status: 404 });
     // everything that is not tied to particular OLD scenes: the story changes, the whole-script rules (narration, camera directions, voices …) and the changes with no place to put them.
     // (The new story is written again from scratch, so nothing made scene by scene first would survive: it all goes in at once.) No need to have made the scene changes first.
-    const manual = itemsForNewStory(annotateItems(read.items));
+    const manual = annotateItems(read.items).filter((i) => i.kind !== "keep"); // ALL the changes (scene fixes too, restated as story moments by the merge step), not only the story-level ones
     if (manual.length === 0) throw Object.assign(new Error("There is nothing in this report that needs a new story."), { status: 400 });
     const draftId = Number(req.body?.draftId);
     const draft = Number.isInteger(draftId) && draftId > 0 ? (await db.query("SELECT id, module, project_ref, status FROM project_drafts WHERE id = $1", [draftId])).rows[0] : null;
@@ -22104,7 +22137,7 @@ ensureAiMovieSchema()
   .then(async () => { try { await aiCredentials.load(); aiCredentials.startRefresh(); const c = aiCredentials.current(); console.log(`AI connection: ${c.source}${c.serviceAccount ? ` — project ${c.serviceAccount.project_id}, ${c.location}` : ""}${c.problem ? ` — PROBLEM: ${c.problem}` : ""}`); } catch (error) { console.error("Reading the saved AI key failed:", error.message); } })
   .then(async () => { try { const fixed = await repairStoredLabels(db); if (fixed) console.log(`Screenplay: ${fixed} scene(s) had "ACTION:" written at the start of lines — corrected.`); } catch (error) { console.error("Label repair failed:", error.message); } })
   .then(async () => { try { const fixed = await repairStoredTransitions(db); if (fixed) console.log(`Screenplay: ${fixed} scene(s) had a transition (FREEZE. BREAK- …) written as a character — corrected.`); } catch (error) { console.error("Transition repair failed:", error.message); } })
-  .then(async () => { try { await productionSync.resume(); await resumeAdSheetJobs(); await skipStartJobs.resume(); await writeScenesJobs.resume(); await addScenesJobs.resume(); await preparePacketJobs.resume(); await aiMovieWriteAllJobs.resume(); await aduReportJobs.resume(); await aduReportApplyJobs.resume(); await aiMovieMultiJobs.resume(); await dialogueDoctor.jobs.resume(); await screenplayDoctor.jobs.resume(); } catch (error) { console.error("Resuming interrupted background jobs failed:", error.message); } })
+  .then(async () => { try { await productionSync.resume(); await resumeAdSheetJobs(); await skipStartJobs.resume(); await writeScenesJobs.resume(); await addScenesJobs.resume(); await preparePacketJobs.resume(); await aiMovieWriteAllJobs.resume(); await aduReportJobs.resume(); await aduReportApplyJobs.resume(); await aiMovieMultiJobs.resume(); await dialogueDoctor.jobs.resume(); await screenplayDoctor.jobs.resume(); await scriptDoctorAnalyse.jobs.resume(); } catch (error) { console.error("Resuming interrupted background jobs failed:", error.message); } })
   .then(() => ensureAllProductionSchemas(db))
   .then(() => ensureAduChatSchema(db))
   .then(() => ensureRenameUndoSchema(db))

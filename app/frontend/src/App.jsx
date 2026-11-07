@@ -14807,9 +14807,7 @@ function App() {
                           <>
                             {aiMovieProjectId && screenplayBeats.length > 0 && (
                               <p className="script-doctor-open">
-                                <button type="button" className="choose-button" onClick={() => setShowScriptDoctor(true)}>📄 Script Doctor report — upload it and make its changes</button>{' '}
-                                <button type="button" className="choose-button" onClick={() => setShowDialogueDoctor(true)}>🩺 Dialogue Doctor — check the dialogue</button>{' '}
-                                <button type="button" className="choose-button" onClick={() => setShowScreenplayDoctor(true)}>🎬 Screenplay Doctor — review the whole film</button>
+                                <button type="button" className="choose-button" onClick={() => setShowScriptDoctor(true)}>🩺 Script Doctor — upload a report or analyse the screenplay, then make the changes</button>
                               </p>
                             )}
                             {showScreenplayDoctor && (
@@ -14824,7 +14822,8 @@ function App() {
                               <ScriptDoctorPanel backendUrl={BACKEND_URL} projectId={aiMovieProjectId} draft={currentDraft ? { id: currentDraft.id, title: currentDraft.label ?? currentDraft.title ?? null, draftNumber: currentDraft.draftNumber } : null} language={aiMovieLanguage}
                                 onClose={() => setShowScriptDoctor(false)} onChanged={() => refreshAiMovieScreenplayNow(aiMovieProjectId)}
                                 onSendToChat={(text) => { setAduPending(text); setAduTalkNonce((n) => n + 1) }}
-                                onOpenRevision={(id) => { setAduRequestId(id); setShowScriptDoctor(false) }} />
+                                onOpenRevision={(id) => { setAduRequestId(id); setShowScriptDoctor(false) }}
+                                onOpenDialogueDoctor={() => { setShowScriptDoctor(false); setShowDialogueDoctor(true) }} onOpenScreenplayDoctor={() => { setShowScriptDoctor(false); setShowScreenplayDoctor(true) }} />
                             )}
                             {!screenplayApproved && (
                               <AiMovieWriteAll backendUrl={BACKEND_URL} projectId={aiMovieProjectId} language={aiMovieLanguage} onChanged={refreshAiMovieScreenplayNow} allWritten={screenplayBeats.length > 0 && screenplayBeats.every((b) => Array.isArray(b.scenes) && b.scenes.length > 0)} autoApprovedCount={screenplayBeats.filter((b) => b.autoApproved).length} unfinished={screenplayBeats.filter((b) => !(Array.isArray(b.scenes) && b.scenes.length > 0)).length} />

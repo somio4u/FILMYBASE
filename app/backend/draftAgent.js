@@ -543,7 +543,7 @@ ${lines}`;
 }
 
 // ---- Building the brief: the agent's understanding of the WHOLE current draft plus what must change ----
-export const BRIEF_LIMIT = 16000;
+export const BRIEF_LIMIT = 17000;
 // Every piece of the current draft is given a fair share of the room, so a long film is never cut off at its end: each scene keeps at least a short gist
 // (the old way clipped the whole text at the limit, which silently dropped the last scenes of a long film).
 function fitLines(units, makeText, maxEach, budget, minEach = 40) {
@@ -559,7 +559,7 @@ export function buildBrief(request, parentUnits, impact) {
   const keep = (impact?.unchanged ?? []).map(label).slice(0, 60).join("; ");
   const head = `REVISION OF AN EXISTING DRAFT. Read the whole current draft below, then rework the story as requested. This is a NEW draft: write it fully, to the same standard as any new script, but start from this draft's story, people and world instead of from nothing.
 
-REQUESTED CHANGES (verbatim): """${String(request.instruction ?? "").slice(0, 6000)}"""
+REQUESTED CHANGES (verbatim): """${String(request.instruction ?? "").slice(0, 8000)}"""
 ${request.constraints?.mustKeep?.length ? `MUST KEEP: ${request.constraints.mustKeep.join("; ")}\n` : ""}${request.constraints?.mustChange?.length ? `MUST CHANGE: ${request.constraints.mustChange.join("; ")}\n` : ""}${keep ? `PARTS THE REVISION SHOULD LEAVE ALONE: ${keep}\n` : ""}PARTS THAT MUST BE REWORKED:\n${clip(list([...(impact?.modified ?? []), ...(impact?.indirect ?? [])]), 2500)}
 NEW MATERIAL NEEDED: ${clip((impact?.added ?? []).map((a) => a.label).join("; ") || "(none)", 600)}
 REMOVED: ${clip((impact?.removed ?? []).map((x) => label(x.key)).join("; ") || "(none)", 600)}

@@ -91,5 +91,12 @@ export function createDialogueDoctor({ db, jobStore, makeAsk }) {
     return { readId: read.id, items: items.length };
   }
 
-  return { jobs, latestRun, start, sendToScriptDoctor, publicView };
+  // the findings as a list of changes, without making a read (the combined analysis puts both doctors' lists into ONE read)
+  async function itemsFor(projectId, runId) {
+    const row = (await db.query("SELECT * FROM dialogue_doctor_runs WHERE id = $1 AND project_ref = $2", [runId, projectId])).rows[0];
+    if (!row?.overview) return { items: [], overview: null };
+    return { items: toReportItems(row.notes, row.overview, row.film), overview: row.overview };
+  }
+
+  return { jobs, latestRun, start, sendToScriptDoctor, itemsFor, publicView };
 }

@@ -80,13 +80,14 @@ export function itemProgress(items, plan, results) {
 // (the open one stays as it is), the revised story is designed and — because the person asked for the shortcut — approved by itself, and the screenplay is
 // written again from it. Only the final "approve" is left to the person.
 // ---------------------------------------------------------------------------------------------------------------------------------------------
-export const MAX_DIRECTIONS = 20;
+export const MAX_DIRECTIONS = 24;
 
 export const CONDENSE_SYSTEM = `You merge the many change requests of a script doctor's report into a short list of distinct STORY DIRECTIONS for a rewrite of the whole screenplay.
 Rules:
 - Merge duplicates and overlaps into one direction (the same villain change asked for six times is ONE direction). Keep unrelated changes apart.
 - Each direction is self-contained: what to change and how, with the names, the places and the report's own sample lines or ideas. Never invent a change the requests do not ask for.
 - Put the most important directions first (the ones the requests call critical or that many requests point to).
+- A request that names an OLD scene ("Scene 12: shorten the speech") describes a moment of the old script. Restate it as a direction about that story moment itself (who says or does what, and what should change) so it still makes sense in a script that is written again from scratch, where scene numbers differ; the old scene number may stay in brackets as a pointer.
 - Keep the report's spelling for names and quoted lines. Write the title and the action in English.
 - At most ${MAX_DIRECTIONS} directions. "fromIds" lists the request numbers each direction covers; every request should be covered by some direction.`;
 
@@ -109,7 +110,7 @@ export function normalizeDirections(raw, items) {
   const out = [];
   for (const d of Array.isArray(raw) ? raw : []) {
     const title = clip(d?.title, 120);
-    const action = clip(d?.action, 900);
+    const action = clip(d?.action, 600);
     if (!title || !action) continue;
     out.push({ title, action, fromIds: [...new Set((Array.isArray(d.fromIds) ? d.fromIds : []).map(Number).filter((id) => valid.has(id)))] });
     if (out.length >= MAX_DIRECTIONS) break;
@@ -222,7 +223,7 @@ export function impactSummary(annotated) {
   const scenes = new Set();
   let everyScene = false;
   for (const i of doable) { if (i.impact === "new_draft" && !(i.scenes?.length)) continue; if (i.kind === "global") everyScene = true; else i.scenesUsed.forEach((n) => scenes.add(n)); }
-  return { inPlace: count("in_place"), careful: count("careful"), newDraft: count("new_draft"), namedScenes: scenes.size, everyScene, forNewStory: itemsForNewStory(annotated).length };
+  return { inPlace: count("in_place"), careful: count("careful"), newDraft: count("new_draft"), namedScenes: scenes.size, everyScene, forNewStory: itemsForNewStory(annotated).length, allChanges: annotated.filter((i) => i.kind !== "keep").length };
 }
 
 // THE NEW-STORY WAY writes everything again, so nothing made scene by scene first would survive. It must therefore be given, in ONE go, everything that is not tied to

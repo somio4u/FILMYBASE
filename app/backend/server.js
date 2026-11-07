@@ -86,6 +86,8 @@ import { MODEL_TIERS, estimateCost, isKeyBeat, modelFor } from "./modelRouting.j
 import { createAnalyse } from "./scriptDoctorAnalyse.js";
 import { loadScenes as loadDoctorScenes } from "./dialogueDoctorRun.js";
 import { blocksOf as doctorBlocksOf } from "./dialogueDoctor.js";
+import { parseScreenplayText, toAiMovieScenes } from "./screenplayTextParser.js";
+import { createDraftFromScreenplay } from "./draftFromScreenplay.js";
 import { screenplayDocxBuffer } from "./aiMovieDocx.js";
 import { createScreenplayDoctor, ensureScreenplayDoctorSchema } from "./screenplayDoctorRun.js";
 import { MARKETS as DOCTOR_MARKETS } from "./screenplayDoctor.js";
@@ -101,7 +103,7 @@ import { registerTimelineRoutes } from "./timeline.js";
 import { registerAudioCueRoutes } from "./audioCues.js";
 import { registerTimelineEditRoutes } from "./timelineEdit.js";
 import { registerShotPlanRoutes } from "./shotPlans.js";
-import { backfillDrafts, registerDraftRoutes, draftUnits } from "./drafts.js";
+import { backfillDrafts, registerDraftRoutes, draftUnits, getDraft } from "./drafts.js";
 import { getAduWork, busyMessage } from "./aduWork.js";
 import { RunStopped, assertRunActive, inRunContext, stopRunJobs } from "./runControl.js";
 import { orderByLastWorked } from "./projectActivity.js";
@@ -7434,6 +7436,28 @@ async function createScreenplayOnlyProject({ title, text, userId, cookie }) {
   startAutoProduction(projectId, cookie, { phase: "prepare" }).catch((error) => console.error("Auto production could not start:", error.message));
   return projectId;
 }
+
+// A new draft from the owner's own final screenplay (a file): the draft chosen is copied — its story, synopsis, characters and beat sheet stay the same — and the copy's
+// screenplay is the uploaded one. Nothing of any older draft is touched. multipart: file (+ optional label)
+const draftScreenplayUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 25 * 1024 * 1024 } });
+app.post("/api/drafts/:draftId/from-screenplay", requireRole("admin"), draftScreenplayUpload.single("file"), async (req, res) => {
+  try {
+    if (!req.file) throw Object.assign(new Error("Choose your screenplay file first (PDF, Word, Final Draft, Fountain or text)."), { status: 400 });
+    const parent = await getDraft(db, Number(req.params.draftId));
+    let text;
+    try { text = await extractTextFromUploadedScreenplay(req.file); } catch (error) { throw Object.assign(new Error(`I could not read that file: ${error.message}`), { status: 422 }); }
+    const known = ((await db.query("SELECT backfill FROM ai_movie_projects WHERE id = $1", [parent.project_ref])).rows[0]?.backfill?.characterArc ?? []).map((c) => c?.name).filter(Boolean);
+    const parsed = parseScreenplayText(text, { knownCharacters: known });
+    if (parsed.length === 0) throw Object.assign(new Error("I could not find any scenes in that file. A scene starts with a heading like “INT. TEMPLE - DAY” or “EXT. RIVER - NIGHT”."), { status: 422 });
+    const scenes = toAiMovieScenes(parsed).map((scene) => ({ ...scene, estimatedMinutes: computeAiMovieSceneMinutes(normalizeAiMovieSceneFormat(scene)) }));
+    const label = String(req.body?.label ?? "").trim().slice(0, 80) || null;
+    const out = await createDraftFromScreenplay(db, { parentDraftId: parent.id, scenes, filename: req.file.originalname, label, actorUserId: req.user.id });
+    syncProductionQuietly(db, out.draft.project_ref ?? out.draft.projectRef);
+    res.status(201).json({ draft: out.draft, scenes: out.scenes, beats: out.beats, dialogueLines: scenes.reduce((n, sc) => n + sc.content.filter((b) => b.type === "dialogue").length, 0) });
+  } catch (error) {
+    res.status(error.status ?? 500).json({ error: error.message, code: error.code });
+  }
+});
 
 app.post("/api/ai-movie/projects/from-screenplay", requireRole("admin"), async (req, res) => {
   const text = String(req.body?.text ?? "").trim();

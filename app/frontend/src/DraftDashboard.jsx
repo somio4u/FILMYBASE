@@ -73,6 +73,9 @@ export default function DraftDashboard({ module, projectRef, backendUrl, onConti
   const [busy, setBusy] = useState('')
   const [picked, setPicked] = useState([])
   const [compare, setCompare] = useState(null)
+  const fileRef = useRef(null)
+  const uploadFor = useRef(null)
+  const [note, setNote] = useState('')
   const lock = useRef(false) // a double-click must not run an action twice
   const [openLast, setOpenLast] = useState(() => { try { return localStorage.getItem(OPEN_LAST_KEY) === '1' } catch { return false } })
 
@@ -98,6 +101,24 @@ export default function DraftDashboard({ module, projectRef, backendUrl, onConti
     const name = window.prompt(kind === 'alternative' ? 'Name this alternative (for example "Villain survives"):' : `Name the new draft (optional). It will be a copy of ${d.title}; ${d.title} stays exactly as it is.`, '')
     if (name === null) return
     act('branch', () => call(`${api}/${d.id}/branch`, 'POST', { kind, label: name.trim() || null }))
+  }
+  // a new draft from the owner's own final screenplay file: the chosen draft is copied (story, synopsis, characters, beat sheet stay), the screenplay is the uploaded one
+  const chooseScreenplay = (d) => { uploadFor.current = d; setError(null); setNote(''); fileRef.current?.click() }
+  async function uploadScreenplay(file) {
+    const d = uploadFor.current
+    if (fileRef.current) fileRef.current.value = ''
+    if (!file || !d || busy || lock.current) return
+    const name = window.prompt(`Name the new draft (optional). It is a copy of ${txt(d.title)} with YOUR screenplay "${file.name}" in it; ${txt(d.title)} and every other draft stay exactly as they are.`, '')
+    if (name === null) return
+    lock.current = true; setBusy('upload'); setError(null)
+    try {
+      const form = new FormData(); form.append('file', file); form.append('label', name.trim())
+      const r = await fetch(`${api}/${d.id}/from-screenplay`, { method: 'POST', body: form })
+      const data = await r.json().catch(() => ({}))
+      if (!r.ok) setError(data.error ?? 'The screenplay could not be made into a draft.')
+      else { setNote(`Done: a new draft was made from “${file.name}” — ${data.scenes} scenes placed in ${data.beats} beats, ${data.dialogueLines} dialogue lines. The story, synopsis, characters and beat sheet are the same as in ${txt(d.title)}.`); await load(); onChanged?.() }
+    } catch { setError('Could not reach the server.') }
+    lock.current = false; setBusy('')
   }
   const togglePick = (id) => setPicked((p) => (p.includes(id) ? p.filter((x) => x !== id) : [...p, id].slice(-2)))
   const byId = new Map((dash?.drafts ?? []).map((d) => [d.id, d]))
@@ -149,6 +170,7 @@ export default function DraftDashboard({ module, projectRef, backendUrl, onConti
           <button type="button" className="dd-btn primary" onClick={() => onContinue(d)}>Continue Draft</button>
           <button type="button" className="dd-btn" disabled={Boolean(busy)} onClick={() => branch(d, 'numbered')}>Create Draft from This</button>
           <button type="button" className="dd-btn" disabled={Boolean(busy)} onClick={() => branch(d, 'alternative')}>Explore Alternative</button>
+          {module === 'ai_movie' && <button type="button" className="dd-btn" disabled={Boolean(busy)} onClick={() => chooseScreenplay(d)}>{busy === 'upload' ? 'Reading your screenplay…' : '📄 Create Draft from My Screenplay'}</button>}
           {d.kind === 'alternative' && <button type="button" className="dd-btn" disabled={Boolean(busy)} onClick={() => act('promote', () => call(`${api}/${d.id}/promote`, 'POST', {}))}>Promote to Draft</button>}
           {d.status === 'locked'
             ? <button type="button" className="dd-btn" disabled={Boolean(busy)} onClick={() => act('unlock', () => call(`${api}/${d.id}`, 'PATCH', { status: 'working' }))}>Unlock</button>
@@ -169,6 +191,10 @@ export default function DraftDashboard({ module, projectRef, backendUrl, onConti
           <button type="button" className="dd-btn" onClick={onClose}>Close</button>
         </header>
         {error && <p className="dd-error" role="alert">{error}</p>}
+        {note && <p className="dd-flag" role="status">{note}</p>}
+        {busy === 'upload' && <p className="dd-note" role="status">⏳ Reading your screenplay and making the new draft… this can take a minute.</p>}
+        <input ref={fileRef} type="file" accept=".pdf,.doc,.docx,.fdx,.fountain,.txt,.md,.scrite,.xlsx" style={{ display: 'none' }} onChange={(e) => uploadScreenplay(e.target.files?.[0])} />
+        {module === 'ai_movie' && <p className="dd-fine">Made your own final screenplay? Press <strong>📄 Create Draft from My Screenplay</strong> on a draft and choose your file (PDF, Word, Final Draft .fdx, Fountain or text). The new draft keeps that draft's story, synopsis, characters and beat sheet, and your screenplay becomes its screenplay.</p>}
         <label className="dd-inline"><input type="checkbox" checked={openLast} onChange={(e) => { setOpenLast(e.target.checked); try { localStorage.setItem(OPEN_LAST_KEY, e.target.checked ? '1' : '0') } catch { /* per-browser convenience */ } }} /> Open the last-used draft directly next time (the Drafts button always brings this back)</label>
         {picked.length === 2 && <p><button type="button" className="dd-btn primary" onClick={() => setCompare(picked.map((id) => byId.get(id)))}>Compare {byId.get(picked[0])?.title} with {byId.get(picked[1])?.title}</button></p>}
         {picked.length < 2 && visible.length > 1 && <p className="dd-fine">Tick two drafts to compare them.</p>}

@@ -19,6 +19,7 @@ import AiMovieMultiChange from './AiMovieMultiChange.jsx'
 import AiMovieRename from './AiMovieRename.jsx'
 import ScriptDoctorPanel from './ScriptDoctorPanel.jsx'
 import DialogueDoctorPanel from './DialogueDoctorPanel.jsx'
+import { buildActs, groupLabel } from './screenplayActs.js'
 import ScreenplayDoctorPanel from './ScreenplayDoctorPanel.jsx'
 import { cleanForSave, collectCharacterNames } from './scriptDoc.js'
 import { splitSceneContexts } from './sceneContexts.js'
@@ -9202,8 +9203,11 @@ function App() {
       document.getElementById(`script-scene-${sceneIndex}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
     }
   }
+  // jumping to a scene in another group of scenes (from the act list): the scene to select once the group has changed
+  const aiMovieJumpScene = useRef(null)
   useEffect(() => {
-    setAiMovieSelectedSceneIndex(0)
+    setAiMovieSelectedSceneIndex(aiMovieJumpScene.current ?? 0)
+    aiMovieJumpScene.current = null
     setAiMovieEditingScene(null)
   }, [aiMovieScreenplayViewIndex])
 
@@ -14791,6 +14795,9 @@ function App() {
                     const screenplayApproved = aiMovieStageStatus?.screenplay?.status === 'approved'
                     const collapsed = isAiMovieStageCollapsed('screenplay', screenplayApproved)
                     const viewIndex = Math.min(aiMovieScreenplayViewIndex, Math.max(screenplayBeats.length - 1, 0))
+                    // the screenplay is shown like a normal film's: ACT 1 / ACT 2 / INTERVAL / ACT 3, every scene in one running sequence (the beats are only the AI's writing groups)
+                    const actsView = buildActs(screenplayBeats, effectiveAiMovieSceneMinutes, aiMovieBackfillResult.intervalAfterBeat)
+                    const groupInfo = groupLabel(actsView, viewIndex)
                     const beat = screenplayBeats[viewIndex]
                     const beatMeta = beatsPlot[viewIndex]
                     // Real scripts number every scene in one running sequence
@@ -14947,12 +14954,12 @@ function App() {
                                       setAiMovieScreenplayViewIndex((i) => Math.max(0, Math.min(i, screenplayBeats.length - 1) - 1))
                                     }}
                                     disabled={viewIndex === 0}
-                                    aria-label="Previous beat"
+                                    aria-label="Earlier scenes"
                                   >
                                     ‹
                                   </button>
                                   <p className="bit-heading ai-movie-screenplay-nav-title">
-                                    {t.aiMovieScreenplayBeatOfLabel(viewIndex + 1, screenplayBeats.length)}: {beatMeta?.title?.[aiMovieLanguage]}
+                                    <span title={beatMeta?.title?.[aiMovieLanguage] ?? undefined}>{groupInfo ? `${groupInfo.act} · ${aiMovieLanguage === 'hi' ? `scenes ${groupInfo.from}–${groupInfo.to} / ${groupInfo.of}` : `${groupInfo.range} of ${groupInfo.of}`}` : t.aiMovieScreenplayBeatOfLabel(viewIndex + 1, screenplayBeats.length)}</span>
                                     {beat.status === 'approved' && (
                                       <span className="approved-badge ai-movie-screenplay-nav-badge">{t.approvedBadge}</span>
                                     )}
@@ -14968,7 +14975,7 @@ function App() {
                                       setAiMovieScreenplayViewIndex((i) => Math.min(screenplayBeats.length - 1, Math.min(i, screenplayBeats.length - 1) + 1))
                                     }}
                                     disabled={viewIndex === screenplayBeats.length - 1}
-                                    aria-label="Next beat"
+                                    aria-label="Later scenes"
                                   >
                                     ›
                                   </button>
@@ -14997,6 +15004,8 @@ function App() {
 
                                 {(beat.status === 'pending' || beat.status === 'approved') && (
                                   <>
+                                    <details className="ai-movie-writing-plan">
+                                    <summary>{aiMovieLanguage === 'hi' ? 'लिखने की योजना (advanced) — लंबाई, बढ़ाना, narration' : 'Writing plan for these scenes (advanced) — length, extend, narration'}</summary>
                                     <RuntimeSummary
                                       total={
                                         beat.scenes &&
@@ -15065,6 +15074,8 @@ function App() {
                                       </div>
                                     )}
 
+                                    </details>
+
                                     {Array.isArray(beat.scenes) && beat.scenes.length > 0 && (() => {
                                       // Step 2 of the redesign: scene list | script page | the
                                       // selected scene's tools, so the page itself stays clean.
@@ -15078,24 +15089,35 @@ function App() {
                                           <aside className="script-navigator" aria-label={t.scriptScenesTitle}>
                                             <p className="script-panel-title">{t.scriptScenesTitle}</p>
                                             <div className="script-navigator-list">
-                                              {beat.scenes.map((navScene, navIndex) => (
-                                                <button
-                                                  key={navIndex}
-                                                  type="button"
-                                                  className={`script-nav-item${navIndex === sceneIndex ? ' is-active' : ''}`}
-                                                  onClick={() => selectAiMovieScene(navIndex, true)}
-                                                  draggable={!isAiWriting}
-                                                  onDragStart={(e) => { aiMovieDragFrom.current = navIndex; e.dataTransfer.effectAllowed = 'move'; try { e.dataTransfer.setData('text/plain', String(navIndex)) } catch { /* some browsers need data to start a drag */ } }}
-                                                  onDragOver={(e) => { if (aiMovieDragFrom.current !== null) e.preventDefault() }}
-                                                  onDrop={(e) => { e.preventDefault(); const from = aiMovieDragFrom.current; aiMovieDragFrom.current = null; if (from !== null) moveAiMovieSceneTo(viewIndex, from, navIndex) }}
-                                                  onDragEnd={() => { aiMovieDragFrom.current = null }}
-                                                  title={navScene.tag?.tag ? `${navScene.tag.tag}${navScene.tag.note ? ` — ${navScene.tag.note}` : ''}` : undefined}
-                                                >
-                                                  {navScene.tag?.tag && <span className={`script-nav-tag is-${navScene.tag.tag}`} aria-hidden="true" />}
-                                                  <span className="script-nav-number">{sceneNumberOffset + navIndex + 1}</span>
-                                                  <span className="script-nav-heading">{navScene.sceneHeading?.en ?? ''}</span>
-                                                  <span className="script-nav-duration">{t.aiMovieShortDuration(effectiveAiMovieSceneMinutes(navScene))}</span>
-                                                </button>
+                                              {actsView.sections.map((section, si) => section.kind === 'interval' ? (
+                                                <p key={`i${si}`} className="script-nav-interval" role="separator">— INTERVAL —</p>
+                                              ) : (
+                                                <div key={`a${si}`} className="script-nav-act">
+                                                  <p className="script-nav-act-title">{section.label}</p>
+                                                  {section.scenes.map((f) => {
+                                                    const navScene = f.scene
+                                                    const here = f.beatIndex === viewIndex
+                                                    return (
+                                                      <button
+                                                        key={`${f.beatIndex}-${f.sceneIndex}`}
+                                                        type="button"
+                                                        className={`script-nav-item${here && f.sceneIndex === sceneIndex ? ' is-active' : ''}`}
+                                                        onClick={() => { if (here) selectAiMovieScene(f.sceneIndex, true); else { aiMovieJumpScene.current = f.sceneIndex; setAiMovieBeatTurnDirection(f.beatIndex > viewIndex ? 'next' : 'prev'); setAiMovieScreenplayViewIndex(f.beatIndex) } }}
+                                                        draggable={!isAiWriting && here}
+                                                        onDragStart={(e) => { aiMovieDragFrom.current = f.sceneIndex; e.dataTransfer.effectAllowed = 'move'; try { e.dataTransfer.setData('text/plain', String(f.sceneIndex)) } catch { /* some browsers need data to start a drag */ } }}
+                                                        onDragOver={(e) => { if (aiMovieDragFrom.current !== null && here) e.preventDefault() }}
+                                                        onDrop={(e) => { e.preventDefault(); const from = aiMovieDragFrom.current; aiMovieDragFrom.current = null; if (from !== null && here) moveAiMovieSceneTo(viewIndex, from, f.sceneIndex) }}
+                                                        onDragEnd={() => { aiMovieDragFrom.current = null }}
+                                                        title={navScene.tag?.tag ? `${navScene.tag.tag}${navScene.tag.note ? ` — ${navScene.tag.note}` : ''}` : undefined}
+                                                      >
+                                                        {navScene.tag?.tag && <span className={`script-nav-tag is-${navScene.tag.tag}`} aria-hidden="true" />}
+                                                        <span className="script-nav-number">{f.number}</span>
+                                                        <span className="script-nav-heading">{navScene.sceneHeading?.en ?? ''}</span>
+                                                        <span className="script-nav-duration">{t.aiMovieShortDuration(effectiveAiMovieSceneMinutes(navScene))}</span>
+                                                      </button>
+                                                    )
+                                                  })}
+                                                </div>
                                               ))}
                                             </div>
                                           </aside>

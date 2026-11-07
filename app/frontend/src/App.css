@@ -5365,9 +5365,14 @@ button, input, textarea, select {
   }
   .script-navigator-list {
     flex-direction: row;
-    overflow-x: auto;
+    flex-wrap: wrap;
+    overflow-x: hidden;
+    overflow-y: auto;
+    max-height: 300px; /* a long film's scene list scrolls inside its box */
     padding-bottom: 2px;
   }
+  .script-nav-act { display: flex; flex-wrap: wrap; flex: 1 1 100%; gap: 4px; }
+  .script-nav-act-title, .script-nav-interval { flex: 1 1 100%; }
   .script-nav-item {
     flex: 0 0 auto;
     width: auto;
@@ -8088,3 +8093,7 @@ body.is-script-edit-mode { overflow: hidden; }
 .script-nav-item[draggable="true"] { cursor: grab; }
 .script-nav-tag { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 6px; flex: none; }
 .script-nav-tag.is-change { background: #e5484d; } .script-nav-tag.is-check { background: #f5c542; } .script-nav-tag.is-new { background: #3b82f6; } .script-nav-tag.is-done { background: #30a46c; }
+.script-nav-act-title { margin: 10px 0 4px; padding: 0 4px; font-size: 0.78rem; letter-spacing: 0.08em; font-weight: 700; opacity: 0.75; }
+.script-nav-interval { margin: 12px 0; padding: 6px 4px; text-align: center; font-size: 0.8rem; letter-spacing: 0.14em; font-weight: 700; border-top: 1px dashed currentColor; border-bottom: 1px dashed currentColor; opacity: 0.85; }
+.ai-movie-writing-plan { margin: 8px 0; opacity: 0.9; }
+.ai-movie-writing-plan > summary { cursor: pointer; font-size: 0.85rem; opacity: 0.75; }

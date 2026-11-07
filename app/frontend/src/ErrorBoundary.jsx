@@ -14,6 +14,7 @@ export default class ErrorBoundary extends Component {
         <div style={{ maxWidth: 420 }}>
           <h2 style={{ margin: '0 0 8px' }}>Something went wrong on this screen</h2>
           <p style={{ margin: '0 0 16px', opacity: 0.85 }}>Your work is saved. Nothing was deleted.</p>
+          <details style={{ margin: '0 0 16px', opacity: 0.7, fontSize: 13, textAlign: 'left' }}><summary>Details (send a screenshot of this to the developer)</summary><pre style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word', margin: '8px 0 0' }}>{String(this.state.error?.message ?? this.state.error).slice(0, 400)}{this.state.error?.stack ? `\n${String(this.state.error.stack).split('\n').slice(1, 5).join('\n').slice(0, 500)}` : ''}</pre></details>
           <button type="button" onClick={close} style={{ padding: '10px 18px', borderRadius: 10, border: 0, background: '#6d5cff', color: '#fff', fontSize: 16, marginRight: 8 }}>{this.props.onClose ? 'Close this' : 'Try again'}</button>
           {!this.props.inline && <button type="button" onClick={() => window.location.reload()} style={{ padding: '10px 18px', borderRadius: 10, border: '1px solid #6d5cff', background: 'transparent', color: '#e8ecff', fontSize: 16 }}>Reload</button>}
         </div>

@@ -2,7 +2,7 @@
 // Opening a project shows this first; "Continue" resumes the draft at its saved stage. Making a new draft COPIES the chosen one —
 // the original (and any pictures, voices, video or timeline made for it) is never changed.
 
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { Component, useCallback, useEffect, useRef, useState } from 'react'
 import './Drafts.css'
 
 async function call(url, method = 'GET', body) {
@@ -18,6 +18,19 @@ export const OPEN_LAST_KEY = 'filmmaking-app:openLastDraft'
 const STAGE_LABEL = { idea: 'Idea', synopsis: 'Synopsis', characters: 'Characters', characterArc: 'Character arc', structure: 'Structure', threeAct: 'Three-act structure', bitsheet: 'Beat sheet', plot: 'Plot', story: 'Story', screenplay: 'Screenplay' }
 const MAKING_LABEL = { analyzing: 'Designing the story…', awaiting_synopsis_approval: 'Story ready — needs your approval', synopsis_approved: 'Writing…', rewriting: 'Writing the script…', failed: 'Stopped — can be retried' }
 const STATUS_LABEL = { working: 'Working', pending_approval: 'Waiting for approval', approved: 'Approved', locked: 'Locked', archived: 'Archived' }
+// anything the server sends is shown as plain text (an object where text was expected would crash the whole screen)
+const txt = (v) => (typeof v === 'string' ? v : v === null || v === undefined ? '' : typeof v === 'number' ? String(v) : (() => { try { return JSON.stringify(v) } catch { return '' } })())
+
+// one draft that cannot be drawn must not hide the others: it shows the reason and a way to open it
+class CardBoundary extends Component {
+  constructor(props) { super(props); this.state = { error: null } }
+  static getDerivedStateFromError(error) { return { error } }
+  componentDidCatch(error) { try { console.error('A draft card crashed:', error) } catch { /* ignore */ } }
+  render() {
+    if (!this.state.error) return this.props.children
+    return <li className="dd-card"><p className="dd-error" role="alert">This draft could not be shown here ({String(this.state.error?.message ?? this.state.error).slice(0, 160)}).</p><div className="dd-actions"><button type="button" className="dd-btn primary" onClick={() => this.props.onOpen?.()}>Continue Draft</button></div></li>
+  }
+}
 const when = (v) => (v ? new Date(v).toLocaleString() : '—')
 
 function Compare({ a, b, backendUrl, onClose }) {
@@ -120,18 +133,18 @@ export default function DraftDashboard({ module, projectRef, backendUrl, onConti
       <li className={`dd-card${d.id === dash.activeDraftId ? ' last' : ''}${d.kind === 'alternative' ? ' alt' : ''}`} data-draft-id={d.id}>
         <header>
           <label className="dd-pick"><input type="checkbox" checked={picked.includes(d.id)} onChange={() => togglePick(d.id)} aria-label={`Select ${d.title} to compare`} /></label>
-          <h3>{d.title}{d.kind === 'alternative' ? ' (alternative)' : ''}</h3>
-          <span className={`chip status-${d.status}`}>{STATUS_LABEL[d.status]}</span>
+          <h3>{txt(d.title)}{d.kind === 'alternative' ? ' (alternative)' : ''}</h3>
+          <span className={`chip status-${txt(d.status)}`}>{STATUS_LABEL[d.status] ?? txt(d.status)}</span>
           {d.id === dash.activeDraftId && <span className="chip last">last used</span>}
         </header>
         <dl>
-          <div><dt>From</dt><dd>{parent ? parent.title : 'The original'}</dd></div>
-          <div><dt>Stage</dt><dd>{STAGE_LABEL[d.currentStage] ?? d.currentStage ?? '—'}{d.screenplayApproved ? ' · screenplay approved' : ''}</dd></div>
+          <div><dt>From</dt><dd>{parent ? txt(parent.title) : 'The original'}</dd></div>
+          <div><dt>Stage</dt><dd>{STAGE_LABEL[d.currentStage] ?? (txt(d.currentStage) || '—')}{d.screenplayApproved ? ' · screenplay approved' : ''}</dd></div>
           <div><dt>Edited</dt><dd>{when(d.updatedAt)}</dd></div>
         </dl>
-        {d.projectTitle && <p className="dd-fine">{d.projectTitle}</p>}
-        {d.openRequest && <p className="dd-flag">Revision in progress: {String(d.openRequest.status ?? '').replace(/_/g, ' ')} <button type="button" className="dd-btn" onClick={() => onReviewRequest?.(d)}>Review revision</button></p>}
-        {d.note && <p className="dd-fine">{d.note}</p>}
+        {d.projectTitle && <p className="dd-fine">{txt(d.projectTitle)}</p>}
+        {d.openRequest && <p className="dd-flag">Revision in progress: {txt(d.openRequest.status).replace(/_/g, ' ')} <button type="button" className="dd-btn" onClick={() => onReviewRequest?.(d)}>Review revision</button></p>}
+        {d.note && <p className="dd-fine">{txt(d.note)}</p>}
         <div className="dd-actions">
           <button type="button" className="dd-btn primary" onClick={() => onContinue(d)}>Continue Draft</button>
           <button type="button" className="dd-btn" disabled={Boolean(busy)} onClick={() => branch(d, 'numbered')}>Create Draft from This</button>
@@ -166,7 +179,7 @@ export default function DraftDashboard({ module, projectRef, backendUrl, onConti
             <ul>
               {dash.revisions.filter((q) => q.offline).map((q) => (
                 <li key={q.id} data-request-id={q.id}>
-                  <span className="chip">{MAKING_LABEL[q.status] ?? String(q.status ?? '').replace(/_/g, ' ')}</span> “{String(q.instruction ?? '').slice(0, 80)}”
+                  <span className="chip">{MAKING_LABEL[q.status] ?? String(q.status ?? '').replace(/_/g, ' ')}</span> “{txt(q.instruction).slice(0, 80)}”
                   <button type="button" className="dd-btn primary" onClick={() => onReviewRequest?.({ openRequest: q, id: q.parentDraftId, module, projectRef })}>Review</button>
                   <button type="button" className="dd-btn primary" disabled={Boolean(busy)} onClick={() => act('online', () => call(`${api}/requests/${q.id}/make-draft`, 'POST', {}))}>Make it my draft now</button>
                   {q.projectRef && q.status !== 'awaiting_synopsis_approval' && <button type="button" className="dd-btn" onClick={() => onContinue({ id: q.draftId, module, projectRef: q.projectRef, resumeContext: {}, currentStage: null })}>Open so far</button>}
@@ -178,8 +191,8 @@ export default function DraftDashboard({ module, projectRef, backendUrl, onConti
         {(dash.revisions ?? []).filter((q) => q.offline).length > 1 && (
           <p className="dd-flag" data-testid="dup-warning">There are {dash.revisions.filter((q) => q.offline).length} copies being made — probably duplicates. <button type="button" className="dd-btn" disabled={Boolean(busy)} onClick={cleanup}>Delete the duplicates</button></p>
         )}
-        <ul className="dd-cards">{visible.map((d) => <Card key={d.id} d={d} />)}</ul>
-        {archived.length > 0 && <details className="dd-archived"><summary>Archived ({archived.length})</summary><ul className="dd-cards">{archived.map((d) => <Card key={d.id} d={d} />)}</ul></details>}
+        <ul className="dd-cards">{visible.map((d) => <CardBoundary key={d.id} onOpen={() => onContinue(d)}><Card d={d} /></CardBoundary>)}</ul>
+        {archived.length > 0 && <details className="dd-archived"><summary>Archived ({archived.length})</summary><ul className="dd-cards">{archived.map((d) => <CardBoundary key={d.id} onOpen={() => onContinue(d)}><Card d={d} /></CardBoundary>)}</ul></details>}
       </div>
     </div>
   )

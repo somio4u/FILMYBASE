@@ -54,7 +54,8 @@ async function ready({ approveStoryboardToo = true } = {}) {
   mock.state.requests.length = 0;
   return { projectId, scene };
 }
-const assetByName = async (pid, re) => (await db.query("SELECT * FROM production_assets WHERE project_id = $1", [pid])).rows.find((a) => re.test(a.name));
+// in a fixed order (a character before anything else with a similar name, then by id), so the pick never depends on where the database happens to keep its rows
+const assetByName = async (pid, re) => (await db.query("SELECT * FROM production_assets WHERE project_id = $1 ORDER BY (kind <> 'character'), id", [pid])).rows.find((a) => re.test(a.name));
 const finish = async ({ row, done }) => { await done; return (await gens.list(row.project_id, { id: row.id }))[0]; };
 const ONE_PIXEL_OK = (b) => b.slice(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]));
 const mediaRow = async (id) => (await db.query("SELECT * FROM production_media_files WHERE id = $1", [id])).rows[0];

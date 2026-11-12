@@ -29,7 +29,7 @@ test.before(async () => {
     stage_status JSONB NOT NULL DEFAULT '{}', created_by INTEGER, created_at TIMESTAMPTZ NOT NULL DEFAULT now(), updated_at TIMESTAMPTZ NOT NULL DEFAULT now())`);
   assert.deepEqual(await ensureAllProductionSchemas(db), []);
   mock = await startMockGemini();
-  providers = createProviders({ env: { GEMINI_API_KEY: "test-key", GEMINI_API_BASE: mock.base }, sleep: async () => {} });
+  providers = createProviders({ env: { GEMINI_API_KEY: "test-key", GEMINI_API_BASE: mock.base, MODEL_AUTO_UPGRADE: "off" }, sleep: async () => {} });
   store = createMediaStore({ db, backend: createLocalBackend({ root: path.join(tmp, "media") }), spoolDir: path.join(tmp, "spool") });
   gens = createGenerationService({ db, store, providers, env: {}, videoPollMs: 1 });
 });

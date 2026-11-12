@@ -63,7 +63,7 @@ test.before(async () => {
   });
   registerPipelineRoutes(app, db, requireRole, {
     store: media.store,
-    providers: createProviders({ env: { GEMINI_API_KEY: "test-key", GEMINI_API_BASE: gemini.base }, sleep: async () => {} }),
+    providers: createProviders({ env: { GEMINI_API_KEY: "test-key", GEMINI_API_BASE: gemini.base, MODEL_AUTO_UPGRADE: "off" }, sleep: async () => {} }),
   });
   server = app.listen(0);
   base = `http://127.0.0.1:${server.address().port}`;

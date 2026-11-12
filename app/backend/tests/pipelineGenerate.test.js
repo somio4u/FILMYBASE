@@ -32,7 +32,7 @@ test.before(async () => {
     stage_status JSONB NOT NULL DEFAULT '{}', created_by INTEGER, created_at TIMESTAMPTZ NOT NULL DEFAULT now(), updated_at TIMESTAMPTZ NOT NULL DEFAULT now())`);
   assert.deepEqual(await ensureAllProductionSchemas(db), []);
   mock = await startMockGemini();
-  providers = createProviders({ env: { GEMINI_API_KEY: "test-key", GEMINI_API_BASE: mock.base }, sleep: async () => {} });
+  providers = createProviders({ env: { GEMINI_API_KEY: "test-key", GEMINI_API_BASE: mock.base, MODEL_AUTO_UPGRADE: "off" }, sleep: async () => {} });
   store = createMediaStore({ db, backend: createLocalBackend({ root: path.join(tmp, "media") }), spoolDir: path.join(tmp, "spool") });
   gens = createGenerationService({ db, store, providers, env: {}, videoPollMs: 1 });
 });
@@ -96,9 +96,9 @@ test("providers: video starts a job, checks back until done, then downloads the 
 });
 
 test("providers: every failure is turned into a plain sentence", async () => {
-  const bad = createProviders({ env: { GEMINI_API_KEY: "wrong", GEMINI_API_BASE: mock.base } });
+  const bad = createProviders({ env: { GEMINI_API_KEY: "wrong", GEMINI_API_BASE: mock.base, MODEL_AUTO_UPGRADE: "off" } });
   await assert.rejects(bad.generateImage({ prompt: "x" }), /API key was refused/);
-  await assert.rejects(createProviders({ env: { GEMINI_API_BASE: mock.base } }).generateImage({ prompt: "x" }), /needs the Gemini key/);
+  await assert.rejects(createProviders({ env: { GEMINI_API_BASE: mock.base, MODEL_AUTO_UPGRADE: "off" } }).generateImage({ prompt: "x" }), /needs the Gemini key/);
   mock.state.failNext = { status: 429 };
   await assert.rejects(providers.generateImage({ prompt: "x" }), /usage limit/);
   mock.state.failNext = { status: 404 };
@@ -109,7 +109,7 @@ test("providers: every failure is turned into a plain sentence", async () => {
   await assert.rejects(providers.generateVideo({ prompt: "FORBIDDEN", pollMs: 1 }), /no video \(blocked by policy\)/);
   const unreachable = createProviders({ env: { GEMINI_API_KEY: "k", GEMINI_API_BASE: "http://127.0.0.1:1" } });
   await assert.rejects(unreachable.generateImage({ prompt: "x" }), /could not reach Google/);
-  const slow = createProviders({ env: { GEMINI_API_KEY: "test-key", GEMINI_API_BASE: mock.base }, sleep: () => new Promise((r) => setTimeout(r, 5)) });
+  const slow = createProviders({ env: { GEMINI_API_KEY: "test-key", GEMINI_API_BASE: mock.base, MODEL_AUTO_UPGRADE: "off" }, sleep: () => new Promise((r) => setTimeout(r, 5)) });
   mock.state.videoPollsBeforeDone = 1000;
   await assert.rejects(slow.generateVideo({ prompt: "slow", pollMs: 1, maxWaitMs: 30 }), /took too long/);
   mock.state.videoPollsBeforeDone = 1;

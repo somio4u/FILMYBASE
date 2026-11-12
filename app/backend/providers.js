@@ -49,13 +49,13 @@ export function wavDurationMs(wav) {
 }
 
 // Which of the models this key can see best replaces a switched-off one? Pure, so it can be tested. kind: "image" | "speech" | "video".
-export function pickReplacementModel(kind, listed, current) {
+export function pickReplacementModel(kind, listed, current, { newerOnly = false } = {}) {
   const want = { image: { name: /image/, not: /imagen|preview-image-generation/, method: "generateContent" }, speech: { name: /tts/, not: null, method: "generateContent" }, video: { name: /veo/, not: null, method: "predictLongRunning" } }[kind];
   if (!want) return null;
   const bare = (n) => String(n ?? "").replace(/^models\//, "");
   const version = (n) => Number(/(\d+(?:\.\d+)?)/.exec(n.replace(/^gemini-/, "").replace(/^veo-/, ""))?.[1] ?? 0);
   const ok = (listed ?? []).map((m) => ({ id: bare(m.name), methods: m.supportedGenerationMethods ?? [] }))
-    .filter((m) => m.id !== bare(current) && want.name.test(m.id) && !(want.not && want.not.test(m.id)) && (m.methods.length === 0 || m.methods.includes(want.method)));
+    .filter((m) => m.id !== bare(current) && (!newerOnly || version(m.id) > version(bare(current))) && want.name.test(m.id) && !(want.not && want.not.test(m.id)) && (m.methods.length === 0 || m.methods.includes(want.method)));
   // cheaper "flash"/"fast" first, then the newest version, then a stable name before a preview one
   const score = (m) => (/flash|fast/.test(m.id) ? 1000 : 0) + (/lite/.test(m.id) && kind === "speech" ? -50 : 0) + version(m.id) * 10 + (/preview|exp/.test(m.id) ? 0 : 1);
   return ok.sort((a, b) => score(b) - score(a))[0]?.id ?? null;
@@ -101,7 +101,44 @@ export function createProviders({ env = process.env, fetchImpl = fetch, getVerte
     const json = await call("Looking for a newer model", `${apiBase}/v1beta/models?pageSize=200`, { method: "GET" });
     return pickReplacementModel(kind, json?.models ?? [], current);
   }
+  // THE NEWEST MODEL THIS KEY CAN USE: the first time a picture / voice / video model is needed, Google's own list of models is read once and, if it holds a NEWER
+  // version of that kind than the one named here, that one is used instead (no names are guessed — only what Google lists). If the newer one then fails (not a
+  // limit or a block), the original is used again and remembered, so an upgrade can never leave the film without pictures or voices. Plain API keys only.
+  const upgraded = new Map(); // kind -> { from, to }
+  const checked = new Set();
+  let listedModels = null;
+  async function listAll() {
+    if (listedModels) return listedModels;
+    const all = [];
+    let url = `${apiBase}/v1beta/models?pageSize=200`;
+    for (let page = 0; page < 5 && url; page++) {
+      const json = await call("Looking for newer models", url, { method: "GET" });
+      all.push(...(json?.models ?? []));
+      url = json?.nextPageToken ? `${apiBase}/v1beta/models?pageSize=200&pageToken=${encodeURIComponent(json.nextPageToken)}` : null;
+    }
+    listedModels = all;
+    return all;
+  }
+  async function ensureBest(kind) {
+    if (useVertex || env.MODEL_AUTO_UPGRADE === "off" || checked.has(kind)) return;
+    checked.add(kind);
+    try {
+      const best = pickReplacementModel(kind, await listAll(), models[kind], { newerOnly: true });
+      if (best) { upgraded.set(kind, { from: models[kind], to: best }); console.warn(`A newer ${kind} model is available to this key: using ${best} instead of ${models[kind]}.`); models[kind] = best; }
+    } catch { /* the list could not be read: the named model stays */ }
+  }
   async function rescue(kind, run) {
+    await ensureBest(kind);
+    const up = upgraded.get(kind);
+    if (up && models[kind] === up.to) {
+      try { return await run(up.to); } catch (error) {
+        if (error.code === "rate_limited" || error.status === 402 || error.status === 429 || /safety|blocked|prohibited/i.test(String(error.message))) throw error;
+        // the newer model did not work here: go back to the one that did, and do not try the newer one again
+        console.warn(`The newer ${kind} model ${up.to} failed (${String(error.message).slice(0, 120)}); using ${up.from} again.`);
+        models[kind] = up.from; upgraded.delete(kind);
+        return rescue(kind, run);
+      }
+    }
     try { return await run(models[kind]); } catch (error) {
       if (!error.modelMissing || useVertex || env.MODEL_AUTO_REPLACE === "off") throw error;
       let next = null;

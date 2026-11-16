@@ -2797,3 +2797,10 @@ Plain version: every project is now a set of **drafts**. Opening a project shows
 
 ## 2026-11-16 — Adu's "Oops, something went wrong" now shows the real reason
 - Reading a run's progress used to swallow the real problem and show only "Oops, something went wrong". It now adds a "[Technical: ...]" line (the error name/message, or the HTTP code), like the Resume button already did. The line disappears by itself once progress is read again. Not deployed yet.
+
+## 2026-11-16 — "All your projects" organised: a tab per person, stage and format on every card
+- **What changed (admin screen):** tabs along the top — Everyone, one tab per person (all projects that person is on), and "Not assigned yet". Chips below filter by stage (Story / Synopsis / Characters / Story structure / Beats / Screenplay / Screenplay done) and by type (Film / Short film / Web series / Vertical drama).
+- **Every card now says:** the project's name; a coloured stage badge (✓ approved, … waiting for approval); a plain sentence such as "Synopsis stage — waiting for approval" or "Screenplay done — ready for production"; the type with its length ("Film · 120 min", "Vertical drama · 60 episodes × 1.5 min each"; a film of 40 min or less is a "Short film"); last-worked date; and who is on it with their roles (Writer / Director / AD).
+- **How the stage is worked out:** the furthest step that exists for the project, and whether it is approved. Code: `projectProgress.js` (+ tests), the query in `server.js`, the screen `MasterProjectBoard.jsx`.
+- **Limit (honest):** a project has no "created by" record, so a tab for someone like Somio exists only when that person is assigned to the project (writer/director/AD). Projects nobody is assigned to are under "Not assigned yet". If wanted, next step: remember who created each project, so every project lands in its creator's tab.
+- Not deployed yet.

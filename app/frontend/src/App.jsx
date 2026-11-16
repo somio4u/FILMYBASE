@@ -30,6 +30,7 @@ import WorkspaceSources, { UsedSources } from './WorkspaceSources.jsx'
 // the drafts screens are loaded only when first opened (keeps the first download small)
 const DraftDashboard = lazy(() => import('./DraftDashboard.jsx'))
 const OPEN_LAST_KEY = 'filmmaking-app:openLastDraft'
+import MasterProjectBoard from './MasterProjectBoard.jsx'
 import ErrorBoundary from './ErrorBoundary.jsx'
 const DraftAgentPanel = lazy(() => import('./DraftAgentPanel.jsx'))
 import AiMovieStudio, { AI_MOVIE_STUDIO_VIEWS, StageJudgeNote } from './AiMovieStudio.jsx'
@@ -16036,114 +16037,17 @@ function App() {
           {isLoadingMasterList && <p className="sidebar-section-note">{t.loadingLabel}</p>}
 
           {!isLoadingMasterList && (
-            <>
-              <div className="master-list-section">
-                <h4>{t.ongoingProjectsHeading}</h4>
-                {masterProjectList.filter((p) => p.stage === 'ongoing').length === 0 && (
-                  <p className="sidebar-section-note">{t.noProjectsInStageNote}</p>
-                )}
-                <div className="master-list-grid">
-                  {masterProjectList.filter((p) => p.stage === 'ongoing').map((project) => (
-                    <div key={project.id} className="master-list-card">
-                      <button className="master-list-card-open" onClick={() => handleOpenMasterProjectClick(project)}>
-                        <strong>{project.title}</strong>
-                        <span className="breakdown-item-meta">
-                          {project.projectType === 'production' ? t.productionAgentLabel : t.storyAgentLabel}
-                        </span>
-                        <div className="master-list-assignments">
-                          {project.assignedUsers.map((u, i) => (
-                            <span key={i} className="master-list-assignment-badge">
-                              {u.role === 'production_manager' ? t.adRoleLabel : u.role === 'independent_writer' ? t.independentWriterRoleLabel : u.role === 'screenplay_writer' ? t.writerRoleLabel : t.directorRoleLabel}: {u.name}
-                            </span>
-                          ))}
-                        </div>
-                      </button>
-                      <div className="master-list-card-actions">
-                        {currentUser.role === 'admin' && (
-                          <input
-                            type="checkbox"
-                            className="master-list-card-checkbox"
-                            checked={selectedMasterProjectIds.has(project.id)}
-                            onChange={() => toggleMasterProjectSelected(project.id)}
-                            title={t.selectProjectCheckboxTitle}
-                          />
-                        )}
-                        <button
-                          className="sidebar-history-icon-button"
-                          onClick={() => handleRenameMasterProjectClick(project)}
-                          title={t.renameIconTitle}
-                        >
-                          {ICONS.pencil}
-                        </button>
-                        {currentUser.role === 'admin' && (
-                          <button
-                            className="sidebar-history-icon-button"
-                            onClick={() => handleDeleteMasterProjectClick(project)}
-                            title={t.deleteIconTitle}
-                          >
-                            {ICONS.trash}
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              <div className="master-list-section">
-                <h4>{t.inDevelopmentProjectsHeading}</h4>
-                {masterProjectList.filter((p) => p.stage === 'in_development').length === 0 && (
-                  <p className="sidebar-section-note">{t.noProjectsInStageNote}</p>
-                )}
-                <div className="master-list-grid">
-                  {masterProjectList.filter((p) => p.stage === 'in_development').map((project) => (
-                    <div key={project.id} className="master-list-card">
-                      <button className="master-list-card-open" onClick={() => handleOpenMasterProjectClick(project)}>
-                        <strong>{project.title}</strong>
-                        <span className="breakdown-item-meta">
-                          {project.projectType === 'production' ? t.productionAgentLabel : t.storyAgentLabel}
-                        </span>
-                        <div className="master-list-assignments">
-                          {project.assignedUsers.length === 0 && <span className="breakdown-item-meta">{t.noOneAssignedNote}</span>}
-                          {project.assignedUsers.map((u, i) => (
-                            <span key={i} className="master-list-assignment-badge">
-                              {u.role === 'production_manager' ? t.adRoleLabel : u.role === 'independent_writer' ? t.independentWriterRoleLabel : u.role === 'screenplay_writer' ? t.writerRoleLabel : t.directorRoleLabel}: {u.name}
-                            </span>
-                          ))}
-                        </div>
-                      </button>
-                      <div className="master-list-card-actions">
-                        {currentUser.role === 'admin' && (
-                          <input
-                            type="checkbox"
-                            className="master-list-card-checkbox"
-                            checked={selectedMasterProjectIds.has(project.id)}
-                            onChange={() => toggleMasterProjectSelected(project.id)}
-                            title={t.selectProjectCheckboxTitle}
-                          />
-                        )}
-                        <button
-                          className="sidebar-history-icon-button"
-                          onClick={() => handleRenameMasterProjectClick(project)}
-                          title={t.renameIconTitle}
-                        >
-                          {ICONS.pencil}
-                        </button>
-                        {currentUser.role === 'admin' && (
-                          <button
-                            className="sidebar-history-icon-button"
-                            onClick={() => handleDeleteMasterProjectClick(project)}
-                            title={t.deleteIconTitle}
-                          >
-                            {ICONS.trash}
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </>
+            <MasterProjectBoard
+              projects={masterProjectList}
+              isAdmin={currentUser.role === 'admin'}
+              selectedIds={selectedMasterProjectIds}
+              onToggle={toggleMasterProjectSelected}
+              onOpen={handleOpenMasterProjectClick}
+              onRename={handleRenameMasterProjectClick}
+              onDelete={handleDeleteMasterProjectClick}
+              icons={ICONS}
+              typeLabel={(project) => (project.projectType === 'production' ? t.productionAgentLabel : t.storyAgentLabel)}
+            />
           )}
         </div>
       )}

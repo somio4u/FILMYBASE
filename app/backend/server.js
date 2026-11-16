@@ -119,6 +119,7 @@ import { registerEventRoutes } from "./events.js";
 import cookieParser from "cookie-parser";
 import http from "node:http";
 import { createClient } from "@supabase/supabase-js";
+import { projectProgress, projectFormat } from "./projectProgress.js";
 import {
   AKHADA_FIXED_SYNOPSIS,
   AKHADA_FIXED_CHARACTERS,
@@ -2046,9 +2047,17 @@ app.get("/api/concepts", requireLogin, async (req, res) => {
 app.get("/api/projects/master-list", requireRole("admin"), async (req, res) => {
   const projectsResult = await db.query(
     `SELECT c.id, c.title, c.concept_text, c.project_type, c.pinned, c.created_at,
-            COALESCE(bool_or(sl.status = 'approved'), false) AS screenplay_ready
+            COALESCE(bool_or(sl.status = 'approved'), false) AS screenplay_ready,
+            -- how far the project has got, and whether that last step is approved (for the stage label on the card)
+            COUNT(DISTINCT pd.id) AS n_deck, COALESCE(bool_or(pd.status = 'approved'), false) AS ok_deck,
+            COUNT(DISTINCT cs.id) AS n_chars, COALESCE(bool_or(cs.status = 'approved'), false) AS ok_chars,
+            COUNT(DISTINCT tas.id) AS n_act, COALESCE(bool_or(tas.status = 'approved'), false) AS ok_act,
+            COUNT(DISTINCT bs.id) AS n_beats, COALESCE(bool_or(bs.status = 'approved'), false) AS ok_beats,
+            COUNT(DISTINCT sl.id) AS n_list,
+            (array_agg(pd.content->'format' ORDER BY pd.id DESC) FILTER (WHERE pd.content ? 'format'))[1] AS format
      FROM concepts c
      LEFT JOIN pitch_decks pd ON pd.concept_id = c.id
+     LEFT JOIN character_sheets cs ON cs.pitch_deck_id = pd.id
      LEFT JOIN three_act_structures tas ON tas.pitch_deck_id = pd.id
      LEFT JOIN bit_sheets bs ON bs.three_act_structure_id = tas.id
      LEFT JOIN scene_lists sl ON sl.bit_sheet_id = bs.id OR sl.concept_id = c.id
@@ -2080,6 +2089,8 @@ app.get("/api/projects/master-list", requireRole("admin"), async (req, res) => {
         screenplayReady: row.screenplay_ready,
         assignedUsers,
         // a screenplay writer is shown on the card but does not move the project to "Ongoing" — that still needs a director / AD
+        ...projectProgress(row),
+        ...projectFormat(row.format),
         stage: row.screenplay_ready && assignedUsers.some((u) => u.role !== "screenplay_writer") ? "ongoing" : "in_development",
       };
     })

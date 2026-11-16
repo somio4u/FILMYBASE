@@ -8097,3 +8097,13 @@ body.is-script-edit-mode { overflow: hidden; }
 .script-nav-interval { margin: 12px 0; padding: 6px 4px; text-align: center; font-size: 0.8rem; letter-spacing: 0.14em; font-weight: 700; border-top: 1px dashed currentColor; border-bottom: 1px dashed currentColor; opacity: 0.85; }
 .ai-movie-writing-plan { margin: 8px 0; opacity: 0.9; }
 .ai-movie-writing-plan > summary { cursor: pointer; font-size: 0.85rem; opacity: 0.75; }
+
+/* Admin "All your projects": a tab per person, stage chips, and a stage badge on every card */
+.board-tabs, .board-stages { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 12px; }
+.board-tab, .board-chip { border: 1px solid rgba(140, 150, 255, 0.35); background: transparent; color: inherit; border-radius: 999px; padding: 8px 14px; font: inherit; cursor: pointer; }
+.board-tab-on, .board-chip-on { background: #6d5cff; border-color: #6d5cff; color: #fff; }
+.board-chip { padding: 5px 11px; font-size: 13px; opacity: 0.9; }
+.board-count { opacity: 0.75; margin-left: 4px; font-size: 12px; }
+.board-stage { display: inline-block; align-self: flex-start; margin: 6px 0 2px; padding: 3px 10px; border-radius: 999px; font-size: 12px; font-weight: 600; background: rgba(140, 150, 255, 0.2); }
+.board-stage[data-stage="done"] { background: rgba(60, 190, 120, 0.25); }
+.board-stage[data-ok="0"][data-stage]:not([data-stage="story"]):not([data-stage="done"]) { background: rgba(255, 190, 70, 0.25); }

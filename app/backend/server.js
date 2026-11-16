@@ -312,6 +312,10 @@ async function ensureAiMovieSchema() {
     // Which "Production only" login uploaded a production project (null for
     // everything the admin made) — that login sees only its own projects.
     `ALTER TABLE concepts ADD COLUMN IF NOT EXISTS owner_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL`,
+    // Who created the project (for the admin's "All your projects" tabs). Separate from owner_user_id, which controls who may open it.
+    `ALTER TABLE concepts ADD COLUMN IF NOT EXISTS created_by_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL`,
+    `UPDATE concepts c SET created_by_user_id = r.created_by FROM auto_pipeline_runs r WHERE r.placeholder_concept_id = c.id AND c.created_by_user_id IS NULL AND r.created_by IS NOT NULL`,
+    `UPDATE concepts SET created_by_user_id = owner_user_id WHERE created_by_user_id IS NULL AND owner_user_id IS NOT NULL`,
     // Screenplay undo/redo: every change to a scene is already a new row in
     // screenplay_scenes, so Undo moves the newest version here and Redo moves
     // it back. Any other new version of that scene clears its redo steps
@@ -1972,8 +1976,8 @@ app.post("/api/generate-storylines", requireRole("admin"), async (req, res) => {
     const initialTitle = parsed.storylines[0]?.title?.en ?? null;
 
     const insertResult = await db.query(
-      "INSERT INTO concepts (concept_text, storylines, title, owner_user_id) VALUES ($1, $2, $3, $4) RETURNING id",
-      [concept, JSON.stringify(parsed.storylines), initialTitle, newProjectOwner(req)]
+      "INSERT INTO concepts (concept_text, storylines, title, owner_user_id, created_by_user_id) VALUES ($1, $2, $3, $4, $5) RETURNING id",
+      [concept, JSON.stringify(parsed.storylines), initialTitle, newProjectOwner(req), req.user?.id ?? null]
     );
 
     res.json({ conceptId: insertResult.rows[0].id, ...parsed });
@@ -2053,16 +2057,18 @@ app.get("/api/projects/master-list", requireRole("admin"), async (req, res) => {
             COUNT(DISTINCT cs.id) AS n_chars, COALESCE(bool_or(cs.status = 'approved'), false) AS ok_chars,
             COUNT(DISTINCT tas.id) AS n_act, COALESCE(bool_or(tas.status = 'approved'), false) AS ok_act,
             COUNT(DISTINCT bs.id) AS n_beats, COALESCE(bool_or(bs.status = 'approved'), false) AS ok_beats,
+            cu.name AS creator_name,
             COUNT(DISTINCT sl.id) AS n_list,
             (array_agg(pd.content->'format' ORDER BY pd.id DESC) FILTER (WHERE pd.content ? 'format'))[1] AS format
      FROM concepts c
+     LEFT JOIN users cu ON cu.id = c.created_by_user_id
      LEFT JOIN pitch_decks pd ON pd.concept_id = c.id
      LEFT JOIN character_sheets cs ON cs.pitch_deck_id = pd.id
      LEFT JOIN three_act_structures tas ON tas.pitch_deck_id = pd.id
      LEFT JOIN bit_sheets bs ON bs.three_act_structure_id = tas.id
      LEFT JOIN scene_lists sl ON sl.bit_sheet_id = bs.id OR sl.concept_id = c.id
      WHERE NOT EXISTS (SELECT 1 FROM project_drafts d JOIN project_drafts p ON p.id = d.parent_draft_id WHERE d.module = 'film' AND d.project_ref = c.id AND EXISTS (SELECT 1 FROM concepts pc WHERE pc.id = p.project_ref))
-     GROUP BY c.id, c.title, c.concept_text, c.project_type, c.pinned, c.created_at
+     GROUP BY c.id, c.title, c.concept_text, c.project_type, c.pinned, c.created_at, cu.name
      ORDER BY c.pinned DESC, c.created_at DESC`
   );
 
@@ -2091,6 +2097,7 @@ app.get("/api/projects/master-list", requireRole("admin"), async (req, res) => {
         // a screenplay writer is shown on the card but does not move the project to "Ongoing" — that still needs a director / AD
         ...projectProgress(row),
         ...projectFormat(row.format),
+        createdBy: row.creator_name ?? null,
         stage: row.screenplay_ready && assignedUsers.some((u) => u.role !== "screenplay_writer") ? "ongoing" : "in_development",
       };
     })
@@ -3306,8 +3313,8 @@ app.post("/api/concepts/import", requireRole("admin"), async (req, res) => {
     const projectType = project.projectType === "production" ? "production" : "story";
 
     const conceptResult = await db.query(
-      "INSERT INTO concepts (concept_text, storylines, title, project_type) VALUES ($1, $2, $3, $4) RETURNING id",
-      [project.concept, JSON.stringify(project.storylines), project.title ?? null, projectType]
+      "INSERT INTO concepts (concept_text, storylines, title, project_type, created_by_user_id) VALUES ($1, $2, $3, $4, $5) RETURNING id",
+      [project.concept, JSON.stringify(project.storylines), project.title ?? null, projectType, req.user?.id ?? null]
     );
     const conceptId = conceptResult.rows[0].id;
 
@@ -9099,8 +9106,8 @@ async function createProductionProjectFromScreenplayText(pastedText, format, use
   const { metadata, sceneListContent } = await parseScreenplayIntoSceneListContent(pastedText, format);
 
   const conceptResult = await db.query(
-    "INSERT INTO concepts (concept_text, storylines, title, project_type, owner_user_id) VALUES ($1, $2, $3, 'production', $4) RETURNING id",
-    [metadata.title, JSON.stringify([]), metadata.title, user?.role === PRODUCTION_ONLY_ROLE ? user.id : null]
+    "INSERT INTO concepts (concept_text, storylines, title, project_type, owner_user_id, created_by_user_id) VALUES ($1, $2, $3, 'production', $4, $5) RETURNING id",
+    [metadata.title, JSON.stringify([]), metadata.title, user?.role === PRODUCTION_ONLY_ROLE ? user.id : null, user?.id ?? null]
   );
   const conceptId = conceptResult.rows[0].id;
 
@@ -9956,8 +9963,8 @@ app.post("/api/pitch-deck/:id/format", requireRole("admin"), async (req, res) =>
     try {
       await client.query("BEGIN");
       const newConcept = await client.query(
-        "INSERT INTO concepts (concept_text, storylines, title, owner_user_id) VALUES ($1, $2, $3, $4) RETURNING id",
-        [conceptRow?.concept_text ?? "", JSON.stringify(conceptRow?.storylines ?? []), `${baseTitle} — ${suffix}`, conceptRow?.owner_user_id ?? null]
+        "INSERT INTO concepts (concept_text, storylines, title, owner_user_id, created_by_user_id) VALUES ($1, $2, $3, $4, $5) RETURNING id",
+        [conceptRow?.concept_text ?? "", JSON.stringify(conceptRow?.storylines ?? []), `${baseTitle} — ${suffix}`, conceptRow?.owner_user_id ?? null, req.user?.id ?? null]
       );
       newConceptId = newConcept.rows[0].id;
       // A film copy has nothing new to review; a series copy has a freshly
@@ -20476,7 +20483,7 @@ app.post("/api/auto-pipeline/start", requireRole("admin"), async (req, res) => {
     const runId = insertResult.rows[0].id;
     // The project exists from the very first second: a blank project named after the idea. Every stage Adu finishes is written
     // into it, and its real title replaces the working one as soon as the story has one.
-    const placeholder = (await db.query("INSERT INTO concepts (concept_text, storylines, title) VALUES ($1, '[]', $2) RETURNING id", [concept, concept.trim().replace(/\s+/g, " ").slice(0, 60)])).rows[0].id;
+    const placeholder = (await db.query("INSERT INTO concepts (concept_text, storylines, title, created_by_user_id) VALUES ($1, '[]', $2, $3) RETURNING id", [concept, concept.trim().replace(/\s+/g, " ").slice(0, 60), req.user.id])).rows[0].id;
     await db.query("UPDATE auto_pipeline_runs SET placeholder_concept_id = $2 WHERE id = $1", [runId, placeholder]);
 
     // A story written from inside a project (with one of its drafts open) is a NEW DRAFT of that project: it is recorded as

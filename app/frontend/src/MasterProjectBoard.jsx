@@ -23,6 +23,8 @@ export function stageText(p) {
   return p.stageApproved ? `${label} approved — next step is waiting` : `${label} stage — waiting for approval`
 }
 
+// everyone connected to a project: the person who created it and the people assigned to it
+const involved = (p) => new Set([p.createdBy, ...p.assignedUsers.map((u) => u.name)].filter(Boolean))
 const when = (iso) => { try { return iso ? new Date(iso).toLocaleDateString(undefined, { day: 'numeric', month: 'short' }) : '' } catch { return '' } }
 
 export default function MasterProjectBoard({ projects, isAdmin, selectedIds, onToggle, onOpen, onRename, onDelete, icons, typeLabel }) {
@@ -33,12 +35,12 @@ export default function MasterProjectBoard({ projects, isAdmin, selectedIds, onT
   // one tab per assigned person; a project with two people shows under both
   const people = useMemo(() => {
     const map = new Map()
-    projects.forEach((p) => p.assignedUsers.forEach((u) => map.set(u.name, (map.get(u.name) ?? 0) + 1)))
+    projects.forEach((p) => { for (const name of involved(p)) map.set(name, (map.get(name) ?? 0) + 1) })
     return [...map.entries()].sort((a, b) => a[0].localeCompare(b[0]))
   }, [projects])
-  const unassigned = projects.filter((p) => p.assignedUsers.length === 0)
+  const unassigned = projects.filter((p) => involved(p).size === 0)
 
-  const inTab = (p) => (tab === 'all' ? true : tab === '__none' ? p.assignedUsers.length === 0 : p.assignedUsers.some((u) => u.name === tab))
+  const inTab = (p) => (tab === 'all' ? true : tab === '__none' ? involved(p).size === 0 : involved(p).has(tab))
   const shown = projects.filter((p) => inTab(p) && (stage === 'all' || p.stageKey === stage) && (kind === 'all' || p.formatKind === kind))
   const stageCounts = useMemo(() => {
     const c = {}
@@ -57,7 +59,7 @@ export default function MasterProjectBoard({ projects, isAdmin, selectedIds, onT
       <div className="board-tabs" role="tablist">
         {tabBtn('all', 'Everyone', projects.length)}
         {people.map(([name, n]) => tabBtn(name, name, n))}
-        {unassigned.length > 0 && tabBtn('__none', 'Not assigned yet', unassigned.length)}
+        {unassigned.length > 0 && tabBtn('__none', 'No one yet', unassigned.length)}
       </div>
       <div className="board-stages">
         <button type="button" className={`board-chip${stage === 'all' ? ' board-chip-on' : ''}`} onClick={() => setStage('all')}>All stages</button>
@@ -81,7 +83,8 @@ export default function MasterProjectBoard({ projects, isAdmin, selectedIds, onT
               <span className="breakdown-item-meta">{stageText(p)}</span>
               <span className="breakdown-item-meta">{KIND_LABEL[p.formatKind] ?? '🎬 Film'}{p.formatDetail ? ` · ${p.formatDetail}` : ''} · {typeLabel(p)}{p.lastWorkedAt ? ` · last worked ${when(p.lastWorkedAt)}` : ''}</span>
               <div className="master-list-assignments">
-                {p.assignedUsers.length === 0 && <span className="breakdown-item-meta">No one on this yet</span>}
+                {p.createdBy && <span className="master-list-assignment-badge">Created by: {p.createdBy}</span>}
+                {p.assignedUsers.length === 0 && <span className="breakdown-item-meta">No one assigned yet</span>}
                 {p.assignedUsers.map((u, i) => (
                   <span key={i} className="master-list-assignment-badge">{ROLE[u.role] ?? u.role}: {u.name}</span>
                 ))}

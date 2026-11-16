@@ -1039,6 +1039,8 @@ async function rawRun(db, models, requestId) {
       const brief = r.proposal.brief;
       if (!done("storyBible")) { must(await pl.call("POST", `/api/ai-movie/projects/${pid}/story-bible/approve`, {}), "Approving the Story Bible"); log.push({ key: "storyBible", status: "done", score: r.proposal.critics?.scores ? Math.min(...Object.values(r.proposal.critics.scores)) : null }); await save(); }
       for (const stage of STAGES) if (!done(`stage:${stage}`)) await aiStage(db, pl, r, pid, stage, brief, log, save);
+      // the new draft's screenplay is written by the agent: whatever "uploaded" mark the copy brought along belongs to the OLD screenplay
+      if (!done("stage:screenplay")) await db.query("UPDATE ai_movie_projects SET backfill = backfill - 'uploadedScreenplay' WHERE id = $1", [pid]);
       if (!done("stage:screenplay")) await aiScreenplay(db, pl, r, pid, log, save);
       if (!done("selfReview")) await aiSelfReview(db, pl, r, pid, draft, log, save);
       await db.query("UPDATE project_drafts SET current_stage = 'revision_review', status = 'pending_approval', updated_at = now() WHERE id = $1", [draft.id]);

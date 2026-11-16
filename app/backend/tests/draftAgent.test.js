@@ -692,3 +692,18 @@ test("the self-check never stops the new draft: with no doctors available it is 
   assert.ok(r.proposal.selfReview.dialogue.error && r.proposal.selfReview.screenplay.error);
   assert.equal(r.proposal.selfReview.applied, 0);
 });
+
+test("a new draft written by the agent drops the 'uploaded screenplay' mark that its copy brought along; the draft it came from keeps it", async () => {
+  const d = await ensureDraftFor(db, "ai_movie", ai);
+  await db.query("UPDATE ai_movie_projects SET backfill = jsonb_set(COALESCE(backfill,'{}'::jsonb), '{uploadedScreenplay}', '{\"filename\":\"mine.pdf\"}'::jsonb) WHERE id = $1", [ai]);
+  const models = mockModels({ writeAllJob: true });
+  const { request } = await startRevision(db, models, d.id, { instruction: "Change the villain.", confirmed: true, actorUserId: 1 });
+  await whenIdle(request.id); await approveSynopsis(db, models, request.id, { actorUserId: 1 }); await whenIdle(request.id);
+  const r = await getRequest(db, request.id);
+  assert.equal(r.status, "awaiting_final_approval", r.error ?? "");
+  const neu = (await db.query("SELECT backfill->'uploadedScreenplay' AS up FROM ai_movie_projects WHERE id = $1", [(await getDraft(db, r.draft_id)).project_ref])).rows[0];
+  assert.equal(neu.up, null);
+  const old = (await db.query("SELECT backfill->'uploadedScreenplay' AS up FROM ai_movie_projects WHERE id = $1", [ai])).rows[0];
+  assert.equal(old.up.filename, "mine.pdf");
+  await db.query("UPDATE ai_movie_projects SET backfill = backfill - 'uploadedScreenplay' WHERE id = $1", [ai]);
+});

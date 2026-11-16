@@ -171,7 +171,11 @@ export default function ScriptDoctorPanel({ backendUrl, projectId, draft, langua
 
   async function make(resume = false) {
     setAsking(false); setBusy('apply'); setError(''); setNote('')
-    const r = await call(`${api}/report/${readId}/apply`, 'POST', { draftId: draft?.id, ids: ticked, resume })
+    let r = await call(`${api}/report/${readId}/apply`, 'POST', { draftId: draft?.id, ids: ticked, resume })
+    // an uploaded screenplay is the owner's own words: the server says so and asks first
+    if (!r.ok && r.data?.code === 'uploaded_screenplay' && window.confirm(`${r.data.error}\n\nOK = change my screenplay    Cancel = leave it as it is`)) {
+      r = await call(`${api}/report/${readId}/apply`, 'POST', { draftId: draft?.id, ids: ticked, resume, confirmUploaded: true })
+    }
     setBusy('')
     if (!r.ok) { setError(r.offline ? L.offline : (r.data.error || L.wrong)); return }
     await load()

@@ -17,6 +17,7 @@ export async function createDraftFromScreenplay(db, { parentDraftId, scenes, fil
     const clone = (await db.query("SELECT backfill, stage_status FROM ai_movie_projects WHERE id = $1", [draft.project_ref])).rows[0];
     const backfill = { ...(clone.backfill ?? {}), screenplayBeats: groups.map((g) => ({ status: "approved", feedback: null, scenes: g.map((i) => scenes[i]) })) };
     delete backfill.removedScenes; // the copied draft's removed-scene list belongs to the old screenplay
+    backfill.uploadedScreenplay = { filename: String(filename ?? "").slice(0, 160), at: new Date().toISOString() }; // the owner's own words: nothing changes them on its own
     const stageStatus = { ...(clone.stage_status ?? {}), screenplay: { status: "approved", feedback: null } };
     await db.query("UPDATE ai_movie_projects SET backfill = $1, stage_status = $2, updated_at = now() WHERE id = $3", [JSON.stringify(backfill), JSON.stringify(stageStatus), draft.project_ref]);
     // "Continue Draft" opens at the screenplay: that is the part the owner brought

@@ -345,27 +345,53 @@ function characterLine(c) {
 // Designs the whole Story Bible for an idea. onProgress(stepLabel) is called
 // as each writers'-room step starts. Returns { bible, usage } where usage
 // adds up the tokens of every call (for the cost of the run).
-export async function designStoryBible(idea, format, { onProgress = () => {} } = {}) {
+// A SYNOPSIS THE OWNER WROTE AND UPLOADED IS CANON. A one-line idea is a seed (the Story Brain pitches directions and invents); a full synopsis is a finished story,
+// and the owner's complaint was exactly that the Brain re-invented it (three different hooks, hidden truths and climaxes, then one chosen). So a long text is treated
+// as canon: the characters, the events, their order, the twists and the ENDING stay as written; the Brain only builds what the synopsis leaves open (the acts, the
+// turning points, the interval, the staging, the scenes, the dialogue). The same rule is applied by the critics and by every revision.
+export const CANON_MIN_WORDS = 120;
+export const isCanonSynopsis = (idea) => String(idea ?? "").trim().split(/\s+/).filter(Boolean).length >= CANON_MIN_WORDS;
+export const CANON_RULES = `THE OWNER'S STORY IS CANON — it was written by the owner and uploaded as it is. Keep it EXACTLY: every character (name, nature, relationships), every event and the order of events, every twist and hidden fact, and the ENDING. Do NOT invent a different premise, hook, hidden truth, climax or ending; do NOT rename, replace or add major characters in a way that changes the story; do NOT "improve" or "make it more wow". You MUST build what the synopsis leaves open: the three-act structure (where each act begins and ends, the turning points, the interval), how each part is staged, the scenes and the dialogue. Where the synopsis says nothing, invent the smallest thing that fits it. Whenever a step below asks you to invent, improve or add a "wow", apply it ONLY to what the synopsis leaves open, never to what it states.`;
+
+export async function designStoryBible(idea, format, { onProgress = () => {}, canon = undefined, ask: askOverride = null } = {}) {
   const units = formatUnits(format);
   const usage = newUsage();
-  const ask = brainAsker(usage, onProgress);
-  const ideaBlock = `THE USER'S IDEA (keep every fixed point):\n${idea}\n\nFORMAT: ${units.label}.`;
+  const ask = askOverride ?? brainAsker(usage, onProgress);
+  const isCanon = canon ?? isCanonSynopsis(idea);
+  const ideaBlock = isCanon
+    ? `THE OWNER'S SYNOPSIS — CANON (keep it exactly):\n${idea}\n\nFORMAT: ${units.label}.\n\n${CANON_RULES}`
+    : `THE USER'S IDEA (keep every fixed point):\n${idea}\n\nFORMAT: ${units.label}.`;
 
-  // 1. Pitch room: three genuinely different directions, judged by an audience critic.
-  const { directions } = await ask(
-    "Pitch room",
-    `${ideaBlock}\n\nPitch THREE genuinely different directions for this story — different hooks, different hidden truths, different climaxes (not three variations of one plot). Each must keep every fixed point of the user's idea.`,
-    OBJ({ directions: LIST(DIRECTION_SCHEMA, "Exactly 3 directions.") })
-  );
-  const pitched = directions.slice(0, 3);
-  const verdict = await ask(
-    "Audience critic picks a direction",
-    `${ideaBlock}\n\nYou are now a tough AUDIENCE CRITIC who has seen every OTT thriller. Score these three directions honestly and pick the one that would grip an audience most while staying true to the user's idea.\n\n${pitched.map((d, i) => `DIRECTION ${i + 1}\n${directionText(d)}`).join("\n\n")}`,
-    PITCH_SCORE_SCHEMA
-  );
-  const chosenIndex = Math.min(Math.max((verdict.best ?? 1) - 1, 0), pitched.length - 1);
-  const chosen = pitched[chosenIndex];
-  const chosenText = `${directionText(chosen)}\n\nCRITIC'S NOTE TO TAKE ON BOARD: ${verdict.improve ?? ""}`;
+  // 1. Pitch room (a seed idea): three genuinely different directions, judged by an audience critic.
+  //    A canon synopsis has ONE direction — its own — read out of the text, never three alternatives.
+  let pitched, verdict, chosenIndex, chosen, chosenText;
+  if (isCanon) {
+    const { directions } = await ask(
+      "Direction taken from the synopsis",
+      `${ideaBlock}\n\nWrite down the ONE direction this synopsis already has: the working title (the owner's own, if the synopsis gives one), the logline, the central question, the genre promise, the cold open, how the first act ends, and the climax and final image — each TAKEN FROM the synopsis, not invented. Do not pitch alternatives.`,
+      OBJ({ directions: LIST(DIRECTION_SCHEMA, "Exactly 1 direction: the synopsis's own.") })
+    );
+    pitched = directions.slice(0, 1);
+    verdict = { best: 1, improve: "" };
+    chosenIndex = 0;
+    chosen = pitched[0];
+    chosenText = directionText(chosen);
+  } else {
+    const { directions } = await ask(
+      "Pitch room",
+      `${ideaBlock}\n\nPitch THREE genuinely different directions for this story — different hooks, different hidden truths, different climaxes (not three variations of one plot). Each must keep every fixed point of the user's idea.`,
+      OBJ({ directions: LIST(DIRECTION_SCHEMA, "Exactly 3 directions.") })
+    );
+    pitched = directions.slice(0, 3);
+    verdict = await ask(
+      "Audience critic picks a direction",
+      `${ideaBlock}\n\nYou are now a tough AUDIENCE CRITIC who has seen every OTT thriller. Score these three directions honestly and pick the one that would grip an audience most while staying true to the user's idea.\n\n${pitched.map((d, i) => `DIRECTION ${i + 1}\n${directionText(d)}`).join("\n\n")}`,
+      PITCH_SCORE_SCHEMA
+    );
+    chosenIndex = Math.min(Math.max((verdict.best ?? 1) - 1, 0), pitched.length - 1);
+    chosen = pitched[chosenIndex];
+    chosenText = `${directionText(chosen)}\n\nCRITIC'S NOTE TO TAKE ON BOARD: ${verdict.improve ?? ""}`;
+  }
 
   // 2. Truth first: what really happened, who these people are, and the facts.
   const truth = await ask(
@@ -392,6 +418,7 @@ export async function designStoryBible(idea, format, { onProgress = () => {} } =
 
   const bible = {
     idea,
+    canon: isCanon,
     format,
     units,
     pitchRoom: { directions: pitched, verdict, chosen: chosenIndex + 1 },
@@ -515,8 +542,16 @@ function userNotesText(bible) {
     : "";
 }
 
+// Whatever the owner fed in (a seed idea, a synopsis, pasted stages), the story, the theme and the style that were chosen are LOCKED while the critics and the revisions work.
+// A lower score is fine: a design that scores 6 and is still the owner's story beats a design that scores 8 and is a different story.
+const LOCKED_CORE = "THE STORY IS LOCKED: its premise, theme, genre, tone and style, main characters, the key events and the ending do NOT change in any critic round or revision, whatever the score. Critics: judge only how well it is built, never ask for a different story, theme or style, and never mark a lower score as a reason to replace the story. Revisions: fix execution (clarity, pacing, logic gaps, weaker scenes) inside the same story. A lower score is acceptable; changing the story is not. Only the owner's own written note can change the story.";
+function canonNote(bible) {
+  const locked = `\n\n${LOCKED_CORE}`;
+  return bible?.canon ? `\n\n${CANON_RULES}\nCRITICS: judge the DESIGN built on this story, never the story itself. Do not ask for the owner's story to be changed; a design that departs from the owner's characters, events or ending is a BLOCKER.\nREVISIONS: never change what the synopsis states.${locked}` : locked;
+}
+
 function criticInput(bible) {
-  return `THE USER'S IDEA (its fixed points must be kept):\n${bible.idea}${userNotesText(bible)}\n\nTHE STORY BIBLE:\n${storyBibleToMarkdown({ ...bible, pitchRoom: null, review: null })}`;
+  return `THE USER'S IDEA (its fixed points must be kept):\n${bible.idea}${canonNote(bible)}${userNotesText(bible)}\n\nTHE STORY BIBLE:\n${storyBibleToMarkdown({ ...bible, pitchRoom: null, review: null })}`;
 }
 
 async function runCritics(bible, ask, round) {
@@ -573,7 +608,7 @@ export async function reviewAndImproveBible(bible, { ask, onProgress = () => {},
 
     const revised = await ask(
       `Head writer revises (version ${round + 1})`,
-      `THE USER'S IDEA (keep every fixed point):\n${current.idea}${userNotesText(current)}\n\nFORMAT: ${current.units.label}.\n\nYOUR CURRENT STORY BIBLE:\n${storyBibleToMarkdown({ ...current, pitchRoom: null, review: null })}\n\nTHREE CRITICS HAVE READ IT:\n${criticNotesText(check)}\n\n${earlierNotes.length ? `PROBLEMS FROM EARLIER ROUNDS (already fixed — never bring any of them back):\n${earlierNotes.join("\n")}\n\n` : ""}Revise the Story Bible like a careful head writer:
+      `THE USER'S IDEA (keep every fixed point):\n${current.idea}${canonNote(current)}${userNotesText(current)}\n\nFORMAT: ${current.units.label}.\n\nYOUR CURRENT STORY BIBLE:\n${storyBibleToMarkdown({ ...current, pitchRoom: null, review: null })}\n\nTHREE CRITICS HAVE READ IT:\n${criticNotesText(check)}\n\n${earlierNotes.length ? `PROBLEMS FROM EARLIER ROUNDS (already fixed — never bring any of them back):\n${earlierNotes.join("\n")}\n\n` : ""}Revise the Story Bible like a careful head writer:
 - Fix EVERY blocker and major problem, and the minor ones where you can. For a blocker, redesign the part of the story it breaks; for anything else, make the smallest change that truly fixes it.
 - CHANGE NOTHING ELSE: every part the critics didn't flag stays as it is, word for word where possible. Every rewrite risks new holes.
 - Before you finish, check every new or changed detail against the facts sheet, the rules of this world, the hidden truth, the timeline and every other ${current.units.kind}: who has which object, who knows what and when, what is physically, legally and technically possible, and what is culturally right. If a fix needs a new fact, add it to the facts sheet.
@@ -620,7 +655,7 @@ export async function reviseBibleWithNote(bible, note, { onProgress = () => {} }
   const withNote = { ...bible, userNotes: [...(bible.userNotes ?? []), note] };
   const revised = await ask(
     "Head writer follows your note",
-    `THE USER'S IDEA (keep every fixed point):\n${withNote.idea}${userNotesText(withNote)}\n\nFORMAT: ${withNote.units.label}.\n\nYOUR CURRENT STORY BIBLE:\n${storyBibleToMarkdown({ ...withNote, pitchRoom: null, review: null })}\n\nTHE USER HAS READ THIS BIBLE AND GIVES THIS NOTE (the most important instruction you have — follow it fully, however much of the story it changes):\n"${note}"\n\nRevise the Story Bible to follow the note. Change whatever the note needs; keep everything else. Then check every changed detail against the facts sheet, the rules of this world, the hidden truth and every other ${withNote.units.kind}, so the design stays one coherent whole. Every ${withNote.units.kind} keeps (or gets) a full SYNOPSIS of 150-250 words, never a one-liner. Whatever else changes, every ending must still be an unmissable cliffhanger (concrete final image, burning question, theories, next-episode payoff) and divine elements the user asked for must stay. Return the complete revised Bible with exactly ${withNote.units.count} ${withNote.units.kind}s.`,
+    `THE USER'S IDEA (keep every fixed point):\n${withNote.idea}${canonNote(withNote)}${userNotesText(withNote)}\n\nFORMAT: ${withNote.units.label}.\n\nYOUR CURRENT STORY BIBLE:\n${storyBibleToMarkdown({ ...withNote, pitchRoom: null, review: null })}\n\nTHE USER HAS READ THIS BIBLE AND GIVES THIS NOTE (the most important instruction you have — follow it fully, however much of the story it changes):\n"${note}"\n\nRevise the Story Bible to follow the note. Change whatever the note needs; keep everything else. Then check every changed detail against the facts sheet, the rules of this world, the hidden truth and every other ${withNote.units.kind}, so the design stays one coherent whole. Every ${withNote.units.kind} keeps (or gets) a full SYNOPSIS of 150-250 words, never a one-liner. Whatever else changes, every ending must still be an unmissable cliffhanger (concrete final image, burning question, theories, next-episode payoff) and divine elements the user asked for must stay. Return the complete revised Bible with exactly ${withNote.units.count} ${withNote.units.kind}s.`,
     REVISED_BIBLE_SCHEMA
   );
   const updated = {

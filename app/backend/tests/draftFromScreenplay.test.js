@@ -36,10 +36,12 @@ test("the new draft keeps the story, synopsis, characters and beat sheet, has th
   assert.equal(neu.backfill.screenplayBeats[0].scenes[0].content[1].character, "RAKHYAKA");
   assert.equal(neu.backfill.removedScenes, undefined); assert.equal(neu.stage_status.screenplay.status, "approved");
   assert.equal(out.draft.current_stage, "screenplay", "Continue Draft opens at the screenplay");
+  assert.equal(neu.backfill.uploadedScreenplay.filename, "final.pdf", "marked as the owner's own screenplay: nothing changes it on its own");
   assert.match(out.draft.note, /final\.pdf/); assert.equal(out.draft.label, "Final screenplay");
   const old = (await db.query("SELECT backfill FROM ai_movie_projects WHERE id = $1", [projectId])).rows[0];
   assert.equal(old.backfill.screenplayBeats[0].scenes[0].sceneHeading.en, "INT. OLD 1 - DAY", "the old draft's screenplay is exactly as it was");
   assert.equal(old.backfill.removedScenes.length, 1);
+  assert.equal(old.backfill.uploadedScreenplay, undefined, "the draft it was copied from is not marked");
 });
 
 test("a screenplay that cannot be placed leaves NO draft behind", async () => {

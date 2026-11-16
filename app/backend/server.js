@@ -6530,6 +6530,16 @@ app.get("/api/ai-movie/assistant/:projectId/report", requireRole("admin"), async
 // ---- Making the report's changes in the OPEN draft, scene by scene (scriptDoctorApply.js): one job, one rewrite per scene with all of that scene's changes together,
 // each scene its own change set (so it can be undone). The scenes already done are skipped after a reload or a restart.
 const ADU_REPORT_APPLY_KIND = "adu-report-apply";
+// A screenplay the owner UPLOADED (a draft made from "My Screenplay") is theirs, word for word: nothing rewrites it on its own. An action that would change it
+// (making a report's changes in it, changing several scenes at once) asks the person first: the answer 409 / "uploaded_screenplay" tells the screen to ask, and the same
+// call is then sent again with confirmUploaded: true.
+async function assertUploadedScreenplayConfirmed(projectId, body) {
+  const row = (await db.query("SELECT backfill->'uploadedScreenplay' AS up FROM ai_movie_projects WHERE id = $1", [projectId])).rows[0];
+  if (row?.up && body?.confirmUploaded !== true) {
+    throw Object.assign(new Error(`This screenplay is YOUR uploaded one${row.up.filename ? ` (“${String(row.up.filename).slice(0, 80)}”)` : ""} — nothing changes it on its own. These changes would rewrite your words in the scenes they touch. Continue only if you want that.`), { status: 409, code: "uploaded_screenplay" });
+  }
+}
+
 const aduReportApplyJobs = createWriteScenesJobs({
   jobStore,
   kind: ADU_REPORT_APPLY_KIND,
@@ -6583,6 +6593,7 @@ app.post("/api/ai-movie/projects/:projectId/multi-change", requireRole("admin"),
     const draft = Number.isInteger(draftId) && draftId > 0 ? (await db.query("SELECT id, module, project_ref, status FROM project_drafts WHERE id = $1", [draftId])).rows[0] : null;
     if (!draft || draft.module !== "ai_movie" || draft.project_ref !== projectId) throw Object.assign(new Error("Open the draft you want to change first."), { status: 400 });
     if (["locked", "archived"].includes(draft.status)) throw Object.assign(new Error(`This draft is ${draft.status}. Unlock it first, or open another draft.`), { status: 409 });
+    await assertUploadedScreenplayConfirmed(projectId, req.body);
     const instruction = String(req.body?.instruction ?? "").trim();
     if (instruction.length < 4 || instruction.length > 2000) throw Object.assign(new Error("Say what to change, in 4 to 2000 characters."), { status: 400 });
     const scenes = sceneKeysInOrder(await draftUnits(db, "ai_movie", projectId));
@@ -6712,6 +6723,7 @@ app.post("/api/ai-movie/assistant/:projectId/report/:readId/apply", requireRole(
     const draft = Number.isInteger(draftId) && draftId > 0 ? (await db.query("SELECT id, module, project_ref, status FROM project_drafts WHERE id = $1", [draftId])).rows[0] : null;
     if (!draft || draft.module !== "ai_movie" || draft.project_ref !== projectId) throw Object.assign(new Error("Open the draft you want to change first."), { status: 400 });
     if (["locked", "archived"].includes(draft.status)) throw Object.assign(new Error(`This draft is ${draft.status}. Unlock it first, or open another draft.`), { status: 409 });
+    await assertUploadedScreenplayConfirmed(projectId, req.body);
     for (const [jobs, what] of [[aduReportApplyJobs, "The report's changes are already being made."], [aiMovieWriteAllJobs, "The whole screenplay is being written right now. Wait for it to finish."]]) {
       const running = await jobs.currentFor(projectId).catch(() => null);
       if (running?.status === "running") throw Object.assign(new Error(what), { status: 409 });
@@ -7202,6 +7214,11 @@ app.post("/api/ai-movie/projects/:id/script-check", requireRole("admin"), async 
   const project = (await db.query("SELECT backfill FROM ai_movie_projects WHERE id = $1", [projectId])).rows[0];
   if (!project) {
     res.status(404).json({ error: "Project not found." });
+    return;
+  }
+  if (project.backfill?.uploadedScreenplay) {
+    // the language check rewrites wording (spelling, grammar, romanized Hindi -> Devanagari, translations): never on its own for a screenplay the owner uploaded
+    res.status(409).json({ error: "This is your uploaded screenplay, so the full-script check will not change it. Your words stay exactly as you wrote them. Edit a scene yourself, or use Script Doctor and approve each change.", code: "uploaded_screenplay" });
     return;
   }
   if (aiMovieScriptChecksRunning.has(projectId)) {

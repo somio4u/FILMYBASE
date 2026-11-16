@@ -50,7 +50,11 @@ export default function AiMovieMultiChange({ backendUrl, projectId, draftId, lan
 
   async function start() {
     setAsking(false); setBusy(true); setError('')
-    const r = await call(api, 'POST', { draftId, scenes, instruction: what })
+    let r = await call(api, 'POST', { draftId, scenes, instruction: what })
+    // an uploaded screenplay is the owner's own words: the server says so and asks first
+    if (!r.ok && r.data?.code === 'uploaded_screenplay' && window.confirm(`${r.data.error}\n\nOK = change my screenplay    Cancel = leave it as it is`)) {
+      r = await call(api, 'POST', { draftId, scenes, instruction: what, confirmUploaded: true })
+    }
     setBusy(false)
     if (!r.ok) { setError(r.offline ? L.offline : (r.data.error || L.error)); return }
     setJob(r.data.job)

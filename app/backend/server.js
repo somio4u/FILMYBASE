@@ -83,6 +83,7 @@ import { ensureAiMovieStorySchema, getProjectModes, judgedStage, registerAiMovie
 import { assertWithinBudget, recordSpend } from "./pipelineSettings.js";
 import { ensureCinematicSchema, registerSpectacleRoutes, createShotCutterHook } from "./spectacleDirector.js";
 import { MODEL_TIERS, estimateCost, isKeyBeat, modelFor } from "./modelRouting.js";
+import { securityHeaders } from "./securityHeaders.js";
 import { createAnalyse } from "./scriptDoctorAnalyse.js";
 import { loadScenes as loadDoctorScenes } from "./dialogueDoctorRun.js";
 import { blocksOf as doctorBlocksOf } from "./dialogueDoctor.js";
@@ -1439,6 +1440,8 @@ function formatWithGenreLabel(format, genre, lang) {
 // wildcard origin. FRONTEND_URL will be the deployed Vercel URL in
 // production; defaults to the local Vite dev server.
 const FRONTEND_URL = process.env.FRONTEND_URL || "http://localhost:5173";
+app.disable("x-powered-by");
+app.use(securityHeaders({ production: process.env.NODE_ENV === "production" }));
 app.use(cors({ origin: FRONTEND_URL, credentials: true, exposedHeaders: ["Content-Disposition"] })); // the page reads the file name of a download from this header
 app.use(cookieParser());
 // A pasted-in screenplay (the /import-screenplay-for-production text route)

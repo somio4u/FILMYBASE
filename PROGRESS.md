@@ -2794,3 +2794,6 @@ Plain version: every project is now a set of **drafts**. Opening a project shows
 - **Uploaded screenplay is never changed on its own:** a draft made from an uploaded screenplay is marked; the full-script check is blocked on it; Script Doctor "apply" and multi-scene changes ask "change my screenplay?" first (OK / Cancel). A new AI-written draft does not inherit the mark.
 - **Tests:** storyBrainCanon (5), draftFromScreenplay + draftAgent mark tests. **Not verified:** real-AI behaviour (sandbox has no live AI).
 - **Next:** owner tries a real synopsis once billing is on and checks the story stayed the same. Not deployed yet (waiting for "deploy karo").
+
+## 2026-11-16 — Adu's "Oops, something went wrong" now shows the real reason
+- Reading a run's progress used to swallow the real problem and show only "Oops, something went wrong". It now adds a "[Technical: ...]" line (the error name/message, or the HTTP code), like the Resume button already did. The line disappears by itself once progress is read again. Not deployed yet.

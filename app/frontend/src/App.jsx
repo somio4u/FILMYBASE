@@ -3339,9 +3339,10 @@ function FloatingAgentWidget({ currentUser, t, onRunCompleted, onOpenProject, dr
         const data = await response.json()
         if (cancelled) return
         if (!response.ok) {
-          setErrorMessage(data.error || t.genericError)
+          setErrorMessage(`${data.error || t.genericError}\n[Technical: reading the run's progress — HTTP ${response.status}]`)
           return
         }
+        setErrorMessage((m) => (m && m.includes("reading the run's progress") ? null : m))
         setStatus(data)
         statusRef.current = data.status
         if (!runStartedAtRef.current && data.createdAt) {
@@ -3351,8 +3352,9 @@ function FloatingAgentWidget({ currentUser, t, onRunCompleted, onOpenProject, dr
           notifiedRef.current = true
           onRunCompleted?.(data)
         }
-      } catch {
-        if (!cancelled) setErrorMessage(t.genericError)
+      } catch (error) {
+        // show the real reason (no connection, the server waking up, a page that is not the app's own answer), not only "Oops"
+        if (!cancelled) setErrorMessage(`${t.genericError}\n[Technical: reading the run's progress — ${error?.name ?? 'Error'}: ${String(error?.message ?? 'no connection').slice(0, 120)}]`)
       }
     }
 

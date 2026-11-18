@@ -1560,8 +1560,9 @@ async function getCurrentUser(req) {
   );
   const user = result.rows[0] ?? null;
   // an Independent Writer works on the projects he created himself: their ids ride along with every request (the Story & Screenplay Writer only has the project the admin assigned)
-  if (user?.role === INDEPENDENT_WRITER_ROLE) {
-    user.ownedConceptIds = (await db.query("SELECT id FROM concepts WHERE owner_user_id = $1", [user.id])).rows.map((r) => String(r.id));
+  // (and, for either writer login, any project he CREATED — e.g. a story he wrote with Adu — so nothing he made is ever "no access")
+  if (user && isWriterRole(user.role)) {
+    user.ownedConceptIds = (await db.query("SELECT id FROM concepts WHERE owner_user_id = $1 OR created_by_user_id = $1", [user.id])).rows.map((r) => String(r.id));
   }
   return user;
 }
@@ -2019,12 +2020,12 @@ app.get("/api/concepts", requireLogin, async (req, res) => {
         )
       : req.user.role === INDEPENDENT_WRITER_ROLE
       ? await db.query(
-          "SELECT id, concept_text, title, pinned, project_type, created_at FROM concepts WHERE owner_user_id = $1 ORDER BY pinned DESC, created_at DESC",
+          "SELECT id, concept_text, title, pinned, project_type, created_at FROM concepts WHERE owner_user_id = $1 OR created_by_user_id = $1 ORDER BY pinned DESC, created_at DESC",
           [req.user.id]
         )
       : await db.query(
-          "SELECT id, concept_text, title, pinned, project_type, created_at FROM concepts WHERE id = $1 ORDER BY pinned DESC, created_at DESC",
-          [req.user.concept_id]
+          "SELECT id, concept_text, title, pinned, project_type, created_at FROM concepts WHERE id = $1 OR created_by_user_id = $2 ORDER BY pinned DESC, created_at DESC",
+          [req.user.concept_id, req.user.id]
         );
 
   // most recently worked-on project first (pinned ones stay on top)

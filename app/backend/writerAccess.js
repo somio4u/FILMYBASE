@@ -105,7 +105,8 @@ export async function writerTargetConcept(db, kind, match, req, sceneListConcept
     case "threeAct": return one(THREE, match[1]);
     case "bodyThreeAct": return one(THREE, req.body?.threeActStructureId);
     case "bitSheet": return one(BIT, match[1]);
-    case "bodyBitSheet": return one(BIT, req.body?.bitSheetId);
+    // "Make the scene one-liners" with the Bit Sheet skipped sends the locked three-act structure's id instead of a bit sheet's
+    case "bodyBitSheet": return isId(req.body?.bitSheetId) ? one(BIT, req.body.bitSheetId) : one(THREE, req.body?.threeActStructureId);
     case "characterSheet": return one(CHAR, match[1]);
     case "sceneList": return sceneListConceptId(match[1]);
     case "querySceneList": return sceneListConceptId(req.query?.sceneListId);

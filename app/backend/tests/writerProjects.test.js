@@ -74,3 +74,15 @@ test("the Story & Screenplay Writer keeps to the project he was given and cannot
   assert.equal(start.status, 403);
   for (const path of ["/api/skip-to-synopsis", "/api/skip-to-bitsheet", "/api/skip-to-scenelist"]) assert.equal((await run(assignedWriter(), "POST", path)).status, 403, path);
 });
+
+import { writerTargetConcept } from "../writerAccess.js";
+test("'Make the scene one-liners' with the Bit Sheet skipped (only the three-act id is sent) is tied to its project, not refused", async () => {
+  const asked = [];
+  const db = { query: async (sql, [id]) => { asked.push(id); return { rows: [{ concept_id: 77 }] }; } };
+  assert.equal(await writerTargetConcept(db, "bodyBitSheet", [], { body: { threeActStructureId: 5, skipBitSheet: true } }, null), 77);
+  assert.deepEqual(asked, [5]);
+  asked.length = 0;
+  assert.equal(await writerTargetConcept(db, "bodyBitSheet", [], { body: { bitSheetId: 9 } }, null), 77);
+  assert.deepEqual(asked, [9]);
+  assert.equal(await writerTargetConcept(db, "bodyBitSheet", [], { body: {} }, null), null);
+});

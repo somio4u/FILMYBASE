@@ -120,7 +120,7 @@ import cookieParser from "cookie-parser";
 import http from "node:http";
 import { createClient } from "@supabase/supabase-js";
 import { projectProgress, projectFormat } from "./projectProgress.js";
-import { ensureWriterLearningSchema, recordWriterEdit, writerStyleMiddleware } from "./writerLearning.js";
+import { ensureWriterLearningSchema, recordWriterEdit, writerStyleMiddleware, importWriterStyle } from "./writerLearning.js";
 import {
   AKHADA_FIXED_SYNOPSIS,
   AKHADA_FIXED_CHARACTERS,
@@ -2043,6 +2043,23 @@ app.get("/api/concepts", requireLogin, async (req, res) => {
       lastWorkedAt: ordered.worked.get(Number(row.id)) ? new Date(ordered.worked.get(Number(row.id))).toISOString() : row.created_at,
     }))
   );
+});
+
+// Admin: give a writer a style that was worked out from drafts. Body: { username, seed: "kumar" } (a ready-made style in seeds/), or { username, card, pairs }.
+app.post("/api/admin/writer-style/import", requireRole("admin"), async (req, res) => {
+  try {
+    const username = String(req.body?.username ?? "").trim().toLowerCase();
+    const user = (await db.query("SELECT id FROM users WHERE lower(username) = $1", [username])).rows[0];
+    if (!user) { res.status(404).json({ error: `No login with the username "${username}".` }); return; }
+    let style = { card: req.body?.card, pairs: req.body?.pairs, source: "import" };
+    if (req.body?.seed) {
+      if (!/^[a-z0-9-]+$/.test(String(req.body.seed))) { res.status(400).json({ error: "Unknown ready-made style." }); return; }
+      style = JSON.parse(await fs.promises.readFile(new URL(`./seeds/${req.body.seed}-style.json`, import.meta.url), "utf8"));
+    }
+    res.json(await importWriterStyle(db, user.id, style));
+  } catch (error) {
+    res.status(error.status ?? 500).json({ error: error.code === "ENOENT" ? "Unknown ready-made style." : error.message });
+  }
 });
 
 // The admin-only cross-project dashboard: every project (Story & Screenplay

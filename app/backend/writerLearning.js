@@ -21,6 +21,13 @@ export async function ensureWriterLearningSchema(db) {
   await db.query("ALTER TABLE writer_edits ADD COLUMN IF NOT EXISTS before_lines JSONB");
   await db.query("ALTER TABLE writer_edits ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT now()");
   await db.query("CREATE INDEX IF NOT EXISTS writer_edits_user_idx ON writer_edits (user_id, created_at DESC)");
+  // a written description of a writer's style (made by reading drafts side by side); used together with the pairs
+  await db.query(`CREATE TABLE IF NOT EXISTS writer_style_cards (
+    user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+    card TEXT NOT NULL,
+    source TEXT,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+  )`);
 }
 
 // one line of text, whatever shape the screen keeps it in (plain text, or { en, hi, or })
@@ -101,18 +108,26 @@ export const MIN_STYLE_EXAMPLES = 5;   // fewer rewrites than this and there is 
 const MAX_DIALOGUE_EXAMPLES = 12, MAX_ACTION_EXAMPLES = 4;
 const clip = (t, n) => { const s = String(t ?? "").replace(/\s+/g, " ").trim(); return s.length > n ? `${s.slice(0, n - 1)}…` : s; };
 
-export function buildStyleBlock(name, rows) {
+export function buildStyleBlock(name, rows, card = "") {
   const dialogue = [], action = [];
   for (const r of rows) for (const p of r.pairs ?? []) {
-    if (!p.before || !p.after || p.before.trim() === p.after.trim()) continue; // only real rewrites teach a style
+    if (!p.after || (p.before && p.before.trim() === p.after.trim())) continue; // only rewrites (and lines the writer added) teach a style
     (p.type === "dialogue" ? dialogue : action).push(p);
   }
-  if (dialogue.length + action.length < MIN_STYLE_EXAMPLES) return "";
-  const line = (p) => `- ${p.character ? `${p.character}: ` : ""}AI wrote: "${clip(p.before, 160)}"  →  ${name || "the writer"} made it: "${clip(p.after, 160)}"`;
+  const real = [...dialogue, ...action].filter((p) => p.before).length;
+  // a written style card is enough on its own; without one, we wait for enough real rewrites
+  if (!card && real < MIN_STYLE_EXAMPLES) return "";
+  const who = name || "the writer";
+  const line = (p) => (p.before
+    ? `- ${p.character ? `${p.character}: ` : ""}AI wrote: "${clip(p.before, 160)}"  →  ${who} made it: "${clip(p.after, 160)}"`
+    : `- ${p.character ? `${p.character}: ` : ""}${who} added: "${clip(p.after, 160)}"`);
+  const rewrites = dialogue.filter((p) => p.before), added = dialogue.filter((p) => !p.before);
   return [
-    `THIS WRITER'S OWN STYLE — learned from how ${name || "the writer"} rewrites the AI's lines. Write like ${name || "them"}: the same word choice, line length, tone, humour and way of showing feeling. Study what changed between "AI wrote" and the writer's version, and apply that to NEW lines. Never copy these lines into the film, and never let this change the story, the characters or the events.`,
-    ...dialogue.slice(0, MAX_DIALOGUE_EXAMPLES).map(line),
-    ...action.slice(0, MAX_ACTION_EXAMPLES).map(line),
+    `THIS WRITER'S OWN STYLE — ${who}. Write like ${who}: the same word choice, line length, tone, humour and way of showing feeling. Study the style description and the examples ("AI wrote" → the writer's version), and apply what changed to NEW lines. Never copy these lines into the film, and never let this change the story, the characters or the events.`,
+    ...(card ? [String(card).trim()] : []),
+    ...rewrites.slice(0, MAX_DIALOGUE_EXAMPLES).map(line),
+    ...added.slice(0, 4).map(line),
+    ...action.filter((p) => p.before).slice(0, MAX_ACTION_EXAMPLES).map(line),
   ].join("\n");
 }
 
@@ -120,7 +135,8 @@ export async function styleBlockFor(db, user) {
   try {
     if (!user?.id) return "";
     const rows = (await db.query("SELECT pairs FROM writer_edits WHERE user_id = $1 ORDER BY updated_at DESC LIMIT 40", [user.id])).rows;
-    return buildStyleBlock(user.name, rows);
+    const card = (await db.query("SELECT card FROM writer_style_cards WHERE user_id = $1", [user.id])).rows[0]?.card ?? "";
+    return buildStyleBlock(user.name, rows, card);
   } catch (error) {
     console.error("Could not read a writer's style (writing goes on without it):", error.message);
     return "";
@@ -134,3 +150,15 @@ export const writerStyleMiddleware = (db) => async (req, res, next) => {
   if (!block) { next(); return; }
   runWithWriterStyle(block, next);
 };
+
+// Gives a writer a style that was worked out from drafts (a written card + before/after pairs). Safe to run again: it replaces the earlier import of the same writer.
+export async function importWriterStyle(db, userId, { card, pairs = [], source = "import" }) {
+  const user = (await db.query("SELECT id, name FROM users WHERE id = $1", [userId])).rows[0];
+  if (!user) throw Object.assign(new Error("No such login."), { status: 404 });
+  await db.query("DELETE FROM writer_edits WHERE user_id = $1 AND module = 'import'", [userId]);
+  const clean = (pairs ?? []).filter((p) => p && typeof p.after === "string" && p.after.trim()).slice(0, 200)
+    .map((p) => ({ type: p.type === "action" ? "action" : "dialogue", character: String(p.character ?? ""), before: String(p.before ?? ""), after: String(p.after) }));
+  if (clean.length) await db.query("INSERT INTO writer_edits (user_id, user_name, module, language, pairs) VALUES ($1,$2,'import','or',$3)", [userId, user.name, JSON.stringify(clean)]);
+  if (card) await db.query("INSERT INTO writer_style_cards (user_id, card, source) VALUES ($1,$2,$3) ON CONFLICT (user_id) DO UPDATE SET card = EXCLUDED.card, source = EXCLUDED.source, updated_at = now()", [userId, String(card), source]);
+  return { userId, name: user.name, pairs: clean.length, card: Boolean(card) };
+}

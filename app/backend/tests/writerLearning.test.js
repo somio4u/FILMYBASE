@@ -75,3 +75,40 @@ test("the writer's style reaches the writing prompts of the request that is runn
   assert.equal(currentWriterStyle(), "", "outside that request nothing leaks");
   assert.doesNotMatch(withWritingStyle("BASE"), /THIS WRITER'S OWN STYLE/);
 });
+
+import { importWriterStyle, styleBlockFor } from "../writerLearning.js";
+import { readFileSync } from "node:fs";
+
+test("a written style card is enough on its own, and shows up in the writing prompt together with the examples", () => {
+  const card = "KUMAR'S STYLE: close people say ତୁ.";
+  const block = buildStyleBlock("Kumar", [{ pairs: [{ type: "dialogue", character: "SOUMYA", before: "", after: "ଭାଇ... ମୁଁ କ'ଣ ମରିଯିବି?" }] }], card);
+  assert.match(block, /KUMAR'S STYLE: close people say ତୁ\./);
+  assert.match(block, /Kumar added: "ଭାଇ\.\.\. ମୁଁ କ'ଣ ମରିଯିବି\?"/);
+  assert.equal(buildStyleBlock("Kumar", [], ""), "");
+});
+
+test("the ready-made Kumar style file is well formed (a card plus before/after pairs in Odia)", () => {
+  const seed = JSON.parse(readFileSync(new URL("../seeds/kumar-style.json", import.meta.url), "utf8"));
+  assert.ok(seed.card.length > 1000 && /ତୁ/.test(seed.card) && /ସୋମୁ/.test(seed.card));
+  assert.ok(seed.pairs.length >= 50);
+  assert.ok(seed.pairs.every((p) => p.type === "dialogue" && typeof p.after === "string" && p.after.trim() && /[଀-୿]/.test(p.after)));
+  assert.ok(seed.pairs.some((p) => p.before) && seed.pairs.some((p) => !p.before));
+});
+
+test("importing a style gives the writer a card and pairs; importing again replaces, never doubles", async () => {
+  const db = new pg.Pool({ database: process.env.TEST_DB || "filmmaking_app_test", user: process.env.PGUSER || "root", host: process.env.PGHOST || "/var/run/postgresql" });
+  try {
+    await ensureWriterLearningSchema(db);
+    const uid = (await db.query("INSERT INTO users (name, username, password_hash, password_salt, role) VALUES ('Kumar Test','kumar_t_wl','x','x','independent_writer') RETURNING id")).rows[0].id;
+    const style = { card: "CARD TEXT", pairs: [{ type: "dialogue", character: "A", before: "x one", after: "ଏକ ଦୁଇ" }, { type: "dialogue", character: "B", before: "", after: "ତିନି ଚାରି" }] };
+    await importWriterStyle(db, uid, style);
+    const r = await importWriterStyle(db, uid, style);
+    assert.deepEqual(r, { userId: uid, name: "Kumar Test", pairs: 2, card: true });
+    assert.equal((await db.query("SELECT count(*)::int AS n FROM writer_edits WHERE user_id = $1", [uid])).rows[0].n, 1);
+    const block = await styleBlockFor(db, { id: uid, name: "Kumar Test" });
+    assert.match(block, /CARD TEXT/); assert.match(block, /ଏକ ଦୁଇ/);
+    assert.equal(await styleBlockFor(db, { id: uid + 99999, name: "Nobody" }), "");
+    await assert.rejects(() => importWriterStyle(db, uid + 99999, style), /No such login/);
+    await db.query("DELETE FROM users WHERE id = $1", [uid]);
+  } finally { await db.end(); }
+});

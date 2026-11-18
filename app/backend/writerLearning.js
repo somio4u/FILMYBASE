@@ -165,7 +165,8 @@ export async function importWriterStyle(db, userId, { card, pairs = [], source =
 
 // Styles worked out from drafts that belong to ONE exact login. At every start: if that login exists and has no style card yet, it gets the ready-made one.
 // (Only when there is no card, so a style the admin changes later is never overwritten by a restart.)
-export const STYLE_SEEDS = [{ username: "kumar", seed: "kumar" }];
+// "kumar" = "kumar bro" (the writer who edited Maha Kali); "script" = the new "Kumar" login the owner made for him to write on his own.
+export const STYLE_SEEDS = [{ username: "kumar", seed: "kumar" }, { username: "script", seed: "kumar" }];
 
 export async function applyStyleSeeds(db, readSeed, seeds = STYLE_SEEDS) {
   const done = [];

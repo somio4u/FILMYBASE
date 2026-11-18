@@ -87,3 +87,50 @@ export async function recordWriterEdit(db, { user, module, projectRef, sceneRef,
     return null;
   }
 }
+
+// ---- STEP 2: USING what was learned ----
+// The style of the person who is working is added to every screenplay / dialogue writing prompt (writingStyleGuide.js reads it from here).
+// It is made of that writer's OWN corrections: "the AI wrote X, the writer made it Y". The AI is shown the most recent ones and writes the next scenes in that voice.
+import { AsyncLocalStorage } from "node:async_hooks";
+
+const styleStore = new AsyncLocalStorage();
+export const currentWriterStyle = () => styleStore.getStore()?.block ?? "";
+export const runWithWriterStyle = (block, fn) => styleStore.run({ block }, fn);
+
+export const MIN_STYLE_EXAMPLES = 5;   // fewer rewrites than this and there is nothing reliable to learn yet
+const MAX_DIALOGUE_EXAMPLES = 12, MAX_ACTION_EXAMPLES = 4;
+const clip = (t, n) => { const s = String(t ?? "").replace(/\s+/g, " ").trim(); return s.length > n ? `${s.slice(0, n - 1)}…` : s; };
+
+export function buildStyleBlock(name, rows) {
+  const dialogue = [], action = [];
+  for (const r of rows) for (const p of r.pairs ?? []) {
+    if (!p.before || !p.after || p.before.trim() === p.after.trim()) continue; // only real rewrites teach a style
+    (p.type === "dialogue" ? dialogue : action).push(p);
+  }
+  if (dialogue.length + action.length < MIN_STYLE_EXAMPLES) return "";
+  const line = (p) => `- ${p.character ? `${p.character}: ` : ""}AI wrote: "${clip(p.before, 160)}"  →  ${name || "the writer"} made it: "${clip(p.after, 160)}"`;
+  return [
+    `THIS WRITER'S OWN STYLE — learned from how ${name || "the writer"} rewrites the AI's lines. Write like ${name || "them"}: the same word choice, line length, tone, humour and way of showing feeling. Study what changed between "AI wrote" and the writer's version, and apply that to NEW lines. Never copy these lines into the film, and never let this change the story, the characters or the events.`,
+    ...dialogue.slice(0, MAX_DIALOGUE_EXAMPLES).map(line),
+    ...action.slice(0, MAX_ACTION_EXAMPLES).map(line),
+  ].join("\n");
+}
+
+export async function styleBlockFor(db, user) {
+  try {
+    if (!user?.id) return "";
+    const rows = (await db.query("SELECT pairs FROM writer_edits WHERE user_id = $1 ORDER BY updated_at DESC LIMIT 40", [user.id])).rows;
+    return buildStyleBlock(user.name, rows);
+  } catch (error) {
+    console.error("Could not read a writer's style (writing goes on without it):", error.message);
+    return "";
+  }
+}
+
+// Express middleware: finds the style of whoever is asking and keeps it for everything this request (and the background work it starts) writes.
+export const writerStyleMiddleware = (db) => async (req, res, next) => {
+  if (!req.user || !/^\/api\/(screenplay|ai-movie|scene-lists|assistant|pitch-deck|generate|skip|draft)/.test(req.path)) { next(); return; }
+  const block = await styleBlockFor(db, req.user);
+  if (!block) { next(); return; }
+  runWithWriterStyle(block, next);
+};

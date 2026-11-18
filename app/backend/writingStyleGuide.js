@@ -20,13 +20,17 @@ export const ACTION_STYLE_GUIDE = `EASY-TO-READ ACTION AND DESCRIPTION (English 
 - New worlds and places (the Avatar way): see the world through one character's eyes, with sound, light and touch. One striking, easy-to-picture thing per scene. A new name is first SHOWN in action, then named.
 - A scene opens on a clear picture and ends on a clear picture or a line. No scene explains itself.`;
 
+import { currentWriterStyle } from "./writerLearning.js";
+
 const off = () => String(process.env.WRITING_STYLE_GUIDE ?? "").toLowerCase() === "off";
 
 // the full guide, appended to a system prompt
+// (plus, when the person working has rewritten enough of the AI's lines, THEIR OWN style learned from those rewrites — see writerLearning.js)
+const learned = () => { const b = currentWriterStyle(); return b ? `\n\n${b}` : ""; };
 export function withWritingStyle(prompt) {
-  return off() ? prompt : `${prompt}\n\n${DIALOGUE_STYLE_GUIDE}\n\n${ACTION_STYLE_GUIDE}`;
+  return off() ? prompt : `${prompt}\n\n${DIALOGUE_STYLE_GUIDE}\n\n${ACTION_STYLE_GUIDE}${learned()}`;
 }
 
 // just the dialogue part (the Hindi/Odia "sound like real speech" pass), or just the action part
-export const dialogueStyleText = () => (off() ? "" : DIALOGUE_STYLE_GUIDE);
+export const dialogueStyleText = () => (off() ? "" : `${DIALOGUE_STYLE_GUIDE}${learned()}`);
 export const actionStyleText = () => (off() ? "" : ACTION_STYLE_GUIDE);

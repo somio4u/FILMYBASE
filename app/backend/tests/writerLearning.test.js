@@ -45,3 +45,33 @@ test("edits are remembered per writer; autosave of one scene stays ONE record; a
     await db.query("DELETE FROM writer_edits WHERE user_id = $1", [uid]); await db.query("DELETE FROM users WHERE id = $1", [uid]);
   } finally { await db.end(); }
 });
+
+import { buildStyleBlock, runWithWriterStyle, currentWriterStyle, MIN_STYLE_EXAMPLES } from "../writerLearning.js";
+import { withWritingStyle, dialogueStyleText } from "../writingStyleGuide.js";
+
+const rows = (n) => [{ pairs: Array.from({ length: n }, (_, i) => ({ type: "dialogue", character: "RAJU", before: `I shall not tolerate this ${i}.`, after: `Bas. Aur nahi ${i}.` })) }];
+
+test("a writer's style is only used after enough real rewrites, and carries their own before/after lines", () => {
+  assert.equal(buildStyleBlock("Chandan", rows(MIN_STYLE_EXAMPLES - 1)), "");
+  const block = buildStyleBlock("Chandan", rows(8));
+  assert.match(block, /Chandan/);
+  assert.match(block, /AI wrote: "I shall not tolerate this 0\."/);
+  assert.match(block, /Bas\. Aur nahi 0\./);
+  assert.match(block, /never let this change the story/);
+  // unchanged lines and pure additions/cuts teach nothing
+  assert.equal(buildStyleBlock("C", [{ pairs: Array.from({ length: 9 }, () => ({ type: "dialogue", character: "R", before: "same", after: "same" })).concat(Array.from({ length: 9 }, () => ({ type: "dialogue", character: "R", before: "", after: "added" }))) }]), "");
+});
+
+test("the writer's style reaches the writing prompts of the request that is running (even after awaits), and of nobody else", async () => {
+  const plainPrompt = withWritingStyle("BASE");
+  assert.doesNotMatch(plainPrompt, /THIS WRITER'S OWN STYLE/);
+  const block = buildStyleBlock("Chandan", rows(8));
+  await runWithWriterStyle(block, async () => {
+    await new Promise((r) => setTimeout(r, 5));
+    assert.match(withWritingStyle("BASE"), /THIS WRITER'S OWN STYLE/);
+    assert.match(dialogueStyleText(), /Bas\. Aur nahi 0\./);
+    assert.equal(currentWriterStyle(), block);
+  });
+  assert.equal(currentWriterStyle(), "", "outside that request nothing leaks");
+  assert.doesNotMatch(withWritingStyle("BASE"), /THIS WRITER'S OWN STYLE/);
+});

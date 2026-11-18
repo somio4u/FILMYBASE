@@ -120,7 +120,7 @@ import cookieParser from "cookie-parser";
 import http from "node:http";
 import { createClient } from "@supabase/supabase-js";
 import { projectProgress, projectFormat } from "./projectProgress.js";
-import { ensureWriterLearningSchema, recordWriterEdit } from "./writerLearning.js";
+import { ensureWriterLearningSchema, recordWriterEdit, writerStyleMiddleware } from "./writerLearning.js";
 import {
   AKHADA_FIXED_SYNOPSIS,
   AKHADA_FIXED_CHARACTERS,
@@ -1578,6 +1578,7 @@ app.use(async (req, res, next) => {
   next();
 });
 app.use(usageContext);
+app.use(writerStyleMiddleware(db));
 
 // Wrap a route handler to require the caller be logged in as one of the
 // given roles — 401 if not logged in at all, 403 if logged in as the wrong

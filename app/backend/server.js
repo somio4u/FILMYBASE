@@ -120,6 +120,7 @@ import cookieParser from "cookie-parser";
 import http from "node:http";
 import { createClient } from "@supabase/supabase-js";
 import { projectProgress, projectFormat } from "./projectProgress.js";
+import { ensureWriterLearningSchema, recordWriterEdit } from "./writerLearning.js";
 import {
   AKHADA_FIXED_SYNOPSIS,
   AKHADA_FIXED_CHARACTERS,
@@ -7035,6 +7036,7 @@ app.post("/api/ai-movie/stages/screenplay/beats/:beatIndex/scenes/:sceneIndex/ed
   try {
     const characterNames = (project.backfill?.characterArc ?? []).map((c) => c?.name).filter(Boolean);
     const heading = typeof sceneHeading === "string" && sceneHeading.trim() ? sceneHeading.trim() : beat.scenes[sceneIndex].sceneHeading?.en ?? "";
+    await recordWriterEdit(db, { user: req.user, module: "ai_movie", projectRef: Number(projectId), sceneRef: `${beatIndex}.${sceneIndex}`, language: language === "en" ? "en" : "hi", before: beat.scenes[sceneIndex].content, after: blocks });
     const corrected = await generateAiMovieSceneEditCorrection(language === "en" ? "en" : "hi", heading, blocks, characterNames, beats[beatIndex]);
 
     const latest = (await db.query("SELECT backfill FROM ai_movie_projects WHERE id = $1", [projectId])).rows[0].backfill;
@@ -12568,6 +12570,7 @@ app.post("/api/screenplay/scene/:id/edit", requireRole("admin"), async (req, res
     return;
   }
   if (await newerVersionConflict(previousRow, res)) return;
+  await recordWriterEdit(db, { user: req.user, module: "screenplay", projectRef: previousRow.scene_list_id, sceneRef: previousRow.id, language: previousRow.content?.dialogueLanguage ?? "en", before: previousRow.content?.elements, after: elements });
   try {
     const dialogueLanguage = ["en", "or", "hi"].includes(previousRow.content?.dialogueLanguage) ? previousRow.content.dialogueLanguage : "en";
     const characterNames = await movieCharacterNamesForSceneList(previousRow.scene_list_id);
@@ -12598,6 +12601,8 @@ app.post("/api/screenplay/scene/:id/draft", requireRole("admin"), async (req, re
     return;
   }
   if (await newerVersionConflict(previousRow, res)) return;
+  // remember what the writer changed (training material for the style-learning agent); never blocks the save
+  await recordWriterEdit(db, { user: req.user, module: "screenplay", projectRef: previousRow.scene_list_id, sceneRef: previousRow.id, language: previousRow.content?.dialogueLanguage ?? "en", before: previousRow.content?.elements, after: elements });
   if (previousRow.content?.draft === true) {
     const content = { ...previousRow.content, elements, editedByUser: true, draft: true, madeBy: actorOf(req.user) };
     const updated = await db.query(
@@ -22225,6 +22230,7 @@ registerScreenplayImportRoutes(app, db, { requireRole, upload: screenplayUpload,
 // starts, rather than blocking startup entirely.
 ensureAiMovieSchema()
   .then(() => ensureWriterSchema(db))
+  .then(() => ensureWriterLearningSchema(db))
   .then(() => ensureUsageSchema(db))
   .then(() => ensureScreenplayImportSchema(db))
   .then(() => ensureApprovalFormatSchema(db))

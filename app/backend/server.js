@@ -120,7 +120,7 @@ import cookieParser from "cookie-parser";
 import http from "node:http";
 import { createClient } from "@supabase/supabase-js";
 import { projectProgress, projectFormat } from "./projectProgress.js";
-import { ensureWriterLearningSchema, recordWriterEdit, writerStyleMiddleware, importWriterStyle } from "./writerLearning.js";
+import { ensureWriterLearningSchema, recordWriterEdit, writerStyleMiddleware, importWriterStyle, applyStyleSeeds } from "./writerLearning.js";
 import {
   AKHADA_FIXED_SYNOPSIS,
   AKHADA_FIXED_CHARACTERS,
@@ -22249,6 +22249,7 @@ registerScreenplayImportRoutes(app, db, { requireRole, upload: screenplayUpload,
 ensureAiMovieSchema()
   .then(() => ensureWriterSchema(db))
   .then(() => ensureWriterLearningSchema(db))
+  .then(() => applyStyleSeeds(db, async (name) => JSON.parse(await fs.promises.readFile(new URL(`./seeds/${name}-style.json`, import.meta.url), "utf8"))))
   .then(() => ensureUsageSchema(db))
   .then(() => ensureScreenplayImportSchema(db))
   .then(() => ensureApprovalFormatSchema(db))

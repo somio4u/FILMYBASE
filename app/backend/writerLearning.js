@@ -162,3 +162,22 @@ export async function importWriterStyle(db, userId, { card, pairs = [], source =
   if (card) await db.query("INSERT INTO writer_style_cards (user_id, card, source) VALUES ($1,$2,$3) ON CONFLICT (user_id) DO UPDATE SET card = EXCLUDED.card, source = EXCLUDED.source, updated_at = now()", [userId, String(card), source]);
   return { userId, name: user.name, pairs: clean.length, card: Boolean(card) };
 }
+
+// Styles worked out from drafts that belong to ONE exact login. At every start: if that login exists and has no style card yet, it gets the ready-made one.
+// (Only when there is no card, so a style the admin changes later is never overwritten by a restart.)
+export const STYLE_SEEDS = [{ username: "kumar", seed: "kumar" }];
+
+export async function applyStyleSeeds(db, readSeed, seeds = STYLE_SEEDS) {
+  const done = [];
+  for (const { username, seed } of seeds) {
+    try {
+      const user = (await db.query("SELECT id FROM users WHERE lower(username) = $1", [username])).rows[0];
+      if (!user) continue;
+      if ((await db.query("SELECT 1 FROM writer_style_cards WHERE user_id = $1", [user.id])).rows.length) continue;
+      done.push(await importWriterStyle(db, user.id, await readSeed(seed)));
+    } catch (error) {
+      console.error(`Could not give "${username}" the ready-made style (nothing else is affected):`, error.message);
+    }
+  }
+  return done;
+}

@@ -112,3 +112,23 @@ test("importing a style gives the writer a card and pairs; importing again repla
     await db.query("DELETE FROM users WHERE id = $1", [uid]);
   } finally { await db.end(); }
 });
+
+import { applyStyleSeeds } from "../writerLearning.js";
+test("a ready-made style goes only to the exact username, only once, and a restart never overwrites a changed card", async () => {
+  const db = new pg.Pool({ database: process.env.TEST_DB || "filmmaking_app_test", user: process.env.PGUSER || "root", host: process.env.PGHOST || "/var/run/postgresql" });
+  try {
+    await ensureWriterLearningSchema(db);
+    const a = (await db.query("INSERT INTO users (name, username, password_hash, password_salt, role) VALUES ('Kumar Bro','kumar_seed_t','x','x','screenplay_writer') RETURNING id")).rows[0].id;
+    const b = (await db.query("INSERT INTO users (name, username, password_hash, password_salt, role) VALUES ('Chandan Kumar T','chandan_seed_t','x','x','independent_writer') RETURNING id")).rows[0].id;
+    const read = async () => ({ card: "SEED CARD", pairs: [{ type: "dialogue", character: "A", before: "x", after: "ଯ" }] });
+    const seeds = [{ username: "kumar_seed_t", seed: "kumar" }];
+    assert.equal((await applyStyleSeeds(db, read, seeds)).length, 1);
+    assert.equal((await db.query("SELECT card FROM writer_style_cards WHERE user_id = $1", [a])).rows[0].card, "SEED CARD");
+    assert.equal((await db.query("SELECT count(*)::int AS n FROM writer_style_cards WHERE user_id = $1", [b])).rows[0].n, 0, "the other 'Kumar' got nothing");
+    await db.query("UPDATE writer_style_cards SET card = 'EDITED' WHERE user_id = $1", [a]);
+    assert.equal((await applyStyleSeeds(db, read, seeds)).length, 0, "second start does nothing");
+    assert.equal((await db.query("SELECT card FROM writer_style_cards WHERE user_id = $1", [a])).rows[0].card, "EDITED");
+    assert.deepEqual(await applyStyleSeeds(db, read, [{ username: "nobody_here", seed: "kumar" }]), []);
+    await db.query("DELETE FROM users WHERE id = ANY($1)", [[a, b]]);
+  } finally { await db.end(); }
+});

@@ -120,6 +120,7 @@ import cookieParser from "cookie-parser";
 import http from "node:http";
 import { createClient } from "@supabase/supabase-js";
 import { projectProgress, projectFormat } from "./projectProgress.js";
+import { isQuotaError, fallbackModelsFor, jitter } from "./overloadFallback.js";
 import { ensureWriterLearningSchema, recordWriterEdit, writerStyleMiddleware, importWriterStyle, applyStyleSeeds } from "./writerLearning.js";
 import {
   AKHADA_FIXED_SYNOPSIS,
@@ -435,15 +436,29 @@ function friendlyGeminiErrorMessage(rawMessage) {
   return rawMessage;
 }
 
-async function generateContentWithRetry(params, { retries = 4, fallbackDelayMs = 2000 } = {}) {
+async function generateContentWithRetry(params, { retries = 5, fallbackDelayMs = 2000 } = {}) {
   for (let attempt = 0; ; attempt++) {
     assertRunActive();
     try {
       return await withTimeout(ai.models.generateContent(params), GEMINI_CALL_TIMEOUT_MS);
     } catch (error) {
       const transient = /"code":\s*(429|503)/.test(error.message ?? "") || /timed out after/.test(error.message ?? "");
-      if (!transient || attempt >= retries) throw error;
-      const delay = parseRetryDelayMs(error.message) ?? fallbackDelayMs * 2 ** attempt;
+      if (!transient) throw error;
+      if (attempt >= retries) {
+        // Waiting did not help: Google's room for THIS model is used up. Another model usually still has room — try each once.
+        if (isQuotaError(error.message) && params.model) {
+          for (const model of fallbackModelsFor(params.model)) {
+            try {
+              console.error(`Gemini ${params.model} is out of room (429) — trying ${model} instead`);
+              return await withTimeout(ai.models.generateContent({ ...params, model }), GEMINI_CALL_TIMEOUT_MS);
+            } catch (fallbackError) {
+              console.error(`${model} did not work either: ${String(fallbackError.message).slice(0, 120)}`);
+            }
+          }
+        }
+        throw error;
+      }
+      const delay = parseRetryDelayMs(error.message) ?? jitter(fallbackDelayMs * 2 ** attempt);
       console.error(`Gemini call failed (${error.message.slice(0, 100)}...), retrying in ${delay}ms`);
       await new Promise((resolve) => setTimeout(resolve, delay));
     }

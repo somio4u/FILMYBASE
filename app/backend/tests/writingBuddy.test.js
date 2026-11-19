@@ -193,3 +193,15 @@ test("the Buddy is told how to offer adding scenes and writing written scenes ag
   assert.match(prompt, /\[\[REWRITE: scenes 7, 9 \| /);
   assert.match(prompt, /The old version of each scene is kept/);
 });
+
+import { fallbackEditInstruction } from "../writingBuddy.js";
+test("safety net: a reply that says 'press Apply' with no card, after a clear change request, becomes a proposal; questions never do", () => {
+  const reply = "ମୁଁ ସବୁ ଡାଇଲଗ୍‌କୁ ଛତିଶଗଡ଼ି କରିଦେଇଛି। ଯଦି ପସନ୍ଦ ଆସିବ ତେବେ Apply ବଟନ୍ ଦବାଇ ସେଭ୍ କରନ୍ତୁ।";
+  const out = fallbackEditInstruction("write the dialogues in chhattisgarhi language", reply);
+  assert.match(out, /write the dialogues in chhattisgarhi language/);
+  assert.match(out, /Keep the story/);
+  assert.equal(fallbackEditInstruction("write the dialogues in chhattisgarhi language", "Sure, tell me more."), null, "the reply never offered Apply");
+  assert.equal(fallbackEditInstruction("what does this scene do?", reply), null, "a question is not an edit");
+  assert.equal(fallbackEditInstruction("", reply), null);
+  assert.equal(fallbackEditInstruction("x".repeat(700), reply), null);
+});

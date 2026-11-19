@@ -245,3 +245,15 @@ export function unwrittenContextText(unwritten, totalScenes, extra = {}) {
   }
   return lines.join("\n");
 }
+
+// SAFETY NET. The Buddy is told to end an edit proposal with [[EDIT: …]] — that tag is what makes the Apply card appear. Sometimes the model describes the change and
+// says "press Apply" but forgets the tag, so the writer sees no button and nothing can change (seen for real: "write the dialogues in Chhattisgarhi"). When the reply
+// talks about Apply, no card came with it, and the writer's own words are clearly a request to change the scene, the writer's request becomes the proposal itself.
+const EDIT_REQUEST = /\b(change|rewrite|re-write|write|translate|convert|make|shorten|lengthen|replace|fix|turn|redo|edit|add|remove|delete|cut|dialogues?|dialogs?)\b/i;
+const QUESTION_ONLY = /^\s*(what|why|how|when|where|who|which|is|are|do|does|can you tell|tell me)\b[^.]*\?\s*$/i;
+export function fallbackEditInstruction(userText, replyText) {
+  const user = String(userText ?? "").trim();
+  if (!user || user.length > 600 || QUESTION_ONLY.test(user) || !EDIT_REQUEST.test(user)) return null;
+  if (!/\bapply\b|ଆପ୍ଲାଏ|एप्लाई|अप्लाई/i.test(String(replyText ?? ""))) return null;
+  return `Do exactly what the writer asked, for this scene only: "${user}". Keep the story, the characters, the events and the order of the scene; change only what was asked.`;
+}

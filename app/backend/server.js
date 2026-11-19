@@ -55,7 +55,7 @@ import { planFill } from "./pdfFill.js";
 import { makeInsertedScenes, planInsertions, renumberSimpleScenes } from "./sceneInsert.js";
 import { sceneState } from "./importAnalysis.js";
 import { buildScreenplayProject, saveScreenplayProject } from "./screenplayProject.js";
-import { buddySystemPrompt, sceneContextText, historyToContents, extractProposal, parseWriteSpec, unwrittenContextText } from "./writingBuddy.js";
+import { buddySystemPrompt, sceneContextText, historyToContents, extractProposal, parseWriteSpec, unwrittenContextText, fallbackEditInstruction } from "./writingBuddy.js";
 import { createSkipStartJobs, publicView as publicSkipJob } from "./skipStartJobs.js";
 import { WRITER_ROLE, INDEPENDENT_WRITER_ROLE, isWriterRole, userHasConcept, writerGatekeeper, ensureWriterSchema, registerWriterRoutes } from "./writerAccess.js";
 import { usageContext, installGeminiMetering, ensureUsageSchema, registerUsageRoutes, setSceneListResolver } from "./usageLedger.js";
@@ -21592,6 +21592,11 @@ app.post("/api/assistant/:sceneListId/message", requireLogin, async (req, res) =
       // only scenes that really are written can be written again
       const chosen = parseWriteSpec(proposal.rewrite.spec, (await listSceneStates(ctx.sceneListId)).filter((x) => x.written)).slice(0, 10);
       if (chosen.length > 0) proposed = { type: "rewrite_scenes", scenes: chosen.map(brief), count: chosen.length, feedback: proposal.rewrite.feedback };
+    }
+    if (!proposed && canAct && sceneIndex !== null) {
+      // the reply talked about Apply but came without its tag: the writer's own request becomes the proposal, so the Apply card still appears
+      const instruction = fallbackEditInstruction(text, reply);
+      if (instruction) proposed = { type: "scene_edit", instruction, episodeIndex, sceneIndex };
     }
     const assistantRow = (await db.query("INSERT INTO agent_chat_messages (concept_id, stage_key, role, content, proposed_action) VALUES ($1, $2, 'assistant', $3, $4) RETURNING id, role, content, proposed_action, resolved, created_at",
       [ctx.conceptId, stageKey, proposal.text || proposal.instruction || proposal.write || (proposal.add ? `[add ${proposal.add}]` : null) || proposal.rewrite?.spec, proposed ? JSON.stringify(proposed) : null])).rows[0];

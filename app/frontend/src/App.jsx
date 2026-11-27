@@ -9688,6 +9688,9 @@ function App() {
     setDraftDashboard({ module, projectRef: id })
   }
 
+  // The Drafts screen of a project, always — even when "open the last draft directly" is on (that setting skips it when a project is clicked).
+  function openDraftsScreen(module, id) { setIsSidebarOpen(false); setDraftDashboard({ module, projectRef: id }) }
+
   // If the drafts service is unavailable, the project must still open exactly as it always did.
   async function openProjectDirect({ module, projectRef }) {
     setDraftDashboard(null)
@@ -14609,6 +14612,7 @@ function App() {
                       <span className="breakdown-item-meta">{project.detectedStage}</span>
                     </button>
                     <div className="master-list-card-actions">
+                      {currentUser?.role === 'admin' && <button className="sidebar-history-icon-button" onClick={() => openDraftsScreen('ai_movie', project.id)} title="Drafts of this project">📂</button>}
                       <button
                         className="sidebar-history-icon-button"
                         onClick={() => handleDeleteAiMovieProjectClick(project)}
@@ -16068,6 +16072,7 @@ function App() {
                     {item.pinned && <span className="sidebar-history-pin-marker">{ICONS.pin}</span>}
                     {isActive ? sidebarProjectLabel : projectHistoryLabel(item)}
                   </button>
+                  {currentUser?.role === 'admin' && <button className="sidebar-history-icon-button" onClick={() => openDraftsScreen('film', item.id)} title="Drafts of this project">📂</button>}
                   {isActive && (
                     <button
                       className="sidebar-history-icon-button"
@@ -16136,6 +16141,7 @@ function App() {
               selectedIds={selectedMasterProjectIds}
               onToggle={toggleMasterProjectSelected}
               onOpen={handleOpenMasterProjectClick}
+              onOpenDrafts={(project) => openDraftsScreen('film', project.id)}
               onRename={handleRenameMasterProjectClick}
               onDelete={handleDeleteMasterProjectClick}
               icons={ICONS}

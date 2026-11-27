@@ -27,7 +27,7 @@ export function stageText(p) {
 const involved = (p) => new Set([p.createdBy, ...p.assignedUsers.map((u) => u.name)].filter(Boolean))
 const when = (iso) => { try { return iso ? new Date(iso).toLocaleDateString(undefined, { day: 'numeric', month: 'short' }) : '' } catch { return '' } }
 
-export default function MasterProjectBoard({ projects, isAdmin, selectedIds, onToggle, onOpen, onRename, onDelete, icons, typeLabel }) {
+export default function MasterProjectBoard({ projects, isAdmin, selectedIds, onToggle, onOpen, onOpenDrafts, onRename, onDelete, icons, typeLabel }) {
   const [tab, setTab] = useState('all')
   const [stage, setStage] = useState('all')
   const [kind, setKind] = useState('all')
@@ -92,6 +92,7 @@ export default function MasterProjectBoard({ projects, isAdmin, selectedIds, onT
             </button>
             <div className="master-list-card-actions">
               {isAdmin && <input type="checkbox" className="master-list-card-checkbox" checked={selectedIds.has(p.id)} onChange={() => onToggle(p.id)} title="Select this project" />}
+              {isAdmin && p.projectType !== 'production' && <button className="sidebar-history-icon-button" onClick={() => onOpenDrafts?.(p)} title="Drafts of this project">📂</button>}
               <button className="sidebar-history-icon-button" onClick={() => onRename(p)} title="Rename">{icons.pencil}</button>
               {isAdmin && <button className="sidebar-history-icon-button" onClick={() => onDelete(p)} title="Delete">{icons.trash}</button>}
             </div>

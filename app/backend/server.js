@@ -122,6 +122,7 @@ import { createClient } from "@supabase/supabase-js";
 import { projectProgress, projectFormat } from "./projectProgress.js";
 import { isQuotaError, fallbackModelsFor, jitter } from "./overloadFallback.js";
 import { ensureWriterLearningSchema, recordWriterEdit, writerStyleMiddleware, importWriterStyle, applyStyleSeeds } from "./writerLearning.js";
+import { aiMovieToFilm, filmToAiMovie } from "./convertProject.js";
 import {
   AKHADA_FIXED_SYNOPSIS,
   AKHADA_FIXED_CHARACTERS,
@@ -2074,6 +2075,20 @@ app.post("/api/admin/writer-style/import", requireRole("admin"), async (req, res
     res.json(await importWriterStyle(db, user.id, style));
   } catch (error) {
     res.status(error.status ?? 500).json({ error: error.code === "ENOENT" ? "Unknown ready-made style." : error.message });
+  }
+});
+
+// Admin: bring a project over to the other side of the app — a separate copy, the original stays as it is. Body: { from: "ai_movie" | "film", projectRef }.
+app.post("/api/projects/convert", requireRole("admin"), async (req, res) => {
+  try {
+    const from = req.body?.from;
+    const ref = Number(req.body?.projectRef);
+    if (!["ai_movie", "film"].includes(from) || !Number.isInteger(ref) || ref < 1) { res.status(400).json({ error: "Say which project to bring over." }); return; }
+    const out = from === "ai_movie" ? await aiMovieToFilm(db, ref, { ownerUserId: null }) : await filmToAiMovie(db, ref, { actorUserId: req.user.id });
+    res.json(out);
+  } catch (error) {
+    if (!error.status) console.error("Bringing a project over failed:", error.message);
+    res.status(error.status ?? 500).json({ error: error.message });
   }
 });
 

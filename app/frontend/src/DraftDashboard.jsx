@@ -102,6 +102,15 @@ export default function DraftDashboard({ module, projectRef, backendUrl, onConti
     if (name === null) return
     act('branch', () => call(`${api}/${d.id}/branch`, 'POST', { kind, label: name.trim() || null }))
   }
+  // bring this draft's project over to the other side of the app: a separate copy (AI Movie -> Movie, Movie -> AI Movie); this one stays as it is
+  const convertDraft = (d) => {
+    const toMovie = module === 'ai_movie'
+    if (!window.confirm(toMovie
+      ? `Make a MOVIE (Story & Screenplay) project from “${d.title}”?\n\nIts written scenes become the Movie's screenplay, word for word. This AI Movie stays exactly as it is.`
+      : `Make an AI MOVIE project from “${d.title}”?\n\nIts written scenes become the AI Movie's screenplay, word for word. This Movie stays exactly as it is.`)) return
+    setNote('')
+    act('convert', () => call(`${backendUrl}/api/projects/convert`, 'POST', { from: module, projectRef: d.projectRef }), (out) => setNote(`✓ Done: “${out.title}” is now in the ${out.module === 'film' ? 'Movie (Story & Screenplay)' : 'AI Movie'} list${out.scenes ? ` with ${out.scenes} written scene${out.scenes === 1 ? '' : 's'}` : ''}${out.scenesLeftOut ? ` (${out.scenesLeftOut} scene${out.scenesLeftOut === 1 ? '' : 's'} not written yet stayed behind)` : ''}. Open it from All projects.`))
+  }
   // a new draft from the owner's own final screenplay file: the chosen draft is copied (story, synopsis, characters, beat sheet stay), the screenplay is the uploaded one
   const chooseScreenplay = (d) => { uploadFor.current = d; setError(null); setNote(''); fileRef.current?.click() }
   // the reading takes a while (a PDF is read page by page): it runs on the server, and this follows it — what it is doing now, how long it has run; it also shows again after a reload
@@ -191,6 +200,7 @@ export default function DraftDashboard({ module, projectRef, backendUrl, onConti
           <button type="button" className="dd-btn" disabled={Boolean(busy)} onClick={() => branch(d, 'numbered')}>Create Draft from This</button>
           <button type="button" className="dd-btn" disabled={Boolean(busy)} onClick={() => branch(d, 'alternative')}>Explore Alternative</button>
           {module === 'ai_movie' && <button type="button" className="dd-btn" disabled={Boolean(busy) || watching} onClick={() => chooseScreenplay(d)}>{busy === 'upload' || watching ? 'Reading your screenplay…' : '📄 Create Draft from My Screenplay'}</button>}
+          <button type="button" className="dd-btn" disabled={Boolean(busy)} onClick={() => convertDraft(d)}>{busy === 'convert' ? 'Bringing it over…' : module === 'ai_movie' ? '🎬 Make a Movie project from this' : '🤖 Make an AI Movie project from this'}</button>
           {d.kind === 'alternative' && <button type="button" className="dd-btn" disabled={Boolean(busy)} onClick={() => act('promote', () => call(`${api}/${d.id}/promote`, 'POST', {}))}>Promote to Draft</button>}
           {d.status === 'locked'
             ? <button type="button" className="dd-btn" disabled={Boolean(busy)} onClick={() => act('unlock', () => call(`${api}/${d.id}`, 'PATCH', { status: 'working' }))}>Unlock</button>

@@ -31,6 +31,7 @@ import WorkspaceSources, { UsedSources } from './WorkspaceSources.jsx'
 const DraftDashboard = lazy(() => import('./DraftDashboard.jsx'))
 const OPEN_LAST_KEY = 'filmmaking-app:openLastDraft'
 import MasterProjectBoard from './MasterProjectBoard.jsx'
+import { stripActLabel, joinActs } from './joinActs.js'
 import ErrorBoundary from './ErrorBoundary.jsx'
 const DraftAgentPanel = lazy(() => import('./DraftAgentPanel.jsx'))
 import AiMovieStudio, { AI_MOVIE_STUDIO_VIEWS, StageJudgeNote } from './AiMovieStudio.jsx'
@@ -7334,8 +7335,11 @@ function ScreenplayImportButton({ backendUrl, onText, disabled }) {
   const [note, setNote] = useState('')
 
   async function handleFile(event) {
-    const file = event.target.files?.[0]
+    const picked = [...(event.target.files ?? [])]
     event.target.value = ''
+    // several files picked at once are the parts of ONE film: show them in order, so the order can be checked before reading
+    if (picked.length > 1) { addActFiles(picked); setActsMode(true); return }
+    const file = picked[0]
     if (!file) return
     setBusy(true)
     setError('')
@@ -7622,6 +7626,7 @@ async function uploadFileWithRetries(url, file, fields, onProgress) {
 
 function DraftUpload({ backendUrl, onBack, onImportScreenplay, onStartStage, onUseAsIdea }) {
   const inputRef = useRef(null)
+  const actsInputRef = useRef(null)
   const [phase, setPhase] = useState('idle') // idle | reading | ready | going
   const [progress, setProgress] = useState('')
   const [startedAt, setStartedAt] = useState(0)
@@ -7635,12 +7640,70 @@ function DraftUpload({ backendUrl, onBack, onImportScreenplay, onStartStage, onU
   const [episodes, setEpisodes] = useState('8')
   const [thisEpisode, setThisEpisode] = useState('1')
   const [error, setError] = useState('')
+  // "my film comes in 3 parts": Act 1, Act 2 and Act 3 as three files, read in order and kept as ONE film (never as three stories)
+  const [actsMode, setActsMode] = useState(false)
+  const [actFiles, setActFiles] = useState([]) // the parts, in reading order (any number from 2 up; three for a film in three acts)
+  const addActFiles = (list) => setActFiles((cur) => {
+    const added = [...list].filter((f) => !cur.some((c) => c.name === f.name && c.size === f.size))
+    // several files picked at once arrive in their name order (act1, act2, act3 — numbers counted as numbers), and can be moved afterwards
+    added.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }))
+    return [...cur, ...added].slice(0, 12)
+  })
+  const moveActFile = (i, d) => setActFiles((cur) => { const n = [...cur]; const j = i + d; if (j < 0 || j >= n.length) return cur; [n[i], n[j]] = [n[j], n[i]]; return n })
 
   useEffect(() => {
     if (phase !== 'reading' && phase !== 'going') return undefined
     const id = setInterval(() => setSeconds(Math.round((Date.now() - startedAt) / 1000)), 500)
     return () => clearInterval(id)
   }, [phase, startedAt])
+
+  // the three parts of one film: each file is read (PDFs page by page by the AI) and the texts are joined in order into ONE screenplay
+  async function readActs() {
+    const files = actFiles
+    if (files.length < 2) { setError('Choose at least two files — the parts of your film, for example Act 1, Act 2 and Act 3.'); return }
+    setError(''); setDraft(null)
+    setStartedAt(Date.now()); setSeconds(0)
+    setPhase('reading')
+    try {
+      const parts = []
+      for (let i = 0; i < files.length; i += 1) {
+        const file = files[i]
+        const label = files.length === 3 ? `Act ${i + 1} of 3` : `Part ${i + 1} of ${files.length}`
+        setProgress(`${label}: uploading ${file.name}…`)
+        let text; let title = ''
+        if (/\.pdf$/i.test(file.name)) {
+          const start = await uploadFileWithRetries(`${backendUrl}/api/story-from-pdf`, file, { mode: 'auto' }, (m) => setProgress(`${label}: ${m}`))
+          const started = await start.json().catch(() => ({}))
+          if (!start.ok) throw new Error(`${label}: ${started.error || 'could not upload the file.'}`)
+          const got = await waitForPdfJob(backendUrl, started.jobId, (m) => setProgress(`${label}: ${m}`))
+          text = got.text; title = got.title || ''
+        } else {
+          const response = await uploadFileWithRetries(`${backendUrl}/api/draft/read-file`, file, {}, (m) => setProgress(`${label}: ${m}`))
+          const { data, problem } = await readServerAnswer(response)
+          if (!response.ok || !data) throw new Error(`${label}: ${data?.error || problem || 'I could not read this file type.'}`)
+          text = data.text; title = data.title || ''
+        }
+        if (!String(text ?? '').trim()) throw new Error(`${label}: I could not find any readable text in ${file.name}.`)
+        // a lone "ACT TWO" heading at the top of a part is a label of the part, not a line of the film
+        text = stripActLabel(text)
+        parts.push({ text, title, name: file.name })
+      }
+      const text = joinActs(parts.map((x) => x.text))
+      setProgress('Looking at what your film contains…')
+      const response = await fetch(`${backendUrl}/api/draft/analyze`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text }) })
+      const { data, problem } = await readServerAnswer(response)
+      if (!response.ok || !data) throw new Error(data?.error || problem || 'Something went wrong. Please try again.')
+      const { analysis, report } = data
+      if (analysis.stage === 'empty') throw new Error('I could not find any readable text in these files.')
+      setDraft({ text, title: parts.find((x) => x.title)?.title || '', analysis, report, fileName: `${parts.length === 3 ? 'Act 1 + Act 2 + Act 3' : `${parts.length} parts`} (${parts.map((x) => x.name).join(', ')})`, acts: parts.length })
+      setStage(DRAFT_STAGE_OF[analysis.stage] ?? 'idea')
+      setTotal(String(Math.max(analysis.totals?.scenes ?? 0, 1)))
+      setKind('film'); setMinutes('120') // three acts are ONE film
+      setPhase('ready')
+    } catch (e) {
+      setError(e.message); setPhase('idle')
+    }
+  }
 
   async function handleFile(event) {
     const file = event.target.files?.[0]
@@ -7709,13 +7772,43 @@ function DraftUpload({ backendUrl, onBack, onImportScreenplay, onStartStage, onU
     <div className="draft-upload">
       <button type="button" className="cancel-button" onClick={onBack}>← Back</button>
       <h2>Upload your draft</h2>
-      <input ref={inputRef} type="file" onChange={handleFile} style={{ display: 'none' }} />
+      <input ref={inputRef} type="file" multiple onChange={handleFile} style={{ display: 'none' }} />
       {(phase === 'idle' || phase === 'reading') && (
         <>
           <p>Choose your file — a <b>PDF</b>, <b>text</b> file, <b>Word</b> file, an <b>Excel</b> scene table (.xlsx), <b>Final Draft</b> (.fdx), a script / <b>Fountain</b> file, or any other relevant file. I will read it and tell you which stage your draft is at.</p>
-          <button type="button" className="choose-button" onClick={() => inputRef.current?.click()} disabled={phase === 'reading'}>
-            {phase === 'reading' ? 'Reading your draft…' : '📎 Choose a file'}
-          </button>
+          {!actsMode && (
+            <>
+              <button type="button" className="choose-button" onClick={() => inputRef.current?.click()} disabled={phase === 'reading'}>
+                {phase === 'reading' ? 'Reading your draft…' : '📎 Choose a file (or several files)'}
+              </button>
+              <button type="button" className="cancel-button" onClick={() => setActsMode(true)} disabled={phase === 'reading'}>🎬 My film is in parts (Act 1, Act 2, Act 3…)</button>
+            </>
+          )}
+          {actsMode && (
+            <div className="draft-acts">
+              <p>Choose <b>all the parts of ONE film</b> at once (hold Ctrl or Shift to pick several) — for example Act 1, Act 2 and Act 3, each with its screenplay and dialogues. They are read in the order below and kept as <b>one film</b>, never as separate stories.</p>
+              <input ref={actsInputRef} type="file" multiple style={{ display: 'none' }} onChange={(e) => { addActFiles(e.target.files ?? []); e.target.value = '' }} />
+              <button type="button" className="choose-button" onClick={() => actsInputRef.current?.click()} disabled={phase === 'reading'}>📎 {actFiles.length ? 'Add more files' : 'Choose the files'}</button>
+              {actFiles.length > 0 && (
+                <ol className="draft-acts-list">
+                  {actFiles.map((f, i) => (
+                    <li key={`${f.name}-${f.size}`}>
+                      <b>{actFiles.length === 3 ? `Act ${i + 1}` : `Part ${i + 1}`}</b> — {f.name}{' '}
+                      <button type="button" className="cancel-button" onClick={() => moveActFile(i, -1)} disabled={phase === 'reading' || i === 0} title="Move up">↑</button>{' '}
+                      <button type="button" className="cancel-button" onClick={() => moveActFile(i, 1)} disabled={phase === 'reading' || i === actFiles.length - 1} title="Move down">↓</button>{' '}
+                      <button type="button" className="cancel-button" onClick={() => setActFiles((cur) => cur.filter((_, j) => j !== i))} disabled={phase === 'reading'} title="Remove">✕</button>
+                    </li>
+                  ))}
+                </ol>
+              )}
+              <div className="script-scene-form-actions">
+                <button type="button" className="choose-button" onClick={readActs} disabled={phase === 'reading' || actFiles.length < 2}>
+                  {phase === 'reading' ? 'Reading your film…' : `📖 Read ${actFiles.length >= 2 ? `all ${actFiles.length} parts` : 'the parts'} as one film`}
+                </button>
+                <button type="button" className="cancel-button" onClick={() => { setActsMode(false); setActFiles([]) }} disabled={phase === 'reading'}>Use one file instead</button>
+              </div>
+            </div>
+          )}
         </>
       )}
       {(phase === 'reading' || phase === 'going') && <p className="floating-agent-stage-line"><span className="floating-agent-spinner" aria-hidden="true" /><span>{progress} <b>{Math.floor(seconds / 60)}m {String(seconds % 60).padStart(2, '0')}s</b> — you can wait here.</span></p>}
@@ -7734,10 +7827,10 @@ function DraftUpload({ backendUrl, onBack, onImportScreenplay, onStartStage, onU
           <div className="draft-format">
             <label className="draft-stage-pick">
               What is this?
-              <select value={kind === 'episode' && !sceneStage ? 'series' : kind} onChange={(e) => { const next = e.target.value; setKind(next); setMinutes(next === 'film' ? '120' : '20') }}>
-                <option value="film">A film</option>
-                <option value="series">A web series (all its episodes are in this draft, or will be made)</option>
-                {sceneStage && <option value="episode">One episode of a series</option>}
+              <select value={draft?.acts ? 'film' : kind === 'episode' && !sceneStage ? 'series' : kind} disabled={Boolean(draft?.acts)} onChange={(e) => { const next = e.target.value; setKind(next); setMinutes(next === 'film' ? '120' : '20') }}>
+                <option value="film">A film{draft?.acts ? ' (your 3 acts are one film)' : ''}</option>
+                {!draft?.acts && <option value="series">A web series (all its episodes are in this draft, or will be made)</option>}
+                {sceneStage && !draft?.acts && <option value="episode">One episode of a series</option>}
               </select>
             </label>
             {kind !== 'film' && (

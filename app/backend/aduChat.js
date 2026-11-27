@@ -67,6 +67,22 @@ export function sortWithoutAi(text, context = {}, { module = "ai_movie" } = {}) 
     const addWord = /\b(add|jodo|jod\s*do|aur|more|another|new)\b|जोड़|जोड़ो|और\s|ଯୋଡ଼|ଯୋଡ|ଆହୁରି|ଆଉ/i.test(t);
     if (count && sceneWord && addWord) { const n = Number(count[1]); if (n >= 1 && n <= 40) return { kind: "add", count: n }; }
   }
+  // a film: "write the next 5 scenes" / "write scene 7 and 9" / "write scenes 10 to 15" — only those, not the whole film (the scenes job already takes them)
+  if (module === "film" && !looksLikeQuestion(t) && (WRITE_VERB.test(t) || /\bwriting\b/i.test(t)) && !/\b(add|jodo|jod\s*do)\b/i.test(t)) {
+    const named = /\bscenes?\s*((?:\d{1,3}(?:\s*(?:,|and|&|aur|और|-|–|to|through)\s*)?)+)/i.exec(t);
+    if (named) {
+      const numbers = new Set();
+      const parts = named[1].split(/\s*(?:,|and|&|aur|और)\s*/i).filter(Boolean);
+      for (const part of parts) {
+        const range = /^(\d{1,3})\s*(?:-|–|to|through)\s*(\d{1,3})$/i.exec(part.trim());
+        if (range) { for (let n = Number(range[1]); n <= Math.min(Number(range[2]), Number(range[1]) + 60); n += 1) numbers.add(n); }
+        else if (/^\d{1,3}$/.test(part.trim())) numbers.add(Number(part.trim()));
+      }
+      if (numbers.size) return { kind: "write_some", numbers: [...numbers].sort((a, b) => a - b) };
+    }
+    const next = /\bnext\s+(\d{1,3})\s+scenes?\b|\b(\d{1,3})\s+(?:next\s+|more\s+)?scenes?\b/i.exec(t);
+    if (next) { const n = Number(next[1] ?? next[2]); if (n >= 1 && n <= 200) return { kind: "write_some", count: n }; }
+  }
   // "make beat 3 longer — 8 minutes": extend one beat to a time
   const minutes = /(\d+(?:\.\d+)?)\s*(?:min|mins|minute|minutes|मिनट|ମିନିଟ୍?)/i.exec(t);
   if (module !== "film" && /\b(extend|longer|lengthen|increase|stretch|badha|badhao|lamba|lamb)\b|ବଢ଼ା|ଲମ୍ବା|बढ़ा|लंबा|लम्बा/i.test(t) && (/\b(beat|scene)\b/i.test(t) || Number.isInteger(context.beatIndex)) && minutes && !looksLikeQuestion(t)) {
@@ -92,6 +108,7 @@ export function sortWithoutAi(text, context = {}, { module = "ai_movie" } = {}) 
 // ---- what Adu tells the person about what it understood ----------------------------------------------------------------------------------------
 const SAYS = {
   en: {
+    writeSome: (a) => `I can write ${a.n} scene${a.n === 1 ? "" : "s"} that ${a.n === 1 ? "is" : "are"} not written yet${a.label ? ` (${a.label})` : ""}, one after the other, in the background. Scenes already written stay as they are. Press the button to start.`,
     writeFilm: (a) => `I can write every scene that is not written yet (${a.unwritten} of ${a.total}), one after the other, in the background. Scenes already written stay as they are. Press the button to start.`,
     addFilm: (a) => `I can plan ${a.count} new scene${a.count === 1 ? '' : 's'} that fit your story and put them in the scene list. They start as “not written yet”. Press the button to do it.`,
     allWritten: () => `Every scene of this film is already written, so there is nothing left to write. If you want more scenes, say “add 5 scenes”.`,
@@ -110,6 +127,7 @@ const SAYS = {
     })[a.why],
   },
   hi: {
+    writeSome: (a) => `मैं ${a.n} ऐसे scene${a.n === 1 ? "" : "s"} लिख सकता हूँ जो अभी लिखे नहीं गए${a.label ? ` (${a.label})` : ""}, एक के बाद एक, पीछे चलते हुए। जो scenes पहले से लिखे हैं वे वैसे ही रहेंगे। शुरू करने के लिए बटन दबाओ।`,
     writeFilm: (a) => `मैं हर वह scene लिख सकता हूँ जो अभी लिखा नहीं गया (${a.total} में से ${a.unwritten}), एक के बाद एक, पीछे चलते हुए। जो scenes लिखे जा चुके हैं वे जैसे हैं वैसे रहेंगे। शुरू करने के लिए बटन दबाओ।`,
     addFilm: (a) => `मैं आपकी कहानी में फिट होने वाले ${a.count} नए scenes सोचकर scene list में जोड़ सकता हूँ। वे “अभी लिखे नहीं गए” के रूप में शुरू होंगे। करने के लिए बटन दबाओ।`,
     allWritten: () => `इस film के सारे scenes पहले से लिखे हुए हैं, इसलिए लिखने को कुछ बचा नहीं है। और scenes चाहिए तो कहो “5 scenes जोड़ो”।`,
@@ -128,6 +146,7 @@ const SAYS = {
     })[a.why],
   },
   or: {
+    writeSome: (a) => `ମୁଁ ${a.n} ଟି ଦୃଶ୍ୟ ଲେଖିପାରିବି ଯାହା ଏଯାଏଁ ଲେଖାହୋଇନାହିଁ${a.label ? ` (${a.label})` : ""}, ଗୋଟିଏ ପରେ ଗୋଟିଏ, ପଛରେ ଚାଲି। ଯେଉଁ ଦୃଶ୍ୟ ଲେଖାହୋଇସାରିଛି ସେସବୁ ସେମିତି ରହିବ। ଆରମ୍ଭ କରିବାକୁ ବଟନ୍ ଦବାଅ।`,
     writeFilm: (a) => `ମୁଁ ଯେଉଁ ଦୃଶ୍ୟ ଏଯାଏଁ ଲେଖାହୋଇନାହିଁ ସେ ସବୁ (${a.total} ମଧ୍ୟରୁ ${a.unwritten}) ଗୋଟିଏ ପରେ ଗୋଟିଏ, ପଛରେ ଚାଲି ଲେଖିପାରିବି। ଯେଉଁ ଦୃଶ୍ୟ ଲେଖାହୋଇସାରିଛି ସେଗୁଡ଼ିକ ଯେମିତି ଅଛି ସେମିତି ରହିବ। ଆରମ୍ଭ କରିବାକୁ ବଟନ୍ ଦବାଅ।`,
     addFilm: (a) => `ମୁଁ ତୁମ ଗପ ସହ ମେଳ ଖାଉଥିବା ${a.count} ଟି ନୂଆ ଦୃଶ୍ୟ ଭାବି ସିନ୍ ତାଲିକାରେ ଯୋଡ଼ିପାରିବି। ସେଗୁଡ଼ିକ “ଏଯାଏଁ ଲେଖାହୋଇନାହିଁ” ଭାବେ ଆରମ୍ଭ ହେବ। କରିବାକୁ ବଟନ୍ ଦବାଅ।`,
     allWritten: () => `ଏହି ଫିଲ୍ମର ସବୁ ଦୃଶ୍ୟ ଆଗରୁ ଲେଖା ହୋଇସାରିଛି, ତେଣୁ ଲେଖିବାକୁ କିଛି ବାକି ନାହିଁ। ଆହୁରି ଦୃଶ୍ୟ ଚାହିଁଲେ କୁହ “5 ଦୃଶ୍ୟ ଯୋଡ଼”।`,
@@ -330,6 +349,20 @@ export async function handleAduMessage(db, models, { projectId, userId = null, t
     if (!project.sceneListId) reply = SAYS[lang].noSceneList();
     else if (a.unwritten === 0) reply = SAYS[lang].allWritten();
     else { action = { type: "write_scenes", module: "film", sceneListId: project.sceneListId, unwritten: a.unwritten, total: a.total }; reply = SAYS[lang].writeFilm(a); }
+  } else if (kind === "write_some" && module === "film") {
+    if (!project.sceneListId) reply = SAYS[lang].noSceneList();
+    else {
+      const unwritten = Math.max(0, project.totalScenes - project.writtenScenes);
+      if (unwritten === 0) reply = SAYS[lang].allWritten();
+      else {
+        const n = sorted.numbers ? Math.min(sorted.numbers.filter((x) => x >= 1 && x <= project.totalScenes).length, unwritten) : Math.min(sorted.count, unwritten);
+        if (n === 0) reply = SAYS[lang].writeFilm({ total: project.totalScenes, unwritten });
+        else {
+          action = { type: "write_scenes", module: "film", sceneListId: project.sceneListId, unwritten: n, total: project.totalScenes, ...(sorted.numbers ? { scope: "numbers", numbers: sorted.numbers } : { scope: "next", count: sorted.count }) };
+          reply = SAYS[lang].writeSome({ n, label: sorted.numbers ? `scene${sorted.numbers.length === 1 ? "" : "s"} ${sorted.numbers.join(", ")}` : "" });
+        }
+      }
+    }
   } else if (kind === "add" && module === "film") {
     if (!project.sceneListId) reply = SAYS[lang].noSceneList();
     else { action = { type: "add_scenes", module: "film", sceneListId: project.sceneListId, count: sorted.count }; reply = SAYS[lang].addFilm({ count: sorted.count }); }

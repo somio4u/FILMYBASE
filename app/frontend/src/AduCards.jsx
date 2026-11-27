@@ -217,7 +217,7 @@ export default function AduAction({ message, action, current, update, lang = 'en
         {!started ? (
           <div className="dd-actions">
             <button type="button" className="dd-btn primary" disabled={Boolean(busy)} onClick={async () => {
-              const d = await run('film', () => call(`${backendUrl}/api/scene-lists/${action.sceneListId}/write-jobs`, 'POST', adding ? { scope: 'add', count: action.count } : { scope: 'all' }))
+              const d = await run('film', () => call(`${backendUrl}/api/scene-lists/${action.sceneListId}/write-jobs`, 'POST', adding ? { scope: 'add', count: action.count } : action.scope === 'next' ? { scope: 'next', count: action.count } : action.scope === 'numbers' ? { scope: 'numbers', numbers: action.numbers } : { scope: 'all' }))
               if (d) { setStarted(true); setNote(L.filmStarted); await resolve('applied') }
             }}>{adding ? L.filmAddBtn(action.count) : L.filmWriteBtn(action.unwritten)}</button>
             {dismiss}

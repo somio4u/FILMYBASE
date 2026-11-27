@@ -21484,6 +21484,8 @@ app.post("/api/scene-lists/:id/write-jobs", requireRole("admin"), async (req, re
     if (scope === "all") chosen = unwritten;
     else if (scope === "next") chosen = unwritten.slice(0, Math.max(1, Math.min(200, Math.floor(Number(req.body.count)) || 1)));
     else if (scope === "scenes") chosen = unwritten.filter((x) => wanted.has(`${x.episodeIndex ?? "film"}:${x.sceneIndex}`));
+    // scene numbers as the writer says them ("scene 7 and 9"): a film's scenes are numbered from 1 in the scene list
+    else if (scope === "numbers") { const numbers = new Set((Array.isArray(req.body?.numbers) ? req.body.numbers : []).map(Number).filter((n) => Number.isInteger(n) && n >= 1)); chosen = unwritten.filter((x) => x.episodeIndex == null && numbers.has(x.sceneIndex + 1)); }
     else { res.status(400).json({ error: "Which scenes? (all, the next few, or named ones)" }); return; }
     if (chosen.length === 0) { res.status(400).json({ error: "There is nothing left to write there — every one of those scenes is already written." }); return; }
     const items = chosen.map((x) => ({ ...x, sceneListId, language }));

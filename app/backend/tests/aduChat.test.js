@@ -334,3 +334,30 @@ test("'continue writing the next beats in the same style' is a request to WRITE 
   assert.notEqual(sortWithoutAi("continue writing this scene").kind, "write", "one scene on screen is an edit, not a whole-film job");
   assert.notEqual(sortWithoutAi("continue this draft where it stopped").kind, "write", "plain resume is still resume");
 });
+
+test("a film: 'write the next 5 scenes' / 'write scene 7 and 9' / 'write scenes 10 to 12' write ONLY those; add and whole-film phrases keep their meaning", () => {
+  const film = (t) => sortWithoutAi(t, {}, { module: "film" });
+  assert.deepEqual(film("write the next 5 scenes"), { kind: "write_some", count: 5 });
+  assert.deepEqual(film("continue writing the next 3 scenes"), { kind: "write_some", count: 3 });
+  assert.deepEqual(film("write scene 7 and 9"), { kind: "write_some", numbers: [7, 9] });
+  assert.deepEqual(film("write scenes 10 to 12"), { kind: "write_some", numbers: [10, 11, 12] });
+  assert.deepEqual(film("write scenes 3, 5 and 8"), { kind: "write_some", numbers: [3, 5, 8] });
+  assert.deepEqual(film("add 5 scenes"), { kind: "add", count: 5 });
+  assert.deepEqual(film("Write the whole screenplay"), { kind: "write", dialogue: true });
+  assert.equal(film("how many scenes are written?").kind, "chat");
+  // a series' or AI Movie's wording is untouched
+  assert.notEqual(sortWithoutAi("write the next 5 scenes", {}, { module: "ai_movie" }).kind, "write_some");
+});
+
+test("a film: the card for 'write the next 5 scenes' carries the scope, so only the scenes asked for are written; scene numbers carry the numbers", async () => {
+  const f = await filmFixture({ written: 1 }); // 3 scenes, 1 written, 2 not
+  const next = await handleAduMessage(db, models(), { projectId: f.concept, userId: 7, text: "write the next 5 scenes", language: "en", module: "film" });
+  assert.equal(next.assistant.action.type, "write_scenes");
+  assert.equal(next.assistant.action.scope, "next");
+  assert.equal(next.assistant.action.count, 5);
+  assert.equal(next.assistant.action.unwritten, 2, "never promises more than there is");
+  const named = await handleAduMessage(db, models(), { projectId: f.concept, userId: 7, text: "write scene 2 and 3", language: "en", module: "film" });
+  assert.deepEqual(named.assistant.action.numbers, [2, 3]);
+  assert.equal(named.assistant.action.scope, "numbers");
+  assert.match(named.assistant.content, /scenes 2, 3/);
+});

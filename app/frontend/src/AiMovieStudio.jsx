@@ -113,6 +113,9 @@ function ModeBar({ api, projectId, settings, onChanged }) {
           {settings.qualityModes.map((q) => <option key={q.key} value={q.key}>{q.label}</option>)}
         </select>
       </label>
+      <label className="studio-field" title="The writing AI learns from how our writers (Kumar, Chandan and anyone else) rewrite its lines. With this on, every dialogue and scene written for this project uses what ALL of them have taught it, whoever is logged in.">
+        <span><input type="checkbox" checked={Boolean(settings.teamStyle)} onChange={(e) => change({ teamStyle: e.target.checked })} /> Write in the style of all our writers</span>
+      </label>
       <fieldset className="studio-field studio-segment">
         <legend>Creative mode</legend>
         {settings.creativeModes.map((m) => (

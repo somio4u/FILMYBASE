@@ -132,3 +132,39 @@ test("a ready-made style goes only to the exact username, only once, and a resta
     await db.query("DELETE FROM users WHERE id = ANY($1)", [[a, b]]);
   } finally { await db.end(); }
 });
+
+import { buildTeamStyleBlock, projectIdOfRequest, teamStyleBlock } from "../writerLearning.js";
+test("the team style blends every writer who has learned something, keeps characters' voices apart, and skips writers with nothing yet", () => {
+  const rewrites = (n, tag) => [{ pairs: Array.from({ length: n }, (_, i) => ({ type: "dialogue", character: "R", before: `${tag} old ${i}`, after: `${tag} new ${i}` })) }];
+  const block = buildTeamStyleBlock([
+    { name: "Kumar", rows: [], card: "KUMAR CARD" },
+    { name: "Chandan", rows: rewrites(8, "C"), card: "" },
+    { name: "Newbie", rows: rewrites(2, "N"), card: "" },
+  ]);
+  assert.match(block, /ALL its dialogue and screenplay writers \(Kumar, Chandan\)/);
+  assert.match(block, /KUMAR CARD/);
+  assert.match(block, /C new 0/);
+  assert.doesNotMatch(block, /N new/);
+  assert.match(block, /every CHARACTER's own voice distinct/);
+  assert.equal((block.match(/Chandan made it:/g) ?? []).length, 6, "at most 6 examples per writer");
+  assert.equal(buildTeamStyleBlock([{ name: "A", rows: [], card: "" }]), "");
+});
+
+test("the AI Movie project of a request is found from the path, the body or the query", () => {
+  assert.equal(projectIdOfRequest({ path: "/api/ai-movie/projects/42/dialogue-doctor" }), 42);
+  assert.equal(projectIdOfRequest({ path: "/api/ai-movie/stages/screenplay/beats/1/scenes/2/dialogue", body: { projectId: 7 } }), 7);
+  assert.equal(projectIdOfRequest({ path: "/api/ai-movie/x", query: { projectId: "9" } }), 9);
+  assert.equal(projectIdOfRequest({ path: "/api/ai-movie/x" }), null);
+});
+
+test("the team style of a project is read from every writer in the database", async () => {
+  const db = new pg.Pool({ database: process.env.TEST_DB || "filmmaking_app_test", user: process.env.PGUSER || "root", host: process.env.PGHOST || "/var/run/postgresql" });
+  try {
+    await ensureWriterLearningSchema(db);
+    const a = (await db.query("INSERT INTO users (name, username, password_hash, password_salt, role) VALUES ('Team A','team_a_t','x','x','independent_writer') RETURNING id")).rows[0].id;
+    await importWriterStyle(db, a, { card: "TEAM A CARD", pairs: [] });
+    const block = await teamStyleBlock(db);
+    assert.match(block, /TEAM A CARD/);
+    await db.query("DELETE FROM users WHERE id = $1", [a]);
+  } finally { await db.end(); }
+});

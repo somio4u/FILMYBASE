@@ -30,6 +30,9 @@ export async function ensureAiMovieStorySchema(db) {
     `ALTER TABLE ai_movie_projects ADD COLUMN IF NOT EXISTS story_bible_usage JSONB`,
     `ALTER TABLE ai_movie_projects ADD COLUMN IF NOT EXISTS story_bible_job JSONB`,
     `ALTER TABLE ai_movie_projects ADD COLUMN IF NOT EXISTS quality_mode TEXT NOT NULL DEFAULT 'professional'`,
+    // "write with the style of ALL our writers" (Kumar, Chandan, …): null = never decided; the Akhada script starts with it ON (the owner asked), after that the owner's choice rules
+    `ALTER TABLE ai_movie_projects ADD COLUMN IF NOT EXISTS team_style BOOLEAN`,
+    `UPDATE ai_movie_projects SET team_style = true WHERE team_style IS NULL AND title ILIKE 'akhada%'`,
     `ALTER TABLE ai_movie_projects ADD COLUMN IF NOT EXISTS cinematic_mode TEXT NOT NULL DEFAULT 'mass'`,
     `ALTER TABLE ai_movie_projects ADD COLUMN IF NOT EXISTS length_kind TEXT`,
     `ALTER TABLE ai_movie_projects ADD COLUMN IF NOT EXISTS length_minutes NUMERIC`,
@@ -55,11 +58,12 @@ const sha = (text) => crypto.createHash("sha256").update(String(text)).digest("h
 // ---------------------------------------------------------------------------
 
 export async function getProjectModes(db, projectId) {
-  const row = (await db.query("SELECT quality_mode, cinematic_mode FROM ai_movie_projects WHERE id = $1", [projectId])).rows[0];
+  const row = (await db.query("SELECT quality_mode, cinematic_mode, team_style FROM ai_movie_projects WHERE id = $1", [projectId])).rows[0];
   if (!row) throw httpError("Project not found.", 404);
   return {
     qualityMode: normalizeQualityMode(row.quality_mode),
     cinematicMode: CREATIVE_MODES.includes(row.cinematic_mode) ? row.cinematic_mode : DEFAULT_CREATIVE_MODE,
+    teamStyle: row.team_style === true,
   };
 }
 
@@ -437,7 +441,8 @@ export function registerAiMovieStoryRoutes(app, db, requireRole, deps) {
 
   app.patch("/api/ai-movie/projects/:id/ai-settings", admin, wrap(async (req, res) => {
     const { projectId } = await loadProject(req);
-    const { qualityMode, cinematicMode } = req.body ?? {};
+    const { qualityMode, cinematicMode, teamStyle } = req.body ?? {};
+    if (teamStyle !== undefined) await db.query("UPDATE ai_movie_projects SET team_style = $2 WHERE id = $1", [projectId, teamStyle === true]);
     if (qualityMode !== undefined) {
       if (!QUALITY_MODES.includes(qualityMode)) throw httpError(`Quality mode must be one of ${QUALITY_MODES.join(", ")}.`, 400);
       await db.query("UPDATE ai_movie_projects SET quality_mode = $2 WHERE id = $1", [projectId, qualityMode]);

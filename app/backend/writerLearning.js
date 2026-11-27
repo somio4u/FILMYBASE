@@ -108,7 +108,7 @@ export const MIN_STYLE_EXAMPLES = 5;   // fewer rewrites than this and there is 
 const MAX_DIALOGUE_EXAMPLES = 12, MAX_ACTION_EXAMPLES = 4;
 const clip = (t, n) => { const s = String(t ?? "").replace(/\s+/g, " ").trim(); return s.length > n ? `${s.slice(0, n - 1)}…` : s; };
 
-export function buildStyleBlock(name, rows, card = "") {
+export function buildStyleBlock(name, rows, card = "", { examples = MAX_DIALOGUE_EXAMPLES, header = true } = {}) {
   const dialogue = [], action = [];
   for (const r of rows) for (const p of r.pairs ?? []) {
     if (!p.after || (p.before && p.before.trim() === p.after.trim())) continue; // only rewrites (and lines the writer added) teach a style
@@ -123,9 +123,11 @@ export function buildStyleBlock(name, rows, card = "") {
     : `- ${p.character ? `${p.character}: ` : ""}${who} added: "${clip(p.after, 160)}"`);
   const rewrites = dialogue.filter((p) => p.before), added = dialogue.filter((p) => !p.before);
   return [
-    `THIS WRITER'S OWN STYLE — ${who}. Write like ${who}: the same word choice, line length, tone, humour and way of showing feeling. Study the style description and the examples ("AI wrote" → the writer's version), and apply what changed to NEW lines. Never copy these lines into the film, and never let this change the story, the characters or the events.`,
+    header
+      ? `THIS WRITER'S OWN STYLE — ${who}. Write like ${who}: the same word choice, line length, tone, humour and way of showing feeling. Study the style description and the examples ("AI wrote" → the writer's version), and apply what changed to NEW lines. Never copy these lines into the film, and never let this change the story, the characters or the events.`
+      : `— THE STYLE OF ${String(who).toUpperCase()} —`,
     ...(card ? [String(card).trim()] : []),
-    ...rewrites.slice(0, MAX_DIALOGUE_EXAMPLES).map(line),
+    ...rewrites.slice(0, examples).map(line),
     ...added.slice(0, 4).map(line),
     ...action.filter((p) => p.before).slice(0, MAX_ACTION_EXAMPLES).map(line),
   ].join("\n");
@@ -143,10 +145,54 @@ export async function styleBlockFor(db, user) {
   }
 }
 
-// Express middleware: finds the style of whoever is asking and keeps it for everything this request (and the background work it starts) writes.
+// ---- TEAM STYLE: a project can be written with the style of ALL our writers, whoever is logged in ----
+const TEAM_PER_WRITER_EXAMPLES = 6, TEAM_MAX_WRITERS = 6;
+
+export function buildTeamStyleBlock(writers) {
+  const parts = writers.map(({ name, rows, card }) => buildStyleBlock(name, rows, card, { examples: TEAM_PER_WRITER_EXAMPLES, header: false })).filter(Boolean);
+  if (!parts.length) return "";
+  return [
+    `THE TEAM'S WRITING STYLES — this project is written with the learned style of ALL its dialogue and screenplay writers (${writers.filter((w, i) => parts[i]).map((w) => w.name).join(", ")}). Use what is strongest in each of them, and keep every CHARACTER's own voice distinct: do not make everybody speak like one writer. Never copy the example lines, and never let any of this change the story, the characters or the events.`,
+    ...parts,
+  ].join("\n\n");
+}
+
+export async function teamStyleBlock(db) {
+  try {
+    const users = (await db.query(
+      `SELECT u.id, u.name FROM users u WHERE EXISTS (SELECT 1 FROM writer_style_cards c WHERE c.user_id = u.id) OR EXISTS (SELECT 1 FROM writer_edits e WHERE e.user_id = u.id)
+       ORDER BY u.id LIMIT ${TEAM_MAX_WRITERS}`)).rows;
+    const writers = [];
+    for (const u of users) {
+      const rows = (await db.query("SELECT pairs FROM writer_edits WHERE user_id = $1 ORDER BY updated_at DESC LIMIT 40", [u.id])).rows;
+      const card = (await db.query("SELECT card FROM writer_style_cards WHERE user_id = $1", [u.id])).rows[0]?.card ?? "";
+      writers.push({ name: u.name, rows, card });
+    }
+    return buildTeamStyleBlock(writers);
+  } catch (error) {
+    console.error("Could not read the team's style (writing goes on without it):", error.message);
+    return "";
+  }
+}
+
+// the AI Movie project a request is about (path, body or query)
+export const projectIdOfRequest = (req) => {
+  const m = /^\/api\/ai-movie\/projects\/(\d+)(?:\/|$)/.exec(req.path ?? "");
+  const id = Number(m?.[1] ?? req.body?.projectId ?? req.query?.projectId);
+  return Number.isInteger(id) && id > 0 ? id : null;
+};
+
+// Express middleware: finds the style for this request — the team's, if the AI Movie project asks for it, else that of whoever is asking — and keeps it
+// for everything this request (and the background work it starts) writes.
 export const writerStyleMiddleware = (db) => async (req, res, next) => {
   if (!req.user || !/^\/api\/(screenplay|ai-movie|scene-lists|assistant|pitch-deck|generate|skip|draft)/.test(req.path)) { next(); return; }
-  const block = await styleBlockFor(db, req.user);
+  let block = "";
+  const projectId = req.path.startsWith("/api/ai-movie") ? projectIdOfRequest(req) : null;
+  if (projectId) {
+    const team = (await db.query("SELECT team_style FROM ai_movie_projects WHERE id = $1", [projectId]).catch(() => ({ rows: [] }))).rows[0]?.team_style === true;
+    if (team) block = await teamStyleBlock(db);
+  }
+  if (!block) block = await styleBlockFor(db, req.user);
   if (!block) { next(); return; }
   runWithWriterStyle(block, next);
 };

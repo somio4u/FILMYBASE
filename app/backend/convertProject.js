@@ -5,6 +5,7 @@
 // The new project is a separate copy; the one it came from stays exactly as it is.
 import { buildScreenplayProject, saveScreenplayProject } from "./screenplayProject.js";
 import { assignScenesToBeats } from "./screenplayTextParser.js";
+import { createProjectLink } from "./projectLinks.js";
 
 const pick = (value, language) => {
   if (typeof value === "string") return value.trim();
@@ -71,7 +72,7 @@ export function filmEpisodeFromAiMovie(backfill, language = chooseLanguage(backf
   return { number: 1, title: "", declaredMinutes: null, scenes, minutes: scenes.reduce((n, s) => n + s.minutes, 0) };
 }
 
-export async function aiMovieToFilm(db, projectId, { ownerUserId = null, language = null } = {}) {
+export async function aiMovieToFilm(db, projectId, { ownerUserId = null, language = null, link = false } = {}) {
   const project = (await db.query("SELECT id, title, backfill FROM ai_movie_projects WHERE id = $1", [projectId])).rows[0];
   if (!project) throw Object.assign(new Error("The AI Movie project was not found."), { status: 404 });
   const lang = language ?? chooseLanguage(project.backfill);
@@ -86,7 +87,8 @@ export async function aiMovieToFilm(db, projectId, { ownerUserId = null, languag
   const names = (project.backfill?.characterArc ?? []).map((c) => String(c?.name ?? "").trim()).filter(Boolean);
   for (const name of names) if (!built.characterSheet.characters.some((c) => c.name.toUpperCase() === name.toUpperCase())) built.characterSheet.characters.push({ ...built.characterSheet.characters[0], name, role: both(""), want: both(""), need: both(""), flaw: both(""), innerConflict: both(""), outerConflict: both(""), arc: both(""), introductionBeat: both(""), archetypeNote: both(""), virtues: [] });
   const conceptId = await saveScreenplayProject(db, built, { ownerUserId, setTitle: async (id, t) => { await db.query("UPDATE concepts SET title = $2 WHERE id = $1", [id, t]); } });
-  return { module: "film", projectRef: conceptId, title, scenes: built.summary.scenes, language: lang };
+  if (link) await createProjectLink(db, { filmConceptId: conceptId, aiMovieId: projectId, language: lang });
+  return { module: "film", projectRef: conceptId, title, scenes: built.summary.scenes, language: lang, linked: Boolean(link) };
 }
 
 // ---- Movie -> AI Movie ----------------------------------------------------------------------------------------------------------------------------
@@ -125,7 +127,7 @@ export function aiMovieBackfillFromFilm({ title, deck, characterNames, outlines,
   };
 }
 
-export async function filmToAiMovie(db, conceptId, { actorUserId = null } = {}) {
+export async function filmToAiMovie(db, conceptId, { actorUserId = null, link = false } = {}) {
   const concept = (await db.query("SELECT id, title, concept_text FROM concepts WHERE id = $1", [conceptId])).rows[0];
   if (!concept) throw Object.assign(new Error("The Movie project was not found."), { status: 404 });
   const list = (await db.query(
@@ -145,5 +147,6 @@ export async function filmToAiMovie(db, conceptId, { actorUserId = null } = {}) 
   const id = (await db.query(
     "INSERT INTO ai_movie_projects (title, pasted_text, detected_stage, backfill, stage_status, created_by) VALUES ($1, $2, 'screenplay', $3, $4, $5) RETURNING id",
     [title, String(concept.concept_text ?? "").slice(0, 4000), JSON.stringify(backfill), JSON.stringify({ screenplay: { status: "approved", feedback: null } }), actorUserId])).rows[0].id;
-  return { module: "ai_movie", projectRef: id, title, scenes: backfill.screenplayBeats.reduce((n, b) => n + b.scenes.length, 0), scenesLeftOut: left };
+  if (link) await createProjectLink(db, { filmConceptId: conceptId, aiMovieId: id, language: "en" });
+  return { module: "ai_movie", projectRef: id, title, scenes: backfill.screenplayBeats.reduce((n, b) => n + b.scenes.length, 0), scenesLeftOut: left, linked: Boolean(link) };
 }

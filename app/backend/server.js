@@ -123,6 +123,7 @@ import { projectProgress, projectFormat } from "./projectProgress.js";
 import { isQuotaError, fallbackModelsFor, jitter } from "./overloadFallback.js";
 import { ensureWriterLearningSchema, recordWriterEdit, writerStyleMiddleware, importWriterStyle, applyStyleSeeds } from "./writerLearning.js";
 import { aiMovieToFilm, filmToAiMovie } from "./convertProject.js";
+import { ensureProjectLinkSchema, startProjectLinkSync } from "./projectLinks.js";
 import {
   AKHADA_FIXED_SYNOPSIS,
   AKHADA_FIXED_CHARACTERS,
@@ -2084,12 +2085,28 @@ app.post("/api/projects/convert", requireRole("admin"), async (req, res) => {
     const from = req.body?.from;
     const ref = Number(req.body?.projectRef);
     if (!["ai_movie", "film"].includes(from) || !Number.isInteger(ref) || ref < 1) { res.status(400).json({ error: "Say which project to bring over." }); return; }
-    const out = from === "ai_movie" ? await aiMovieToFilm(db, ref, { ownerUserId: null }) : await filmToAiMovie(db, ref, { actorUserId: req.user.id });
+    const link = req.body?.link === true; // only when the owner asks: some projects are meant to live on one side only
+    const out = from === "ai_movie" ? await aiMovieToFilm(db, ref, { ownerUserId: null, link }) : await filmToAiMovie(db, ref, { actorUserId: req.user.id, link });
     res.json(out);
   } catch (error) {
     if (!error.status) console.error("Bringing a project over failed:", error.message);
     res.status(error.status ?? 500).json({ error: error.message });
   }
+});
+
+// Is this project linked to a twin on the other side? And: stop linking (both projects stay, they just stop following each other).
+app.get("/api/projects/link", requireRole("admin"), async (req, res) => {
+  const ref = Number(req.query?.projectRef);
+  const row = req.query?.module === "ai_movie"
+    ? (await db.query("SELECT l.film_concept_id AS other, c.title FROM project_links l JOIN concepts c ON c.id = l.film_concept_id WHERE l.ai_movie_id = $1", [ref])).rows[0]
+    : (await db.query("SELECT l.ai_movie_id AS other, a.title FROM project_links l JOIN ai_movie_projects a ON a.id = l.ai_movie_id WHERE l.film_concept_id = $1", [ref])).rows[0];
+  res.json(row ? { linked: true, other: { module: req.query.module === "ai_movie" ? "film" : "ai_movie", projectRef: row.other, title: row.title } } : { linked: false });
+});
+app.post("/api/projects/unlink", requireRole("admin"), async (req, res) => {
+  const ref = Number(req.body?.projectRef);
+  const column = req.body?.module === "ai_movie" ? "ai_movie_id" : "film_concept_id";
+  const done = await db.query(`DELETE FROM project_links WHERE ${column} = $1`, [ref]);
+  res.json({ unlinked: done.rowCount > 0 });
 });
 
 // The admin-only cross-project dashboard: every project (Story & Screenplay
@@ -22286,6 +22303,8 @@ registerScreenplayImportRoutes(app, db, { requireRole, upload: screenplayUpload,
 ensureAiMovieSchema()
   .then(() => ensureWriterSchema(db))
   .then(() => ensureWriterLearningSchema(db))
+  .then(() => ensureProjectLinkSchema(db))
+  .then(() => startProjectLinkSync(db))
   .then(() => applyStyleSeeds(db, async (name) => JSON.parse(await fs.promises.readFile(new URL(`./seeds/${name}-style.json`, import.meta.url), "utf8"))))
   .then(() => ensureUsageSchema(db))
   .then(() => ensureScreenplayImportSchema(db))

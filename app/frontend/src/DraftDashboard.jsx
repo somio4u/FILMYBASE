@@ -103,13 +103,18 @@ export default function DraftDashboard({ module, projectRef, backendUrl, onConti
     act('branch', () => call(`${api}/${d.id}/branch`, 'POST', { kind, label: name.trim() || null }))
   }
   // bring this draft's project over to the other side of the app: a separate copy (AI Movie -> Movie, Movie -> AI Movie); this one stays as it is
+  const [link, setLink] = useState(null) // { linked, other: { module, projectRef, title } }
+  const loadLink = useCallback(async () => { const r = await call(`${backendUrl}/api/projects/link?module=${module}&projectRef=${projectRef}`); if (r.ok) setLink(r.data) }, [backendUrl, module, projectRef])
+  useEffect(() => { loadLink() }, [loadLink])
   const convertDraft = (d) => {
     const toMovie = module === 'ai_movie'
     if (!window.confirm(toMovie
       ? `Make a MOVIE (Story & Screenplay) project from “${d.title}”?\n\nIts written scenes become the Movie's screenplay, word for word. This AI Movie stays exactly as it is.`
       : `Make an AI MOVIE project from “${d.title}”?\n\nIts written scenes become the AI Movie's screenplay, word for word. This Movie stays exactly as it is.`)) return
+    // some projects are meant to live on one side only: linking is the owner's choice, project by project
+    const link = window.confirm(`Keep the two LINKED?\n\nOK = linked: when you change the screenplay or dialogue on one side, the same change is made on the other (both ways).\nCancel = just a separate copy; the two will not follow each other.`)
     setNote('')
-    act('convert', () => call(`${backendUrl}/api/projects/convert`, 'POST', { from: module, projectRef: d.projectRef }), (out) => setNote(`✓ Done: “${out.title}” is now in the ${out.module === 'film' ? 'Movie (Story & Screenplay)' : 'AI Movie'} list${out.scenes ? ` with ${out.scenes} written scene${out.scenes === 1 ? '' : 's'}` : ''}${out.scenesLeftOut ? ` (${out.scenesLeftOut} scene${out.scenesLeftOut === 1 ? '' : 's'} not written yet stayed behind)` : ''}. Open it from All projects.`))
+    act('convert', () => call(`${backendUrl}/api/projects/convert`, 'POST', { from: module, projectRef: d.projectRef, link }), (out) => { loadLink(); setNote(`✓ Done: “${out.title}” is now in the ${out.module === 'film' ? 'Movie (Story & Screenplay)' : 'AI Movie'} list${out.scenes ? ` with ${out.scenes} written scene${out.scenes === 1 ? '' : 's'}` : ''}${out.scenesLeftOut ? ` (${out.scenesLeftOut} scene${out.scenesLeftOut === 1 ? '' : 's'} not written yet stayed behind)` : ''}. ${out.linked ? 'The two are linked: changes to the screenplay go both ways within a few seconds.' : 'It is a separate copy.'} Open it from All projects.`) })
   }
   // a new draft from the owner's own final screenplay file: the chosen draft is copied (story, synopsis, characters, beat sheet stay), the screenplay is the uploaded one
   const chooseScreenplay = (d) => { uploadFor.current = d; setError(null); setNote(''); fileRef.current?.click() }
@@ -221,6 +226,11 @@ export default function DraftDashboard({ module, projectRef, backendUrl, onConti
           <button type="button" className="dd-btn" onClick={onClose}>Close</button>
         </header>
         {error && <p className="dd-error" role="alert">{error}</p>}
+        {link?.linked && (
+          <p className="dd-flag" role="status">🔗 Linked with the {link.other.module === 'film' ? 'Movie' : 'AI Movie'} version “{link.other.title}”: changes to the screenplay and dialogue go both ways.{' '}
+            <button type="button" className="dd-btn" disabled={Boolean(busy)} onClick={() => { if (window.confirm('Stop linking? Both projects stay as they are now; they just stop following each other.')) act('unlink', () => call(`${backendUrl}/api/projects/unlink`, 'POST', { module, projectRef }), () => loadLink()) }}>Unlink</button>
+          </p>
+        )}
         {note && <p className="dd-flag" role="status">{note}</p>}
         {watching && (
           <p className="dd-note" role="status">⏳ Reading “{txt(fsJob.job.filename)}” — {txt(fsJob.job.step)} · running {Math.max(0, Math.floor((Date.now() - fsJob.job.startedAt) / 1000))}s. A PDF is read page by page by the AI so that Hindi comes out right; a long screenplay takes several minutes. You can leave this screen — it carries on.</p>

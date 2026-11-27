@@ -2860,3 +2860,10 @@ Plain version: every project is now a set of **drafts**. Opening a project shows
 - **Akhada:** at server start every AI Movie project whose title starts with "Akhada" and has never had the switch decided is turned ON (drafts copied from it inherit the value). After that the owner's own choice is respected.
 - **Honest limits:** Chandan has nothing to contribute until he has at least 5 real rewrites (nothing was compared for him); Kumar's card is from "Maha Kali", not from Akhada; real-AI effect unverified. Background jobs that resume after a server restart lose the style until the next request.
 - Not deployed yet.
+
+## 2026-11-27 — Adu: "continue writing the next beats in the same style" only reopened scene 1
+- **What happened (owner, Akhada):** he typed "CONTINUE RE WRITING FOR NEXT BEATS IN SAME STYLE AND SHOW ME". Adu offered the button "Continue this draft where it stopped" — which only REOPENS the draft at its saved place (scene 1) and writes nothing — and then said "✓ done".
+- **Cause:** the words-only sorter did not know "continue writing …" (it only knew "write the whole / rest / remaining …"), so the AI classifier read "continue" as "resume this draft".
+- **Fix:** `sortWithoutAi` (`aduChat.js`): a message with a "continue / keep going / next / aage" word, a "writing / rewrite / likh" word and a screenplay word (beats, scenes, screenplay, dialogue…) is now the "write what is not written yet" proposal — the existing "Write the whole screenplay" job (beats not finished yet, with dialogue, in the background with progress, in the project's style incl. the team style when it is on). Questions are only answered; one scene on screen stays an edit; plain "continue this draft" stays resume. Tests added.
+- **Note:** that job writes the beats that are NOT yet written; beats already approved are left as they are. To rewrite a written beat the person says which one ("rewrite beat 3, more tense").
+- Not deployed yet.

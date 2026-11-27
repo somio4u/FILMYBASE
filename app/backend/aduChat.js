@@ -74,6 +74,13 @@ export function sortWithoutAi(text, context = {}, { module = "ai_movie" } = {}) 
     const beatIndex = beat ? Number(beat[1]) - 1 : Number.isInteger(context.beatIndex) ? context.beatIndex : null;
     return { kind: "extend", beatIndex, minutes: Number(minutes[1]) };
   }
+  // "continue writing the next beats in the same style" / "keep writing" / "aage likho": go on writing what is not written yet. (Seen for real: this was taken
+  // for "resume this draft", which only reopened scene 1 and wrote nothing.)
+  const CONTINUE_WORD = /\b(continue|continuing|keep\s+going|carry\s+on|go\s+on|next|aage|agle|jaari|jari)\b|जारी|आगे|अगले|ଜାରି|ଆଗକୁ|ପରବର୍ତ୍ତୀ/i;
+  const WRITING_WORD = /\b(writ(?:e|ing)|re-?writ(?:e|ing)|likh\w*)\b|लिख|ଲେଖ/i;
+  if (!looksLikeQuestion(t) && CONTINUE_WORD.test(t) && WRITING_WORD.test(t) && SCREENPLAY_WORD.test(t) && !/\b(this|that)\s+(scene|line|dialogue)\b/i.test(t)) {
+    return { kind: "write", dialogue: !/\b(without|no|bina)\s+dialogues?\b/i.test(t) };
+  }
   // "write the whole screenplay" / "write what is left" / "write all the dialogue"
   if (!looksLikeQuestion(t) && WRITE_VERB.test(t) && WHOLE.test(t) && SCREENPLAY_WORD.test(t) && !/\b(this|that)\s+(scene|line|dialogue)\b/i.test(t)) {
     return { kind: "write", dialogue: !/\b(without|no|bina)\s+dialogues?\b/i.test(t) };

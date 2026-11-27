@@ -324,3 +324,13 @@ test("film: the web routes exist under /api/film/assistant", async () => {
     assert.equal(hist.messages.length, 2);
   } finally { s.close(); await db.query("DELETE FROM concepts WHERE title LIKE '[ADU-TEST]%'"); }
 });
+
+test("'continue writing the next beats in the same style' is a request to WRITE what is not written yet — never 'resume this draft' (which only reopens scene 1)", () => {
+  assert.deepEqual(sortWithoutAi("CONTINUE RE WRITING FOR NEXT BEATS IN SAME STYLE AND SHOW ME"), { kind: "write", dialogue: true });
+  assert.deepEqual(sortWithoutAi("continue writing the next beats"), { kind: "write", dialogue: true });
+  assert.deepEqual(sortWithoutAi("keep going with the screenplay, writing the rest"), { kind: "write", dialogue: true });
+  assert.deepEqual(sortWithoutAi("continue writing the next beats without dialogue"), { kind: "write", dialogue: false });
+  assert.equal(sortWithoutAi("how do I continue writing?").kind, "chat", "a question is only answered");
+  assert.notEqual(sortWithoutAi("continue writing this scene").kind, "write", "one scene on screen is an edit, not a whole-film job");
+  assert.notEqual(sortWithoutAi("continue this draft where it stopped").kind, "write", "plain resume is still resume");
+});
